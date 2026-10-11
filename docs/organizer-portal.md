@@ -2,7 +2,7 @@
 
 What's in here: organizer auth, event submission, trust gating and review, rich-text authoring, the organizer contact form, Organizer Settings, and Event Claiming.
 
-An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter that submits events directly. It is not the Fienta organizer in [pipeline.md](pipeline.md), which is a ticketing-source id being polled. Saved Venues live in [data-model.md](data-model.md)'s `venues` entry.
+An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter that submits events directly. It is not the Fienta organizer in [pipeline.md](pipeline.md), which is a ticketing-source id being polled. Saved Venues live in [data-model.md](data-model.md)'s Saved Venues section.
 
 ## Auth
 

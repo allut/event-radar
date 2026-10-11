@@ -1,39 +1,171 @@
 # Data Model
 
-What's in here: every key database table and what its columns mean. Read this before writing a migration, a query touching a new column, or a serializer.
+What's in here: what the key tables' columns mean and who writes them, the `events` triggers and indexes, migrations, connection pooling and serializer rules.
+
+`app/models/models.py` is the full column list. This doc covers what reading it won't tell you: meaning, authority, triggers and gotchas.
 
 ## Key Database Tables
 
-- `users` — email (citext unique), email_verified (bool, set true on first successful magic-link verification — see `docs/security.md`'s Email Verification Gate section; gates `build_daily_feeds`/`send_daily_digests`), locale (et|en|ru), home_city, email_digest_opt_in (bool, gates the daily digest send), session_token_version (int, bumped to revoke all sessions — see `docs/security.md`'s Session Revocation section)
-- `auth_magic_links` — token_hash (sha256), expires_at, used_at; one-use only; `pending_google_sub` (nullable) marks a link sent to confirm a pending Google-identity link (ADR 0002) rather than to start a session — no second token type
-- `user_identities` — linked external sign-in provider identities (ADR 0002): `user_id` FK (`ON DELETE CASCADE`), `provider` (data value, e.g. `"google"` — not hardcoded), `provider_sub`, `created_at`. `UniqueConstraint("provider", "provider_sub")` is per-table, not global — the same Google account may hold both a `User` row and an `Organizer` row that never merge, mirroring the `auth_magic_links`/`organizer_magic_links` split. Deliberately no `email` column: the address lives on `users.email`/`organizers.email`, and a provider identity is keyed only by its stable `sub`. Plain index on `user_id` for the reverse "which providers does this account have linked" lookup.
-- `personas` — 9 static personas with JSONB affinity vectors; display names in et/en/ru
-- `user_personas` — M2M join with a per-rank `weight`. Onboarding is a ranked 1–`PERSONA_MAX_SELECTABLE` (3) multi-pick; each pick's weight comes from `PERSONA_RANK_WEIGHTS` by position (1.0 / 0.4 / 0.2), first pick leads (`routers/onboarding.py`)
-- `sources` — ingestion source registry
-- `raw_events` — source payload as JSONB
-- `event_sources` — M2M: links events to source + external_id; unique index on `(source_id, external_id)` enforces ingestion idempotency at the DB level (migration 0007)
-- `events` — normalized: slug, title_orig, description_orig, important_info (ticket/access notes block scraped from HTML-listing sources), url, image_url, price_hint (raw price text from ingestion, fed to LLM classification), starts_at/ends_at, venue_name/venue_address (left `NULL` when venue_id is set — resolve via `resolve_venue_name()`/`resolve_venue_address()`), venue_id (nullable FK → `venues`, organizer submissions only), lat/lng (backfilled by the geocoding job when missing), price_min/price_max/currency (parsed from price_hint by classification), has_free_tier (paid event that also offers a free/companion/member tier; OR-merged, see Classification in `docs/pipeline.md`), status (draft→classified→published|cancelled — `published` is set by the publish gate, not directly by classification), cancellation_reason (nullable, one of `VALID_EVENT_CANCELLATION_REASONS` — `organizer_retract`/`admin_retract`/`report_takedown`; set only by the manual retract/takedown paths; `NULL` for never-cancelled rows, pipeline cancellations such as `classify_pending`'s ended-draft sweep, and rows cancelled before the column existed), is_explicit (NSFW filter flag), is_non_event (non-event filter flag: gift cards/merch/webinars; blocks the publish gate), is_out_of_area (LLM `in_target_city` signal; blocks the publish gate), detail_refetched_at/detail_refetch_count (bookkeeping for the daily detail-refetch sync), geocode_attempted_at (bookkeeping for the geocoding backfill), venue_extract_attempted_at (cooldown for the venue-extract sub-pass, migration 0056 — stamped when the LLM finds no address in a suspect `venue_name`; untracked by the `updated_at` trigger like `geocode_attempted_at`), title_localized/description_localized/important_info_localized (JSONB `{locale: html}`, filled by per-locale page fetches at ingest, by the organizer submit/edit form's per-locale fields, and backfilled per-missing-locale by the daily detail-refetch pass — a source publishing one page with multiple languages concatenated in a single field is stored as-is, unsplit), dedup_group_id, created_at, updated_at (trigger-maintained, migration 0027 — bumped only when a column other than `detail_refetched_at`/`detail_refetch_count`/`geocode_attempted_at` actually changes, so the prerender pipeline's change-detection (issue #80, `GET /public/prerender-events`) doesn't see a marker mismatch on every routine sync pass; since migration 0050 the trigger compares an explicit `ROW(...)` column list, frozen in that migration and guarded by `tests/test_events_trigger_columns.py` — **adding an `events` column needs a migration that re-issues `trg_events_set_updated_at` with it**)
-- `event_classifications` — categories[], vibes[], quality_score, why_go_bullets[3], why_go_localized JSONB ({locale: [bullets]}), language_detected, model_used
-- `user_event_feedback` — two signal classes: **preference** signals (like/dislike/bookmark, `PREFERENCE_SIGNALS`) are a current-state model — one row per (user, event), enforced by a partial unique index (migration 0019); POST `/feedback` upserts, DELETE `/feedback/{event_id}` removes. **Passive** signals (view/click_external, the rest of `VALID_SIGNALS`) stay append-only/multi-row (page-view + ticket-click analytics, not covered by that index) but are capped at one row per (user, event, signal, UTC day) by a second partial unique index on `((created_at AT TIME ZONE 'UTC')::date)` (`uq_user_event_feedback_passive_signal_day`, migration 0055 — it first deletes historical same-day duplicates, keeping the earliest); `POST /feedback` inserts them `ON CONFLICT DO NOTHING`, so a client spamming the endpoint can't grow the table (OWASP audit #9). Ranking reads only like/dislike rows, so the cap changes no score. `GET /feedback/events?signal=` reads the preference rows (Saved Events page). Mixing the two under one upsert-by-(user,event) rule would let a ticket click overwrite a bookmark — keep them split.
-- ~~`user_event_scores`~~ — dropped in migration 0053 (Big-O audit #455). `build_daily_feeds` recomputes scores every run (per-event factors precomputed once, persona affinity memoized), so there is no read-through cache and no invalidation on feedback/persona change. A dislike (direct or via its dedup group) is a hard exclude in `_score_user_candidates`.
-- `daily_feeds` — user_id, feed_date, event_ids BigInteger[]
-- `organizers` — self-service submission account (see `docs/organizer-portal.md`): email (citext unique), locale, session_token_version (int, bumped to revoke all organizer sessions), verified (bool, default false — gates auto-publish, flipped true by an admin's first `POST /admin/submissions/{id}/approve`), name (nullable display name, #175 — blank is stored as `NULL`). No theme column on either account table — migration 0040 dropped `theme_preference` (ADR 0003).
-- `organizer_magic_links` — mirrors `auth_magic_links` for the organizer auth track: token_hash (sha256), expires_at, used_at, `pending_google_sub`
-- `organizer_identities` — mirrors `user_identities` for the organizer auth track (`organizer_id` FK, `ON DELETE CASCADE`); same per-table unique constraint and no-email-column reasoning
-- `organizer_image_uploads` — one row per successful `POST /organizer/events/image` upload (organizer_id, created_at); exists purely to count-then-act against `ORGANIZER_DAILY_IMAGE_UPLOAD_CAP` (an upload can happen before the organizer ever submits/edits an event, so it can't be derived from `Event.created_at` the way `ORGANIZER_DAILY_SUBMISSION_CAP` is). Never read back; no retention sweep.
-- `venues` — an organizer's reusable venue, built up and picked across event submissions (#173/#174; the submit/edit form picks one via `frontend/src/components/VenuePicker/`): `organizer_id` FK (`ON DELETE CASCADE`), `name`/`name_en`/`name_ru` as separate per-locale text columns (personas-table pattern, not Event's JSONB pattern; `address` is a single non-localized column — street names don't translate across locales), `lat`/`lng` (backfilled by the geocoding job's `geocode_pending_venues` sub-pass, then propagated onto linked `Event`s — both initial fill and later address-correction resync — by `_sync_venue_linked_coords`, #179), `price_min`/`price_max`/`currency` (copy-in defaults only — not authoritative once copied onto an Event), `geocode_attempted_at` (own cooldown clock, separate from `Event.geocode_attempted_at`), `deleted_at` (soft-delete — hides the venue from `GET /organizer/venues` but never touches events that already reference it). CRUD lives under `routers/organizer_venues.py`, scoped to `get_current_organizer`; update/delete 404 (not 403) on cross-organizer access, matching `organizer_events.py`'s convention. Editing any address field synchronously clears `lat`/`lng`/`geocode_attempted_at` to force re-resolution. Renaming a venue (`name`/`name_en`/`name_ru`) changes the text shown on every linked event at read time, so `PATCH` rescans those events (`remoderate_venue_linked_events`, `routers/utils.py`, one query): explicit/non-event flags are re-applied via `apply_moderation_flags`, a newly flagged published event drops back to `classified`, and all linked live events get `needs_review` (OWASP audit #5). Daily creation capped by `ORGANIZER_DAILY_VENUE_CREATION_CAP`, same count-then-insert pattern as `ORGANIZER_DAILY_SUBMISSION_CAP`.
-- `events.submitted_by_organizer_id` (FK → `organizers.id`, indexed) / `events.needs_review` (bool, partial index on true) — attribute an organizer-submitted event back to its account and flag it for the admin post-hoc review queue (`GET /admin/submissions`)
-- `publishers` — organizer event claiming foundation (#409/#410; see CONTEXT.md's Event Claiming glossary): the real-world entity a claim is granted against. `source_id` FK, nullable `external_id` (unique with `source_id` — one row per Fienta organizer id or Piletilevi promoter id, `external_id` NULL for the single KUMU/Estonia Concert Hall row), `name`, `status` (`active`/`retired`). `event_sources.publisher_id` (nullable FK, `ON DELETE SET NULL`) links a listing to its resolved Publisher. `event_sources.publisher_resolve_attempted_at` (nullable timestamptz) is the backfill's retry-cooldown stamp for listings the live Fienta re-query could not resolve. Populated by `sync_fienta_organizers()`'s `_sync_publishers()` mirror + `seed_publishers()` (the `publishers` rows), by `insert_normalized_event()` at ingest and the 6-hourly `backfill_publisher_ids` job (Fienta/KUMU/ECH `publisher_id` stamps), and at claim time for Piletilevi (`resolve_claim_target_live()`) — see `docs/pipeline.md`'s Publisher mirroring.
-- `claims` — an organizer's claim over a Publisher or an event series (#409/#410). `organizer_id` FK (`ON DELETE CASCADE`), `kind` (`publisher`/`series`, polymorphic tag), `publisher_id` (nullable FK, set for `kind="publisher"`) / `event_series_key` (nullable text, set for `kind="series"` — the `event_series_key()` tuple from `events/queries.py` serialized as `"<normalized_title>\x1f<normalized_venue>"`), `status` (`pending`/`approved`/`revoked`/`cancelled`/`expired` — `VALID_CLAIM_STATUSES`; a stored `revoked` always means a declined *pending* claim and is serialized to the API-only `declined`, since an admin revoke of an *approved* claim deletes the row outright), `verification_mechanism` (one of `VALID_CLAIM_VERIFICATION_MECHANISMS`: `fienta_token`/`dns_txt`/`piletilevi_promoter`/`piletilevi_mailbox`/`admin_review`), `proof_token` (system-generated, reused by every recheck), `verification_domain` (DNS-TXT target, NULL for token/admin-review mechanisms), `verification_contact` (the Piletilevi promoter mailbox a `piletilevi_mailbox` check compared against, shown to the admin as evidence), `justification` (required for `kind="series"`, enforced in `app/claims/lifecycle.py`), `last_checked_at` (bumped at creation and by every recheck — the expiry sweep's clock, not `created_at`), `resolved_at` (set once status leaves `pending`), `dormant` (bool, default false — set by dedup's `resolve_claim_dormancy()` when this claim's event loses a claimed-vs-claimed collision, #418; see CONTEXT.md's Event Claiming glossary). Partial unique indexes on `publisher_id`/`event_series_key` constrain **approved** claims only (migration 0048, ADR 0004) — multiple pending claims may coexist on one target.
-- `claim_edit_attempts` — one row per claim-editing-surface save attempt (organizer_id, created_at; #416), counted against the per-organizer daily claim-edit cap (`ORGANIZER_DAILY_CLAIM_EDIT_CAP`, scaled by covered-event count via `claims/pinning.py::scaled_claim_edit_cap`). Written on every PATCH regardless of outcome — it counts attempts, not successful publishes.
-- `events.series_key` (M6, migration 0052) — text, btree-indexed `(series_key, starts_at)`; the serialized `event_series_key()` (`normalized_title(title_orig)` + `\x1f` + normalized *resolved* venue name — a linked `Venue`'s `coalesce(name_en, name)`, else `venue_name`). **DB-maintained, never written by the app** (`server_default=FetchedValue()`): a `BEFORE INSERT/UPDATE OF title_orig, venue_name, venue_id` trigger on `events` plus an `AFTER UPDATE OF name, name_en` trigger on `venues` (refreshes linked events on rename), both using `event_series_key_sql()`, the SQL mirror of `normalized_title()`. Replaces the 2000-row Python scan in `claims/pinning.py` (`bulk_resolve_series_events`, `clear_claim_pins`). Kept out of the 0050 `updated_at` column list (`tests/test_events_trigger_columns.py` `UNTRACKED`). Known divergence: SQL `lower()` follows DB locale and differs from Python on exotic case folds (e.g. Turkish dotted `İ`); a miss there just means no series-claim match. `tests/test_events_series_key_sql.py` asserts parity + rename propagation against a real migrated Postgres (skipped when none reachable). The other series-key call sites (dedup, dormancy, target resolution, Daily 5) still compute keys in Python from loaded rows.
-- `events` claim-discovery trigram indexes (M9, migration 0051) — `ix_events_search_text_trgm` (pg_trgm GIN over `constants.EVENT_SEARCH_TEXT_SQL`: `title_orig` + every locale's `title_localized`) backs `GET /organizer/claims/search`; `ix_events_url_trgm` backs `/suggestions`' domain ILIKE. Expression indexes, not columns, so the M11 `updated_at` trigger column list is untouched. The query side (`claim_search_text()` in `organizer_claims.py`) must match the index expression textually — `tests/test_claim_search_indexes.py` guards drift. Search now matches any locale's title, not just the requested locale's.
-- `events.pinned_fields` — JSONB array (default `[]`) of field names a claim has pinned against overwrite by ingestion/detail-refetch; a per-locale text field (`title_localized`/`description_localized`/`important_info_localized`) is pinned per-locale via a `"<field>:<locale>"` entry. Price fields (`price_min`/`price_max`/`currency`/`has_free_tier`) never participate. Written by the claim-editing surface (`organizer_claim_edits.py`, `app/claims/pinning.py`) and honored by the detail-refetch sync (`ingestion/refetch.py`); a dormant claim's pins are treated as absent (`bulk_dormant_pinned_event_ids()`).
-- `event_reports` — user-filed content reports (`POST /reports`, see CONTEXT.md's Content Moderation glossary): `user_id`, `event_id`, `reason`, `is_illegal_allegation` (bool — PII/legal-sensitive, one reason `/admin/reports` is session-only), `detail`, `status` (`open`/`resolved`), `resolution_note`, `created_at`/`resolved_at`. Resolved by admins via `/admin/reports` (resolve or take down — takedown cancels the event with `cancellation_reason = report_takedown`).
-- `admin_actions` — durable audit row per console-initiated admin action (`action` — one of the `ADMIN_ACTION_*` values, `target`, `result`, `created_at`), written by `log_admin_action()` in the same transaction as the mutation it records (see `docs/backend-ops.md`'s Audit logging). Migration 0030 — the prod incident behind the boot-time `assert_schema_at_head` guard.
-- `llm_calls` — per-call LLM log + content-hash cache (`task`, `event_id`, `content_hash`, `provider`, `model`, token counts, `response_json`); the dedup/classification/venue-extract cache lookups key off `content_hash`. Pruned after `LLM_CALLS_RETENTION_DAYS` (see `docs/backend-ops.md`'s retention table).
-- `ingestion_runs` — one row per adapter run (`source_id`, `started_at`/`finished_at`, `raw_count`/`new_count`, `error` — set from the propagated adapter exception, see `docs/conventions.md`'s Error visibility).
-- `raw_inbound_emails` — stored newsletter-inbound webhook payloads (`from_addr`/`to_addr`/`subject`/`raw_payload`, `received_at`/`processed_at`); dormant path, see `docs/pipeline.md`'s Newsletter inbound.
+### Users and Sign-In
+
+- **`users.email_verified` flips true on the first successful magic-link verification.** It gates `build_daily_feeds` and `send_daily_digests`. See [security.md](security.md)'s Email Verification Gate section.
+- **`users.email_digest_opt_in` gates the daily digest send.** `users.locale` is one of `et`, `en` and `ru`.
+- **`session_token_version` is bumped to revoke every session** of a user, or of an organizer on `organizers`. See [security.md](security.md)'s Session Revocation section.
+- **`auth_magic_links` rows are one-use and store only a sha256 `token_hash`.** A non-null `pending_google_sub` marks a link that confirms a pending Google link instead of starting a session ([ADR 0002](adr/0002-google-sign-in-oauth-pkce.md)). There is no second token type.
+
+### Linked Identities
+
+- **`user_identities` maps an account to an external sign-in identity** by `provider` and `provider_sub`. `provider` is a data value such as `"google"`, not hardcoded. The `user_id` FK cascades on delete, and a plain index on it serves the "which providers are linked" lookup.
+- **`UniqueConstraint("provider", "provider_sub")` is per table, not global.** One Google account may hold both a `User` and an `Organizer` row, and the two never merge. This mirrors the split between `auth_magic_links` and `organizer_magic_links`.
+- **There is deliberately no `email` column.** The address lives on `users.email` or `organizers.email`, and an identity is keyed only by its stable `sub`.
+
+### Organizers
+
+- **`organizers` holds the self-service portal account;** see [organizer-portal.md](organizer-portal.md). `organizer_magic_links` and `organizer_identities` mirror the consumer tables for this auth track, constraints and all.
+- **`organizers.verified` (default false) gates auto-publish.** An admin's first `POST /admin/submissions/{id}/approve` flips it true.
+- **`organizers.email_verified_at` is stamped on the first sign-in by any path** (migration 0057). The weekly cleanup never prunes an organizer that has it. See [backend-ops.md](backend-ops.md)'s Data Retention & Cleanup section.
+- **A blank `organizers.name` is stored as `NULL`.**
+- **Neither account table has a theme column.** Migration 0040 dropped `theme_preference` ([ADR 0003](adr/0003-device-theme-with-expiring-override.md)).
+- **`organizer_image_uploads` exists only to enforce `ORGANIZER_DAILY_IMAGE_UPLOAD_CAP`.** An upload can precede any submission, so the count can't come from `Event.created_at` the way the submission cap's does. Rows are never read back and never swept.
+
+### Personas
+
+- **`personas` holds the 9 static personas.** Each has a JSONB affinity vector and display names in et, en and ru.
+- **`user_personas.weight` comes from the pick's rank.** Onboarding is a ranked multi-pick of up to `PERSONA_MAX_SELECTABLE` (3). `PERSONA_RANK_WEIGHTS` gives 1.0 / 0.4 / 0.2 by position, so the first pick leads (`app/routers/onboarding.py`).
+
+### Ingestion Tables
+
+| Table | Holds |
+|---|---|
+| `sources` | the ingestion source registry |
+| `raw_events` | each source payload, as JSONB |
+| `event_sources` | links from an event to a source and its `external_id` |
+| `ingestion_runs` | one row per adapter run, with counts and `error` |
+| `llm_calls` | the per-call LLM log and content-hash cache |
+| `raw_inbound_emails` | stored newsletter-inbound webhook payloads |
+
+- **A unique index on `event_sources(source_id, external_id)` makes ingestion idempotent** at the DB level (migration 0007).
+- **`ingestion_runs.error` comes from the propagated adapter exception.** See [pipeline.md](pipeline.md)'s Pipeline Code Rules section.
+- **The dedup, classification and venue-extract caches key off `llm_calls.content_hash`.** Rows are pruned after `LLM_CALLS_RETENTION_DAYS`; see [backend-ops.md](backend-ops.md)'s Data Retention & Cleanup section.
+- **`raw_inbound_emails` backs a dormant path.** See [pipeline.md](pipeline.md)'s Newsletter Inbound section.
+
+### Events
+
+`events` holds one normalized row per occurrence. [pipeline.md](pipeline.md) covers the stages that write it.
+
+| Column | Meaning |
+|---|---|
+| `title_orig`, `description_orig` | source text |
+| `important_info` | ticket and access notes scraped from HTML-listing sources |
+| `title_localized`, `description_localized`, `important_info_localized` | JSONB `{locale: html}` |
+| `price_hint` | raw price text from ingestion, fed to classification |
+| `price_min`, `price_max`, `currency` | parsed from `price_hint` by classification |
+| `has_free_tier` | a paid event that also offers a free, companion or member tier |
+| `venue_name`, `venue_address` | `NULL` when `venue_id` is set |
+| `venue_id` | nullable FK → `venues`, organizer submissions only |
+| `lat`, `lng` | backfilled by the geocoding job when missing |
+| `status` | `draft` → `classified` → `published` or `cancelled` |
+| `cancellation_reason` | one of `VALID_EVENT_CANCELLATION_REASONS` |
+| `is_explicit` | NSFW filter flag |
+| `is_non_event` | gift card, merch or webinar; blocks the publish gate |
+| `is_out_of_area` | the LLM's `in_target_city` signal; blocks the publish gate |
+| `detail_refetched_at`, `detail_refetch_count` | detail-refetch sync bookkeeping |
+| `geocode_attempted_at` | geocoding backfill cooldown |
+| `venue_extract_attempted_at` | venue-name extract cooldown (migration 0056) |
+| `submitted_by_organizer_id` | FK → `organizers`, indexed |
+| `needs_review` | flags the admin review queue; partial index on true |
+| `pinned_fields` | JSONB array of fields a claim has pinned |
+| `series_key` | DB-maintained series key (migration 0052) |
+| `dedup_group_id` | the event's dedup group |
+| `updated_at` | trigger-maintained change marker |
+
+- **`published` is set by the publish gate, never directly by classification.** See [pipeline.md](pipeline.md)'s Publish Gate section.
+- **Only the manual retract and takedown paths set `cancellation_reason`:** `organizer_retract`, `admin_retract` and `report_takedown`. Pipeline cancellations, such as `classify_pending`'s ended-draft sweep, leave it `NULL`. So do rows cancelled before the column existed.
+- **`has_free_tier` is OR-merged across sources.** See [pipeline.md](pipeline.md)'s Prices section.
+- **The `*_localized` columns have three writers:** per-locale page fetches at ingest, the organizer form's per-locale fields, and the detail-refetch backfill of missing locales. A source that concatenates several languages in one field is stored as-is, unsplit.
+- **`submitted_by_organizer_id` and `needs_review` feed `GET /admin/submissions`.** See [organizer-portal.md](organizer-portal.md)'s Trust Gating and Review section.
+
+#### The `updated_at` Trigger
+
+- **`trg_events_set_updated_at` bumps `updated_at` only when a tracked column actually changes** (migration 0027). The bookkeeping columns stay untracked, so routine sync passes don't move the prerender's change marker. See [seo.md](seo.md)'s Change Detection and Copy-Forward section.
+- **The trigger compares an explicit `ROW(...)` column list frozen in migration 0050.** `backend/tests/test_events_trigger_columns.py` checks it covers every `events` column outside its `UNTRACKED` set.
+- **Adding an `events` column needs a migration that re-issues `trg_events_set_updated_at` with it.** Otherwise edits to that column never move `updated_at`, and the prerender keeps serving the stale page. Add the column to the test's expectations in the same change.
+
+#### Series Key
+
+- **`events.series_key` is maintained by the database, never written by the app** (`server_default=FetchedValue()`). It holds the serialized `event_series_key()`: `normalized_title(title_orig)`, then `\x1f`, then the normalized resolved venue name. That name is a linked `Venue`'s `coalesce(name_en, name)`, else `venue_name`.
+- **Two triggers keep it current, both calling `event_series_key_sql()`,** the SQL mirror of `normalized_title()`. A `BEFORE INSERT/UPDATE OF title_orig, venue_name, venue_id` trigger runs on `events`. An `AFTER UPDATE OF name, name_en` trigger on `venues` refreshes linked events on a rename.
+- **A btree index on `(series_key, starts_at)` serves `app/claims/pinning.py`** (`bulk_resolve_series_events`, `clear_claim_pins`). Dedup, dormancy, target resolution and the Daily 5 still compute keys in Python from loaded rows.
+- **Known divergence: SQL `lower()` follows the DB locale.** It differs from Python on exotic case folds such as Turkish dotted `İ`. A miss there only means no series-claim match.
+- **`backend/tests/test_events_series_key_sql.py` asserts parity and rename propagation** against a real migrated Postgres. It skips when none is reachable.
+
+#### Claim Search Indexes
+
+- **Two pg_trgm GIN expression indexes back claim discovery** (migration 0051). `ix_events_search_text_trgm` covers `EVENT_SEARCH_TEXT_SQL` (`app/constants.py`): `title_orig` plus every locale's `title_localized`. It serves `GET /organizer/claims/search`, which therefore matches a title in any locale.
+- **`ix_events_url_trgm` serves the domain `ILIKE` in `GET /organizer/claims/suggestions`.**
+- **The query side must match the index expression textually.** `app/routers/organizer_claims.py::claim_search_text()` builds it, and `backend/tests/test_claim_search_indexes.py` guards drift.
+- **They are expression indexes, not columns,** so the `updated_at` trigger's column list is untouched.
+
+#### Pinned Fields
+
+- **`events.pinned_fields` lists the fields a claim has pinned against overwrite** by ingestion and detail-refetch. It defaults to `[]`. A per-locale text field pins one locale with a `"<field>:<locale>"` entry.
+- **Price fields never take part:** `price_min`, `price_max`, `currency` and `has_free_tier`.
+- **The claim-editing surface writes it** (`app/routers/organizer_claim_edits.py`, `app/claims/pinning.py`). A Dormant claim's pins count as absent. See [pipeline.md](pipeline.md)'s Localized Text Backfill section for how the refetch honors them.
+
+### Classifications
+
+- **`event_classifications` holds the LLM's output per event:** `categories[]`, `vibes[]`, `quality_score`, three `why_go_bullets`, `why_go_localized` (JSONB `{locale: [bullets]}`), `language_detected` and `model_used`.
+
+### Feedback and Feeds
+
+`user_event_feedback` holds two signal classes with different row rules. Keep them split: a single upsert-by-(user, event) rule would let a ticket click overwrite a bookmark.
+
+- **Preference signals keep current state, one row per (user, event).** These are like, dislike and bookmark (`PREFERENCE_SIGNALS`), enforced by a partial unique index (migration 0019). `POST /feedback` upserts and `DELETE /feedback/{event_id}` removes. `GET /feedback/events?signal=` reads them for the Saved Events page.
+- **Passive signals append, at most one row per (user, event, signal, UTC day).** These are `view` and `click_external`, the rest of `VALID_SIGNALS`, kept for page-view and ticket-click analytics. A partial unique index on the UTC date enforces the cap (`uq_user_event_feedback_passive_signal_day`, migration 0055).
+- **`POST /feedback` inserts passive rows `ON CONFLICT DO NOTHING`**, so a client spamming the endpoint can't grow the table. Ranking reads only like and dislike rows, so the cap changes no score.
+- **`daily_feeds` stores each user's Daily 5** as `user_id`, `feed_date` and a `BigInteger[]` of `event_ids`.
+- **There is no score cache.** Migration 0053 dropped `user_event_scores`, and `build_daily_feeds` recomputes scores every run. So a feedback or persona change needs no invalidation. See [pipeline.md](pipeline.md)'s Ranking section.
+
+### Saved Venues
+
+`venues` holds an organizer's reusable venues, picked across submissions in `frontend/src/components/VenuePicker/`. CRUD lives in `app/routers/organizer_venues.py`, scoped to `get_current_organizer`.
+
+- **Names are per-locale columns: `name`, `name_en` and `name_ru`.** That follows the `personas` pattern, not the `events` JSONB pattern. `address` is a single non-localized column, since street names don't translate.
+- **`lat` and `lng` come from the geocoding job's venue pass,** which then copies them onto linked events. See [pipeline.md](pipeline.md)'s Geocoding Backfill section. `venues.geocode_attempted_at` is the venue's own cooldown, separate from the event's.
+- **`price_min`, `price_max` and `currency` are copy-in defaults only.** Once copied onto an event, the event's values are authoritative.
+- **`deleted_at` is a soft delete.** It hides the venue from `GET /organizer/venues` and never touches events that already reference it.
+- **Update and delete return 404, not 403, on another organizer's venue,** matching `app/routers/organizer_events.py`.
+- **Editing any address field clears `lat`, `lng` and `geocode_attempted_at` synchronously,** which forces re-resolution.
+- **A rename re-moderates every linked event,** because events show the venue name at read time. `app/routers/utils.py::remoderate_venue_linked_events` re-applies the explicit and non-event flags in one query. A newly flagged published event drops to `classified`, and every linked live event gets `needs_review`.
+- **`ORGANIZER_DAILY_VENUE_CREATION_CAP` caps daily venue creation** with the same soft count-then-insert as the other organizer caps.
+
+### Publishers and Claims
+
+- **A `publishers` row is the real-world entity a Publisher claim is granted against.** `external_id` is unique with `source_id`: one row per Fienta organizer id or Piletilevi promoter id. The single KUMU/Estonia Concert Hall row has a `NULL` `external_id`. `status` is `active` or `retired`. See `CONTEXT.md`'s Event Claiming glossary.
+- **`event_sources.publisher_id` links a listing to its resolved Publisher** (nullable, `ON DELETE SET NULL`). `event_sources.publisher_resolve_attempted_at` is the backfill's retry cooldown for listings the live Fienta re-query couldn't resolve.
+- **Publisher rows and `publisher_id` stamps have several writers:** the Fienta organizer sync, ingest, the 6-hourly backfill and, for Piletilevi, claim time. See [pipeline.md](pipeline.md)'s Publisher Mirroring and Publisher Backfill sections.
+- **A `claims` row is an organizer's claim over a Publisher or an event series.** `kind` (`publisher` or `series`) is the polymorphic tag. A `publisher` claim sets `publisher_id`. A `series` claim sets `event_series_key` to the serialized `"<normalized_title>\x1f<normalized_venue>"`.
+- **A stored `revoked` always means a declined pending claim,** and the API serializes it as `declined`. An admin revoke of an approved claim deletes the row outright. `VALID_CLAIM_STATUSES` lists the stored values.
+- **The expiry sweep clocks off `last_checked_at`, not `created_at`.** Creation and every recheck bump it.
+- **Partial unique indexes on `publisher_id` and `event_series_key` cover approved claims only** (migration 0048, [ADR 0004](adr/0004-claim-eligibility-tightening.md)). Several pending claims can coexist on one target.
+- **`claim_edit_attempts` gets a row for every save on the claim-editing surface,** successful or not. It counts against `ORGANIZER_DAILY_CLAIM_EDIT_CAP`, scaled by covered-event count in `app/claims/pinning.py::scaled_claim_edit_cap`.
+
+| `claims` column | Meaning |
+|---|---|
+| `verification_mechanism` | one of `VALID_CLAIM_VERIFICATION_MECHANISMS` |
+| `proof_token` | system-generated, reused by every recheck |
+| `verification_domain` | DNS-TXT target; `NULL` for token and admin-review mechanisms |
+| `verification_contact` | the Piletilevi promoter mailbox a `piletilevi_mailbox` check compared against, shown to the admin |
+| `justification` | required for `series`, enforced in `app/claims/lifecycle.py` |
+| `resolved_at` | set once `status` leaves `pending` |
+| `dormant` | set by `app/dedup/rules.py::resolve_claim_dormancy()`; see [organizer-portal.md](organizer-portal.md)'s Dormant Claims section |
+
+### Moderation and Audit
+
+- **`event_reports` holds user-filed content reports from `POST /reports`.** Admins resolve them or take the event down through `/admin/reports`; a takedown cancels the event with `cancellation_reason = report_takedown`. See `CONTEXT.md`'s Content Moderation glossary.
+- **`event_reports.is_illegal_allegation` is legal-sensitive.** It is one reason `/admin/reports` is session-only.
+- **`admin_actions` is a durable audit row per console action,** written by `log_admin_action()` in the same transaction as the mutation. See [backend-ops.md](backend-ops.md)'s Audit Logging section.
+- **The boot-time `assert_schema_at_head` guard exists because of this table.** Its migration (0030) went unapplied in production, and every audited admin action returned 500.
 
 ## Migrations
 
