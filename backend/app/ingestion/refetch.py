@@ -59,6 +59,7 @@ from app.constants import (
     REFETCH_REQUEST_DELAY_SECONDS,
     REPORT_AUTO_RESOLVE_NOTE,
     SOURCE_KIND_USER_SUBMISSION,
+    SOURCE_SLUG_PILETILEVI,
     TALLINN_TZ,
     VENUE_NAME_MAX_LEN,
 )
@@ -105,7 +106,12 @@ from app.ingestion.sources.estonia_concert_hall import (
     estonia_concert_hall_localized_text,
 )
 from app.ingestion.sources.kumu import kumu_localized_text
-from app.ingestion.sources.piletilevi import piletilevi_localized_text
+from app.ingestion.sources.html_base import OnceAsync
+from app.ingestion.sources.piletilevi import (
+    piletilevi_localized_text,
+    piletilevi_store_login,
+    piletilevi_store_price_fields,
+)
 from app.models.models import Event, EventReport, EventSource, Source
 
 log = logging.getLogger(__name__)
@@ -355,6 +361,7 @@ async def _process_one(
     now: datetime,
     dormant_event_ids: set[int],
     gone_due: list[Event],
+    store_session: OnceAsync[bool],
 ) -> bool:
     """Fetch one event's detail page, backfill locales, and reconcile fields.
 
@@ -395,6 +402,12 @@ async def _process_one(
         fallback = PRICE_FALLBACK_EXTRACTORS.get(normalized_host)
         if fallback is not None:
             price_min, price_max, currency, has_free_tier = fallback(soup)
+    if normalized_host == PILETILEVI_HOST and price_min is None and event.price_min is None:
+        # Piletilevi detail pages carry no JSON-LD offers, so a pre-sale event
+        # only gets its price from the store API once its sale opens (#535).
+        price_min, price_max, currency, has_free_tier = await piletilevi_store_price_fields(
+            client, url, store_session
+        )
 
     # Runs before the no_data gate so events whose JSON-LD has only text
     # (no location/offers) still receive localized titles/descriptions.
@@ -481,6 +494,9 @@ async def refetch_event_details(db: AsyncSession) -> dict:
     host_semaphore = asyncio.Semaphore(REFETCH_HOST_CONCURRENCY)
     commit_lock = asyncio.Lock()
     gone_due: list[Event] = []
+    store_session: OnceAsync[bool] = OnceAsync(
+        lambda client: piletilevi_store_login(client, SOURCE_SLUG_PILETILEVI)
+    )
 
     async def _refetch_host(client: httpx.AsyncClient, host_events: list[Event]) -> None:
         nonlocal last_commit
@@ -492,7 +508,7 @@ async def refetch_event_details(db: AsyncSession) -> dict:
                     summary["deadline_stopped"] = True
                     break
                 fetched = await _process_one(
-                    client, event, summary, now, dormant_event_ids, gone_due
+                    client, event, summary, now, dormant_event_ids, gone_due, store_session
                 )
                 if fetched:
                     await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)

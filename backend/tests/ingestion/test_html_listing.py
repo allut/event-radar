@@ -42,6 +42,7 @@ from app.ingestion.sources.piletilevi import (
     _parse_piletilevi_date,
     _piletilevi_important_info,
     _price_bounds_from_store,
+    classify_store_price_400,
     full_res_piletilevi_image,
     piletilevi_localized_text,
 )
@@ -1570,6 +1571,89 @@ def _piletilevi_response(payload: dict):
     resp = MagicMock(spec=httpx.Response)
     resp.json.return_value = payload
     return resp
+
+
+def _piletilevi_400(body) -> httpx.HTTPStatusError:
+    resp = MagicMock(spec=httpx.Response)
+    resp.status_code = 400
+    resp.json.return_value = body
+    return httpx.HTTPStatusError("400 Bad Request", request=MagicMock(), response=resp)
+
+
+class TestPiletileviPrice400:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("body", "outcome"),
+        [
+            (
+                {"code": "web_event_sale_has_not_started", "message": "Sale for this event has not started yet"},
+                "sale_not_started",
+            ),
+            ([{"message": "YBO client errors", "errors": [{"message": "This event is SOLD OUT."}]}], "sold_out"),
+        ],
+    )
+    async def test_business_state_400_logs_info_and_counts(self, body, outcome, caplog):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {"url": _PILETILEVI_DETAIL_URL}
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post"),
+            patch("app.ingestion.sources.piletilevi.http_get", side_effect=_piletilevi_400(body)),
+            caplog.at_level("INFO"),
+        ):
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert "price_min" not in card
+        assert adapter.price_outcomes == {outcome: 1}
+        assert not [r for r in caplog.records if r.levelname == "WARNING"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("body", [{"code": "something_else"}, [{"errors": [{"message": "boom"}]}], "text", None])
+    async def test_other_400_still_warns(self, body, caplog):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {"url": _PILETILEVI_DETAIL_URL}
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post"),
+            patch("app.ingestion.sources.piletilevi.http_get", side_effect=_piletilevi_400(body)),
+            caplog.at_level("INFO"),
+        ):
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert adapter.price_outcomes == {}
+        assert [r for r in caplog.records if r.levelname == "WARNING" and "price fetch failed" in r.message]
+
+
+class TestClassifyStorePrice400:
+    @pytest.mark.parametrize(
+        ("body", "expected"),
+        [
+            ({"code": "web_event_sale_has_not_started"}, "sale_not_started"),
+            ([{"errors": [{"message": "  this event is sold out. "}]}], "sold_out"),
+            ({"code": "other"}, None),
+            ([], None),
+            ("x", None),
+        ],
+    )
+    def test_classify(self, body, expected):
+        assert classify_store_price_400(body) == expected
+
+    @pytest.mark.asyncio
+    async def test_non_json_400_and_500_still_warn(self, caplog):
+        for exc in (
+            _piletilevi_400(ValueError("no json")),
+        ):
+            exc.response.json.side_effect = ValueError("no json")
+            adapter = _piletilevi_adapter()
+            soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+            with (
+                patch("app.ingestion.sources.piletilevi.http_post"),
+                patch("app.ingestion.sources.piletilevi.http_get", side_effect=exc),
+                caplog.at_level("INFO"),
+            ):
+                await adapter.parse_detail(MagicMock(), soup, {"url": _PILETILEVI_DETAIL_URL})
+            assert adapter.price_outcomes == {}
+        assert [r for r in caplog.records if r.levelname == "WARNING"]
 
 
 def _make_jwt(claims: dict) -> str:

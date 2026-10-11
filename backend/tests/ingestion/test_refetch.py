@@ -223,6 +223,60 @@ class TestPriceReconcile:
         assert summary["price_changed"] == 0
 
 
+    @pytest.mark.asyncio
+    async def test_piletilevi_fills_price_from_store_api_when_unpriced(self, mock_db):
+        """Piletilevi pages carry no JSON-LD offers (#535); an unpriced event
+        gets its price from the store API once the sale opens."""
+        event = _future_event(url="https://www.piletilevi.ee/en/tickets/EIHT67B2EC/x")
+        payload = {"eventSections": [{"priceZones": [{"ticketTypes": [{"price": 26.9}, {"price": 36.9}]}]}]}
+        store_resp = MagicMock()
+        store_resp.json.return_value = payload
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        get = AsyncMock(side_effect=[_resp("<html></html>"), store_resp])
+        with (
+            patch("app.ingestion.refetch.http_get", new=get),
+            patch("app.ingestion.sources.piletilevi.http_get", new=get),
+            patch("app.ingestion.sources.piletilevi.http_post", new=AsyncMock()),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        ):
+            summary = await refetch_event_details(mock_db)
+        assert event.price_min == 26.9
+        assert event.price_max == 36.9
+        assert summary["price_changed"] == 1
+
+    @pytest.mark.asyncio
+    async def test_piletilevi_pre_sale_stays_unpriced_for_next_refetch(self, mock_db):
+        event = _future_event(url="https://www.piletilevi.ee/en/tickets/DZA5RNPAZJ/x")
+        err_resp = MagicMock(spec=httpx.Response)
+        err_resp.status_code = 400
+        err_resp.json.return_value = {"code": "web_event_sale_has_not_started"}
+        err = httpx.HTTPStatusError("400", request=MagicMock(), response=err_resp)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        refetch_get = AsyncMock(return_value=_resp("<html></html>"))
+        with (
+            patch("app.ingestion.refetch.http_get", new=refetch_get),
+            patch("app.ingestion.sources.piletilevi.http_get", new=AsyncMock(side_effect=err)),
+            patch("app.ingestion.sources.piletilevi.http_post", new=AsyncMock()),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        ):
+            summary = await refetch_event_details(mock_db)
+        assert event.price_min is None
+        assert summary["price_changed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_piletilevi_priced_event_skips_store_api(self, mock_db):
+        event = _future_event(url="https://www.piletilevi.ee/en/tickets/EIHT67B2EC/x", price_min=10.0)
+        store_get = AsyncMock()
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        with (
+            patch("app.ingestion.refetch.http_get", new=AsyncMock(return_value=_resp("<html></html>"))),
+            patch("app.ingestion.sources.piletilevi.http_get", new=store_get),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        ):
+            await refetch_event_details(mock_db)
+        store_get.assert_not_called()
+
+
 # --- address <-> coords coupling --------------------------------------------
 
 

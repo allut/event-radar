@@ -221,6 +221,8 @@ The LLM classifies each event against a fixed category and vibe taxonomy (`VALID
 - **`app/ingestion/refetch.py::refetch_event_details()` re-reads every future event's `event.url`.** It parses the JSON-LD `Event` block through `app/ingestion/jsonld.py`. Then it reconciles venue, coordinates and price fields against the source.
 - **Reconciliation updates a differing value and fills an empty one.** It never replaces a good stored value with nothing.
 - **The parsing is generic JSON-LD, not Fienta-specific.** It no-ops on pages without an `Event` block. HTML-listing sources already fetch detail at ingest, so Fienta benefits most.
+- **Piletilevi prices come from the store API, not JSON-LD.** Its detail pages carry no `offers`. Ingest and refetch both call `piletilevi.py::fetch_store_prices()`. Refetch asks only for events with no stored price (`piletilevi_store_price_fields()`), so a pre-sale event is priced on the first refetch after its sale opens.
+- **A store-API 400 for a pre-sale or sold-out event is a business state, not a failure.** It logs at INFO, and the adapter logs a per-run count. Any other 400 still logs a WARNING. The codes live in `app/ingestion/selectors.py`.
 - **A coordinate cleared by an address change is repaired by the next geocoding pass.**
 - **A changed `venue_name` re-runs the explicit and non-event checks.** A published event that newly fails is demoted.
 
