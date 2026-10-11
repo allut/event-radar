@@ -8,11 +8,12 @@ import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import { t, ti } from '../../i18n';
 import {
-  API,
   CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
-  CLAIM_DNS_VERIFICATION_MECHANISMS,
   CLAIM_EXPIRY_DAYS,
-  COPY_FEEDBACK_MS,
+} from '../../_generated/sharedConstants';
+import { API, QUERY_KEYS } from '../../constants/api';
+import {
+  CLAIM_DNS_VERIFICATION_MECHANISMS,
   CLAIM_KIND_PUBLISHER,
   CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS,
   CLAIM_STATUS_APPROVED,
@@ -23,13 +24,12 @@ import {
   CLAIM_STATUS_REVOKED,
   CLAIM_TERMINAL_STATUSES,
   CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
-  QUERY_KEYS,
-  ROUTES,
-  UI_STATE,
   type ClaimKind,
   type ClaimStatus,
   type ClaimVerificationMechanism,
-} from '../../constants';
+} from '../../constants/claims';
+import { COPY_FEEDBACK_MS, UI_STATE } from '../../constants/core';
+import { ROUTES } from '../../constants/routes';
 import { apiErrorMessage, copyToClipboard, numericRouteId } from '../../utils';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import PageState from '../../components/PageState';

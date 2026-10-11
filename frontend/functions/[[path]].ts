@@ -26,7 +26,7 @@
  * confirmed to have no real asset: the build copies the pristine,
  * never-prerendered shell to `app-shell.html` *before* `prerender.ts`
  * overwrites `dist/index.html` with the Landing route's own prerendered
- * snapshot (APP_SHELL_FILENAME, src/constants.ts) — an unknown client-side
+ * snapshot (APP_SHELL_FILENAME, src/constants/prerender.ts) — an unknown client-side
  * route must get the generic shell, not Landing's snapshot.
  *
  * `env.ASSETS.fetch()` applies Pages' own redirect rules to the requested
@@ -38,7 +38,7 @@
  * say ASSETS.fetch expects.
  */
 import { StatusCodes } from 'http-status-codes';
-import { APP_SHELL_FILENAME } from '../src/constants.js';
+import { APP_SHELL_FILENAME } from '../src/constants/prerender.js';
 import type { PagesFunction } from './_shared/cloudflare.js';
 
 interface Env {

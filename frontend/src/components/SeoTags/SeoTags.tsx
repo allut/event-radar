@@ -1,6 +1,6 @@
 import { memo, useMemo } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { JSONLD_SCRIPT_TYPE } from '../../constants';
+import { JSONLD_SCRIPT_TYPE } from '../../constants/seo';
 import type { SeoMetaResult } from '../../hooks/useSeoMeta';
 import { serializeJsonLd } from '../../lib/jsonLd';
 

@@ -8,7 +8,9 @@ import type {
   WithContext,
 } from 'schema-dts';
 import type { EventData } from '../components/EventCard';
-import { DEFAULT_CURRENCY, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, ROUTES, SCHEMA_ORG_CONTEXT } from '../constants';
+import { DEFAULT_CURRENCY } from '../_generated/sharedConstants';
+import { ROUTES } from '../constants/routes';
+import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, SCHEMA_ORG_CONTEXT } from '../constants/seo';
 import { t } from '../i18n';
 import { localizedPath, safeUrl } from '../utils';
 

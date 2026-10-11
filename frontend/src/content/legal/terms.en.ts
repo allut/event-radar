@@ -1,4 +1,4 @@
-import { CONTACT_EMAIL, CONTACT_MAILTO, ODR_URL } from '../../constants';
+import { CONTACT_EMAIL, CONTACT_MAILTO, ODR_URL } from '../../constants/core';
 import type { LegalDoc } from './types';
 
 const doc: LegalDoc = {

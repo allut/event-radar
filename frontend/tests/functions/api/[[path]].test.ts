@@ -5,11 +5,9 @@
 // resolve.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { onRequest } from '../../../functions/api/[[path]]';
-import {
-  BACKEND_ORIGIN,
-  PRERENDER_CADENCE_TOKEN_HEADER,
-  SEO_AUDIT_TOKEN_HEADER,
-} from '../../../src/constants';
+import { BACKEND_ORIGIN } from '../../../src/constants/api';
+import { PRERENDER_CADENCE_TOKEN_HEADER } from '../../../src/constants/prerender';
+import { SEO_AUDIT_TOKEN_HEADER } from '../../../src/constants/seo';
 
 function makeContext(path: string, init: RequestInit = {}, env: Record<string, string> = {}) {
   return {

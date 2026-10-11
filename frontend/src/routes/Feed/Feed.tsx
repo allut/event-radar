@@ -13,7 +13,9 @@ import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import SeoTags from '../../components/SeoTags';
 import { formatHourMinute, formatIsoDate, formatTodayDate, padIndex, titleWithBrand, withLocaleQuery } from '../../utils';
-import { API, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
+import { API, QUERY_KEYS } from '../../constants/api';
+import { UI_STATE } from '../../constants/core';
+import { ROUTES } from '../../constants/routes';
 import styles from './Feed.module.css';
 
 interface FeedResponse {

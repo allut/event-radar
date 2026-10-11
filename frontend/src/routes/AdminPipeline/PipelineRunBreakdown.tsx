@@ -1,10 +1,10 @@
 import type { NdjsonLine } from '../../api/client';
-import { ADMIN_PIPELINE_STAGE_LABELS } from '../../constants';
+import { ADMIN_PIPELINE_STAGE_LABELS } from '../../constants/admin';
 import styles from './PipelineRunBreakdown.module.css';
 
 // Bespoke stage-by-stage breakdown for pipeline_run's result (issue #161).
 // Renders one row per stage in `stages` order (trigger.stages —
-// constants.ts) regardless of how many lines have arrived yet, so a run in
+// constants/admin.ts) regardless of how many lines have arrived yet, so a run in
 // progress (or one that stopped early on a failure) shows the full seven-
 // stage shape instead of only what's streamed so far.
 

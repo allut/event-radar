@@ -1,6 +1,6 @@
 // .js extensions required: this module is also imported (transitively) by
 // functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
-import { LOCALE_EN, LOCALE_ET, LOCALE_RU } from './constants.js';
+import { LOCALE_EN, LOCALE_ET, LOCALE_RU } from './constants/core.js';
 import { PERSONA_TRANSLATIONS, TRANSLATIONS } from './_generated/i18nData.js';
 import { PERSONAS_EN } from './_generated/i18nData.js';
 

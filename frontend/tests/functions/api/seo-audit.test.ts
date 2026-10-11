@@ -5,7 +5,11 @@
 // resolve.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { onRequest } from '../../../functions/api/seo-audit';
-import { PRODUCTION_ORIGIN, SEO_AUDIT_TOKEN_HEADER, CRAWLABLE_ICON_PATHS } from '../../../src/constants';
+import {
+  PRODUCTION_ORIGIN,
+  SEO_AUDIT_TOKEN_HEADER,
+  CRAWLABLE_ICON_PATHS,
+} from '../../../src/constants/seo';
 import { buildEventJsonLd, buildWebsiteJsonLd } from '../../../src/lib/structuredData';
 import { buildSeoMeta } from '../../../src/hooks/useSeoMeta';
 import { makeEvent } from '../../../src/test/utils';

@@ -37,15 +37,9 @@ import type { RoundMarker } from '../src/lib/prerenderChain';
 import faqEn from '../src/content/faq/faq.en';
 import faqEt from '../src/content/faq/faq.et';
 import faqRu from '../src/content/faq/faq.ru';
-import {
-  BROWSE_PAGE_SIZE,
-  CHAIN_STATE_PREFIX,
-  CRAWLABLE_ICON_PATHS,
-  LOCALES,
-  PRERENDER_READY_SELECTOR,
-  PRODUCTION_ORIGIN,
-  SITEMAP_PATH,
-} from '../src/constants';
+import { BROWSE_PAGE_SIZE, LOCALES } from '../src/_generated/sharedConstants';
+import { CHAIN_STATE_PREFIX, PRERENDER_READY_SELECTOR } from '../src/constants/prerender';
+import { CRAWLABLE_ICON_PATHS, PRODUCTION_ORIGIN, SITEMAP_PATH } from '../src/constants/seo';
 
 function makeTarget(bare: string): PrerenderTarget {
   return { bare, locale: 'en' };

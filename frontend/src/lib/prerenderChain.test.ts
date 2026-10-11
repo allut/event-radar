@@ -12,7 +12,7 @@ import {
   shouldCommitRoundMarker,
   type RoundMarker,
 } from './prerenderChain';
-import { CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES } from '../constants';
+import { CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES } from '../constants/prerender';
 
 function makeMarker(overrides: Partial<RoundMarker> = {}): RoundMarker {
   return {

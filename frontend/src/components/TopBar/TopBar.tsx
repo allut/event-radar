@@ -1,7 +1,12 @@
 import { Link } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { ACCOUNT_MENU_ITEMS, NAV_ITEMS, ROUTES, SIGNED_OUT_NAV_ITEMS } from '../../constants';
+import {
+  ACCOUNT_MENU_ITEMS,
+  NAV_ITEMS,
+  ROUTES,
+  SIGNED_OUT_NAV_ITEMS,
+} from '../../constants/routes';
 import { useBarScrolled } from '../../hooks/useBarScrolled';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import AccountMenu from '../AccountMenu';

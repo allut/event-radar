@@ -4,7 +4,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import DateRangeMenu from './DateRangeMenu';
 import { renderWithProviders } from '../../test/utils';
-import type { DatePreset } from '../../constants';
+import type { DatePreset } from '../../constants/explore';
 
 function Harness({ initialPreset = 'any' as DatePreset, initialFrom = null as string | null, initialTo = null as string | null }) {
   const [value, setValue] = useState<DatePreset>(initialPreset);

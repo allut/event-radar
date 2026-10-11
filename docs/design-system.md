@@ -98,7 +98,7 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 ### Pre-Paint Script
 
 - **An inline script in `frontend/index.html` resolves the theme before first paint**, so there's no flash of the wrong theme. It duplicates `resolveTheme`'s logic because it must run with no module loading. The two must never disagree.
-- **Its storage keys mirror `THEME_OVERRIDE_KEY` and `THEME_OVERRIDE_DEVICE_KEY` in `constants.ts`.** It also wipes the legacy `theme_preference` key unread.
+- **Its storage keys mirror `THEME_OVERRIDE_KEY` and `THEME_OVERRIDE_DEVICE_KEY` in `frontend/src/constants/theme.ts`.** It also wipes the legacy `theme_preference` key unread.
 - **Its body is pinned by a CSP hash in `frontend/public/_headers`.** Editing it means updating the hash, or production silently falls back to the boot self-heal with a flash on every load. See [security.md](security.md)'s Frontend CSP section.
 - **`main.tsx` calls `applyTheme()` at boot, just before `createRoot(...).render(...)`.** It's a self-heal: if the pre-paint script is blocked or a snapshot shipped a baked `data-theme`, the theme corrects itself once JS runs.
 - **Prerendered snapshots are theme-neutral.** `stripBakedThemeAttr` drops the build browser's `data-theme`; see [seo.md](seo.md)'s Theme-Neutral Snapshots section.
@@ -145,7 +145,7 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 
 - **No pictographic emoji in consumer or organizer UI.** `PersonaCard` and Settings' persona summary render none. `shared/personas.json` keeps its `emoji` field as data only.
 - **Unicode status marks (`✓ ✕ ⚠ ☰`) are functional glyphs, allowed everywhere.** Auth, modal, drawer and success states use them, and so do admin run and queue statuses.
-- **One emoji exception: the `👍 👎 🔖` signal glyphs.** They come from `SIGNAL_CONFIG` in `frontend/src/constants.ts`, on `FeedbackButtonRow` and the Saved page tabs. The tabs keep them by owner decision, so a tab reads as the same signal as the button that saved the event.
+- **One emoji exception: the `👍 👎 🔖` signal glyphs.** They come from `SIGNAL_CONFIG` in `frontend/src/constants/feedback.ts`, on `FeedbackButtonRow` and the Saved page tabs. The tabs keep them by owner decision, so a tab reads as the same signal as the button that saved the event.
 - **Treat that exception as open work, not precedent.** Replacing the glyphs is fine; a second emoji set is not.
 - **`RichTextEditor`'s toolbar glyphs are controls, not iconography.** They're local inline SVGs in `RichTextEditor/icons.tsx`, because a toolbar button has no text label to carry the meaning.
 - **A few small inline SVGs are documented functional exceptions.** They're the footer social marks, the overflow menu's Share/Flag, the search magnifiers, the preferences glyph, the account chevron, and label-less kebab, chevron, calendar and remove controls.
@@ -162,7 +162,7 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 - **`DialMark` is the brand mark, not an icon.** Rim, inner ring and pivot are `currentColor`; hand and tip dot are `--accent-ink`. It appears in both bars, `Footer`, `AuthCard`, `Login` and `OrganizerLogin`.
 - **The intro plays on the first bar mount per page load only.** A module-level flag gates it, since every route mounts its own bar. `Footer` and `AuthCard` render it static.
 - **Its animations fill `backwards` only.** The rim's `stroke-dasharray` lives only in the keyframes; on the resting ring it leaves a hairline gap at 12 o'clock.
-- **Admin keeps `BRAND_GLYPH` (`◉`).** `AdminShell` and `AdminLogin` get no brand imagery, so the constant stays in `constants.ts` for those two alone.
+- **Admin keeps `BRAND_GLYPH` (`◉`).** `AdminShell` and `AdminLogin` get no brand imagery, so the constant stays in `frontend/src/constants/core.ts` for those two alone.
 
 `frontend/scripts/generate-icons.ts` draws the off-page marks: favicons, app icons, the email header mark and the OG fallback image.
 

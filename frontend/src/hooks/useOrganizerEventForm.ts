@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../api/client';
-import { API, QUERY_KEYS, ORGANIZER_EVENT_DETAIL_KEY, ORGANIZER_MAX_CATEGORIES, DEFAULT_CURRENCY, ORGANIZER_IMAGE_ALLOWED_MIME, ROUTES } from '../constants';
+import {
+  ORGANIZER_MAX_CATEGORIES,
+  DEFAULT_CURRENCY,
+  ORGANIZER_IMAGE_ALLOWED_MIME,
+} from '../_generated/sharedConstants';
+import { API, QUERY_KEYS } from '../constants/api';
+import { ORGANIZER_EVENT_DETAIL_KEY } from '../constants/organizer';
+import { ROUTES } from '../constants/routes';
 import { t } from '../i18n';
 import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, toggleCapped, withLocaleQuery, type LocalizedTextFields } from '../utils';
 import { useLocaleNavigate } from './useLocaleNavigate';

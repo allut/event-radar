@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { api } from '../api/client';
-import { API, UI_STATE, type LoginState } from '../constants';
+import { API } from '../constants/api';
+import type { LoginState } from '../constants/auth';
+import { UI_STATE } from '../constants/core';
 import { t } from '../i18n';
 import { apiErrorMessage } from '../utils';
 

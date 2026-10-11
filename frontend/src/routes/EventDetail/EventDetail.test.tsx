@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import EventDetail from './EventDetail';
 import { renderWithProviders, makeEvent } from '../../test/utils';
-import { ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants';
+import { ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants/auth';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {

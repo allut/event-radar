@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ADMIN_NAV_ITEMS, BRAND_GLYPH, ROUTES } from '../../constants';
+import { BRAND_GLYPH } from '../../constants/core';
+import { ADMIN_NAV_ITEMS, ROUTES } from '../../constants/routes';
 import { useAdminLogout } from '../../hooks/useAdminLogout';
 import AdminThemeToggle from '../AdminThemeToggle';
 import styles from './AdminShell.module.css';

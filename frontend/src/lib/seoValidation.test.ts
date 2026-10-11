@@ -11,7 +11,7 @@ import { buildEventJsonLd, buildExploreItemListJsonLd, buildWebsiteJsonLd } from
 import { buildSeoMeta } from '../hooks/useSeoMeta';
 import { makeEvent } from '../test/utils';
 import { serializeJsonLd } from './jsonLd';
-import { PRODUCTION_ORIGIN } from '../constants';
+import { PRODUCTION_ORIGIN } from '../constants/seo';
 
 /** Mirrors components/SeoTags/SeoTags.tsx's rendering (title/meta/link/
  * ld+json escaping) closely enough to exercise parseSnapshotHtml against a

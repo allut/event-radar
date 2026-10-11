@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { cx } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
-import { DROPDOWN_DEFAULT_FOCUS_SELECTOR } from '../../constants';
+import { DROPDOWN_DEFAULT_FOCUS_SELECTOR } from '../../constants/core';
 import Chip, { type ChipOption } from '../Chip';
 import menuStyles from '../shared/Menu.module.css';
 import styles from './FacetMenu.module.css';

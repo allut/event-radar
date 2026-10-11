@@ -4,7 +4,8 @@ import { useOrganizerContactSubmit } from '../../hooks/useOrganizerContactSubmit
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import { Link } from 'react-router-dom';
 import { useLocalePath } from '../../hooks/useLocalePath';
-import { UI_STATE, CONTACT_TEXTAREA_ROWS, ROUTES, FAQ_ORGANIZERS_HASH } from '../../constants';
+import { UI_STATE, CONTACT_TEXTAREA_ROWS } from '../../constants/core';
+import { ROUTES, FAQ_ORGANIZERS_HASH } from '../../constants/routes';
 import { t } from '../../i18n';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import SeoTags from '../../components/SeoTags';

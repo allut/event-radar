@@ -1,4 +1,5 @@
-import { BRAND_GLYPH, TOTP_CODE_LENGTH, UI_STATE } from '../../constants';
+import { TOTP_CODE_LENGTH } from '../../constants/auth';
+import { BRAND_GLYPH, UI_STATE } from '../../constants/core';
 import { useAdminLogin } from '../../hooks/useAdminLogin';
 import styles from './AdminLogin.module.css';
 

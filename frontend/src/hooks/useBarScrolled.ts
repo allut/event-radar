@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BAR_CONDENSE_SCROLL_PX, BAR_EXPAND_SCROLL_PX } from '../constants';
+import { BAR_CONDENSE_SCROLL_PX, BAR_EXPAND_SCROLL_PX } from '../constants/core';
 
 /**
  * Whether the top bar should be condensed. Hysteresis (condense past 24px,

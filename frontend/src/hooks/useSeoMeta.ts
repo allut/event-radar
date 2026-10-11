@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
+import { LOCALE_ET } from '../constants/core';
 import {
   CANONICAL_REL,
-  LOCALE_ET,
   PRODUCTION_ORIGIN,
   ROBOTS_INDEX_FOLLOW,
   ROBOTS_NOINDEX,
   SEO_HREFLANG_CODES,
   SEO_XDEFAULT_CODE,
-} from '../constants';
+} from '../constants/seo';
 import { canonicalUrlFor } from '../lib/urlLocale';
 import { localizedPath, stripLocalePrefix } from '../utils';
 

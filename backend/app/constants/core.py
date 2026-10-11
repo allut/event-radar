@@ -50,7 +50,7 @@ LOCALE_EN = "en"
 LOCALE_RU = "ru"
 # Locales whose frontend URLs carry a `/en`/`/ru` path prefix — Estonian is the
 # bare (unprefixed) URL locale. Backend mirror of the frontend's
-# LOCALE_URL_PREFIX_CODES (frontend/src/constants.ts); used by
+# LOCALE_URL_PREFIX_CODES (frontend/src/constants/core.ts); used by
 # app/email/links.py to point email links at the recipient's locale (#499).
 LOCALE_URL_PREFIX_CODES: frozenset[str] = frozenset(VALID_LOCALES) - {LOCALE_ET}
 

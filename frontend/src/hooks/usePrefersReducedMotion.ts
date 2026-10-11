@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { REDUCED_MOTION_QUERY } from '../constants';
+import { REDUCED_MOTION_QUERY } from '../constants/theme';
 
 function subscribe(callback: () => void): () => void {
   const mql = window.matchMedia(REDUCED_MOTION_QUERY);

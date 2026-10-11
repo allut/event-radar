@@ -6,7 +6,7 @@ import {
   THEME_OVERRIDE_KEY,
   THEME_COLOR_META_DARK,
   THEME_COLOR_META_LIGHT,
-} from '../constants';
+} from '../constants/theme';
 import { THEME_PREFERENCES } from '../_generated/sharedConstants.js';
 
 // What actually gets applied to the DOM / rendered — always binary, and

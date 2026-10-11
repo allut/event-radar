@@ -1,4 +1,5 @@
-import { LOCALE_URL_PREFIX_CODES, PRODUCTION_ORIGIN } from '../constants';
+import { LOCALE_URL_PREFIX_CODES } from '../constants/core';
+import { PRODUCTION_ORIGIN } from '../constants/seo';
 
 /** Strips a leading `/en` or `/ru` locale-prefix segment from a pathname
  * (Estonian is bare, so there's nothing to strip for it), returning the bare

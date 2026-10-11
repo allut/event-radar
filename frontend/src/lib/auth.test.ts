@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { setSignedInHint, clearSignedInHint, isAuthenticated, getLocale, getStoredLocale, setLocale, clearLocale, beginLogout, isLoggingOut } from './auth';
-import { LOCALE_EN } from '../constants';
+import { LOCALE_EN } from '../constants/core';
 
 describe('signed-in hint storage', () => {
   it('setSignedInHint sets the hint, isAuthenticated reflects it', () => {

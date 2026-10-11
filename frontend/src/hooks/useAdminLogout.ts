@@ -2,7 +2,8 @@ import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../api/client';
-import { API, ROUTES } from '../constants';
+import { API } from '../constants/api';
+import { ROUTES } from '../constants/routes';
 import { beginAdminLogout, clearAdminSignedInHint } from '../lib/adminAuth';
 
 // Mirrors useLogout/useOrganizerLogout, but navigates with plain useNavigate

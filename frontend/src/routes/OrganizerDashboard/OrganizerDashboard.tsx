@@ -14,7 +14,16 @@ import EmptyState from '../../components/EmptyState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
-import { API, CLAIM_KIND_PUBLISHER, CLAIM_STATUS_APPROVED, QUERY_KEYS, ORGANIZER_EVENTS_PAGE_SIZE, ROUTES, UI_STATE, PAGE_PARAM, type ClaimKind, type ClaimStatus } from '../../constants';
+import { API, QUERY_KEYS, PAGE_PARAM } from '../../constants/api';
+import {
+  CLAIM_KIND_PUBLISHER,
+  CLAIM_STATUS_APPROVED,
+  type ClaimKind,
+  type ClaimStatus,
+} from '../../constants/claims';
+import { UI_STATE } from '../../constants/core';
+import { ORGANIZER_EVENTS_PAGE_SIZE } from '../../constants/organizer';
+import { ROUTES } from '../../constants/routes';
 import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerDashboard.module.css';
 

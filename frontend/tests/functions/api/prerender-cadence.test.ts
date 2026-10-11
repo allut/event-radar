@@ -5,7 +5,7 @@
 // resolve.
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { onRequest } from '../../../functions/api/prerender-cadence';
-import { PRERENDER_CADENCE_TOKEN_HEADER } from '../../../src/constants';
+import { PRERENDER_CADENCE_TOKEN_HEADER } from '../../../src/constants/prerender';
 import { buildRoundMarker, serializeRoundMarker } from '../../../src/lib/prerenderChain';
 
 interface Env {

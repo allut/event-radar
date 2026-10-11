@@ -3,7 +3,8 @@
 // sizes, so each page and each load-more ends on a full grid row.
 /// <reference types="node" />
 import { readFileSync } from 'node:fs';
-import { BROWSE_PAGE_SIZE, SAVED_EVENTS_PAGE_SIZE } from './constants';
+import { BROWSE_PAGE_SIZE } from './_generated/sharedConstants';
+import { SAVED_EVENTS_PAGE_SIZE } from './constants/feedback';
 
 // Read off disk: vitest doesn't run CSS through Vite, so `?raw` comes back empty.
 const indexCss = readFileSync(`${import.meta.dirname}/index.css`, 'utf8');

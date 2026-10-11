@@ -13,7 +13,15 @@ import PageState from '../../components/PageState';
 import TopBar from '../../components/TopBar';
 import SeoTags from '../../components/SeoTags';
 import SegmentedControl from '../../components/SegmentedControl';
-import { API, SAVED_TABS, SIGNAL_CONFIG, SAVED_EVENTS_PAGE_SIZE, QUERY_KEYS, UI_STATE, type Signal, PAGE_PARAM, SIGNAL_PARAM } from '../../constants';
+import { API, QUERY_KEYS, PAGE_PARAM } from '../../constants/api';
+import { UI_STATE } from '../../constants/core';
+import {
+  SAVED_TABS,
+  SIGNAL_CONFIG,
+  SAVED_EVENTS_PAGE_SIZE,
+  type Signal,
+  SIGNAL_PARAM,
+} from '../../constants/feedback';
 import styles from './SavedEvents.module.css';
 
 interface SavedEventsResponse {

@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
-import { API, QUERY_KEYS, UI_STATE, ADMIN_DEDUP_GROUPS_PAGE_SIZE, EVENT_STATUS, PAGE_PARAM } from '../../constants';
+import { ADMIN_DEDUP_GROUPS_PAGE_SIZE } from '../../constants/admin';
+import { API, QUERY_KEYS, PAGE_PARAM } from '../../constants/api';
+import { UI_STATE } from '../../constants/core';
+import { EVENT_STATUS } from '../../constants/prerender';
 import { nextOffsetParam } from '../../utils';
 import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';

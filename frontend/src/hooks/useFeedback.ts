@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { API, type Signal, QUERY_KEYS } from '../constants';
+import { API, QUERY_KEYS } from '../constants/api';
+import type { Signal } from '../constants/feedback';
 import { patchCachedEvent } from '../utils';
 
 interface UseFeedbackOptions {

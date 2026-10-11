@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { SAVE_MSG_CLEAR_DELAY_MS, UI_STATE, TOAST_IDLE, type ToastState } from '../constants';
+import { SAVE_MSG_CLEAR_DELAY_MS, UI_STATE, TOAST_IDLE, type ToastState } from '../constants/core';
 
 export interface UseToastResult {
   toast: ToastState;

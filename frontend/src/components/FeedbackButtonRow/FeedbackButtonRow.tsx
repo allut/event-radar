@@ -1,4 +1,4 @@
-import { SIGNAL_CONFIG, type Signal } from '../../constants';
+import { SIGNAL_CONFIG, type Signal } from '../../constants/feedback';
 import { t } from '../../i18n';
 import { cx, makeActiveClassMap } from '../../utils';
 import styles from './FeedbackButtonRow.module.css';

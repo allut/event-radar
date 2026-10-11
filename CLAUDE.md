@@ -104,7 +104,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 ### Where things live
 
 - **Backend constants live in `app/constants/<domain>.py`**, one file per docs-map domain, imported from the file that defines them. LLM prompts go in `app/llm/prompts.py`, scrape selectors in `app/ingestion/selectors.py`, and cross-stack values in `shared/`. Add the constant there first, then import it.
-- **Frontend constants live in `frontend/src/constants.ts`**, and cross-stack ones in `shared/`. Add the literal there before using it in a component.
+- **Frontend constants live in `frontend/src/constants/<domain>.ts`**, imported from the file that defines them, and cross-stack ones in `shared/`. Add the literal there before using it in a component.
 - **Each backend helper has one home.** Router-shared helpers go in `app/routers/utils.py`. Domain packages (`app/auth/`, `app/email/`, `app/claims/`, `app/ingestion/`, `app/events/`) own theirs and never import from `routers/utils.py`. Check both before writing one.
 - **Cross-router auth dependencies live in `app/auth/dependencies.py`**, so routers never import from each other's modules.
 - **Frontend helpers live in `frontend/src/utils.ts` and hooks in `frontend/src/hooks/`.** Every request goes through `frontend/src/api/client.ts`. Check there before writing a new one.
@@ -136,7 +136,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 
 ## Traps
 
-- **Production builds from `release`, not `master`.** `master` is the CI/PR branch. A Cloudflare Pages build of any other branch skips the prerender pass (`PRERENDER_CADENCE_GIT_BRANCH`, `frontend/src/constants.ts`).
+- **Production builds from `release`, not `master`.** `master` is the CI/PR branch. A Cloudflare Pages build of any other branch skips the prerender pass (`PRERENDER_CADENCE_GIT_BRANCH`, `frontend/src/constants/prerender.ts`).
 - **CI runs no ruff, mypy, eslint or type-check.** A green PR doesn't mean they ran, so run them locally before committing.
 - **Edit translations and shared values in `shared/`, then run `python scripts/generate_shared.py`.** Commit the JSON and the regenerated `_generated/` files together, and leave `_generated/` to the script. `backend/tests/test_generated_sync.py` fails on drift.
 - **The three auth tracks never mix.** Consumer, organizer and admin sessions use separate signing salts and cookies, and consumer and organizer accounts live in separate tables. `CONTEXT.md` names them and `docs/security.md` has the flows.

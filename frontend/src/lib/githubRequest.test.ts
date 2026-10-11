@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { githubRequest } from './githubRequest';
-import { GITHUB_API_BASE_URL } from '../constants';
+import { GITHUB_API_BASE_URL } from '../constants/seo';
 
 afterEach(() => {
   vi.unstubAllGlobals();

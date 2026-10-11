@@ -5,7 +5,7 @@
 // resolve.
 import { describe, it, expect, vi } from 'vitest';
 import { onRequest } from '../../functions/[[path]]';
-import { APP_SHELL_FILENAME } from '../../src/constants';
+import { APP_SHELL_FILENAME } from '../../src/constants/prerender';
 
 function makeContext(path: string, method = 'GET', assetResponses?: Response[]) {
   const responses = assetResponses ?? [new Response(null, { status: 404 }), new Response('<html>shell</html>', { status: 200 })];

@@ -1,4 +1,4 @@
-import { ADMIN_NOTE_TEXTAREA_ROWS } from '../../constants';
+import { ADMIN_NOTE_TEXTAREA_ROWS } from '../../constants/admin';
 import styles from './AdminQueueActionPanel.module.css';
 
 interface AdminQueueAction {

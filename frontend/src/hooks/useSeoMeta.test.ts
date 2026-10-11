@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildSeoMeta } from './useSeoMeta';
 import { canonicalUrlFor } from '../lib/urlLocale';
-import { PRODUCTION_ORIGIN } from '../constants';
+import { PRODUCTION_ORIGIN } from '../constants/seo';
 
 describe('canonicalUrlFor', () => {
   it('matches the canonical link buildSeoMeta emits', () => {

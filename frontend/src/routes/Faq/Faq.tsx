@@ -9,16 +9,11 @@ import { useLocalePath } from '../../hooks/useLocalePath';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import { FAQ_LOADERS } from '../../content/faq/loaders';
 import type { FaqBlock, FaqDoc, FaqInline } from '../../content/faq/types';
-import {
-  LOCALE_EN,
-  MAILTO_SCHEME,
-  OG_FALLBACK_IMAGE_PATH,
-  PRODUCTION_ORIGIN,
-  REDUCED_MOTION_QUERY,
-  ROUTES,
-  SAFE_URL_SCHEMES,
-  UI_STATE,
-} from '../../constants';
+import { SAFE_URL_SCHEMES } from '../../_generated/sharedConstants';
+import { LOCALE_EN, MAILTO_SCHEME, UI_STATE } from '../../constants/core';
+import { ROUTES } from '../../constants/routes';
+import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN } from '../../constants/seo';
+import { REDUCED_MOTION_QUERY } from '../../constants/theme';
 import TopBar from '../../components/TopBar';
 import PageState from '../../components/PageState';
 import SeoTags from '../../components/SeoTags';

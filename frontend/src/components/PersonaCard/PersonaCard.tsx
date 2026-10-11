@@ -1,4 +1,4 @@
-import { type PersonaData } from '../../constants';
+import type { PersonaData } from '../../_generated/i18nData';
 import { t, ti } from '../../i18n';
 import { cx } from '../../utils';
 import styles from './PersonaCard.module.css';

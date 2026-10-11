@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { UI_STATE } from '../../constants';
+import { UI_STATE } from '../../constants/core';
 import styles from './PageState.module.css';
 
 interface PageStateProps {

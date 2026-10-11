@@ -1,7 +1,9 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { API, EXPLORE_TODAY_SEARCH, QUERY_KEYS, ROUTES } from '../../constants';
+import { API, QUERY_KEYS } from '../../constants/api';
+import { EXPLORE_TODAY_SEARCH } from '../../constants/explore';
+import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
 import { withLocaleQuery } from '../../utils';
 import { useLocalePath } from '../../hooks/useLocalePath';

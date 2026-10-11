@@ -1,7 +1,7 @@
 import { t } from '../../i18n';
 import { useDropdown } from '../../hooks/useDropdown';
 import { cx } from '../../utils';
-import { DROPDOWN_DEFAULT_FOCUS_SELECTOR } from '../../constants';
+import { DROPDOWN_DEFAULT_FOCUS_SELECTOR } from '../../constants/core';
 import menuStyles from '../shared/Menu.module.css';
 import styles from './EventOverflowMenu.module.css';
 

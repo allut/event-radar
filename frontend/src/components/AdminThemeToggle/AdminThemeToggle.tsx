@@ -1,4 +1,4 @@
-import { ADMIN_THEME_OPTIONS } from '../../constants';
+import { ADMIN_THEME_OPTIONS } from '../../constants/admin';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { setThemeOverride, type ResolvedTheme } from '../../lib/theme';
 import SelectMenu from '../SelectMenu';

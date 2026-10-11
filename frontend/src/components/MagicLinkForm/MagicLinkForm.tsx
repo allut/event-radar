@@ -1,6 +1,7 @@
 import { t, ti } from '../../i18n';
 import { cx } from '../../utils';
-import { MAGIC_LINK_EXPIRY_MINUTES, UI_STATE } from '../../constants';
+import { MAGIC_LINK_EXPIRY_MINUTES } from '../../_generated/sharedConstants';
+import { UI_STATE } from '../../constants/core';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import styles from './MagicLinkForm.module.css';
 

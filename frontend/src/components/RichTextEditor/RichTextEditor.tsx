@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { RICH_TEXT_HEADING_LEVELS } from '../../constants';
+import { RICH_TEXT_HEADING_LEVELS } from '../../constants/organizer';
 import { t } from '../../i18n';
 import { safeUrl } from '../../utils';
 import { BoldIcon, ItalicIcon, UnderlineIcon, BulletListIcon, NumberedListIcon, LinkIcon, QuoteIcon } from './icons';

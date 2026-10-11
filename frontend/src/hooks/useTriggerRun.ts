@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { adminStream, StreamDisconnectedError, type NdjsonLine } from '../api/client';
-import { ADMIN_GENERIC_ERROR } from '../constants';
+import { ADMIN_GENERIC_ERROR } from '../constants/admin';
 import { apiErrorMessage } from '../utils';
 
 export type RunState = 'idle' | 'starting' | 'streaming' | 'done' | 'disconnected';

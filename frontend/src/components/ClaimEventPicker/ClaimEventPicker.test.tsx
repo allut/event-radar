@@ -10,7 +10,7 @@ vi.mock('../../api/client', async (importOriginal) => ({
 }));
 
 import { ApiError, organizerApi } from '../../api/client';
-import { CLAIM_JUSTIFICATION_REQUIRED_ERROR } from '../../constants';
+import { CLAIM_JUSTIFICATION_REQUIRED_ERROR } from '../../constants/claims';
 const mockGet = vi.mocked(organizerApi.get);
 const mockPost = vi.mocked(organizerApi.post);
 

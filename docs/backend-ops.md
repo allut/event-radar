@@ -37,7 +37,7 @@ Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). B
 
 `frontend/functions/api/[[path]].ts` forwards every `/api/*` request to Render. The browser sees one origin, so CORS never applies and the session cookie stays first-party (`docs/adr/0001`).
 
-- **It strips the `/api` prefix and targets `BACKEND_ORIGIN` (`frontend/src/constants.ts`).** It drops the wire-encoding response headers (`content-encoding`, `content-length`, `transfer-encoding`, `connection`), which would describe bytes that no longer match the re-emitted body.
+- **It strips the `/api` prefix and targets `BACKEND_ORIGIN` (`frontend/src/constants/api.ts`).** It drops the wire-encoding response headers (`content-encoding`, `content-length`, `transfer-encoding`, `connection`), which would describe bytes that no longer match the re-emitted body.
 - **It asserts `backendUrl.origin === BACKEND_ORIGIN` before fetching.** `new URL(relative, base)` discards the base host for a protocol-relative path. Without the check, `/api//host/...` would send the visitor's cookie to an arbitrary host.
 - **It rewrites the client-IP headers for the two-hop topology.** It strips inbound `X-Forwarded-For` and `X-Client-IP`, then sends `CF-Connecting-IP` with `X-Edge-Auth` when `EDGE_SHARED_SECRET` is set. See [security.md](security.md)'s Client Key section.
 - **Without `EDGE_SHARED_SECRET`, every visitor shares a rate-limit bucket.** The backend falls back to the rightmost `X-Forwarded-For`, which is Cloudflare's egress address.

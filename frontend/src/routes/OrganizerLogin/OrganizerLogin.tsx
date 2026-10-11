@@ -1,11 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  API,
-  API_BASE,
-  isGoogleSignInOrganizerEnabled,
-  ROUTES,
-} from '../../constants';
+import { API, API_BASE } from '../../constants/api';
+import { isGoogleSignInOrganizerEnabled } from '../../constants/auth';
+import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
 import { useGoogleSignInError } from '../../hooks/useGoogleSignInError';
 import { useLocalePath } from '../../hooks/useLocalePath';

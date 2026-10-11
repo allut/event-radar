@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { renderWithProviders } from '../../test/utils';
 import VenuePicker, { type VenuePickerValue } from './VenuePicker';
-import { LOCALE_EN, LOCALE_ET, QUERY_KEYS, type ContentLang } from '../../constants';
+import { QUERY_KEYS } from '../../constants/api';
+import { LOCALE_EN, LOCALE_ET, type ContentLang } from '../../constants/core';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),

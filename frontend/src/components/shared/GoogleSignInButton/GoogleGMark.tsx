@@ -5,7 +5,7 @@
  * one fewer request, no `img-src` CSP surface, asserted by the brand-fill
  * test (docs/adr/0002 Design-system exception).
  */
-import { GOOGLE_G_MARK_SIZE } from '../../../constants';
+import { GOOGLE_G_MARK_SIZE } from '../../../constants/auth';
 
 export default function GoogleGMark({ size = GOOGLE_G_MARK_SIZE }: { size?: number }) {
   return (

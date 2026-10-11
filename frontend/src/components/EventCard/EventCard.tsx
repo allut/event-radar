@@ -1,6 +1,8 @@
 import { memo } from 'react';
 import { Link } from 'react-router-dom';
-import { ROUTES, UI_STATE, type Signal } from '../../constants';
+import { UI_STATE } from '../../constants/core';
+import type { Signal } from '../../constants/feedback';
+import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
 import { cardAnimationDelayMs, categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, shareEvent, trackExternalClick } from '../../utils';
 import { useEventReport } from '../../hooks/useEventReport';

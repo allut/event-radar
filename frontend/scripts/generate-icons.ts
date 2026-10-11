@@ -10,16 +10,16 @@ import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { EMAIL_BRAND_MARK_PATH } from '../src/_generated/sharedConstants';
 import {
   APPLE_TOUCH_ICON_PATH,
-  EMAIL_BRAND_MARK_PATH,
   FAVICON_ICO_PATH,
   ICON_96_PATH,
   ICON_192_PATH,
   ICON_512_PATH,
   ICON_MASKABLE_512_PATH,
   OG_FALLBACK_IMAGE_PATH,
-} from '../src/constants';
+} from '../src/constants/seo';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');

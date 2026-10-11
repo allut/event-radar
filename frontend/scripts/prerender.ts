@@ -34,35 +34,18 @@ import { JSDOM } from 'jsdom';
 import { chromium, type Browser, type Page } from 'playwright';
 import { preview, type PreviewServer } from 'vite';
 import type { EventData } from '../src/components/EventCard';
+import { BROWSE_PAGE_SIZE, LOCALES } from '../src/_generated/sharedConstants';
+import { LOCALE_ET, LOCALE_KEY, LOCALE_URL_PREFIX_CODES } from '../src/constants/core';
+import { EXPLORE_PARAM, SORT_DEFAULT } from '../src/constants/explore';
 import {
   APP_SHELL_FILENAME,
-  BROWSE_PAGE_SIZE,
-  CANONICAL_LINK_SELECTOR,
   CHAIN_STATE_PREFIX,
-  CRAWLABLE_ASSETS_PATH,
-  CRAWLABLE_ICON_PATHS,
-  EXPLORE_PARAM,
-  JSONLD_SCRIPT_SELECTOR,
-  JSONLD_SCRIPT_TYPE,
-  LOCALE_ET,
-  LOCALE_KEY,
-  LOCALE_URL_PREFIX_CODES,
-  LOCALES,
-  OG_FALLBACK_IMAGE_PATH,
   PRERENDER_CADENCE_GIT_BRANCH,
   PRERENDER_CHAIN_GITHUB_REPO,
   PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH,
   PRERENDER_ERROR_SELECTOR,
   PRERENDER_READY_SELECTOR,
-  PRODUCTION_ORIGIN,
-  ROBOTS_TXT_FILENAME,
   ROUND_STATUS,
-  ROUTES,
-  SEO_HREFLANG_CODES,
-  SEO_XDEFAULT_CODE,
-  SITEMAP_FILENAME,
-  SITEMAP_PATH,
-  SORT_DEFAULT,
   CHANGE_DETECTION_CONCURRENCY,
   R2_PERSIST_CONCURRENCY,
   CHANGE_MARKER_JSONLD_FIELD,
@@ -74,8 +57,24 @@ import {
   RENDER_POOL_CONCURRENCY,
   PRERENDER_DIAGNOSTIC_MAX_EVENTS,
   RATE_GATE_SLACK_MS,
-} from '../src/constants';
-import { TALLINN_TZ, type LocaleCode } from '../src/constants';
+} from '../src/constants/prerender';
+import { ROUTES } from '../src/constants/routes';
+import {
+  CANONICAL_LINK_SELECTOR,
+  CRAWLABLE_ASSETS_PATH,
+  CRAWLABLE_ICON_PATHS,
+  JSONLD_SCRIPT_SELECTOR,
+  JSONLD_SCRIPT_TYPE,
+  OG_FALLBACK_IMAGE_PATH,
+  PRODUCTION_ORIGIN,
+  ROBOTS_TXT_FILENAME,
+  SEO_HREFLANG_CODES,
+  SEO_XDEFAULT_CODE,
+  SITEMAP_FILENAME,
+  SITEMAP_PATH,
+} from '../src/constants/seo';
+import { TALLINN_TZ } from '../src/_generated/sharedConstants';
+import type { LocaleCode } from '../src/constants/core';
 import { serializeJsonLd } from '../src/lib/jsonLd';
 import faqEn from '../src/content/faq/faq.en';
 import faqEt from '../src/content/faq/faq.et';

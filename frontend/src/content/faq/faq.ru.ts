@@ -1,4 +1,5 @@
-import { CONTACT_EMAIL, CONTACT_MAILTO, ROUTES } from '../../constants';
+import { CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants/core';
+import { ROUTES } from '../../constants/routes';
 import type { FaqDoc } from './types';
 
 const doc: FaqDoc = {

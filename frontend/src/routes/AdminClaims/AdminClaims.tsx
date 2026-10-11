@@ -6,9 +6,11 @@ import {
   ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
   ADMIN_GENERIC_ERROR,
   ADMIN_QUEUE_DETAIL_LINK_LABEL,
+} from '../../constants/admin';
+import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
+import {
   ADMIN_CLAIM_ACTION_TAGS,
   ADMIN_CLAIM_MECHANISM_LABELS,
-  API,
   CLAIM_DNS_VERIFICATION_MECHANISMS,
   CLAIM_KIND_PUBLISHER,
   CLAIM_KIND_SERIES,
@@ -16,14 +18,12 @@ import {
   CLAIM_STATUS_PENDING,
   CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
   CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
-  PAGE_PARAM,
-  QUERY_KEYS,
-  ROUTES,
-  UI_STATE,
   type AdminClaimActionKind,
   type ClaimKind,
   type ClaimVerificationMechanism,
-} from '../../constants';
+} from '../../constants/claims';
+import { UI_STATE } from '../../constants/core';
+import { ROUTES } from '../../constants/routes';
 import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
