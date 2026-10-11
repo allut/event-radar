@@ -22,7 +22,6 @@ NOT_YET_REWRITTEN = {
     "docs/backend-ops.md",
     "docs/conventions.md",
     "docs/data-model.md",
-    "docs/design-system.md",
     "docs/frontend.md",
     "docs/organizer-portal.md",
     "docs/pipeline.md",
