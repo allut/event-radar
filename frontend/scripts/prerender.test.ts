@@ -18,6 +18,8 @@ import {
   fetchLiveExploreCount,
   fetchResolvedTarget,
   finalizeChainState,
+  finalizeSnapshotHtml,
+  isAlreadyFinalized,
   isPreviewBuild,
   logZeroProgressAbort,
   main,
@@ -209,6 +211,51 @@ describe('rewriteSnapshotAssetRefs (issue #97)', () => {
     const emptyShell = '<!doctype html><html><head><title>App Shell</title></head><body></body></html>';
 
     expect(() => rewriteSnapshotAssetRefs(staleHtml, emptyShell)).toThrow(/zero \/assets\//);
+  });
+});
+
+describe('isAlreadyFinalized / finalizeSnapshotHtml fast path (#455)', () => {
+  const shellHtml =
+    '<!doctype html><html><head>' +
+    '<script type="module" crossorigin src="/assets/index-NEW111.js"></script>' +
+    '<link rel="stylesheet" crossorigin href="/assets/index-NEW222.css">' +
+    '</head><body><div id="root"></div></body></html>';
+  const staleHtml =
+    '<!doctype html><html lang="en" data-theme="light"><head>' +
+    '<title>Jazz Night</title>' +
+    '<script type="application/ld+json">{"@type":"Event","dateModified":"2026-08-01T00:00:00.000Z"}</script>' +
+    '<script type="module" crossorigin src="/assets/index-OLD111.js"></script>' +
+    '<link rel="stylesheet" crossorigin href="/assets/index-OLD222.css">' +
+    '</head><body><div id="root">rendered</div></body></html>';
+
+  it('recognises a page a previous finalize wrote against the same shell and returns it untouched', () => {
+    const finalized = finalizeSnapshotHtml(staleHtml, shellHtml);
+
+    expect(isAlreadyFinalized(finalized, shellHtml)).toBe(true);
+    expect(finalizeSnapshotHtml(finalized, shellHtml)).toBe(finalized);
+  });
+
+  it('rejects a page carrying an older build\'s asset refs', () => {
+    expect(isAlreadyFinalized(staleHtml.replace(' data-theme="light"', ''), shellHtml)).toBe(false);
+  });
+
+  it('rejects a page with a baked data-theme even when its asset refs are current', () => {
+    const themed = finalizeSnapshotHtml(staleHtml, shellHtml).replace('<html lang="en"', '<html lang="en" data-theme="dark"');
+
+    expect(isAlreadyFinalized(themed, shellHtml)).toBe(false);
+    expect(finalizeSnapshotHtml(themed, shellHtml)).not.toContain('data-theme');
+  });
+
+  it('rejects a page with an extra /assets/ tag the shell lacks, such as a runtime-injected modulepreload', () => {
+    const finalized = finalizeSnapshotHtml(staleHtml, shellHtml);
+    const extra = finalized.replace('</head>', '<link rel="modulepreload" href="/assets/RichTextEditor-X.js"></head>');
+
+    expect(isAlreadyFinalized(extra, shellHtml)).toBe(false);
+    expect(finalizeSnapshotHtml(extra, shellHtml)).not.toContain('RichTextEditor-X');
+  });
+
+  it('rejects HTML with no </head>', () => {
+    expect(isAlreadyFinalized('<html><body></body></html>', shellHtml)).toBe(false);
   });
 });
 

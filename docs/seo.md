@@ -70,7 +70,7 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 
 ### Theme-Neutral Snapshots
 
-- **Every snapshot write goes through `finalizeSnapshotHtml`.** It runs `rewriteSnapshotAssetRefs` (copy-forward writes only), then `stripBakedThemeAttr`.
+- **Every snapshot write goes through `finalizeSnapshotHtml`.** It runs `rewriteSnapshotAssetRefs` (copy-forward writes only), then `stripBakedThemeAttr`, unless the copy is already final (see Measured Cost).
 - **`stripBakedThemeAttr` removes the build browser's `data-theme` from `<html>`.** `index.html`'s pre-paint script sets it from the build machine's OS theme. Left in, every visitor would see that theme until client JS re-resolved it.
 - **The strip is idempotent and leaves `lang` and `data-rh` alone.** With no `data-theme`, the page shows the dark origin palette only until the pre-paint script sets the real value before first paint. That script runs under a CSP hash; see [security.md](security.md)'s Frontend CSP section.
 
@@ -78,7 +78,11 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 
 - **First real Cloudflare burst (2026-10-03, 5,442 routes, `PRERENDER_RENDER_BUDGET_MINUTES=10`):** three rounds rendered 1,012, 1,012 and 334 routes, each validating clean. Rendering ran at about 100 routes a minute, and the rounds took about 16, 20 and 11 minutes.
 - **Resumed rounds spend 5–6 minutes in copy-forward and about 3 validating.** Round 1's copy-forward took 84 s. Each round logs `prerender: peak RSS`, which covers the node process only, not Chromium.
-- **The other cost trims stay in place.** `extractChangeMarker` regex-scans the first JSON-LD script instead of re-parsing the DOM, `classification[].liveHtml` is nulled once consumed, and the live-API staleness check runs for the default locale only.
+- **Single-round burst (2026-10-10, 5,610 routes, Node 24):** copy-forward of 4,710 routes took 4 min 7 s, rendering 900 took 8 min 16 s, validation about 3 min. Peak RSS was 1,582 MiB.
+- **Classify and copy-forward share one pool.** Each route's live HTML is written and released as soon as its fetch returns, so fetches overlap JSDOM work and the round never holds every body at once.
+- **`finalizeSnapshotHtml` skips JSDOM for a copy that is already final.** `isAlreadyFinalized` string-checks that the `<head>` asset tags equal the shell's JSDOM-serialized tags, in order, and that `<html>` has no `data-theme`. Any mismatch takes the JSDOM path. A JSDOM pass costs 25–40 ms per page; the check costs about 0.01 ms.
+- **Each round logs a `prerender: change detection took` line.** It splits fetch time (summed across workers) from finalize time and counts the copies that skipped JSDOM.
+- **The other cost trims stay in place.** `extractChangeMarker` regex-scans the first JSON-LD script instead of re-parsing the DOM, and the live-API staleness check runs for the default locale only.
 
 ## Round Chaining
 

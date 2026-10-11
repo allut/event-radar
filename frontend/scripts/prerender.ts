@@ -281,16 +281,54 @@ function isAssetNode(node: Element): boolean {
 // identical string with a fresh JSDOM per call would be pure waste at that
 // scale. Keyed on shellHtml itself rather than assuming "one call per round",
 // so a shellHtml change (e.g. between test cases) still gets a fresh parse.
-let shellAssetNodeCache: { shellHtml: string; nodes: Element[] } | null = null;
+let shellAssetNodeCache: { shellHtml: string; nodes: Element[]; openTags: string[] } | null = null;
 
-function getShellAssetNodes(shellHtml: string): Element[] {
+function getShellAssetCache(shellHtml: string): { nodes: Element[]; openTags: string[] } {
   if (shellAssetNodeCache !== null && shellAssetNodeCache.shellHtml === shellHtml) {
-    return shellAssetNodeCache.nodes;
+    return shellAssetNodeCache;
   }
   const shellDom = new JSDOM(shellHtml);
   const nodes = [...shellDom.window.document.head.querySelectorAll('script, link')].filter(isAssetNode);
-  shellAssetNodeCache = { shellHtml, nodes };
-  return nodes;
+  // JSDOM's own serialization of each node's open tag — the exact bytes a
+  // previous finalizeSnapshotHtml wrote for it, which is what
+  // isAlreadyFinalized compares a live page's tags against.
+  const openTags = nodes.map((node) => node.outerHTML.slice(0, node.outerHTML.indexOf('>') + 1));
+  shellAssetNodeCache = { shellHtml, nodes, openTags };
+  return shellAssetNodeCache;
+}
+
+function getShellAssetNodes(shellHtml: string): Element[] {
+  return getShellAssetCache(shellHtml).nodes;
+}
+
+const HEAD_ASSET_TAG_RE = /<(?:script|link)\b[^>]*>/g;
+const ASSET_REF_ATTR_RE = /\s(?:src|href)="([^"]*)"/;
+const HTML_OPEN_TAG_RE = /<html\b[^>]*>/;
+const THEME_ATTR_RE = /\sdata-theme\s*=/;
+
+/** String-only check that `html` is already what finalizeSnapshotHtml(html,
+ * shellHtml) would produce: its `<head>` asset tags are exactly the shell's,
+ * in order, and `<html>` carries no baked `data-theme`. True for nearly every
+ * copy-forward target when the frontend build hasn't changed since the live
+ * page was written — every live page went through JSDOM serialize, so its
+ * tags match the shell's JSDOM-serialized open tags byte-for-byte. Lets
+ * copy-forward skip a full JSDOM parse/serialize per route (Big-O audit #455,
+ * copy-forward tuning). Any doubt (no `</head>`, an extra or missing asset
+ * tag, a different attribute) returns false and falls back to the JSDOM
+ * path, never the other way round. */
+export function isAlreadyFinalized(html: string, shellHtml: string): boolean {
+  const headEnd = html.indexOf('</head>');
+  if (headEnd === -1) return false;
+  const head = html.slice(0, headEnd);
+  const htmlTag = HTML_OPEN_TAG_RE.exec(head);
+  if (htmlTag === null || THEME_ATTR_RE.test(htmlTag[0])) return false;
+  const liveAssetTags = (head.match(HEAD_ASSET_TAG_RE) ?? []).filter((tag) =>
+    ASSET_REF_ATTR_RE.exec(tag)?.[1].startsWith(CRAWLABLE_ASSETS_PATH) ?? false,
+  );
+  const { openTags } = getShellAssetCache(shellHtml);
+  return openTags.length > 0
+    && liveAssetTags.length === openTags.length
+    && liveAssetTags.every((tag, i) => tag === openTags[i]);
 }
 
 // In-place — mutates `document`, no JSDOM/serialize of its own, so
@@ -355,8 +393,11 @@ export function stripBakedThemeAttr(html: string): string {
  * fresh-render write site (snapshotTarget) has no stale asset refs to
  * rewrite (the page was just rendered against the current build), while
  * both copy-forward write sites in main() do. One JSDOM parse/serialize for
- * both steps, not two chained string round trips (Big-O audit #5, Tier 4). */
-function finalizeSnapshotHtml(html: string, shellHtml?: string): string {
+ * both steps, not two chained string round trips (Big-O audit #5, Tier 4).
+ * A copy-forward write whose HTML isAlreadyFinalized against `shellHtml`
+ * skips JSDOM entirely and is returned as-is. */
+export function finalizeSnapshotHtml(html: string, shellHtml?: string): string {
+  if (shellHtml !== undefined && isAlreadyFinalized(html, shellHtml)) return html;
   const dom = new JSDOM(html);
   if (shellHtml !== undefined) rewriteSnapshotAssetRefsInPlace(dom.window.document, shellHtml);
   stripBakedThemeAttrInPlace(dom.window.document);
@@ -825,6 +866,10 @@ async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => 
   await mapPool(items, concurrency, worker);
 }
 
+function formatSeconds(ms: number): string {
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 /** In-build validation gate (issue #53) — reads a just-written snapshot back
  * off disk and checks it against src/lib/seoValidation.ts's structural
  * (title/canonical/hreflang/JSON-LD) assertions and, for /events/:id
@@ -1168,20 +1213,13 @@ export async function main(): Promise<void> {
   // Round 2+ (issue #368) skips this production fetch for any event target
   // the manifest index already resolved earlier in the burst, substituting
   // fetchResolvedTarget's cheaper R2 read instead — both routes run through
-  // the same mapPool/CHANGE_DETECTION_CONCURRENCY pool `targets` already
-  // did pre-#368, so the concurrency cap against PRODUCTION_ORIGIN never
-  // stacks and the result stays ordered like `targets` with no separate
-  // merge step.
+  // one CHANGE_DETECTION_CONCURRENCY pool, so the concurrency cap against
+  // PRODUCTION_ORIGIN never stacks.
   const resolvedTargets: ResolvedTarget[] = isResumedRound
     ? partitionByChainState(targets, chainStateIndex).resolved
     : [];
   const resolvedTargetSet = new Set<PrerenderTarget>(resolvedTargets);
   const resolvedFromManifest = new Set<PrerenderTarget>();
-  const classification = await mapPool(targets, CHANGE_DETECTION_CONCURRENCY, (target) =>
-    resolvedTargetSet.has(target)
-      ? fetchResolvedTarget(sanitizedBurstId, target as ResolvedTarget, resolvedFromManifest)
-      : classifyTarget(target),
-  );
   let copiedForward = 0;
   // Stale-but-real fallback (issue #82) content, held in memory rather than
   // written to dist/ yet — see the write-out below (after the render pool)
@@ -1193,23 +1231,38 @@ export async function main(): Promise<void> {
   // `allSettled` after the pools drains them. persistChainStateTarget fails
   // open, so a rejected entry can only mean a lost optimization.
   const persistLimiter = createLimiter(R2_PERSIST_CONCURRENCY);
-  // runPool, not a sequential for-of — each iteration's mkdir/writeFile/
-  // persistChainStateTarget (an R2 network round trip) was the dominant
-  // wall-clock cost of a copy-forward-heavy round, run one at a time for
-  // events x 3 locales (Big-O audit #5, item Tier 4, biggest single win).
-  // copiedForward++ and staleFallbackHtml.set() are plain synchronous
+  // Phase split for the build log (#455 copy-forward tuning). fetchMs sums
+  // every worker's classify time, so it overlaps itself across the pool;
+  // finalizeMs is synchronous JSDOM work on the one main thread, so it adds
+  // straight to wall-clock.
+  const changeDetectionStart = Date.now();
+  let fetchMs = 0;
+  let finalizeMs = 0;
+  let fastPathCopies = 0;
+  // Classify and copy forward in the same worker (#455), not a classify
+  // pool that finishes before a copy pool starts: each route's live HTML is
+  // written and released as soon as it arrives, instead of every route's
+  // body sitting in memory at once, and in-flight fetches keep downloading
+  // while another worker is busy in JSDOM. Each iteration's mkdir/writeFile/
+  // persistChainStateTarget used to run one at a time (Big-O audit #5, Tier
+  // 4). copiedForward++ and staleFallbackHtml.set() are plain synchronous
   // statements with no await between read and write, so concurrent workers
-  // touching them (distinct target keys) never race.
-  await runPool(classification, CHANGE_DETECTION_CONCURRENCY, async (entry) => {
-    const { target, unchanged, liveHtml } = entry;
-    // Drop the classification's own reference (Big-O audit M12): the HTML now
-    // lives only in the local (copy-forward) or in staleFallbackHtml (needs
-    // render), so it's collectable as soon as each branch is done with it.
-    entry.liveHtml = null;
+  // touching them (distinct target keys) never race. Only `unchanged`
+  // survives the pool, for the render queue below.
+  const unchangedFlags = await mapPool(targets, CHANGE_DETECTION_CONCURRENCY, async (target) => {
+    const fetchStart = Date.now();
+    const { unchanged, liveHtml } = resolvedTargetSet.has(target)
+      ? await fetchResolvedTarget(sanitizedBurstId, target as ResolvedTarget, resolvedFromManifest)
+      : await classifyTarget(target);
+    fetchMs += Date.now() - fetchStart;
     if (unchanged && liveHtml !== null) {
       const outPath = outputFilePath(target.bare, target.locale);
       await mkdir(path.dirname(outPath), { recursive: true });
-      const finalized = finalizeSnapshotHtml(liveHtml, shellHtml);
+      const finalizeStart = Date.now();
+      const fastPath = isAlreadyFinalized(liveHtml, shellHtml);
+      const finalized = fastPath ? liveHtml : finalizeSnapshotHtml(liveHtml, shellHtml);
+      finalizeMs += Date.now() - finalizeStart;
+      if (fastPath) fastPathCopies++;
       await writeFile(outPath, finalized, 'utf-8');
       copiedForward++;
       // A target fetchResolvedTarget already sourced from the manifest is
@@ -1242,14 +1295,18 @@ export async function main(): Promise<void> {
       // render loop resolves each one) without the self-sabotage.
       staleFallbackHtml.set(target, liveHtml);
     }
+    return unchanged;
   });
+  console.log(
+    `prerender: change detection took ${formatSeconds(Date.now() - changeDetectionStart)} — `
+      + `fetch ${formatSeconds(fetchMs)} summed over ${CHANGE_DETECTION_CONCURRENCY} workers, `
+      + `finalize ${formatSeconds(finalizeMs)}, ${fastPathCopies}/${copiedForward} copies skipped JSDOM`,
+  );
   // Priority queue (issue #82): home routes (all locales) first, then event
   // routes oldest-unrendered-first — so a large event backlog can never
   // starve the highest-traffic pages, and among event routes the
   // longest-stale one always gets budget before a newer one.
-  const renderQueue = prioritizeRenderQueue(classification
-    .filter(({ unchanged }) => !unchanged)
-    .map(({ target }) => target));
+  const renderQueue = prioritizeRenderQueue(targets.filter((_, i) => !unchangedFlags[i]));
   console.log(
     `prerender: copied forward ${copiedForward}/${targets.length} unchanged route(s), rendering ${renderQueue.length}`,
   );
