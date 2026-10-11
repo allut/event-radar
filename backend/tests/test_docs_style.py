@@ -26,7 +26,6 @@ NOT_YET_REWRITTEN = {
     "docs/frontend.md",
     "docs/organizer-portal.md",
     "docs/pipeline.md",
-    "docs/security.md",
 }
 
 MAX_UNIT_WORDS = 60

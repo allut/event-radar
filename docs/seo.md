@@ -72,7 +72,7 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 
 - **Every snapshot write goes through `finalizeSnapshotHtml`.** It runs `rewriteSnapshotAssetRefs` (copy-forward writes only), then `stripBakedThemeAttr`.
 - **`stripBakedThemeAttr` removes the build browser's `data-theme` from `<html>`.** `index.html`'s pre-paint script sets it from the build machine's OS theme. Left in, every visitor would see that theme until client JS re-resolved it.
-- **The strip is idempotent and leaves `lang` and `data-rh` alone.** With no `data-theme`, the page shows the dark origin palette only until the pre-paint script sets the real value before first paint. That script runs under a CSP hash; see [security.md](security.md).
+- **The strip is idempotent and leaves `lang` and `data-rh` alone.** With no `data-theme`, the page shows the dark origin palette only until the pre-paint script sets the real value before first paint. That script runs under a CSP hash; see [security.md](security.md)'s Frontend CSP section.
 
 ### Measured Cost
 
