@@ -147,7 +147,7 @@ async def showcase(
     slicing to SHOWCASE_EVENT_COUNT — a recurring multi-day listing (e.g. a
     Tue/Thu/Sat workshop) is never dedup-grouped across days, so each
     date-instance is its own canonical row and could otherwise independently
-    qualify for the grid (docs/pipeline.md). The collapse's surviving
+    qualify for the grid (docs/pipeline.md "Landing Showcase"). The collapse's surviving
     representative per series isn't guaranteed to be the one _showcase_stmt's
     SQL ORDER BY would have picked first, so the post-collapse order is
     recomputed in Python with the same three keys (narrow-window first,

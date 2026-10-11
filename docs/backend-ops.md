@@ -117,7 +117,7 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 
 ### Job Triggers
 
-- **Most scheduled jobs have a `POST /admin/<job>` trigger that runs them outside the schedule.** Dedup and classify use the drain-now variant; see [pipeline.md](pipeline.md)'s backlog-drain rule.
+- **Most scheduled jobs have a `POST /admin/<job>` trigger that runs them outside the schedule.** Dedup and classify use the drain-now variant; see [pipeline.md](pipeline.md)'s Backlog Drain section.
 - **`POST /admin/pipeline/run` runs the seven pipeline stages in dependency order.** Its digest stage defaults to `dry_run=true`.
 - **`/admin/geocode`, `/admin/refetch` and `/admin/cleanup` run standalone**, outside `/admin/pipeline/run`. Run refetch before a manual geocode to re-resolve coordinates an address change nulled.
 - **`POST /admin/cleanup` defaults to `dry_run=true`**, like every destructive admin or maintenance tool here. Pass `?dry_run=false` to delete.

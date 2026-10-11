@@ -618,7 +618,7 @@ class TestBuildClusterAssignmentsClaimedTiebreak:
         assert self._cluster([claimed, unclaimed], frozenset({2})) == {1: 2, 2: 2}
 
     def test_claimed_beats_richer_unclaimed_quality(self):
-        # Ranked between status-rank and quality-rank (docs/pipeline.md) —
+        # Ranked between status-rank and quality-rank (docs/pipeline.md "Group Representative") —
         # claimed outranks quality-completeness outright: a data-poor claimed
         # member still wins over a richer unclaimed one.
         claimed = _event(1, "Show", _BASE)
