@@ -311,9 +311,8 @@ export function toLocaleCode(locale: string): string {
 }
 
 // Estonian is the bare (unprefixed) URL locale; every other locale gets an
-// `/en`/`/ru`-style path prefix — see locale-prefixed routing in
-// docs/frontend.md "Frontend Structure" (App.tsx's route wrapper, utils.ts's
-// localizedPath/stripLocalePrefix).
+// `/en`/`/ru`-style path prefix — see docs/frontend.md "Locale-Prefixed Routing"
+// (App.tsx's route wrapper, utils.ts's localizedPath/stripLocalePrefix).
 export const LOCALE_URL_PREFIX_CODES: string[] = LOCALES
   .map((l) => l.code)
   .filter((code) => code !== LOCALE_ET);

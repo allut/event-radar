@@ -21,7 +21,6 @@ REPO = Path(__file__).parent.parent.parent
 NOT_YET_REWRITTEN = {
     "docs/conventions.md",
     "docs/data-model.md",
-    "docs/frontend.md",
     "docs/organizer-portal.md",
 }
 
