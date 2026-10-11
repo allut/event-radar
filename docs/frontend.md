@@ -113,7 +113,8 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 
 - **`frontend/scripts/generate-icons.ts` is hand-run, not part of `npm run build`:** `npx tsx scripts/generate-icons.ts`. It owns `public/favicon.svg` and rasterizes the favicons, app icons, email mark and `og-fallback.png` through Playwright.
 - **Commit the regenerated binaries with the script change.** The geometry rules are in [design-system.md](design-system.md)'s The Dial section.
-- **The email mark's path is `EMAIL_BRAND_MARK_PATH`, shared with the backend through `shared/app-config.json`.** `backend/app/email/brand.py::brand_mark_html()` renders it into every `*_HEADER` template.
+- **The email mark is embedded as an inline CID attachment, not linked.** Apple Mail's privacy proxy failed to fetch it from the Pages host. The script writes it to `backend/app/email/assets/` as well as `public/`, since Render deploys `backend/` alone. `backend/app/email/brand.py::brand_mark_html()` renders the `cid:` `<img>` into every `*_HEADER` template, and `brand_mark_attachments()` adds the payload in `send_resend_email()` and the digest send.
+- **`public/email-mark.png` (`EMAIL_BRAND_MARK_PATH`) stays only for already-sent mail,** which links it by URL.
 
 ## Email
 

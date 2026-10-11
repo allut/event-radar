@@ -6,7 +6,7 @@
  *
  * Usage: npx tsx scripts/generate-icons.ts
  */
-import { writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -36,7 +36,7 @@ const OUTPUT_SIZES: { size: number; name: string }[] = [
 
 /** iOS applies its own rounding/mask to apple-touch-icon — the source must be
  * full-bleed, no transparency, or the mask crops into visible artwork. Every
- * tile here is a sharp, opaque square, so that holds for all outputs. */
+ * tile but the email mark is a sharp, opaque square, so that holds. */
 const APPLE_TOUCH_ICON_SIZE = 180;
 const MASKABLE_SIZE = 512;
 
@@ -77,15 +77,17 @@ function dialMarkup(variant: DialVariant): string {
   );
 }
 
-/** Sharp square navy tile with the Dial centred. `fill` is the share of the
- * tile the 24-unit dial box takes. Omit `size` for a scalable file (favicon.svg). */
-function tileSvg(variant: DialVariant, fill: number, size?: number): string {
+/** Navy tile with the Dial centred — sharp unless `radiusRatio` (share of the
+ * tile side) rounds it. `fill` is the share of the tile the 24-unit dial box
+ * takes. Omit `size` for a scalable file (favicon.svg). */
+function tileSvg(variant: DialVariant, fill: number, size?: number, radiusRatio = 0): string {
   const vb = 24 / fill;
   const off = (vb - 24) / 2;
+  const rx = +(vb * radiusRatio).toFixed(4);
   const dims = size === undefined ? '' : ` width="${size}" height="${size}"`;
   return (
     `<svg xmlns="http://www.w3.org/2000/svg"${dims} viewBox="0 0 ${+vb.toFixed(4)} ${+vb.toFixed(4)}">` +
-    `<rect width="${+vb.toFixed(4)}" height="${+vb.toFixed(4)}" fill="${NAVY}"/>` +
+    `<rect width="${+vb.toFixed(4)}" height="${+vb.toFixed(4)}"${rx ? ` rx="${rx}"` : ''} fill="${NAVY}"/>` +
     `<g transform="translate(${+off.toFixed(4)} ${+off.toFixed(4)})">${dialMarkup(variant)}</g></svg>`
   );
 }
@@ -97,17 +99,25 @@ const LARGE_FILL = 0.68;
 const MASKABLE_FILL = 0.75;
 
 const EMAIL_MARK_SIZE = 96; // displayed at 32px in mail — 3x for HiDPI.
+/** The email mark sits on the mail body, not under an OS mask, so it rounds
+ * itself — a sharp navy square reads as a black box on the light palette.
+ * 6/32 is `--radius` at the 32px display size. */
+const EMAIL_MARK_RADIUS_RATIO = 6 / 32;
+/** The backend embeds the mark as an inline CID attachment (app/email/brand.py),
+ * so it needs its own copy — Render deploys `backend/` alone. */
+const BACKEND_EMAIL_ASSETS_DIR = path.join(__dirname, '..', '..', 'backend', 'app', 'email', 'assets');
 
 async function screenshotSvgAtSize(
   page: import('playwright').Page,
   size: number,
   svgMarkup: string,
+  transparent = false,
 ): Promise<Buffer> {
   await page.setViewportSize({ width: size, height: size });
   await page.setContent(
     `<html><body style="margin:0;padding:0;width:${size}px;height:${size}px;">${svgMarkup}</body></html>`,
   );
-  return page.screenshot();
+  return page.screenshot({ omitBackground: transparent });
 }
 
 const fontDataUri = (relPath: string): string =>
@@ -204,9 +214,18 @@ async function main(): Promise<void> {
     writeFileSync(path.join(PUBLIC_DIR, filename(ICON_MASKABLE_512_PATH)), maskable);
     console.log(`wrote ${filename(ICON_MASKABLE_512_PATH)} (${MASKABLE_SIZE}x${MASKABLE_SIZE})`);
 
-    const emailMark = await screenshotSvgAtSize(page, EMAIL_MARK_SIZE, tileSvg('small', SMALL_FILL, EMAIL_MARK_SIZE));
+    // Transparent outside the rounded corners. The public copy keeps already-sent
+    // mail (which links it by URL) rendering; new mail embeds the backend copy.
+    const emailMark = await screenshotSvgAtSize(
+      page,
+      EMAIL_MARK_SIZE,
+      tileSvg('small', SMALL_FILL, EMAIL_MARK_SIZE, EMAIL_MARK_RADIUS_RATIO),
+      true,
+    );
     writeFileSync(path.join(PUBLIC_DIR, filename(EMAIL_BRAND_MARK_PATH)), emailMark);
-    console.log(`wrote ${filename(EMAIL_BRAND_MARK_PATH)} (${EMAIL_MARK_SIZE}x${EMAIL_MARK_SIZE})`);
+    mkdirSync(BACKEND_EMAIL_ASSETS_DIR, { recursive: true });
+    writeFileSync(path.join(BACKEND_EMAIL_ASSETS_DIR, filename(EMAIL_BRAND_MARK_PATH)), emailMark);
+    console.log(`wrote ${filename(EMAIL_BRAND_MARK_PATH)} (${EMAIL_MARK_SIZE}x${EMAIL_MARK_SIZE}, public + backend)`);
 
     const appleTouchIcon = await screenshotSvgAtSize(page, APPLE_TOUCH_ICON_SIZE, tileSvg('large', LARGE_FILL, APPLE_TOUCH_ICON_SIZE));
     writeFileSync(path.join(PUBLIC_DIR, filename(APPLE_TOUCH_ICON_PATH)), appleTouchIcon);

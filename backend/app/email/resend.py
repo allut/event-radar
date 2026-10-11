@@ -16,6 +16,7 @@ from app.constants import (
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
 )
+from app.email.brand import brand_mark_attachments
 
 log = logging.getLogger(__name__)
 
@@ -35,8 +36,9 @@ async def send_resend_email(
     log_ref: str,
 ) -> None:
     """POST ``payload`` to Resend exactly once and log the outcome. ``payload``
-    carries everything except ``from``, which is added here. ``log_ref`` must
-    already be PII-safe (``mask_email()`` for an address).
+    carries everything except ``from`` and the brand-mark attachment, which are
+    added here. ``log_ref`` must already be PII-safe (``mask_email()`` for an
+    address).
 
     Deliberately not routed through the retrying ``http_post``: these sends are
     awaited synchronously inside rate-limited, user-facing request handlers
@@ -53,6 +55,8 @@ async def send_resend_email(
 
     headers = {AUTHORIZATION_HEADER: f"{BEARER_PREFIX}{settings.RESEND_API_KEY}"}
     body = {"from": settings.RESEND_FROM_ADDRESS, **payload}
+    if attachments := brand_mark_attachments(payload.get("html", "")):
+        body["attachments"] = attachments
     if http_client is not None:
         resp = await http_client.post(RESEND_SEND_URL, headers=headers, json=body)
     else:

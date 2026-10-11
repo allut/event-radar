@@ -131,8 +131,8 @@ def test_event_link_carries_locale_prefix(monkeypatch, make_event, locale, prefi
     assert text.endswith(f"https://radar.ee{prefix}/events/42")
 
 
-def test_header_carries_absolute_brand_mark(make_event):
+def test_header_carries_inline_brand_mark(make_event):
     html = report_reporter.build_report_outcome_html(make_event(10), "Fine.", "en")
 
-    assert "/email-mark.png" in html
-    assert html.index("email-mark.png") < html.index("EVENT RADAR")
+    assert "cid:event-radar-mark" in html
+    assert html.index("cid:event-radar-mark") < html.index("EVENT RADAR")

@@ -167,6 +167,7 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 `frontend/scripts/generate-icons.ts` draws the off-page marks: favicons, app icons, the email header mark and the OG fallback image.
 
 - **Every off-page mark sits on a sharp, opaque navy square tile.** The tile stays navy under every browser chrome theme, and iOS and Android apply their own masks.
+- **The email mark is the exception: its tile is rounded (`--radius` at 32px) with transparent corners.** No OS mask rounds it, and a sharp navy square read as a black box on the light email palette. The tile stays navy in both email themes, because clients that force-invert dark mode leave images alone.
 - **Two optical sizes come from one geometry function.** The small size (favicons, the 32px email mark) drops the inner ring and thickens rim, hand, pivot and tip dot. The large size (app icons, apple-touch, maskable) stays faithful to `DialMark`.
 - **Both sizes stroke the tip dot in the tile color**, so it cuts the rim instead of merging into it. The maskable icon keeps rim and tip dot inside the 40%-radius safe zone.
 - **`og-fallback.png` is one image for all three locales,** so it carries no tagline. Its fonts are embedded from `@fontsource`, never a CDN.

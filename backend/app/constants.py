@@ -12,7 +12,6 @@ from app._generated.shared_constants import (
     DEFAULT_CURRENCY,
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
-    EMAIL_BRAND_MARK_PATH,
     HTML_SANITIZE_ALLOWED_ATTRS,
     HTML_SANITIZE_ALLOWED_TAGS,
     IMAGE_UPLOAD_ALLOWED_MIME,
@@ -38,7 +37,6 @@ __all__ = [
     "DEFAULT_CURRENCY",
     "DEFAULT_USER_CITY",
     "DEFAULT_USER_LOCALE",
-    "EMAIL_BRAND_MARK_PATH",
     "HTML_SANITIZE_ALLOWED_ATTRS",
     "HTML_SANITIZE_ALLOWED_TAGS",
     "IMAGE_UPLOAD_ALLOWED_MIME",
@@ -709,6 +707,11 @@ DEDUP_CANDIDATE_PAIR_MAX = 50_000
 RESEND_SEND_URL = "https://api.resend.com/emails"
 RESEND_TIMEOUT_SECONDS: float = 10.0
 RESEND_ERROR_SNIPPET_LEN = 200
+# Header Dial mark, embedded as an inline (CID) attachment rather than linked:
+# Apple Mail's privacy proxy fails to fetch it from the Pages host. The file is
+# backend/app/email/assets/<filename>, written by frontend/scripts/generate-icons.ts.
+EMAIL_BRAND_MARK_FILENAME = "email-mark.png"
+EMAIL_BRAND_MARK_CID = "event-radar-mark"
 # Scheduler cadence (see docs/backend-ops.md "Scheduled Jobs" for the full cron schedule)
 ORGANIZER_SYNC_HOUR = 3  # weekly Sunday 03:00 Europe/Tallinn
 ORGANIZER_SYNC_MINUTE = 0

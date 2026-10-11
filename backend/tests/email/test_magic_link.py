@@ -1,6 +1,5 @@
 """Tests for email/magic_link.py — HTML/text builders."""
 
-from app.config import settings
 from app.email.magic_link import build_magic_link_html, build_magic_link_text
 from app.i18n import t
 
@@ -16,9 +15,9 @@ class TestBuildMagicLinkHtml:
         )
         assert 'href="https://example.com/auth/verify?token=a&amp;b"' in html
 
-    def test_header_carries_absolute_brand_mark(self):
+    def test_header_carries_inline_brand_mark(self):
         html = build_magic_link_html("https://example.com/verify?token=x", 15, "en")
-        assert f'<img src="{settings.FRONTEND_URL}/email-mark.png"' in html
+        assert '<img src="cid:event-radar-mark"' in html
         assert 'alt=""' in html
 
     def test_ttl_minutes_interpolated(self):
