@@ -1484,7 +1484,7 @@ class TestDeleteOwnEvent:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+            "app.events.cancellation.send_report_outcome_email", new=AsyncMock()
         ) as mock_send:
             await delete_own_event(
                 10,

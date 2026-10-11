@@ -39,6 +39,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
     DEFAULT_CURRENCY,
+    EVENT_CANCELLATION_REASON_SOURCE_GONE,
+    EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     GEOCODE_COORD_QUANT_DECIMALS,
@@ -46,6 +48,8 @@ from app.constants import (
     HTTP_TIMEOUT_SECONDS,
     LOCALIZED_TEXT_FIENTA_LOCALES,
     REFETCH_COMMIT_INTERVAL_SECONDS,
+    REFETCH_GONE_CANCEL_AFTER_DAYS,
+    REFETCH_GONE_STATUS_CODES,
     REFETCH_MAX_PER_RUN,
     REFETCH_MAX_RUN_SECONDS,
     REFETCH_MIN_INTERVAL_DAYS,
@@ -53,6 +57,7 @@ from app.constants import (
     REFETCH_PRICE_TOLERANCE,
     REFETCH_HOST_CONCURRENCY,
     REFETCH_REQUEST_DELAY_SECONDS,
+    REPORT_AUTO_RESOLVE_NOTE,
     SOURCE_KIND_USER_SUBMISSION,
     TALLINN_TZ,
     VENUE_NAME_MAX_LEN,
@@ -85,6 +90,11 @@ from app.ingestion.locale_urls import (
     locale_from_html_lang,
     locale_from_url_path,
 )
+from app.events.cancellation import (
+    cancel_event_and_resolve_reports,
+    send_report_resolution_emails,
+)
+from app.events.queries import no_live_dedup_sibling_clause
 from app.claims.lifecycle import bulk_dormant_pinned_event_ids
 from app.claims.pinning import pin_key
 from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
@@ -96,7 +106,7 @@ from app.ingestion.sources.estonia_concert_hall import (
 )
 from app.ingestion.sources.kumu import kumu_localized_text
 from app.ingestion.sources.piletilevi import piletilevi_localized_text
-from app.models.models import Event, EventSource, Source
+from app.models.models import Event, EventReport, EventSource, Source
 
 log = logging.getLogger(__name__)
 
@@ -344,17 +354,29 @@ async def _process_one(
     summary: dict,
     now: datetime,
     dormant_event_ids: set[int],
+    gone_due: list[Event],
 ) -> bool:
     """Fetch one event's detail page, backfill locales, and reconcile fields.
 
     Returns False when the fetch itself failed (caller skips the pacing sleep
     and leaves detail_refetched_at untouched so the event retries next run).
+    A 404/410 is not a failure: the page is gone, so the event is stamped
+    ``source_gone_since`` and marked synced (it moves to the back of the
+    queue). Once it has stayed gone for REFETCH_GONE_CANCEL_AFTER_DAYS it is
+    appended to ``gone_due`` for the caller's bulk cancel.
     """
     url = event.url
     assert url is not None  # guaranteed by the candidate query
     try:
         response = await http_get(client, url)
-    except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code not in REFETCH_GONE_STATUS_CODES:
+            summary["failed"] += 1
+            log.warning("refetch failed url=%s: %s", url, exc)
+            return False
+        _record_source_gone(event, summary, now, gone_due)
+        return True
+    except (httpx.RequestError, ValueError) as exc:
         # ValueError: host_guard_hook's SSRF guard — an expected per-item
         # rejection (e.g. a pre-guard row or off-host redirect), degrades like
         # any fetch failure.
@@ -363,6 +385,7 @@ async def _process_one(
         return False
 
     summary["fetched"] += 1
+    event.source_gone_since = None
     soup = BeautifulSoup(response.text, HTML_PARSER)
     normalized_host = normalized_hostname(url)
     jsonld_items = parse_jsonld_event_items(soup)
@@ -436,6 +459,8 @@ async def refetch_event_details(db: AsyncSession) -> dict:
         "unchanged": 0,
         "no_data": 0,
         "failed": 0,
+        "source_gone": 0,
+        "cancelled_gone": 0,
         "flagged_explicit": 0,
         "flagged_non_event": 0,
         "localized_text_backfilled": 0,
@@ -455,6 +480,7 @@ async def refetch_event_details(db: AsyncSession) -> dict:
         by_host.setdefault(normalized_hostname(event.url), []).append(event)
     host_semaphore = asyncio.Semaphore(REFETCH_HOST_CONCURRENCY)
     commit_lock = asyncio.Lock()
+    gone_due: list[Event] = []
 
     async def _refetch_host(client: httpx.AsyncClient, host_events: list[Event]) -> None:
         nonlocal last_commit
@@ -465,7 +491,9 @@ async def refetch_event_details(db: AsyncSession) -> dict:
                     # the events left unprocessed here sort first next run.
                     summary["deadline_stopped"] = True
                     break
-                fetched = await _process_one(client, event, summary, now, dormant_event_ids)
+                fetched = await _process_one(
+                    client, event, summary, now, dormant_event_ids, gone_due
+                )
                 if fetched:
                     await asyncio.sleep(REFETCH_REQUEST_DELAY_SECONDS)
                 if time.monotonic() - last_commit >= REFETCH_COMMIT_INTERVAL_SECONDS:
@@ -495,7 +523,72 @@ async def refetch_event_details(db: AsyncSession) -> dict:
     if failures:
         raise failures[0]
 
+    await _cancel_gone_events(db, gone_due, summary, now)
     return summary
+
+
+def _record_source_gone(
+    event: Event, summary: dict, now: datetime, gone_due: list[Event]
+) -> None:
+    """Stamp the first-seen-gone time, mark the event synced, and queue it for
+    cancellation once it has stayed gone past REFETCH_GONE_CANCEL_AFTER_DAYS.
+    An already-cancelled event is stamped but never queued again."""
+    summary["source_gone"] += 1
+    if event.source_gone_since is None:
+        event.source_gone_since = now
+    log.info("refetch source gone url=%s since=%s", event.url, event.source_gone_since)
+    _mark_synced(event, now)
+    # Calendar days, so run-start jitter can't push a cancel back a whole day.
+    gone_days = (
+        now.astimezone(TALLINN_TZ).date()
+        - event.source_gone_since.astimezone(TALLINN_TZ).date()
+    ).days
+    if (
+        gone_days >= REFETCH_GONE_CANCEL_AFTER_DAYS
+        and event.status != EVENT_STATUS_CANCELLED
+    ):
+        gone_due.append(event)
+
+
+async def _ids_without_live_sibling(
+    db: AsyncSession, event_ids: list[int], now: datetime
+) -> set[int]:
+    """Subset of ``event_ids`` safe to cancel: no still-live dedup sibling
+    points at them (one query for the whole batch)."""
+    rows = await db.scalars(
+        select(Event.id).where(
+            Event.id.in_(event_ids), no_live_dedup_sibling_clause(now)
+        )
+    )
+    return set(rows.all())
+
+
+async def _cancel_gone_events(
+    db: AsyncSession, gone_due: list[Event], summary: dict, now: datetime
+) -> None:
+    """Cancel events whose source page has been gone past the threshold.
+
+    Goes through cancel_event_and_resolve_reports like every other cancel path
+    so open reports are auto-resolved. A dedup representative with a live
+    sibling is spared (retried next run). Reporter emails are sent only after
+    the commit that persists the cancellation (#127).
+    """
+    if not gone_due:
+        return
+    cancelable = await _ids_without_live_sibling(db, [e.id for e in gone_due], now)
+    resolved: list[tuple[Event, list[EventReport]]] = []
+    for event in gone_due:
+        if event.id not in cancelable:
+            continue
+        reports = await cancel_event_and_resolve_reports(
+            db, event, EVENT_CANCELLATION_REASON_SOURCE_GONE, REPORT_AUTO_RESOLVE_NOTE
+        )
+        summary["cancelled_gone"] += 1
+        if reports:
+            resolved.append((event, reports))
+    await db.commit()
+    for event, reports in resolved:
+        await send_report_resolution_emails(db, event, reports, REPORT_AUTO_RESOLVE_NOTE)
 
 
 def _mark_synced(event: Event, now: datetime) -> None:

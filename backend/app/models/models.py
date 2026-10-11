@@ -767,6 +767,12 @@ class Event(Base):
     geocode_attempted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # First time the detail-refetch saw the source page gone (404/410); cleared
+    # by any later successful fetch. Sync bookkeeping, untracked by the
+    # updated_at trigger like geocode_attempted_at.
+    source_gone_since: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Cooldown clock for the venue-extract sub-pass: stamped when the LLM
     # decided a suspect venue_name carries no street address. Sync bookkeeping,
     # untracked by the updated_at trigger like geocode_attempted_at.
@@ -784,7 +790,8 @@ class Event(Base):
     # `onupdate` — most writers (dedup/classify/publish/geocode) bulk-UPDATE
     # via SQLAlchemy Core, which bypasses ORM column defaults. The trigger
     # only bumps this when a column other than detail_refetched_at/
-    # detail_refetch_count/geocode_attempted_at/venue_extract_attempted_at (pure sync-bookkeeping,
+    # detail_refetch_count/geocode_attempted_at/venue_extract_attempted_at/
+    # source_gone_since (pure sync-bookkeeping,
     # written on every daily/6-hourly pass regardless of real change)
     # actually changed, so the prerender pipeline's change-detection (issue
     # #80) doesn't see a false "changed" marker on every ingestion pass.

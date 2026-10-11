@@ -72,6 +72,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 | `detail_refetched_at`, `detail_refetch_count` | detail-refetch sync bookkeeping |
 | `geocode_attempted_at` | geocoding backfill cooldown |
 | `venue_extract_attempted_at` | venue-name extract cooldown (migration 0056) |
+| `source_gone_since` | first time the detail-refetch saw the source page gone, cleared on a later successful fetch (migration 0058) |
 | `submitted_by_organizer_id` | FK → `organizers`, indexed |
 | `needs_review` | flags the admin review queue; partial index on true |
 | `pinned_fields` | JSONB array of fields a claim has pinned |
@@ -80,7 +81,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 | `updated_at` | trigger-maintained change marker |
 
 - **`published` is set by the publish gate, never directly by classification.** See [pipeline.md](pipeline.md)'s Publish Gate section.
-- **Only the manual retract and takedown paths set `cancellation_reason`:** `organizer_retract`, `admin_retract` and `report_takedown`. Pipeline cancellations, such as `classify_pending`'s ended-draft sweep, leave it `NULL`. So do rows cancelled before the column existed.
+- **Only the manual retract and takedown paths and the detail-refetch source-gone cancel set `cancellation_reason`:** `organizer_retract`, `admin_retract`, `report_takedown` and `source_gone`. Pipeline cancellations, such as `classify_pending`'s ended-draft sweep, leave it `NULL`. So do rows cancelled before the column existed.
 - **`has_free_tier` is OR-merged across sources.** See [pipeline.md](pipeline.md)'s Prices section.
 - **The `*_localized` columns have three writers:** per-locale page fetches at ingest, the organizer form's per-locale fields, and the detail-refetch backfill of missing locales. A source that concatenates several languages in one field is stored as-is, unsplit.
 - **`submitted_by_organizer_id` and `needs_review` feed `GET /admin/submissions`.** See [organizer-portal.md](organizer-portal.md)'s Trust Gating and Review section.

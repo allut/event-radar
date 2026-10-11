@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.constants import IMPORTANT_INFO_MAX_CHARS
+from app.events.queries import no_live_dedup_sibling_clause
 from app.llm.classifier import (
     _build_classify_prompt,
-    _no_live_dedup_sibling_clause,
     _parse_classification,
     classify_event,
     classify_pending,
@@ -779,7 +779,7 @@ class TestNoLiveDedupSiblingClause:
     def test_compiles_to_not_exists_correlated_on_own_id(self):
         now = datetime(2026, 6, 25, tzinfo=timezone.utc)
         compiled = str(
-            _no_live_dedup_sibling_clause(now).compile(
+            no_live_dedup_sibling_clause(now).compile(
                 compile_kwargs={"literal_binds": True}
             )
         )

@@ -109,7 +109,7 @@ The LLM classifies each event against a fixed category and vibe taxonomy (`VALID
 
 - **Events flagged by a layer-1 keyword prefilter skip the LLM call but still advance to `classified`.** Otherwise a flagged dedup representative would strand its whole group in `draft`.
 - **`classify_pending` cancels ended drafts before each batch.** They can never pass the publish gate, so an LLM call on them is wasted.
-- **The sweep spares a dedup representative with a live sibling** (`_no_live_dedup_sibling_clause`). Cancelling it would orphan the sibling outside `canonical_event_filter()` until the next dedup pass.
+- **The sweep spares a dedup representative with a live sibling** (`app/events/queries.py::no_live_dedup_sibling_clause()`). Cancelling it would orphan the sibling outside `canonical_event_filter()` until the next dedup pass.
 
 ## Ranking
 
@@ -236,6 +236,15 @@ The LLM classifies each event against a fixed category and vibe taxonomy (`VALID
 - **That exclusion is a security boundary.** An organizer's `url` isn't host-pinned, so it must never be fetched. See [security.md](security.md)'s External URLs section.
 - **Candidates are grouped by host.** Each host is walked sequentially with `REFETCH_REQUEST_DELAY_SECONDS` between requests. Up to `REFETCH_HOST_CONCURRENCY` hosts run in parallel.
 - **A run handles at most `REFETCH_MAX_PER_RUN` events.** An event is re-checked only after `REFETCH_MIN_INTERVAL_DAYS`.
+
+### Source-Gone Retirement
+
+- **A detail page answering 404 or 410 (`REFETCH_GONE_STATUS_CODES`) means the source removed the event.** It isn't counted in `failed`. The run stamps `events.source_gone_since` on the first sighting and marks the event synced, so it moves to the back of the queue.
+- **Any other status, a `RequestError` or an SSRF-guard `ValueError` is transient.** It counts in `failed` and leaves the event untouched.
+- **A later successful fetch clears `source_gone_since`.**
+- **An event gone for `REFETCH_GONE_CANCEL_AFTER_DAYS` is cancelled** with `cancellation_reason = source_gone`, through `app/events/cancellation.py::cancel_event_and_resolve_reports()` like every other cancel path. The wait keeps one bad response from the source from cancelling a live event.
+- **A dedup representative with a live sibling is spared** (`no_live_dedup_sibling_clause()`) and retried next run.
+- **Cancellations run once after the host walk, in one batched sibling query.** The run commits, then sends the reporter emails, so no one is told about a cancel that rolled back. The summary counts `source_gone` and `cancelled_gone`.
 
 ## Read Paths
 

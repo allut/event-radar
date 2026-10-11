@@ -425,11 +425,13 @@ EVENT_STATUS_CANCELLED = "cancelled"
 EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT = "organizer_retract"
 EVENT_CANCELLATION_REASON_ADMIN_RETRACT = "admin_retract"
 EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN = "report_takedown"
+EVENT_CANCELLATION_REASON_SOURCE_GONE = "source_gone"
 VALID_EVENT_CANCELLATION_REASONS = frozenset(
     {
         EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT,
         EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
         EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
+        EVENT_CANCELLATION_REASON_SOURCE_GONE,
     }
 )
 
@@ -1752,6 +1754,12 @@ REFETCH_MAX_RUN_SECONDS: float = 2400.0
 # Flat daily throttle: an event re-synced within this window is not due again.
 # Guards mainly against manual POST /admin/refetch re-runs; the cron fires once daily.
 REFETCH_MIN_INTERVAL_DAYS = 1
+# A detail page answering one of these means the source removed the event. Any
+# other status (5xx, 403, 429) or a transport error is treated as transient.
+REFETCH_GONE_STATUS_CODES: frozenset[int] = frozenset({404, 410})
+# How long a detail page must keep answering gone before the event is
+# cancelled, so one bad response from the source can't cancel a live event.
+REFETCH_GONE_CANCEL_AFTER_DAYS = 2
 # Absolute tolerance (currency units) when comparing a stored price against the
 # detail-page price — sub-cent float noise must read as "unchanged", not a change.
 REFETCH_PRICE_TOLERANCE = 0.005

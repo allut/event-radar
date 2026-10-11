@@ -16,12 +16,11 @@ from app.routers.utils import (
     recent_unused_link_exists,
     replace_organizer_categories,
     resolve_locale_param,
-    resolve_open_reports,
-    send_report_resolution_emails,
     serialize_event,
     stream_admin_job,
     validate_categories,
 )
+from app.events.cancellation import resolve_open_reports, send_report_resolution_emails
 from app.claims.target_resolution import bulk_resolve_publisher_events
 from app.events.queries import (
     collapse_series_duplicates,
@@ -447,7 +446,7 @@ class TestResolveOpenReports:
         mock_db.execute.return_value.scalars.return_value.all.return_value = [report]
 
         with patch(
-            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+            "app.events.cancellation.send_report_outcome_email", new=AsyncMock()
         ) as mock_send:
             resolved = await resolve_open_reports(mock_db, event, "Reviewed.")
 
@@ -480,7 +479,7 @@ class TestSendReportResolutionEmails:
         )
 
         with patch(
-            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+            "app.events.cancellation.send_report_outcome_email", new=AsyncMock()
         ) as mock_send:
             await send_report_resolution_emails(
                 mock_db, event, [report_a, report_b], "Reviewed."
@@ -495,7 +494,7 @@ class TestSendReportResolutionEmails:
         from unittest.mock import AsyncMock, patch
 
         with patch(
-            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+            "app.events.cancellation.send_report_outcome_email", new=AsyncMock()
         ) as mock_send:
             await send_report_resolution_emails(mock_db, make_event(42), [], "note")
 
@@ -517,7 +516,7 @@ class TestSendReportResolutionEmails:
 
         with (
             patch(
-                "app.routers.utils.send_report_outcome_email",
+                "app.events.cancellation.send_report_outcome_email",
                 new=AsyncMock(side_effect=RuntimeError("boom")),
             ),
             caplog.at_level(logging.ERROR),
@@ -558,7 +557,7 @@ class TestSendReportResolutionEmails:
                 raise _SimulatedFatalError("boom")
 
         with patch(
-            "app.routers.utils.send_report_outcome_email",
+            "app.events.cancellation.send_report_outcome_email",
             new=AsyncMock(side_effect=_raise_for_a),
         ) as mock_send:
             await send_report_resolution_emails(

@@ -86,10 +86,13 @@ from app.models.models import (
 from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
+from app.events.cancellation import (
+    cancel_event_and_resolve_reports,
+    send_report_resolution_emails,
+)
 from app.routers.utils import (
     apply_moderation_flags,
     apply_price_edit,
-    cancel_event_and_resolve_reports,
     check_image_host,
     fold_legacy_category,
     localized_dict,
@@ -98,7 +101,6 @@ from app.routers.utils import (
     own_venue_or_404,
     replace_organizer_categories,
     resolve_locale_param,
-    send_report_resolution_emails,
     serialize_event,
     validate_categories,
     validate_price_ordering,

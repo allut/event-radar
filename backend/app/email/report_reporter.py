@@ -2,7 +2,7 @@
 (manual admin resolve/takedown, or the auto-resolve-on-cancellation cascade).
 Branded/i18n pattern (EMAIL_DOCUMENT shell + styles.py/templates.py, t()/ti()),
 this goes to an external user.
-Sent by app.routers.utils.resolve_open_reports, the single shared helper
+Sent by app.events.cancellation.resolve_open_reports, the single shared helper
 every resolve/takedown/cascade path funnels through (see issue #125), so the
 send is centralized there rather than duplicated per caller.
 """

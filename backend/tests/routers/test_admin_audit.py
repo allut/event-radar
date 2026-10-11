@@ -206,7 +206,7 @@ async def test_resolve_reports_writes_one_admin_action_row(
     with (
         patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
-        patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
+        patch("app.events.cancellation.send_report_outcome_email", new=AsyncMock()),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -279,7 +279,7 @@ async def test_takedown_writes_one_admin_action_row(
     with (
         patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
-        patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
+        patch("app.events.cancellation.send_report_outcome_email", new=AsyncMock()),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
