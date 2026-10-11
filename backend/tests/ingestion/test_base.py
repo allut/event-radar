@@ -1,6 +1,7 @@
 """Tests for the shared ingestion helper modules (http_client, sanitize, pricing, jsonld, adapter)."""
 
 import http
+import logging
 import socket
 import time
 from datetime import datetime
@@ -8,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from sqlalchemy.dialects import postgresql
 from tenacity import RetryCallState
 
 from app.constants import (
@@ -21,6 +23,7 @@ from app.ingestion.adapter import (
     SourceAdapter,
     coords_in_estonia,
     coords_in_tallinn,
+    existing_external_ids,
     insert_normalized_event,
     load_publisher_lookup,
 )
@@ -1060,9 +1063,55 @@ class TestInsertNormalizedEvent:
             starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
         )
 
+        mock_db.scalar.return_value = None
+
         result = await insert_normalized_event(mock_db, source, normalized)
 
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_real_slug_collision_logs_warning(self, mock_db, caplog):
+        from sqlalchemy.exc import IntegrityError
+
+        self._nested_cm(mock_db)
+        mock_db.flush.side_effect = IntegrityError("stmt", {}, Exception("dup key"))
+        mock_db.scalar.return_value = None  # external_id not stored: genuine collision
+        source = MagicMock(id=1, slug="test-source")
+        normalized = NormalizedEvent(
+            external_id="ext-1",
+            title="Test Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+        )
+
+        with caplog.at_level(logging.DEBUG, logger="app.ingestion.adapter"):
+            result = await insert_normalized_event(mock_db, source, normalized)
+
+        assert result is None
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("slug collision" in r.getMessage() for r in warnings)
+
+    @pytest.mark.asyncio
+    async def test_duplicate_external_id_does_not_log_slug_collision_warning(
+        self, mock_db, caplog
+    ):
+        from sqlalchemy.exc import IntegrityError
+
+        self._nested_cm(mock_db)
+        mock_db.flush.side_effect = IntegrityError("stmt", {}, Exception("dup key"))
+        mock_db.scalar.return_value = 99  # event_sources row already exists
+        source = MagicMock(id=1, slug="test-source")
+        normalized = NormalizedEvent(
+            external_id="ext-1",
+            title="Test Event",
+            starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
+        )
+
+        with caplog.at_level(logging.DEBUG, logger="app.ingestion.adapter"):
+            result = await insert_normalized_event(mock_db, source, normalized)
+
+        assert result is None
+        assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+        assert any("already stored" in r.getMessage() for r in caplog.records)
 
     @pytest.mark.asyncio
     async def test_returns_none_on_data_error(self, mock_db):
@@ -1401,3 +1450,18 @@ class TestLocaleVariantGuardRejection:
             source_label="test",
         )
         assert "en" not in titles
+
+
+class TestExistingExternalIds:
+    @pytest.mark.asyncio
+    async def test_bounds_on_end_of_event_not_start(self, mock_db):
+        """#532: a long-running listing (old starts_at, future ends_at) must stay
+        in the skip set, so the cutoff is on coalesce(ends_at, starts_at)."""
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=["a", None]))
+
+        result = await existing_external_ids(mock_db, 1)
+
+        assert result == {"a"}
+        stmt = mock_db.scalars.call_args.args[0]
+        where = str(stmt.whereclause.compile(dialect=postgresql.dialect()))
+        assert "coalesce(events.ends_at, events.starts_at)" in where

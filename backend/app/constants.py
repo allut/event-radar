@@ -1769,13 +1769,15 @@ REFETCH_COMMIT_INTERVAL_SECONDS: float = 120.0
 # re-fetched/re-saved on every run; it is retried once after this window so a
 # transient rejection still self-heals. Pure backend scalar — not cross-stack.
 INGEST_REJECT_RECHECK_DAYS = 7
-# Lower bound on existing_external_ids' EventSource->Event join. Without it,
-# every external_id ever stored for a source is loaded into a Python set on
-# every hourly ingest run, growing monotonically since events rows are never
-# deleted. A source's live listing never re-surfaces an external_id belonging
-# to an event that started this long ago, so dropping it from the skip set
-# costs nothing beyond the event_sources unique index + IntegrityError handler
-# already guarding against a duplicate insert (see insert_normalized_event).
+# Lower bound on existing_external_ids' EventSource->Event join, applied to
+# coalesce(ends_at, starts_at). Without it, every external_id ever stored for a
+# source is loaded into a Python set on every hourly ingest run, growing
+# monotonically since events rows are never deleted. A source's live listing
+# never re-surfaces an external_id belonging to an event that ended this long
+# ago (long-running listings like Fienta's exhibitions stay inside the window
+# until they end), so dropping it from the skip set costs nothing beyond the
+# event_sources unique index + IntegrityError handler already guarding against
+# a duplicate insert (see insert_normalized_event).
 INGEST_SKIP_ID_LOOKBACK_DAYS = 180
 # venue_name values treated as empty/placeholder, so a real detail name replaces
 # them. Matched case-insensitively. Deliberately excludes "online"/"MamaOnline" —
