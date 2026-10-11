@@ -7,6 +7,7 @@ SourceAdapter.run(): fetch -> raw_events -> normalize -> events(draft).
 import hashlib
 import logging
 import re
+import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -17,6 +18,8 @@ from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants import (
+    SLUG_CYRILLIC_TO_LATIN,
+    SLUG_EMPTY_TITLE_FALLBACK,
     SLUG_DATE_FORMAT,
     ESTONIA_BBOX,
     EVENT_STATUS_DRAFT,
@@ -99,14 +102,22 @@ class NormalizedEvent:
         )
 
 
+def _transliterate(text: str) -> str:
+    """Lowercase to ASCII-friendly text: drop diacritics (õäöüšž), map Cyrillic."""
+    decomposed = unicodedata.normalize("NFKD", text.lower())
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return "".join(SLUG_CYRILLIC_TO_LATIN.get(c, c) for c in stripped)
+
+
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
-    safe = _SLUG_SANITIZE_PATTERN.sub("-", title.lower()).strip("-")
+    safe = _SLUG_SANITIZE_PATTERN.sub("-", _transliterate(title)).strip("-")
+    safe = safe[:SLUG_TITLE_MAX_LEN].strip("-") or SLUG_EMPTY_TITLE_FALLBACK
     date_part = starts_at.strftime(SLUG_DATE_FORMAT)
     # short hex keeps collision probability <0.1% up to ~10k events/run
     h = hashlib.md5(external_id.encode(), usedforsecurity=False).hexdigest()[
         :SLUG_HASH_HEX_LEN
     ]
-    return f"{safe[:SLUG_TITLE_MAX_LEN]}-{date_part}-{h}"
+    return f"{safe}-{date_part}-{h}"
 
 
 async def existing_external_ids(db: AsyncSession, source_id: int) -> set[str]:

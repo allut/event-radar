@@ -25,6 +25,7 @@ from app.ingestion.adapter import (
     coords_in_tallinn,
     existing_external_ids,
     insert_normalized_event,
+    _make_slug,
     load_publisher_lookup,
 )
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
@@ -56,6 +57,45 @@ def _addrinfo(*ips: str) -> list:
     return [
         (socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, 0)) for ip in ips
     ]
+
+
+class TestMakeSlug:
+    _DATE = datetime(2026, 3, 30, 18, 0, tzinfo=TALLINN_TZ)
+
+    def _title_part(self, title: str) -> str:
+        slug = _make_slug(title, self._DATE, "ext-1")
+        head, date, digest = slug.rsplit("-", 2)
+        assert date == "20260330"
+        assert len(digest) == 8
+        return head
+
+    def test_estonian_diacritics_stay_in_word(self):
+        assert self._title_part("Kehataju päeva salvestuste kogu") == (
+            "kehataju-paeva-salvestuste-kogu"
+        )
+        assert self._title_part("Lõgastus") == "logastus"
+        assert self._title_part("Sissepääsupilet Šokolaad Žürii") == (
+            "sissepaasupilet-sokolaad-zurii"
+        )
+
+    def test_cyrillic_title_becomes_latin(self):
+        assert self._title_part("Привет, мир! Ёлка") == "privet-mir-elka"
+        assert self._title_part("Съезд Щука") == "sezd-shchuka"
+
+    def test_empty_result_falls_back(self):
+        assert self._title_part("???") == "event"
+        assert self._title_part("") == "event"
+        assert not _make_slug("???", self._DATE, "x").startswith("-")
+
+    def test_length_cap_never_leaves_trailing_dash(self):
+        title = "a" * 59 + " bbbb"
+        head = self._title_part(title)
+        assert head == "a" * 59
+        assert len(self._title_part("x" * 200)) == 60
+
+    def test_no_leading_or_trailing_dash(self):
+        assert not _make_slug("  -- Tere --  ", self._DATE, "x").startswith("-")
+        assert self._title_part("  -- Tere --  ") == "tere"
 
 
 class TestHostIsAllowed:

@@ -166,6 +166,9 @@ HTTP_RETRYABLE_STATUS_CODES: frozenset[int] = frozenset(
 )
 
 SLUG_TITLE_MAX_LEN = 60
+# Stand-in title part when transliteration leaves nothing (e.g. a title of
+# only symbols), so a slug never starts with "-".
+SLUG_EMPTY_TITLE_FALLBACK = "event"
 SLUG_HASH_HEX_LEN = 8
 INGESTION_ERROR_MAX_LEN = 500
 PRICE_HINT_MAX_CHARS = 300  # cap on Event.price_hint, kept short for the LLM prompt
@@ -2046,6 +2049,16 @@ MASK_DB_URL_PASSWORD_RE = r":[^@/]+@"
 
 # app/ingestion/adapter.py::_make_slug — collapses any non a-z0-9 run to "-".
 SLUG_SANITIZE_RE = r"[^a-z0-9]+"
+
+# app/ingestion/adapter.py::_make_slug — lowercase Russian Cyrillic -> Latin,
+# applied after NFKD marks are dropped. Soft/hard signs map to "".
+SLUG_CYRILLIC_TO_LATIN = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e", "ё": "e",
+    "ж": "zh", "з": "z", "и": "i", "й": "i", "к": "k", "л": "l", "м": "m",
+    "н": "n", "о": "o", "п": "p", "р": "r", "с": "s", "т": "t", "у": "u",
+    "ф": "f", "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "shch",
+    "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
+}  # fmt: skip
 
 # app/ingestion/content_filters.py::is_explicit_text — collapses whitespace
 # runs (incl. literal newlines within a text node) before keyword matching,
