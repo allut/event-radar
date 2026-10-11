@@ -29,9 +29,8 @@ from tenacity import (
     wait_random,
 )
 
-from app.constants import (
-    ALLOWED_SOURCE_HOSTS,
-    DNS_RESOLVE_CACHE_TTL_SECONDS,
+from app._generated.shared_constants import SAFE_URL_SCHEMES
+from app.constants.http import (
     HEADER_RETRY_AFTER,
     HOST_WWW_PREFIX,
     HTTPS_DEFAULT_PORT,
@@ -42,10 +41,13 @@ from app.constants import (
     HTTP_RETRY_WAIT_MAX,
     HTTP_RETRY_WAIT_MIN,
     HTTP_RETRY_WAIT_MULTIPLIER,
-    SAFE_URL_SCHEMES,
+    URL_SCHEME_HTTPS,
+)
+from app.constants.security import (
+    ALLOWED_SOURCE_HOSTS,
+    DNS_RESOLVE_CACHE_TTL_SECONDS,
     SITE_LOCAL_IPV6_CIDR,
     URL_RENDER_FORBIDDEN_RE,
-    URL_SCHEME_HTTPS,
 )
 
 log = logging.getLogger(__name__)

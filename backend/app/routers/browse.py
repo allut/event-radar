@@ -18,12 +18,18 @@ from sqlalchemy import ColumnElement, func, literal, or_, select, true, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
-from app.constants import (
+from app._generated.shared_constants import (
+    BROWSE_PAGE_SIZE,
+    DEFAULT_USER_LOCALE,
+    VALID_CATEGORIES,
+    VALID_VIBES,
+)
+from app.constants.core import TALLINN_TZ
+from app.constants.ranking import (
     BROWSE_ANON_CACHE_SENTINEL,
     BROWSE_FORYOU_MIN_AFFINITY,
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_NEG_INF,
-    BROWSE_PAGE_SIZE,
     BROWSE_QUERY_MAX_LEN,
     BROWSE_RELEVANCE_MAX_CANDIDATES,
     BROWSE_SCORE_CACHE_MAX_ENTRIES,
@@ -33,21 +39,17 @@ from app.constants import (
     BROWSE_SORT_QUALITY,
     BROWSE_SORT_RELEVANCE,
     BROWSE_SQL_SORTS,
-    DEFAULT_USER_LOCALE,
     ERROR_INVALID_SORT,
     FEEDBACK_HISTORY_LOOKBACK_DAYS,
     PAGINATION_CURSOR_MAX_LEN,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
-    RATE_LIMIT_BROWSE,
     SIGNAL_DISLIKE,
     SIGNAL_LIKE,
-    TALLINN_TZ,
     VALID_BROWSE_SORTS,
-    VALID_CATEGORIES,
-    VALID_VIBES,
 )
+from app.constants.rate_limits import RATE_LIMIT_BROWSE
 from app.db import get_db
 from app.models.models import Event, EventClassification, User, UserEventFeedback, UserPersona
 from app.ranking.score import (

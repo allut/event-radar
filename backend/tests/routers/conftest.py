@@ -76,7 +76,7 @@ def make_db_ctx():
 @pytest.fixture(autouse=True)
 def _reset_admin_auth_failures():
     """The failure counter is a module-level dict (in-memory, single-process
-    by design — see ADMIN_AUTH_MAX_FAILURES in constants.py) shared across
+    by design — see ADMIN_AUTH_MAX_FAILURES in app/constants/auth.py) shared across
     tests in this process; isolate each test from the others. Shared by
     every admin-auth-surface test module (Basic-auth lockout, admin console
     session login)."""

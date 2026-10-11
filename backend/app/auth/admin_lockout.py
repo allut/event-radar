@@ -11,20 +11,20 @@ from collections import OrderedDict
 from fastapi import HTTPException, status
 
 from app.config import settings
-from app.constants import (
+from app.constants.auth import (
     ADMIN_AUTH_FAILURES_MAX_ENTRIES,
     ADMIN_AUTH_LOCKOUT_SECONDS,
     ADMIN_AUTH_MAX_FAILURES,
     ADMIN_USERNAME_DEFAULT,
-    APP_ENV_DEVELOPMENT,
     ERROR_ADMIN_LOCKOUT,
-    LOG_EVENT_AUTH_FAILED,
 )
+from app.constants.core import APP_ENV_DEVELOPMENT
+from app.constants.log_events import LOG_EVENT_AUTH_FAILED
 
 log = logging.getLogger(__name__)
 
 # (client_key -> (consecutive_failure_count, locked_until_monotonic)). In-memory,
-# single-process — see ADMIN_AUTH_MAX_FAILURES in constants.py for the trade-off.
+# single-process — see ADMIN_AUTH_MAX_FAILURES in app/constants/auth.py for the trade-off.
 # Bounded LRU (ADMIN_AUTH_FAILURES_MAX_ENTRIES) — mirrors browse.py's _score_cache
 # pattern — so sustained scanning/brute-force traffic can't grow this unboundedly.
 _admin_auth_failures: OrderedDict[str, tuple[int, float]] = OrderedDict()

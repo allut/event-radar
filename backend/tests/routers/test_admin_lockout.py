@@ -10,7 +10,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.constants import ADMIN_AUTH_MAX_FAILURES
+from app.constants.auth import ADMIN_AUTH_MAX_FAILURES
 from tests.routers.conftest import patch_admin_settings
 
 
@@ -128,7 +128,7 @@ async def test_rate_limit_bucket_shared_across_different_admin_routes(admin_app)
     /admin prefix (limiter.shared_limit(..., scope="admin")), not one bucket
     per route — otherwise cycling through routes lets an attacker exceed the
     nominal cap by ~Nx (N = number of admin routes)."""
-    from app.constants import RATE_LIMIT_ADMIN
+    from app.constants.rate_limits import RATE_LIMIT_ADMIN
 
     burst = int(RATE_LIMIT_ADMIN.split("/")[0])
     app = admin_app

@@ -9,17 +9,15 @@ import httpx
 from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
-    SQL_REGEX_DIGIT,
-    GEOCODE_MAX_PER_RUN,
-    TALLINN_TZ,
+from app.constants.core import SQL_REGEX_DIGIT, TALLINN_TZ
+from app.constants.ingestion import GEOCODE_MAX_PER_RUN, VENUE_NAME_MAX_LEN
+from app.constants.llm import (
     LLM_BATCH_FANOUT_CONCURRENCY,
     LLM_DEDUP_HASH_QUERY_CHUNK_SIZE,
     LLM_TASK_VENUE_EXTRACT,
     VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN,
     VENUE_EXTRACT_RETRY_INTERVAL_DAYS,
     VENUE_NAME_DIRECTION_KEYWORDS,
-    VENUE_NAME_MAX_LEN,
     VENUE_NAME_PROMPT_MAX_CHARS,
     VENUE_NAME_SUSPECT_MAX_LEN,
 )

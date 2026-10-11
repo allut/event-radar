@@ -103,7 +103,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 
 ### Where things live
 
-- **Backend constants live in `app/constants.py`.** LLM prompts go in `app/llm/prompts.py`, scrape selectors in `app/ingestion/selectors.py`, and cross-stack values in `shared/`. Add the constant there first, then import it.
+- **Backend constants live in `app/constants/<domain>.py`**, one file per docs-map domain, imported from the file that defines them. LLM prompts go in `app/llm/prompts.py`, scrape selectors in `app/ingestion/selectors.py`, and cross-stack values in `shared/`. Add the constant there first, then import it.
 - **Frontend constants live in `frontend/src/constants.ts`**, and cross-stack ones in `shared/`. Add the literal there before using it in a component.
 - **Each backend helper has one home.** Router-shared helpers go in `app/routers/utils.py`. Domain packages (`app/auth/`, `app/email/`, `app/claims/`, `app/ingestion/`, `app/events/`) own theirs and never import from `routers/utils.py`. Check both before writing one.
 - **Cross-router auth dependencies live in `app/auth/dependencies.py`**, so routers never import from each other's modules.
@@ -118,7 +118,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 ### Backend behaviour
 
 - **Batch jobs bulk-load.** Keep the query count fixed whatever the row count: fetch with one `WHERE col IN (...)`, group in Python, and keep every `SELECT` outside per-row loops.
-- **Bound external-API fan-out.** Use `asyncio.gather(..., return_exceptions=True)` behind an `asyncio.Semaphore` whose limit lives in `app/constants.py`.
+- **Bound external-API fan-out.** Use `asyncio.gather(..., return_exceptions=True)` behind an `asyncio.Semaphore` whose limit lives in `app/constants/`.
 - **HTTP calls go through `app/ingestion/http_client.py::http_get()`/`http_post()`** for tenacity backoff and 429 `Retry-After`. Request-path Resend sends use `app/email/resend.py::send_resend_email()`, a single attempt. `docs/conventions.md` lists the other bypasses and their reasons; add one only with a reason.
 - **Gate numeric fields with `is not None`, never truthiness.** `0` is falsy, so a truthiness check silently drops free events.
 

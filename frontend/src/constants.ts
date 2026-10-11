@@ -68,13 +68,13 @@ export const THEME_OVERRIDE_DEVICE_KEY = 'theme_override_device';
 // Client-only dismissal flag for the profile nudge banner (#175) — no backend
 // field for this, so a stale/cleared browser just re-shows it once.
 export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_dismissed';
-// Mirrors backend OAUTH_ERROR_QUERY_PARAM/OAUTH_ERROR_DENIED (app/constants.py) —
+// Mirrors backend OAUTH_ERROR_QUERY_PARAM/OAUTH_ERROR_DENIED (app/constants/auth.py) —
 // the callback redirect's error query param + the one outcome mapped to the
 // "cancelled" copy; every other OAUTH_ERROR_* code renders the generic failed copy.
 export const GOOGLE_SIGNIN_ERROR_PARAM = 'google_error';
 export const GOOGLE_SIGNIN_ERROR_DENIED = 'access_denied';
 // Mirrors backend GOOGLE_SIGNIN_RESULT_QUERY_PARAM/AUTH_TRACK_USER/
-// AUTH_TRACK_ORGANIZER (app/constants.py) — the Google callback's success
+// AUTH_TRACK_ORGANIZER (app/constants/auth.py) — the Google callback's success
 // redirect carries this so main.tsx can set the right track's signed-in
 // hint before the router's first render. See lib/googleSignInLanding.ts.
 export const GOOGLE_SIGNIN_RESULT_PARAM = 'google_signin';
@@ -104,13 +104,13 @@ export const AUTH_TOKEN_PARAM = 'token';
 // GoogleGMark's default render size (px) — the brand mark's own icon-only
 // SVG viewBox scale, not a design-system --fs-* token (docs/adr/0002).
 export const GOOGLE_G_MARK_SIZE = 20;
-// Mirrors backend ORGANIZER_NAME_MAX_LEN (app/constants.py).
+// Mirrors backend ORGANIZER_NAME_MAX_LEN (app/constants/organizer.py).
 export const ORGANIZER_NAME_MAX_LEN = 255;
-// Mirrors backend ORGANIZER_VENUE_NAME_MAX_LEN/ORGANIZER_VENUE_ADDRESS_MAX_LEN (app/constants.py).
+// Mirrors backend ORGANIZER_VENUE_NAME_MAX_LEN/ORGANIZER_VENUE_ADDRESS_MAX_LEN (app/constants/organizer.py).
 export const ORGANIZER_VENUE_NAME_MAX_LEN = 255;
 export const ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500;
 
-// Mirrors backend CLAIM_VERIFICATION_MECHANISM_* / CLAIM_STATUS_* (app/constants.py)
+// Mirrors backend CLAIM_VERIFICATION_MECHANISM_* / CLAIM_STATUS_* (app/constants/claims.py)
 // — #415's ClaimPending screen switches its mechanism-specific copy off these.
 export const CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN = 'fienta_token';
 export const CLAIM_VERIFICATION_MECHANISM_DNS_TXT = 'dns_txt';
@@ -141,7 +141,7 @@ export const CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS: ReadonlySet<ClaimVerifi
   CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
 ]);
 
-// Mirrors backend ERROR_CLAIM_JUSTIFICATION_REQUIRED (app/constants.py) — the
+// Mirrors backend ERROR_CLAIM_JUSTIFICATION_REQUIRED (app/constants/claims.py) — the
 // one claim-creation error the UI reacts to structurally (revealing the
 // justification field, #428) rather than just displaying; matched by exact
 // string since claim creation has no structured error-code contract.
@@ -150,7 +150,7 @@ export const CLAIM_JUSTIFICATION_REQUIRED_ERROR =
   ' could be identified for this listing).';
 
 // Mirrors backend CLAIM_ERROR_CODE_NOT_GRANTED/CLAIM_ERROR_CODE_DORMANT
-// (app/constants.py) — the two reasons the claim-editing surface's GET/PATCH
+// (app/constants/claims.py) — the two reasons the claim-editing surface's GET/PATCH
 // can 409, told apart via ApiError.code rather than the English message (#444).
 export const CLAIM_ERROR_CODE_NOT_GRANTED = 'claim_not_granted';
 export const CLAIM_ERROR_CODE_DORMANT = 'claim_dormant';
@@ -439,7 +439,7 @@ export const APP_SHELL_FILENAME = 'app-shell.html';
 // <lastmod> (target.updatedAt when available, else the build timestamp — see
 // prerender.ts's buildSitemapXml) older than this is treated as a dead prerender cadence.
 // 6h backend publish/geocode cadence (LLM_PASS_INTERVAL_HOURS, backend
-// app/constants.py) + a 2h buffer.
+// app/constants/jobs.py) + a 2h buffer.
 export const SEO_AUDIT_STALE_THRESHOLD_HOURS = 8;
 // GitHub repo the live audit files/updates/closes its failure issue against
 // (CLAUDE.md "Issue tracker") and the fixed label it searches/tags by.
@@ -549,7 +549,7 @@ export const ANALYTICS_EVENTS = {
 } as const;
 
 // ─── Reports (event_reports, issue #128) ────────────────────────────────────
-// Mirrors the backend's VALID_REPORT_REASONS order (app/constants.py) — labels/
+// Mirrors the backend's VALID_REPORT_REASONS order (app/constants/reports.py) — labels/
 // descriptions come from the report_reason_<slug>(_description) i18n keys.
 export const REPORT_REASON_OTHER = 'other';
 export const REPORT_REASONS: { value: string; labelKey: string; descriptionKey: string }[] = [
@@ -567,7 +567,7 @@ export const REPORT_REASONS: { value: string; labelKey: string; descriptionKey: 
 export const REPORT_REASONS_BY_VALUE: Map<string, (typeof REPORT_REASONS)[number]> = new Map(
   REPORT_REASONS.map((r) => [r.value, r]),
 );
-// Mirrors the backend's REPORT_DETAIL_MAX_CHARS (app/constants.py) — client-side
+// Mirrors the backend's REPORT_DETAIL_MAX_CHARS (app/constants/reports.py) — client-side
 // validation only, the server re-validates and is the real boundary.
 export const REPORT_DETAIL_MAX_CHARS = 500;
 export const REPORT_DETAIL_TEXTAREA_ROWS = 4;
@@ -1319,7 +1319,7 @@ export const PRERENDER_CONCURRENCY = 6;
 // pool in main(), below).
 export const RENDER_POOL_CONCURRENCY = PRERENDER_CONCURRENCY;
 // GET /events/{id} is rate-limited server-side to RATE_LIMIT_EVENTS_DETAIL =
-// "120/minute" per IP (backend/app/constants.py) — every worker's build
+// "120/minute" per IP (backend/app/constants/rate_limits.py) — every worker's build
 // machine shares one IP, so an unthrottled pool would eventually 429 as the
 // published-event catalog grows, which (via the canonical-link wait below)
 // surfaces as a spurious render "failure" and aborts the whole build.

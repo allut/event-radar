@@ -8,11 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.constants import (
+from app.constants.admin import (
     ADMIN_ACTION_DECLINE_CLAIM,
     ADMIN_ACTION_GRANT_CLAIM,
     ADMIN_ACTION_REVOKE_CLAIM,
-    APP_ENV_DEVELOPMENT,
+)
+from app.constants.claims import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
@@ -23,6 +24,7 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
     ERROR_CLAIM_TARGET_ALREADY_APPROVED,
 )
+from app.constants.core import APP_ENV_DEVELOPMENT
 from tests.conftest import build_event
 from tests.routers.conftest import (
     execute_rows,

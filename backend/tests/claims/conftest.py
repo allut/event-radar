@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from app.constants import SOURCE_SLUG_FIENTA
+from app.constants.ingestion import SOURCE_SLUG_FIENTA
 
 
 def fake_event_source(

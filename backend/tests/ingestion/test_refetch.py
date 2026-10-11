@@ -10,15 +10,17 @@ import pytest
 
 from bs4 import BeautifulSoup
 
-from app.constants import (
+from app.constants.core import TALLINN_TZ
+from app.constants.events import (
     EVENT_CANCELLATION_REASON_SOURCE_GONE,
     EVENT_STATUS_CANCELLED,
+    TALLINN_CENTER_LAT,
+    TALLINN_CENTER_LNG,
+)
+from app.constants.ingestion import (
     LOCALIZED_TEXT_FIENTA_LOCALES,
     REFETCH_GONE_CANCEL_AFTER_DAYS,
     REFETCH_MIN_INTERVAL_DAYS,
-    TALLINN_CENTER_LAT,
-    TALLINN_CENTER_LNG,
-    TALLINN_TZ,
 )
 from app.claims.pinning import pin_key
 from app.ingestion.locale_urls import locale_from_url_path

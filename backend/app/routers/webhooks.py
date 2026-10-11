@@ -21,12 +21,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants import (
-    FEATURE_INBOUND_WEBHOOK,
-    LOG_EVENT_WEBHOOK_REJECTED,
+from app.constants.email import (
     NEWSLETTER_SENDER_ALLOWED_DOMAINS,
-    RATE_LIMIT_WEBHOOK_INBOUND_MAIL,
-    SETTING_NAME_RESEND_WEBHOOK_SECRET,
     SVIX_ID_HEADER,
     SVIX_SECRET_PREFIX,
     SVIX_SIGNATURE_HEADER,
@@ -39,6 +35,12 @@ from app.constants import (
     WEBHOOK_STATUS_REJECTED,
     WEBHOOK_STATUS_SKIPPED,
     WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS,
+)
+from app.constants.log_events import LOG_EVENT_WEBHOOK_REJECTED
+from app.constants.rate_limits import RATE_LIMIT_WEBHOOK_INBOUND_MAIL
+from app.constants.security import (
+    FEATURE_INBOUND_WEBHOOK,
+    SETTING_NAME_RESEND_WEBHOOK_SECRET,
 )
 from app.db import AsyncSessionLocal, get_db
 from app.llm.newsletter_extractor import extract_events_from_email

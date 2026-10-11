@@ -32,8 +32,8 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
-    DEDUP_PROMPT_DATE_FORMAT,
+from app.constants.dedup import DEDUP_PROMPT_DATE_FORMAT
+from app.constants.llm import (
     LLM_BACKLOG_MAX_DRAIN_PASSES,
     LLM_BACKLOG_RETRY_SECONDS,
     LLM_BATCH_FANOUT_CONCURRENCY,

@@ -37,15 +37,17 @@ from bs4 import BeautifulSoup
 from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
-    DEFAULT_CURRENCY,
+from app._generated.shared_constants import DEFAULT_CURRENCY
+from app.constants.core import HTML_PARSER, TALLINN_TZ
+from app.constants.events import (
     EVENT_CANCELLATION_REASON_SOURCE_GONE,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
+)
+from app.constants.http import HTTP_TIMEOUT_SECONDS
+from app.constants.ingestion import (
     GEOCODE_COORD_QUANT_DECIMALS,
-    HTML_PARSER,
-    HTTP_TIMEOUT_SECONDS,
     LOCALIZED_TEXT_FIENTA_LOCALES,
     REFETCH_COMMIT_INTERVAL_SECONDS,
     REFETCH_GONE_CANCEL_AFTER_DAYS,
@@ -57,12 +59,11 @@ from app.constants import (
     REFETCH_PRICE_TOLERANCE,
     REFETCH_HOST_CONCURRENCY,
     REFETCH_REQUEST_DELAY_SECONDS,
-    REPORT_AUTO_RESOLVE_NOTE,
     SOURCE_KIND_USER_SUBMISSION,
     SOURCE_SLUG_PILETILEVI,
-    TALLINN_TZ,
     VENUE_NAME_MAX_LEN,
 )
+from app.constants.reports import REPORT_AUTO_RESOLVE_NOTE
 from app.ingestion.selectors import (
     ESTONIA_CONCERT_HALL_HOST,
     KUMU_HOST,

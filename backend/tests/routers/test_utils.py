@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.constants import APP_ENV_DEVELOPMENT
+from app.constants.core import APP_ENV_DEVELOPMENT
 from app.routers.utils import (
     compute_preferred_taxonomy,
     fold_legacy_category,
@@ -816,7 +816,7 @@ class TestOrganizerSharedHelpers:
     def test_apply_price_edit_fills_default_currency_for_price_only_patch(self, make_event):
         from types import SimpleNamespace
 
-        from app.constants import DEFAULT_CURRENCY
+        from app._generated.shared_constants import DEFAULT_CURRENCY
         from app.routers.utils import apply_price_edit
 
         event = make_event(price_min=None)
@@ -833,7 +833,7 @@ class TestOrganizerSharedHelpers:
         """Numeric-truthiness rule: a free (0) price is a price."""
         from types import SimpleNamespace
 
-        from app.constants import DEFAULT_CURRENCY
+        from app._generated.shared_constants import DEFAULT_CURRENCY
         from app.routers.utils import apply_price_edit
 
         event = make_event(price_min=None)

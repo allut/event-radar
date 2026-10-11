@@ -12,19 +12,21 @@ from typing import Any
 import nh3
 from bs4 import BeautifulSoup, Tag
 
-from app.constants import (
-    HTML_BLOCK_BOUNDARY_TAGS,
-    HTML_BLOCK_TAGS_TO_BREAK,
-    HTML_CF_EMAIL_MARKERS,
-    HTML_BR_TAG_RE,
-    HTML_MULTI_BR_TEMPLATE_RE,
-    HTML_PARSER,
+from app._generated.shared_constants import (
     HTML_SANITIZE_ALLOWED_ATTRS,
     HTML_SANITIZE_ALLOWED_TAGS,
+    SAFE_URL_SCHEMES,
+)
+from app.constants.core import HTML_PARSER
+from app.constants.ingestion import HTML_CF_EMAIL_MARKERS
+from app.constants.security import (
+    HTML_BLOCK_BOUNDARY_TAGS,
+    HTML_BLOCK_TAGS_TO_BREAK,
+    HTML_BR_TAG_RE,
+    HTML_MULTI_BR_TEMPLATE_RE,
     HTML_SANITIZE_MAX_CONSECUTIVE_BR,
     HTML_SELF_CLOSING_BR_RE,
     HTML_WHITESPACE_RUN_RE,
-    SAFE_URL_SCHEMES,
 )
 from app.ingestion.selectors import CFEMAIL_HREF_MARKER
 

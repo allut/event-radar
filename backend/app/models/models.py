@@ -23,19 +23,19 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import UserDefinedType
 
-from app.constants import (
-    DEFAULT_USER_CITY,
-    DEFAULT_USER_LOCALE,
+from app._generated.shared_constants import DEFAULT_USER_CITY, DEFAULT_USER_LOCALE
+from app.constants.claims import CLAIM_STATUS_APPROVED, CLAIM_STATUS_PENDING
+from app.constants.events import (
     EVENT_SEARCH_TEXT_SQL,
     EVENT_STATUS_DRAFT,
     EVENT_STATUS_PUBLISHED,
-    CLAIM_STATUS_APPROVED,
-    CLAIM_STATUS_PENDING,
+)
+from app.constants.ingestion import PUBLISHER_STATUS_ACTIVE
+from app.constants.ranking import (
     PASSIVE_SIGNALS_SQL_PREDICATE,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
-    PUBLISHER_STATUS_ACTIVE,
-    REPORT_STATUS_OPEN,
 )
+from app.constants.reports import REPORT_STATUS_OPEN
 from app.db import Base
 
 

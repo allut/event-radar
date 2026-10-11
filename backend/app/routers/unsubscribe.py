@@ -15,12 +15,12 @@ from itsdangerous import BadSignature, SignatureExpired
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import verify_unsubscribe_token
-from app.constants import (
+from app.constants.auth import ERROR_USER_NOT_FOUND
+from app.constants.email import (
     ERROR_UNSUBSCRIBE_LINK_EXPIRED,
     ERROR_UNSUBSCRIBE_LINK_INVALID,
-    ERROR_USER_NOT_FOUND,
-    RATE_LIMIT_UNSUBSCRIBE,
 )
+from app.constants.rate_limits import RATE_LIMIT_UNSUBSCRIBE
 from app.db import get_db
 from app.models.models import User
 from app.rate_limit import limiter

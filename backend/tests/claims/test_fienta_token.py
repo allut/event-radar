@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from app.claims.fienta_token import generate_claim_token, verify_fienta_token
-from app.constants import CLAIM_TOKEN_PREFIX
+from app.constants.claims import CLAIM_TOKEN_PREFIX
 
 _BASE_URL = "https://fienta.com/api/v1/public/events"
 

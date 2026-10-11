@@ -7,7 +7,7 @@ An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter
 ## Auth
 
 - **The organizer track mirrors the consumer magic-link and session stack**, under `app/routers/organizer_auth.py` (prefix `/organizer/auth`). It has its own tables (`organizers`, `organizer_magic_links`) and the TTLs default to the consumer values.
-- **Its own salts keep the tracks apart.** `AUTH_ORGANIZER_MAGIC_SALT` and `AUTH_ORGANIZER_SESSION_SALT` (`app/constants.py`) mean an organizer token never verifies as a consumer token, though both use the same `SECRET_KEY` serializer.
+- **Its own salts keep the tracks apart.** `AUTH_ORGANIZER_MAGIC_SALT` and `AUTH_ORGANIZER_SESSION_SALT` (`app/constants/auth.py`) mean an organizer token never verifies as a consumer token, though both use the same `SECRET_KEY` serializer.
 - **`organizers.session_token_version` backs logout-all**, the same revocation pattern as the consumer track. See [security.md](security.md)'s Session Revocation section.
 - **The session cookie is scoped to `Path=/api/organizer`** (`ORGANIZER_SESSION_COOKIE_PATH`), not `/api`. Every organizer endpoint must stay under `/organizer/*`, or the browser never sends the cookie and the endpoint silently 401s.
 - **Google sign-in shipped on the organizer track first.** [ADR 0002](adr/0002-google-sign-in-oauth-pkce.md) picked it as the safe live-test surface while there were no real organizers. Magic link stays on both tracks. [security.md](security.md)'s Google Sign-In section has the flow.
@@ -72,7 +72,7 @@ An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter
 
 `description` and `important_info`, with their locale siblings, are authored as HTML in `RichTextEditor`, a Tiptap toolbar in `EventSubmit`. It offers bold, italic, underline, lists, links, headings 3–4 and blockquote.
 
-- **The sanitize allowlist tracks the toolbar.** `ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS`/`_ATTRS` (`app/constants.py`) are exactly the tags those extensions emit. Adding a Tiptap extension means adding its tag there in the same commit.
+- **The sanitize allowlist tracks the toolbar.** `ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS`/`_ATTRS` (`app/constants/security.py`) are exactly the tags those extensions emit. Adding a Tiptap extension means adding its tag there in the same commit.
 - **The allowlist is backend-only**, deliberately kept out of `shared/` so the frontend carries no second copy.
 - **[security.md](security.md)'s Stored HTML section owns the sanitize boundary**: `organizer_sanitize()`, its callers and the frontend's defense-in-depth pass.
 - **Length limits are per field, separate from ingestion:** `ORGANIZER_TITLE_MAX_LEN`, `ORGANIZER_DESCRIPTION_MAX_LEN` and `ORGANIZER_IMPORTANT_INFO_MAX_LEN`. They were raised with rich text because markup counts against the budget.

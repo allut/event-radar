@@ -10,14 +10,14 @@ from bs4 import BeautifulSoup
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants import (
+from app.constants.core import HTML_PARSER
+from app.constants.http import HTTP_TIMEOUT_SECONDS
+from app.constants.ingestion import (
     DETAIL_FETCH_CONCURRENCY,
     FIENTA_CITY_FILTER,
     FIENTA_MAX_DETAIL_FETCHES,
     FIENTA_MAX_PAGES,
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
-    HTML_PARSER,
-    HTTP_TIMEOUT_SECONDS,
     LOCALIZED_TEXT_FIENTA_LOCALES,
 )
 from app.ingestion.selectors import (

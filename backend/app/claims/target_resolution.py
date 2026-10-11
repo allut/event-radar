@@ -20,9 +20,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.claims.piletilevi_promoter import resolve_promoter_identity
-from app.constants import (
-    CLAIM_KIND_PUBLISHER,
-    CLAIM_KIND_SERIES,
+from app.constants.claims import CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES
+from app.constants.ingestion import (
     PUBLISHER_NAME_MAX_LEN,
     PUBLISHER_STATUS_ACTIVE,
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,

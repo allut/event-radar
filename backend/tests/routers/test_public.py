@@ -101,7 +101,7 @@ class TestShowcase:
     async def test_full_week_is_single_query(
         self, mock_db, make_event, make_request
     ):
-        from app.constants import SHOWCASE_EVENT_COUNT
+        from app.constants.events import SHOWCASE_EVENT_COUNT
         from app.routers.public import showcase
 
         mock_db.scalars.return_value = _scalars_result(

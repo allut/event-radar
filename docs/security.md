@@ -12,7 +12,7 @@ What's in here: the middleware stack, rate limiting and its client key, URL and 
 
 ### Security Headers
 
-- **`add_security_headers` sets the `SECURITY_HEADERS` dict (`app/constants.py`) on every response.** That's CSP `default-src 'none'`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Cache-Control: no-store`.
+- **`add_security_headers` sets the `SECURITY_HEADERS` dict (`app/constants/security.py`) on every response.** That's CSP `default-src 'none'`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` and `Cache-Control: no-store`.
 - **`no-store` matters most for `POST /auth/verify`**, whose body carries a session token. Nothing a JSON API returns should sit in an intermediary cache.
 - **HSTS (`HSTS_HEADER_*`) is added only outside development**, since it's safe only over HTTPS.
 - **`/docs`, `/redoc` and `/openapi.json` exist only when `APP_ENV == "development"`.** The strict CSP would block their CDN assets in production anyway.
@@ -41,7 +41,7 @@ What's in here: the middleware stack, rate limiting and its client key, URL and 
 
 ## Rate Limiting
 
-- **Every endpoint carries `@limiter.limit(...)` with a `RATE_LIMIT_*` constant from `app/constants.py`**, authenticated ones included. Add both to any new endpoint, public or not.
+- **Every endpoint carries `@limiter.limit(...)` with a `RATE_LIMIT_*` constant from `app/constants/rate_limits.py`**, authenticated ones included. Add both to any new endpoint, public or not.
 - **The limiter lives in `app/rate_limit.py`** so `main.py` and the routers can both import it without a cycle.
 - **All `/admin/*` routes in `app/routers/admin.py` share one bucket** through `limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")`. Per-route limits would let an attacker cycling every admin route multiply the nominal cap.
 - **`admin_auth.py`'s three routes have their own buckets**, separate from the shared admin one. Login uses `RATE_LIMIT_ADMIN_LOGIN`. What admin login shares is the lockout counter; see Admin Console Auth.
@@ -134,7 +134,7 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 
 ## Inbound Mail Webhook
 
-- **`routers/webhooks.py::inbound_mail()` verifies Resend's Svix HMAC-SHA256** over `"{svix-id}.{svix-timestamp}.{raw body}"` with `settings.RESEND_WEBHOOK_SECRET`. The `SVIX_*` header constants live in `app/constants.py`.
+- **`routers/webhooks.py::inbound_mail()` verifies Resend's Svix HMAC-SHA256** over `"{svix-id}.{svix-timestamp}.{raw body}"` with `settings.RESEND_WEBHOOK_SECRET`. The `SVIX_*` header constants live in `app/constants/email.py`.
 - **Timestamps outside `WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS` (300s) are rejected.** Outside development, a missing secret fails closed through `require_configured_secret()`.
 - **A replayed `svix-id` inside that window gets 401.** `_seen_webhook_ids` is a bounded in-memory LRU (`WEBHOOK_SEEN_IDS_MAX_ENTRIES`), the same pattern as the admin lockout.
 - **The sender-domain check runs before the `RawInboundEmail` insert**, so a rejected sender's content is never stored.

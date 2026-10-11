@@ -9,7 +9,7 @@ from rapidfuzz.fuzz import ratio as fuzz_ratio
 from sqlalchemy import false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
+from app.constants.ingestion import (
     CONTENT_FILTER_WHITESPACE_COLLAPSE_RE,
     GEOCODE_COORD_QUANT_DECIMALS,
     GEOCODE_DONOR_LOOKBACK_DAYS,

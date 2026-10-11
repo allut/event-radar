@@ -19,7 +19,7 @@ from app.claims.pinning import (
     representative_event_for_claim,
     scaled_claim_edit_cap,
 )
-from app.constants import (
+from app.constants.claims import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     ORGANIZER_CLAIM_EDIT_CAP_CEILING,

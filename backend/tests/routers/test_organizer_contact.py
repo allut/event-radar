@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 from pydantic import ValidationError
 
-from app.constants import CONTACT_MESSAGE_MAX_LEN
+from app.constants.email import CONTACT_MESSAGE_MAX_LEN
 from app.routers.organizer_contact import (
     OrganizerContactBody,
     submit_organizer_contact,

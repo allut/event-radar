@@ -7,7 +7,7 @@ Backend counterpart of ``localizedPath`` in frontend/src/lib/urlLocale.ts.
 """
 
 from app.config import settings
-from app.constants import HOME_PATH, LOCALE_URL_PREFIX_CODES
+from app.constants.core import HOME_PATH, LOCALE_URL_PREFIX_CODES
 from app.i18n import resolve_locale
 
 

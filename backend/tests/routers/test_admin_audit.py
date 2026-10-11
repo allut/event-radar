@@ -10,13 +10,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.constants import (
+from app.constants.admin import (
     ADMIN_ACTION_APPROVE_SUBMISSION,
     ADMIN_ACTION_RESOLVE_REPORTS,
     ADMIN_ACTION_RETRACT_SUBMISSION,
     ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT,
-    APP_ENV_DEVELOPMENT,
 )
+from app.constants.core import APP_ENV_DEVELOPMENT
 from app.models.models import AdminAction
 from tests.routers.conftest import patch_admin_settings, scalars_returning
 

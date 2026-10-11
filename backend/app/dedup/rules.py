@@ -23,24 +23,24 @@ from sqlalchemy import Integer, cast, column, func, or_, select, update, values
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, load_only, selectinload
 
-from app.constants import (
+from app.constants.claims import CLAIM_STATUS_APPROVED
+from app.constants.core import SQL_IN_CHUNK_SIZE, SECONDS_PER_HOUR, TALLINN_TZ
+from app.constants.dedup import (
     DEDUP_BULK_UPDATE_CHUNK_SIZE,
-    CLAIM_STATUS_APPROVED,
     DEDUP_CANDIDATE_PAIR_MAX,
     DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD,
     DEDUP_LOOKAHEAD_DAYS,
     DEDUP_LOOKBACK_DAYS,
     DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS,
-    EVENT_STATUS_CANCELLED,
-    EVENT_STATUS_CLASSIFIED,
-    EVENT_STATUS_PUBLISHED,
-    SQL_IN_CHUNK_SIZE,
-    SECONDS_PER_HOUR,
-    TALLINN_TZ,
     TIME_WINDOW_HOURS,
     TITLE_RATIO_THRESHOLD,
     TITLE_RATIO_VENUE_BYPASS_THRESHOLD,
     VENUE_RATIO_THRESHOLD,
+)
+from app.constants.events import (
+    EVENT_STATUS_CANCELLED,
+    EVENT_STATUS_CLASSIFIED,
+    EVENT_STATUS_PUBLISHED,
 )
 from app.events.venue import (
     resolve_venue_address,

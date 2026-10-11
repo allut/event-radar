@@ -8,11 +8,11 @@ from app._generated.shared_constants import (
     MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_DEFAULT,
     SESSION_TTL_DAYS as _SESSION_TTL_DEFAULT,
 )
-from app.constants import (
-    ADMIN_USERNAME_DEFAULT,
-    APP_ENV_DEVELOPMENT,
+from app.constants.auth import ADMIN_USERNAME_DEFAULT
+from app.constants.core import APP_ENV_DEVELOPMENT
+from app.constants.ops import LOG_LEVEL_DEFAULT
+from app.constants.security import (
     DEV_CORS_ORIGINS_DEFAULT,
-    LOG_LEVEL_DEFAULT,
     SECRET_KEY_MIN_LEN,
     SECRET_KEY_PLACEHOLDER_PREFIX,
 )

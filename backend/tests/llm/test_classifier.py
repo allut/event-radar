@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.constants import IMPORTANT_INFO_MAX_CHARS
+from app.constants.llm import IMPORTANT_INFO_MAX_CHARS
 from app.events.queries import no_live_dedup_sibling_clause
 from app.llm.classifier import (
     _build_classify_prompt,
@@ -598,7 +598,7 @@ class TestClassifyEventNonEvent:
         assert ok is True
         mock_llm.assert_not_awaited()
         assert event.is_non_event is True
-        from app.constants import EVENT_STATUS_CLASSIFIED
+        from app.constants.events import EVENT_STATUS_CLASSIFIED
 
         assert event.status == EVENT_STATUS_CLASSIFIED
 
@@ -701,7 +701,7 @@ class TestClassifyEventSkipsLLMWhenAlreadyExplicit:
         assert ok is True
         mock_llm.assert_not_awaited()
         assert event.is_explicit is True
-        from app.constants import EVENT_STATUS_CLASSIFIED
+        from app.constants.events import EVENT_STATUS_CLASSIFIED
 
         assert event.status == EVENT_STATUS_CLASSIFIED
 
@@ -731,7 +731,7 @@ class TestClassifyPendingIncludesExplicitRepresentatives:
 
         mock_llm.assert_not_awaited()
         assert summary["succeeded"] == 1
-        from app.constants import EVENT_STATUS_CLASSIFIED
+        from app.constants.events import EVENT_STATUS_CLASSIFIED
 
         assert event.status == EVENT_STATUS_CLASSIFIED
         assert event.is_explicit is True
@@ -857,7 +857,7 @@ class TestClassifyEventMalformedParse:
         """Layer-2 defense-in-depth: any future malformed shape that still slips
         past layer 1 and raises inside _parse_classification must degrade to a
         skipped event (return False), not propagate and abort the batch."""
-        from app.constants import EVENT_STATUS_DRAFT
+        from app.constants.events import EVENT_STATUS_DRAFT
 
         event = make_event()
         event.status = EVENT_STATUS_DRAFT
@@ -883,7 +883,7 @@ class TestClassifyPromptVenueResolution:
     def test_venue_linked_event_uses_linked_venue_name(self, make_event, make_venue):
         """A venue-linked event leaves venue_name NULL (#176) — the prompt must
         carry the linked Venue's name, not the fallback."""
-        from app.constants import LLM_CLASSIFY_VENUE_FALLBACK
+        from app.constants.llm import LLM_CLASSIFY_VENUE_FALLBACK
         from app.llm.classifier import _build_classify_prompt
 
         venue = make_venue(name="Saved Hall")
@@ -895,7 +895,7 @@ class TestClassifyPromptVenueResolution:
         assert LLM_CLASSIFY_VENUE_FALLBACK not in prompt
 
     def test_unlinked_event_without_venue_name_uses_fallback(self, make_event):
-        from app.constants import LLM_CLASSIFY_VENUE_FALLBACK
+        from app.constants.llm import LLM_CLASSIFY_VENUE_FALLBACK
         from app.llm.classifier import _build_classify_prompt
 
         event = make_event(venue_name=None)

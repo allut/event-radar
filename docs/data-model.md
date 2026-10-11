@@ -102,7 +102,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 
 #### Claim Search Indexes
 
-- **Two pg_trgm GIN expression indexes back claim discovery** (migration 0051). `ix_events_search_text_trgm` covers `EVENT_SEARCH_TEXT_SQL` (`app/constants.py`): `title_orig` plus every locale's `title_localized`. It serves `GET /organizer/claims/search`, which therefore matches a title in any locale.
+- **Two pg_trgm GIN expression indexes back claim discovery** (migration 0051). `ix_events_search_text_trgm` covers `app/constants/events.py::EVENT_SEARCH_TEXT_SQL`: `title_orig` plus every locale's `title_localized`. It serves `GET /organizer/claims/search`, which therefore matches a title in any locale.
 - **`ix_events_url_trgm` serves the domain `ILIKE` in `GET /organizer/claims/suggestions`.**
 - **The query side must match the index expression textually.** `app/routers/organizer_claims.py::claim_search_text()` builds it, and `backend/tests/test_claim_search_indexes.py` guards drift.
 - **They are expression indexes, not columns,** so the `updated_at` trigger's column list is untouched.

@@ -12,18 +12,17 @@ from app.auth.tokens import (
     verify_session_token,
 )
 from app.config import settings
-from app.constants import (
+from app.constants.auth import (
     ADMIN_SESSION_COOKIE_NAME,
     ERROR_MISSING_SESSION_COOKIE,
-    ERROR_ORGANIZER_NOT_FOUND,
     ERROR_SESSION_INVALID,
     ERROR_SESSION_REVOKED,
     ERROR_USER_NOT_FOUND,
-    FEATURE_ADMIN_ENDPOINTS,
     ORGANIZER_SESSION_COOKIE_NAME,
     SESSION_COOKIE_NAME,
-    SETTING_NAME_ADMIN_PASSWORD,
 )
+from app.constants.organizer import ERROR_ORGANIZER_NOT_FOUND
+from app.constants.security import FEATURE_ADMIN_ENDPOINTS, SETTING_NAME_ADMIN_PASSWORD
 from app.db import get_db
 from app.models.models import Organizer, User
 from app.auth.utils import require_configured_secret

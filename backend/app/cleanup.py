@@ -7,14 +7,14 @@ from sqlalchemy import and_, ColumnElement, delete, exists, false, func, select
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
+from app.constants.core import TALLINN_TZ
+from app.constants.ops import (
     DAILY_FEEDS_RETENTION_DAYS,
     INGESTION_RUNS_RETENTION_DAYS,
     LLM_CALLS_RETENTION_DAYS,
     MAGIC_LINK_RETENTION_DAYS,
     RAW_EVENTS_RETENTION_DAYS,
     RAW_INBOUND_EMAILS_RETENTION_DAYS,
-    TALLINN_TZ,
     UNVERIFIED_ACCOUNT_RETENTION_DAYS,
 )
 from app.models.models import (

@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 
 from app.config import settings
-from app.constants import FIENTA_MAX_PAGES, TALLINN_TZ
+from app.constants.core import TALLINN_TZ
+from app.constants.ingestion import FIENTA_MAX_PAGES
 from app.ingestion.sources.fienta import FientaAdapter
 from app.ingestion.adapter import NormalizedEvent
 

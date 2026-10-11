@@ -7,15 +7,14 @@ from sqlalchemy import and_, case, false, func, literal, or_, select, true, upda
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
+from app.constants.core import TALLINN_TZ
+from app.constants.events import (
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     PUBLISH_DIAGNOSTICS_WINDOW_DAYS,
     PUBLISH_MIN_QUALITY_SCORE,
-    SOURCE_SLUG_FIENTA,
-    TALLINN_REGION_BBOX,
-    TALLINN_TZ,
 )
+from app.constants.ingestion import SOURCE_SLUG_FIENTA, TALLINN_REGION_BBOX
 from app.models.models import (
     Event,
     EventClassification,
@@ -128,7 +127,7 @@ async def publish_pending(
     non-exclusive — one event can fail several gates — so they need not sum
     to the total reject count. Bounded to the last PUBLISH_DIAGNOSTICS_WINDOW_DAYS
     (by starts_at) — an operator signal about recent rejects, not an all-time
-    audit total; see PUBLISH_DIAGNOSTICS_WINDOW_DAYS in constants.py.
+    audit total; see PUBLISH_DIAGNOSTICS_WINDOW_DAYS in app/constants/events.py.
     """
     now = datetime.now(TALLINN_TZ)
     lat_min, lat_max, lng_min, lng_max = TALLINN_REGION_BBOX

@@ -10,8 +10,8 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
-from app.constants import (
-    CURRENCY_CODE_MAX_LEN,
+from app.constants.events import CURRENCY_CODE_MAX_LEN
+from app.constants.ingestion import (
     LOCALIZED_TEXT_MAX_DESC_CHARS,
     LOCALIZED_TEXT_MAX_TITLE_CHARS,
 )

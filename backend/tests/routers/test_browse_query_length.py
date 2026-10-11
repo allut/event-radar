@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app.constants import BROWSE_QUERY_MAX_LEN
+from app.constants.ranking import BROWSE_QUERY_MAX_LEN
 from app.db import get_db
 from app.auth.dependencies import get_current_user
 

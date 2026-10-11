@@ -3,7 +3,8 @@ from datetime import datetime, timedelta
 from typing import cast
 from unittest.mock import MagicMock
 
-from app.constants import SCORE_HARD_EXCLUDE, TALLINN_TZ
+from app.constants.core import TALLINN_TZ
+from app.constants.ranking import SCORE_HARD_EXCLUDE
 from app.models.models import Event
 from app.ranking.score import (
     FeedbackContext,

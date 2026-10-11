@@ -10,11 +10,9 @@ from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from app.constants import (
-    APP_ENV_DEVELOPMENT,
-    HOST_CHECK_EXEMPT_PATHS,
-    LOG_EVENT_HOST_REJECTED,
-)
+from app.constants.core import APP_ENV_DEVELOPMENT
+from app.constants.log_events import LOG_EVENT_HOST_REJECTED
+from app.constants.security import HOST_CHECK_EXEMPT_PATHS
 from app.main import (
     HostCheckMiddleware,
     MaxBodySizeMiddleware,

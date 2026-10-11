@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.constants import (
+from app.constants.core import TALLINN_TZ
+from app.constants.ingestion import (
     PUBLISHER_STATUS_ACTIVE,
     PUBLISHER_STATUS_RETIRED,
     SOURCE_KIND_API,
     SOURCE_SLUG_FIENTA,
     STALE_ORGANIZER_RETIRE_DAYS,
-    TALLINN_TZ,
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.models.models import Publisher, Source

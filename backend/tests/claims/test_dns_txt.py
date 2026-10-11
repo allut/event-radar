@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from app.claims.dns_txt import verify_dns_txt_token
-from app.constants import CLAIM_DNS_DOH_URL, CLAIM_DNS_TXT_RECORD_LABEL
+from app.constants.claims import CLAIM_DNS_DOH_URL, CLAIM_DNS_TXT_RECORD_LABEL
 
 
 class TestVerifyDnsTxtToken:

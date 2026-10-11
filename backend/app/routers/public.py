@@ -15,18 +15,17 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import Select, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
-    DEFAULT_USER_LOCALE,
+from app._generated.shared_constants import DEFAULT_USER_LOCALE, VALID_LOCALES
+from app.constants.core import TALLINN_TZ
+from app.constants.events import (
     PUBLIC_COUNTS_CACHE_TTL_SECONDS,
     PUBLIC_COUNTS_FALLBACK_WINDOW_DAYS,
     PUBLIC_COUNTS_TONIGHT_CAP,
-    RATE_LIMIT_PUBLIC,
     SHOWCASE_EVENT_COUNT,
     SHOWCASE_FALLBACK_WINDOW_DAYS,
     SHOWCASE_WINDOW_DAYS,
-    TALLINN_TZ,
-    VALID_LOCALES,
 )
+from app.constants.rate_limits import RATE_LIMIT_PUBLIC
 from app.db import get_db
 from app.models.models import Event, EventClassification, Venue
 from app.rate_limit import limiter

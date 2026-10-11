@@ -8,8 +8,8 @@ import pytest
 
 from bs4 import BeautifulSoup
 
-from app.constants import (
-    LOCALIZED_TEXT_FIENTA_LOCALES,
+from app.constants.ingestion import LOCALIZED_TEXT_FIENTA_LOCALES
+from app.constants.security import (
     ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
     ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
 )
@@ -736,7 +736,7 @@ class TestEdgeBrNoBacktracking:
     def test_adversarial_input_is_fast(self):
         import time
 
-        from app.constants import ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS
+        from app.constants.security import ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS
 
         payload = "a<br>" + " " * 14_000 + "<br>" + " " * 14_000 + "x"
         start = time.perf_counter()

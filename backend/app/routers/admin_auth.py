@@ -25,7 +25,7 @@ from app.auth.dependencies import get_current_admin
 from app.auth.tokens import generate_admin_session_token
 from app.auth.totp import check_totp_code, record_totp_step
 from app.config import settings
-from app.constants import (
+from app.constants.auth import (
     ADMIN_SESSION_COOKIE_NAME,
     ADMIN_SESSION_COOKIE_PATH,
     ADMIN_SESSION_TTL_SECONDS,
@@ -33,12 +33,16 @@ from app.constants import (
     DETAIL_SIGNED_OUT,
     ERROR_ADMIN_DISABLED,
     ERROR_ADMIN_INCORRECT_CREDENTIALS,
-    FEATURE_ADMIN_LOGIN,
-    FEATURE_ADMIN_TOTP,
-    LOG_EVENT_ADMIN_ACTION,
+)
+from app.constants.log_events import LOG_EVENT_ADMIN_ACTION
+from app.constants.rate_limits import (
     RATE_LIMIT_ADMIN_LOGIN,
     RATE_LIMIT_BROWSE,
     RATE_LIMIT_LOGOUT,
+)
+from app.constants.security import (
+    FEATURE_ADMIN_LOGIN,
+    FEATURE_ADMIN_TOTP,
     SETTING_NAME_ADMIN_PASSWORD,
     SETTING_NAME_ADMIN_TOTP_SECRET,
 )

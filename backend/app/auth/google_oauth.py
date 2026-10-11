@@ -24,7 +24,7 @@ import jwt
 from jwt import PyJWKClient
 
 from app.config import settings
-from app.constants import (
+from app.constants.auth import (
     GOOGLE_AUTHORITATIVE_EMAIL_DOMAINS,
     GOOGLE_JWKS_CACHE_LIFESPAN_SECONDS,
     GOOGLE_OAUTH_AUTHORIZATION_ENDPOINT,

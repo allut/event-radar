@@ -7,7 +7,10 @@ module avoids a circular import between the two.
 
 from bs4 import BeautifulSoup, Tag
 
-from app.constants import LOCALIZED_TEXT_MAX_DESC_CHARS, LOCALIZED_TEXT_MAX_TITLE_CHARS
+from app.constants.ingestion import (
+    LOCALIZED_TEXT_MAX_DESC_CHARS,
+    LOCALIZED_TEXT_MAX_TITLE_CHARS,
+)
 from app.ingestion.sanitize import html_to_text, sanitize_html
 
 

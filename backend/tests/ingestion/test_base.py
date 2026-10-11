@@ -12,12 +12,9 @@ import pytest
 from sqlalchemy.dialects import postgresql
 from tenacity import RetryCallState
 
-from app.constants import (
-    HTTP_RETRY_AFTER_MAX_SECONDS,
-    SOURCE_KIND_API,
-    SOURCE_KIND_USER_SUBMISSION,
-    TALLINN_TZ,
-)
+from app.constants.core import TALLINN_TZ
+from app.constants.http import HTTP_RETRY_AFTER_MAX_SECONDS
+from app.constants.ingestion import SOURCE_KIND_API, SOURCE_KIND_USER_SUBMISSION
 from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
@@ -551,7 +548,7 @@ class TestPriceContextDigest:
     def test_caps_at_price_context_max_chars(self):
         long_html = "<p>" + "".join(f"Tier {i} €{i}<br>" for i in range(200)) + "</p>"
         digest = price_context_digest(long_html)
-        from app.constants import PRICE_CONTEXT_MAX_CHARS
+        from app.constants.llm import PRICE_CONTEXT_MAX_CHARS
 
         assert len(digest) <= PRICE_CONTEXT_MAX_CHARS
 

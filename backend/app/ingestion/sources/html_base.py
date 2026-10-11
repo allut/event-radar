@@ -18,17 +18,18 @@ from urllib.parse import urlsplit
 import httpx
 from bs4 import BeautifulSoup, Tag
 
-from app.constants import (
-    DETAIL_FETCH_CONCURRENCY,
-    HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS,
-    HTML_LISTING_MAX_DETAIL_FETCHES,
-    HTML_PARSER,
+from app.constants.core import HTML_PARSER, TALLINN_TZ
+from app.constants.http import (
     HTTP_METHOD_GET,
     HTTP_METHOD_POST,
     HTTP_TIMEOUT_SECONDS,
     HTTP_USER_AGENT,
+)
+from app.constants.ingestion import (
+    DETAIL_FETCH_CONCURRENCY,
+    HTML_LISTING_LOCALE_FETCH_DELAY_SECONDS,
+    HTML_LISTING_MAX_DETAIL_FETCHES,
     LOCALIZED_TEXT_HTML_LOCALES,
-    TALLINN_TZ,
 )
 from app.ingestion.adapter import NormalizedEvent, SourceAdapter
 from app.ingestion.html_utils import attr_str

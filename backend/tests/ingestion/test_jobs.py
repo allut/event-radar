@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.constants import LLM_CLASSIFY_BATCH_SIZE
+from app.constants.llm import LLM_CLASSIFY_BATCH_SIZE
 from app.ingestion import jobs
 from app import db as app_db
 from tests.conftest import session_factory as _session_factory

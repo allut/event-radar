@@ -26,7 +26,8 @@ from app.claims.pinning import (
     price_mismatch,
     scaled_claim_edit_cap,
 )
-from app.constants import (
+from app._generated.shared_constants import ORGANIZER_MAX_CATEGORIES
+from app.constants.claims import (
     CLAIM_UNPIN_KEY_MAX_LEN,
     CLAIM_UNPIN_MAX_ITEMS,
     CLAIM_ERROR_CODE_DORMANT,
@@ -37,23 +38,23 @@ from app.constants import (
     ERROR_CLAIM_EVENT_NOT_FOUND,
     ERROR_CLAIM_NOT_GRANTED,
     ERROR_DAILY_CLAIM_EDIT_LIMIT,
+)
+from app.constants.core import LOCALE_EN, LOCALE_ET, LOCALE_RU, TALLINN_TZ
+from app.constants.events import (
     ERROR_EVENT_CANCELLED,
     ERROR_EVENT_URL_SCHEME,
-    ERROR_IMAGE_URL_SCHEME,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
-    HTTP_TIMEOUT_SECONDS,
-    LOCALE_EN,
-    LOCALE_ET,
-    LOCALE_RU,
+)
+from app.constants.http import HTTP_TIMEOUT_SECONDS
+from app.constants.organizer import (
+    ERROR_IMAGE_URL_SCHEME,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DESCRIPTION_MAX_LEN,
-    ORGANIZER_MAX_CATEGORIES,
     ORGANIZER_TITLE_MAX_LEN,
-    URL_MAX_LEN,
-    RATE_LIMIT_SUBMIT,
-    TALLINN_TZ,
 )
+from app.constants.rate_limits import RATE_LIMIT_SUBMIT
+from app.constants.security import URL_MAX_LEN
 from app.db import get_db
 from app.ingestion.http_client import host_matches_domain, safe_render_url
 from app.ingestion.pricing import normalize_currency

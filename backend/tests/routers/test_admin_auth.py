@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 import app.auth.totp as totp_module
-from app.constants import ADMIN_AUTH_MAX_FAILURES, ADMIN_USERNAME_DEFAULT
+from app.constants.auth import ADMIN_AUTH_MAX_FAILURES, ADMIN_USERNAME_DEFAULT
 from tests.routers.conftest import patch_admin_settings
 
 

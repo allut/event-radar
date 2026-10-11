@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.constants import (
+from app.constants.ingestion import (
     PUBLISHER_NAME_ESTONIA_CONCERT_HALL,
     PUBLISHER_NAME_KUMU,
     PUBLISHER_STATUS_ACTIVE,

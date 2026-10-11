@@ -10,12 +10,12 @@ import logging
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field
 
-from app.constants import (
+from app.constants.email import (
     CONTACT_FIELD_MIN_LEN,
     CONTACT_MESSAGE_MAX_LEN,
     CONTACT_SUCCESS_DETAIL,
-    RATE_LIMIT_ORGANIZER_CONTACT,
 )
+from app.constants.rate_limits import RATE_LIMIT_ORGANIZER_CONTACT
 from app.email.contact import send_contact_message
 from app.models.models import Organizer
 from app.rate_limit import limiter

@@ -8,12 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
+from app.constants.ingestion import SOURCE_KIND_INBOUND_EMAIL, SOURCE_SLUG_NEWSLETTER
+from app.constants.llm import (
     LLM_TASK_NEWSLETTER,
     NEWSLETTER_BODY_MAX_LEN,
     NEWSLETTER_SUBJECT_MAX_LEN,
-    SOURCE_KIND_INBOUND_EMAIL,
-    SOURCE_SLUG_NEWSLETTER,
 )
 from app.llm.prompts import NEWSLETTER_EXTRACT_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.llm.router import llm_json_or_none

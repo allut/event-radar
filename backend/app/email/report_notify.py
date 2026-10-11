@@ -8,10 +8,7 @@ from zero to one open report — see routers/reports.py.
 import html
 
 from app.config import settings
-from app.constants import (
-    ADMIN_REPORTS_PATH,
-    EVENTS_PATH,
-)
+from app.constants.core import ADMIN_REPORTS_PATH, EVENTS_PATH
 from app.email.resend import send_resend_email
 from app.email.templates import (
     REPORT_NOTIFY_COUNT_LINE,

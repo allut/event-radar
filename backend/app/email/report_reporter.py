@@ -14,9 +14,7 @@ import html as html_lib
 import httpx
 
 from app.config import settings
-from app.constants import (
-    EVENTS_PATH,
-)
+from app.constants.core import EVENTS_PATH
 from app.email.links import frontend_url
 from app.email.resend import send_resend_email
 from app.email.brand import brand_mark_html

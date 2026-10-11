@@ -10,13 +10,13 @@ from app.claims.lifecycle import (
     claiming_organizer_name,
     resolve_claim_for_event,
 )
-from app.constants import (
+from app._generated.shared_constants import DEFAULT_USER_LOCALE
+from app.constants.claims import (
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
-    DEFAULT_USER_LOCALE,
-    ERROR_EVENT_NOT_FOUND,
-    RATE_LIMIT_EVENTS_DETAIL,
 )
+from app.constants.events import ERROR_EVENT_NOT_FOUND
+from app.constants.rate_limits import RATE_LIMIT_EVENTS_DETAIL
 from app.auth.dependencies import get_optional_user
 from app.db import get_db
 from app.models.models import Event, User

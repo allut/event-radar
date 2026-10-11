@@ -17,32 +17,25 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from app.config import settings
-from app.constants import (
-    APP_ENV_DEVELOPMENT,
-    APP_VERSION,
+from app._generated.shared_constants import APP_VERSION
+from app.constants.core import APP_ENV_DEVELOPMENT, MS_PER_SECOND, TALLINN_TZ_NAME
+from app.constants.http import (
     ASGI_MESSAGE_TYPE_REQUEST,
     ASGI_MESSAGE_TYPE_RESPONSE_BODY,
     ASGI_MESSAGE_TYPE_RESPONSE_START,
     ASGI_SCOPE_TYPE_HTTP,
+    HEADER_HOST,
+    HEADER_ORIGIN,
+)
+from app.constants.jobs import (
     CLEANUP_HOUR,
     CLEANUP_MINUTE,
-    CORS_ALLOWED_HEADERS,
-    CORS_ALLOWED_METHODS,
-    CSRF_UNSAFE_METHODS,
-    DEV_CORS_ORIGINS_DEFAULT,
-    DEV_DB_LOCAL_HOSTS,
     DIGEST_SEND_HOUR,
     DIGEST_SEND_MINUTE,
-    ERROR_CSRF_ORIGIN_MISMATCH,
     EXPIRE_STALE_CLAIMS_HOUR,
     EXPIRE_STALE_CLAIMS_MINUTE,
     FEED_BUILD_HOUR,
     FEED_BUILD_MINUTE,
-    HEADER_HOST,
-    HEADER_ORIGIN,
-    HOST_CHECK_EXEMPT_PATHS,
-    HSTS_HEADER_NAME,
-    HSTS_HEADER_VALUE,
     INGEST_INTERVAL_HOURS,
     JOB_ID_BACKFILL_PUBLISHER_IDS,
     JOB_ID_BUILD_DAILY_FEEDS,
@@ -60,19 +53,30 @@ from app.constants import (
     JOB_LABEL_HOURLY_INGEST,
     JOB_LABEL_ORGANIZER_SYNC,
     LLM_PASS_INTERVAL_HOURS,
-    LOG_EVENT_HOST_REJECTED,
-    LOG_EVENT_JOB_RUN,
-    LOG_STATUS_ERROR,
-    LOG_STATUS_OK,
-    MAX_REQUEST_BODY_BYTES,
-    MS_PER_SECOND,
     ORGANIZER_SYNC_HOUR,
     ORGANIZER_SYNC_MINUTE,
     REFETCH_HOUR,
     REFETCH_MINUTE,
     SCHEDULER_DAY_OF_WEEK_SUNDAY,
+)
+from app.constants.log_events import (
+    LOG_EVENT_HOST_REJECTED,
+    LOG_EVENT_JOB_RUN,
+    LOG_STATUS_ERROR,
+    LOG_STATUS_OK,
+)
+from app.constants.ops import DEV_DB_LOCAL_HOSTS
+from app.constants.security import (
+    CORS_ALLOWED_HEADERS,
+    CORS_ALLOWED_METHODS,
+    CSRF_UNSAFE_METHODS,
+    DEV_CORS_ORIGINS_DEFAULT,
+    ERROR_CSRF_ORIGIN_MISMATCH,
+    HOST_CHECK_EXEMPT_PATHS,
+    HSTS_HEADER_NAME,
+    HSTS_HEADER_VALUE,
+    MAX_REQUEST_BODY_BYTES,
     SECURITY_HEADERS,
-    TALLINN_TZ_NAME,
     TRUSTED_HOST_REJECT_BODY,
 )
 from app.claims.lifecycle import expire_stale_claims

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.constants import TALLINN_TZ
+from app.constants.core import TALLINN_TZ
 from app.dedup import rules
 from app.dedup.rules import (
     candidate_pair_ids_in_window,

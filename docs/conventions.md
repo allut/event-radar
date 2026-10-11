@@ -8,7 +8,9 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 
 ### Constants
 
-- **One constants module per stack keeps every tunable in one place.** A literal inlined near business logic drifts from its twin elsewhere, and nobody finds it when the value changes.
+- **One constants package per stack keeps every tunable in one place.** A literal inlined near business logic drifts from its twin elsewhere, and nobody finds it when the value changes.
+- **The backend package has one file per domain, named after its docs-map area,** such as `app/constants/auth.py` or `app/constants/ingestion.py`. A group tuned or audited as a set gets its own file: `rate_limits.py`, `jobs.py` and `log_events.py`.
+- **`app/constants/__init__.py` stays empty, so every import names the defining file.** A re-export facade adds a hop to go-to-definition and lets constants pile back into one place. Generated cross-stack values are imported from `app._generated.shared_constants` directly.
 - **LLM prompts sit apart in `app/llm/prompts.py`** so prompt-engineering diffs stay clean. Scrape selectors sit apart in `app/ingestion/selectors.py` for the same reason.
 - **Cross-stack values live once in `shared/` and are generated into both stacks.** The backend imports `app._generated.shared_constants` and the frontend `frontend/src/_generated/sharedConstants.ts`, so the two can't disagree. `backend/tests/test_generated_sync.py` fails when the generated files drift.
 
@@ -40,7 +42,7 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 ### External Fan-Out
 
 - **A serial await is too slow, and an unbounded gather trips the provider's rate limit.** A semaphore-bounded `asyncio.gather` sits between the two.
-- **Pick the cap from the provider's documented rate limit, with headroom for retries.** `DIGEST_SEND_CONCURRENCY` in `app/constants.py` is the model.
+- **Pick the cap from the provider's documented rate limit, with headroom for retries.** `app/constants/email.py::DIGEST_SEND_CONCURRENCY` is the model.
 - **`return_exceptions=True` keeps one failed call from discarding the other results.** Each result is then checked on its own.
 - **The Nominatim geocoding passes serial-await on purpose.** Nominatim's usage policy allows one request per second, which a concurrency cap can't express. See [pipeline.md](pipeline.md)'s Geocoding Backfill section.
 

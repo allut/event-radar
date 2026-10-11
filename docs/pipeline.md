@@ -113,7 +113,7 @@ The LLM classifies each event against a fixed category and vibe taxonomy (`VALID
 
 ## Ranking
 
-`app/ranking/score.py` sums weighted terms. The weights are `SCORE_WEIGHT_*` constants in `app/constants.py`.
+`app/ranking/score.py` sums weighted terms. The weights are `SCORE_WEIGHT_*` constants in `app/constants/ranking.py`.
 
 | Term | Signed in | Signed out |
 |---|---|---|
@@ -327,7 +327,7 @@ A Fienta organizer here is a ticketing-source id that gets polled. It is not an 
 
 ## LLM Usage Constraints
 
-`app/constants.py::LLM_PROVIDERS` defines the fallback chain:
+`app/constants/llm.py::LLM_PROVIDERS` defines the fallback chain:
 
 | Order | Provider | Model | Budget |
 |---|---|---|---|

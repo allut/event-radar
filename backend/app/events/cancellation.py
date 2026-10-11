@@ -10,13 +10,13 @@ import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
-    EVENT_STATUS_CANCELLED,
-    LOG_EVENT_EMAIL_SEND_FAILED,
+from app.constants.core import TALLINN_TZ
+from app.constants.events import EVENT_STATUS_CANCELLED
+from app.constants.log_events import LOG_EVENT_EMAIL_SEND_FAILED
+from app.constants.reports import (
     REPORT_EMAIL_SEND_CONCURRENCY,
     REPORT_STATUS_OPEN,
     REPORT_STATUS_RESOLVED,
-    TALLINN_TZ,
 )
 from app.email.report_reporter import send_report_outcome_email
 from app.email.resend import resend_http_client

@@ -29,16 +29,18 @@ from app.claims.verification import (
     verify_piletilevi_claim,
 )
 from app.config import settings
-from app.constants import (
-    CLAIM_ACTIVE_STATUSES,
+from app._generated.shared_constants import (
     CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
+    CLAIM_EXPIRY_DAYS,
+)
+from app.constants.claims import (
+    CLAIM_ACTIVE_STATUSES,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
     CLAIM_DISCOVERY_STATUS_CLAIMED,
     CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
     CLAIM_EMAIL_SEND_CONCURRENCY,
-    CLAIM_EXPIRY_DAYS,
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
@@ -55,17 +57,18 @@ from app.constants import (
     ERROR_CLAIM_OWN_SUBMISSION,
     ERROR_CLAIM_TARGET_ALREADY_APPROVED,
     ERROR_DAILY_CLAIM_LIMIT,
-    ERROR_EVENT_NOT_FOUND,
-    EVENT_STATUS_PUBLISHED,
-    LOG_EVENT_EMAIL_SEND_FAILED,
     ORGANIZER_DAILY_CLAIM_CAP,
-    RESEND_TIMEOUT_SECONDS,
+)
+from app.constants.core import TALLINN_TZ
+from app.constants.email import RESEND_TIMEOUT_SECONDS
+from app.constants.events import ERROR_EVENT_NOT_FOUND, EVENT_STATUS_PUBLISHED
+from app.constants.ingestion import (
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
     SOURCE_SLUG_PILETILEVI,
-    TALLINN_TZ,
 )
+from app.constants.log_events import LOG_EVENT_EMAIL_SEND_FAILED
 from app.email.claim_resolution import (
     send_claim_declined_email,
     send_claim_expired_email,

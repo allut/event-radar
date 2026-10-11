@@ -17,23 +17,25 @@ from sqlalchemy import select
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
+from app.constants.core import (
     SLUG_CYRILLIC_TO_LATIN,
     SLUG_EMPTY_TITLE_FALLBACK,
     SLUG_DATE_FORMAT,
-    ESTONIA_BBOX,
-    EVENT_STATUS_DRAFT,
-    INGEST_REJECT_RECHECK_DAYS,
-    INGEST_SKIP_ID_LOOKBACK_DAYS,
-    INGESTION_ERROR_MAX_LEN,
     SLUG_HASH_HEX_LEN,
     SLUG_SANITIZE_RE,
     SLUG_TITLE_MAX_LEN,
+    TALLINN_TZ,
+)
+from app.constants.events import EVENT_STATUS_DRAFT
+from app.constants.ingestion import (
+    ESTONIA_BBOX,
+    INGEST_REJECT_RECHECK_DAYS,
+    INGEST_SKIP_ID_LOOKBACK_DAYS,
+    INGESTION_ERROR_MAX_LEN,
     SOURCE_KIND_USER_SUBMISSION,
     SOURCE_STATUS_ERROR,
     SOURCE_STATUS_OK,
     TALLINN_REGION_BBOX,
-    TALLINN_TZ,
 )
 from app.events.queries import event_not_ended_filter
 from app.ingestion.content_filters import content_flags, localized_text_values

@@ -12,19 +12,21 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
-    BROWSE_MAX_PAGE_SIZE,
+from app.constants.core import TALLINN_TZ
+from app.constants.organizer import (
     ERROR_DAILY_VENUE_CREATION_LIMIT,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DAILY_VENUE_CREATION_CAP,
     ORGANIZER_VENUE_ADDRESS_MAX_LEN,
     ORGANIZER_VENUE_NAME_MAX_LEN,
+)
+from app.constants.ranking import (
+    BROWSE_MAX_PAGE_SIZE,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
-    RATE_LIMIT_SUBMIT,
-    TALLINN_TZ,
 )
+from app.constants.rate_limits import RATE_LIMIT_SUBMIT
 from app.db import get_db
 from app.ingestion.pricing import normalize_currency
 from app.models.models import Organizer, Venue

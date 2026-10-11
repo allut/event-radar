@@ -20,14 +20,22 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.constants import (
-    CURRENCY_CODE_MAX_LEN,
+from app._generated.shared_constants import (
     DEFAULT_CURRENCY,
     DEFAULT_USER_LOCALE,
+    VALID_CATEGORIES,
+    VALID_LOCALES,
+    VALID_VIBES,
+)
+from app.constants.core import TALLINN_TZ
+from app.constants.events import (
+    CURRENCY_CODE_MAX_LEN,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_DRAFT,
-    FREE_TIER_KEYWORDS,
+)
+from app.constants.ingestion import FREE_TIER_KEYWORDS, PRICE_HINT_MAX_CHARS
+from app.constants.llm import (
     IMPORTANT_INFO_MAX_CHARS,
     LLM_BATCH_FANOUT_CONCURRENCY,
     LLM_CLASSIFY_BATCH_SIZE,
@@ -47,13 +55,8 @@ from app.constants import (
     LLM_OUTPUT_URL_OR_EMAIL_RE,
     LLM_MAX_PROMPT_CHARS,
     LLM_TASK_CLASSIFY,
-    ORGANIZER_SUBMISSION_QUALITY_SCORE_CEILING,
-    PRICE_HINT_MAX_CHARS,
-    TALLINN_TZ,
-    VALID_CATEGORIES,
-    VALID_LOCALES,
-    VALID_VIBES,
 )
+from app.constants.organizer import ORGANIZER_SUBMISSION_QUALITY_SCORE_CEILING
 from app.llm.prompts import LLM_CLASSIFY_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.ingestion.pricing import (
     eur_amounts_from_text,

@@ -10,7 +10,7 @@ import time
 
 import pyotp
 
-from app.constants import ADMIN_TOTP_VALID_WINDOW
+from app.constants.auth import ADMIN_TOTP_VALID_WINDOW
 
 log = logging.getLogger(__name__)
 

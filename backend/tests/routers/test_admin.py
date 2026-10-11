@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.constants import APP_ENV_DEVELOPMENT
+from app.constants.core import APP_ENV_DEVELOPMENT
 from tests.routers.conftest import ndjson_lines, patch_admin_settings
 
 

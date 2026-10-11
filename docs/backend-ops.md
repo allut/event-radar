@@ -140,12 +140,12 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 
 ### Pagination
 
-- **Unbounded admin lists page with `limit`/`offset`**, capped by `ADMIN_*_PAGE_SIZE` and `ADMIN_*_MAX_PAGE_SIZE` in `app/constants.py`. Give a new admin list endpoint the same pattern.
+- **Unbounded admin lists page with `limit`/`offset`**, capped by `ADMIN_*_PAGE_SIZE` and `ADMIN_*_MAX_PAGE_SIZE` in `app/constants/admin.py`. Give a new admin list endpoint the same pattern.
 - **Pages count logical units, such as dedup groups, not rows**, so one noisy cluster can't fill a page.
 
 ## Scheduled Jobs
 
-APScheduler runs embedded in the FastAPI process (`app/main.py::_register_scheduled_jobs()`), on Europe/Tallinn time. The cadence constants live in `app/constants.py`.
+APScheduler runs embedded in the FastAPI process (`app/main.py::_register_scheduled_jobs()`), on Europe/Tallinn time. The cadence constants live in `app/constants/jobs.py`.
 
 | Cadence | Job |
 |---|---|
@@ -176,7 +176,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 
 - **`events` rows are never deleted.** Only satellite data goes, which preserves event history and the `user_event_feedback` signal indefinitely.
 
-| Table | Retention window (`app/constants.py`) |
+| Table | Retention window (`app/constants/ops.py`) |
 |---|---|
 | `auth_magic_links` | `MAGIC_LINK_RETENTION_DAYS` (7), expired-unused and long-used rows |
 | `organizer_magic_links` | `MAGIC_LINK_RETENTION_DAYS` (7), same rule |
@@ -203,7 +203,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 - **It's idempotent**, so it's safe under `--reload` and in tests.
 - **Development logs readable text to the console and a rotating file under `backend/logs/`.** SQL echo logs at INFO.
 - **Production (`APP_ENV != development`) logs JSON lines (`JsonLogFormatter`) to the console.** SQL echo drops to WARNING.
-- **The logging literals live in `app/constants.py` (`LOG_*`).** `LOG_LEVEL`, `LOG_SHIP_URL` and `LOG_SHIP_TOKEN` are settings in `app/config.py`.
+- **The logging literals live in `app/constants/ops.py` (`LOG_*`).** `LOG_LEVEL`, `LOG_SHIP_URL` and `LOG_SHIP_TOKEN` are settings in `app/config.py`.
 
 ### Log Shipping
 

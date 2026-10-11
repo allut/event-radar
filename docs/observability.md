@@ -25,7 +25,7 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `job` / `status` / `duration_ms` | on `event="job_run"` | per scheduled-job telemetry |
 | `path` | on `event="rate_limit_block"` | request path that was throttled |
 
-`event` values (defined in `app/constants.py`, `LOG_EVENT_*`):
+`event` values (defined in `app/constants/log_events.py`, `LOG_EVENT_*`):
 
 | `event` | Meaning | Emitted from |
 |---|---|---|
@@ -36,7 +36,7 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `webhook_rejected` | inbound-mail bad signature / bad body | `app/routers/webhooks.py` |
 | `report_submitted` | `POST /reports` succeeded | `app/routers/reports.py` |
 | `email_send_failed` | a Resend send failed (magic link, digest, contact, report notify/reporter, claim resolution) | `app/email/resend.py::send_resend_email` (every request-path send), `app/email/digest.py`, `app/claims/lifecycle.py`, `app/routers/admin.py`, `app/routers/utils.py` |
-| `admin_action` | console-initiated admin action — audit trail; carries `action`, one of 19 `ADMIN_ACTION_*` values (`app/constants.py`) | `app/routers/admin_auth.py`, `app/routers/utils.py` |
+| `admin_action` | console-initiated admin action — audit trail; carries `action`, one of 19 `ADMIN_ACTION_*` values (`app/constants/admin.py`) | `app/routers/admin_auth.py`, `app/routers/utils.py` |
 | `contact_honeypot_block` | contact-form honeypot field tripped (bot signal) | `app/routers/contact.py` |
 | `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/main.py` |
 | `unverified_account_budget_exceeded` | global daily new-unverified-account budget crossed (mail-bomb early warning, OWASP audit F10) | `app/routers/utils.py::record_unverified_account_creation` |

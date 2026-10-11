@@ -8,7 +8,7 @@ content SSRF surface; the ALLOWED_SOURCE_HOSTS allowlist doesn't apply here.
 
 import httpx
 
-from app.constants import (
+from app.constants.claims import (
     CLAIM_DNS_DOH_ACCEPT_HEADER,
     CLAIM_DNS_DOH_URL,
     CLAIM_DNS_TXT_RECORD_LABEL,

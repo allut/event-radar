@@ -7,7 +7,7 @@ before any LLM call — see docs/pipeline.md "Content Safety" and "Non-Event Fil
 import re
 from collections.abc import Iterable
 
-from app.constants import (
+from app.constants.ingestion import (
     CONTENT_FILTER_WHITESPACE_COLLAPSE_RE,
     EXPLICIT_KEYWORDS,
     NON_EVENT_TITLE_KEYWORDS,

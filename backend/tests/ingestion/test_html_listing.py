@@ -9,7 +9,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.config import settings
-from app.constants import TALLINN_TZ
+from app.constants.core import TALLINN_TZ
 from app.ingestion.selectors import (
     ECH_SITE_TITLE_SUFFIX,
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
@@ -855,7 +855,7 @@ class TestPiletileviLocalizedText:
         # Mirrors kumu_localized_text/estonia_concert_hall_localized_text: an
         # over-cap HTML description falls back to plain text truncated at
         # LOCALIZED_TEXT_MAX_DESC_CHARS, rather than storing unbounded HTML.
-        from app.constants import LOCALIZED_TEXT_MAX_DESC_CHARS
+        from app.constants.ingestion import LOCALIZED_TEXT_MAX_DESC_CHARS
 
         long_paragraph = "word " * (LOCALIZED_TEXT_MAX_DESC_CHARS // 4)
         html = (

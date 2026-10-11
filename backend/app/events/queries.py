@@ -7,7 +7,8 @@ from typing import Any
 from sqlalchemy import Select, and_, ColumnElement, exists, false, func, or_, select
 from sqlalchemy.orm import aliased, selectinload
 
-from app.constants import EVENT_STATUS_CANCELLED, EVENT_STATUS_PUBLISHED, TALLINN_TZ
+from app.constants.core import TALLINN_TZ
+from app.constants.events import EVENT_STATUS_CANCELLED, EVENT_STATUS_PUBLISHED
 from app.events.venue import resolve_venue_name
 from app.models.models import Event
 

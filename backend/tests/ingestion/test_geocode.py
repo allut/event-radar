@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.constants import TALLINN_TZ
+from app.constants.core import TALLINN_TZ
 from app.ingestion.geocode import (
     _self_heal_out_of_bbox_coords,
     _sync_venue_linked_coords,
@@ -773,7 +773,7 @@ class TestCopyVenueFromSiblings:
         and score_cutoff must still find it."""
         from rapidfuzz.fuzz import ratio as fuzz_ratio
 
-        from app.constants import VENUE_SIBLING_RATIO_THRESHOLD
+        from app.constants.ingestion import VENUE_SIBLING_RATIO_THRESHOLD
         from app.ingestion.geocode import canonical_venue_name
 
         target_name = "Kanuti Gildi Saali"  # one extra trailing char vs the donor
@@ -847,7 +847,7 @@ class TestIsSuspectVenueName:
         assert is_suspect_venue_name("Sõltumatu Tantsu Lava (STL)") is False
 
     def test_exactly_max_len_not_suspect(self):
-        from app.constants import VENUE_NAME_SUSPECT_MAX_LEN
+        from app.constants.llm import VENUE_NAME_SUSPECT_MAX_LEN
         assert is_suspect_venue_name("A" * VENUE_NAME_SUSPECT_MAX_LEN) is False
 
     def test_meeting_point_en_flags_suspect(self):
@@ -1023,7 +1023,7 @@ class TestExtractAddressFromVenueName:
 
     @pytest.mark.asyncio
     async def test_fresh_call_budget_defers_excess(self, mock_db):
-        from app.constants import VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN
+        from app.constants.llm import VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN
 
         events = [self._make_event(i, f"Kopli {i}") for i in range(VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN + 2)]
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=events))

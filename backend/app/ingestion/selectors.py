@@ -3,12 +3,12 @@ fixed-venue tables for the HTML-listing adapters (and Fienta's detail page).
 
 Everything here is tied to a live site's DOM/URL structure, not business
 logic — a markup change on a source site should be a one-line fix here.
-Cross-source tuning knobs (caps, timeouts) stay in app/constants.py.
+Cross-source tuning knobs (caps, timeouts) stay in app/constants/ingestion.py.
 """
 
 from typing import NamedTuple
 
-from app.constants import (
+from app.constants.ingestion import (
     ESTONIA_CONCERT_HALL_VERIFICATION_DOMAIN,
     KUMU_VERIFICATION_DOMAIN,
 )

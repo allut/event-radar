@@ -9,12 +9,13 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants import (
+from app.constants.core import TALLINN_TZ
+from app.constants.http import HTTP_TIMEOUT_SECONDS
+from app.constants.ingestion import (
     FIENTA_CITY_FILTER,
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     FIENTA_ORGANIZER_CHECK_LIMIT,
     FIENTA_ORGANIZER_SCAN_LIMIT,
-    HTTP_TIMEOUT_SECONDS,
     ORGANIZER_SYNC_DB_WRITE_ATTEMPTS,
     ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD,
     PUBLISHER_NAME_MAX_LEN,
@@ -22,7 +23,6 @@ from app.constants import (
     PUBLISHER_STATUS_RETIRED,
     SOURCE_SLUG_FIENTA,
     STALE_ORGANIZER_RETIRE_DAYS,
-    TALLINN_TZ,
 )
 from app.ingestion.http_client import AsyncRateLimiter, http_get
 from app.models.models import Publisher, Source

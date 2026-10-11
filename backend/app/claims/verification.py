@@ -16,7 +16,7 @@ import httpx
 from app.claims.dns_txt import verify_dns_txt_token
 from app.claims.fienta_token import verify_fienta_token
 from app.claims.piletilevi_promoter import resolve_promoter_contact
-from app.constants import (
+from app.constants.claims import (
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
     CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
@@ -24,8 +24,8 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
     CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
-    SINGLE_INSTITUTION_SOURCES,
 )
+from app.constants.ingestion import SINGLE_INSTITUTION_SOURCES
 from app.auth.utils import normalize_email
 
 @dataclass(frozen=True)

@@ -13,7 +13,7 @@ from app.claims.verification import (
     verify_institutional_publisher_claim,
     verify_piletilevi_claim,
 )
-from app.constants import (
+from app.constants.claims import (
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
     CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
@@ -21,9 +21,8 @@ from app.constants import (
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
     CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
-    KUMU_VERIFICATION_DOMAIN,
-    SOURCE_SLUG_KUMU,
 )
+from app.constants.ingestion import KUMU_VERIFICATION_DOMAIN, SOURCE_SLUG_KUMU
 
 
 class TestVerifyFientaPublisherClaim:

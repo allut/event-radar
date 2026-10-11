@@ -5,15 +5,15 @@ import logging
 from fastapi import APIRouter, Request, status
 from pydantic import BaseModel, EmailStr, Field
 
-from app.constants import (
+from app.constants.email import (
     CONTACT_HONEYPOT_MAX_LEN,
     CONTACT_FIELD_MIN_LEN,
     CONTACT_MESSAGE_MAX_LEN,
     CONTACT_NAME_MAX_LEN,
     CONTACT_SUCCESS_DETAIL,
-    LOG_EVENT_CONTACT_HONEYPOT,
-    RATE_LIMIT_CONTACT,
 )
+from app.constants.log_events import LOG_EVENT_CONTACT_HONEYPOT
+from app.constants.rate_limits import RATE_LIMIT_CONTACT
 from app.email.contact import send_contact_message
 from app.rate_limit import limiter
 from app.auth.utils import mask_email

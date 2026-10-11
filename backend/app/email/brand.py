@@ -5,7 +5,7 @@ mark's ``cid:`` reference and its payload are built in a single place."""
 import base64
 from pathlib import Path
 
-from app.constants import EMAIL_BRAND_MARK_CID, EMAIL_BRAND_MARK_FILENAME
+from app.constants.email import EMAIL_BRAND_MARK_CID, EMAIL_BRAND_MARK_FILENAME
 from app.email.styles import EmailStyles
 from app.email.templates import EMAIL_BRAND_MARK
 

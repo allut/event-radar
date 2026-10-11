@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import RATE_LIMIT_BROWSE, TALLINN_TZ
+from app.constants.core import TALLINN_TZ
+from app.constants.rate_limits import RATE_LIMIT_BROWSE
 from app.db import get_db
 from app.models.models import DailyFeed, Event, User
 from app.rate_limit import limiter

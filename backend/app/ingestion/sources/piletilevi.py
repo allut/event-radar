@@ -8,7 +8,9 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup, NavigableString, Tag
 
-from app.constants import HTTP_ACCEPT_JSON_HEADERS, SOURCE_SLUG_PILETILEVI, TALLINN_TZ
+from app.constants.core import TALLINN_TZ
+from app.constants.http import HTTP_ACCEPT_JSON_HEADERS
+from app.constants.ingestion import SOURCE_SLUG_PILETILEVI
 from app.ingestion.http_client import http_get, http_post
 from app.ingestion.jsonld import (
     location_from_jsonld_items,

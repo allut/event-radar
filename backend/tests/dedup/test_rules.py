@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from rapidfuzz.fuzz import token_set_ratio
 
-from app.constants import (
-    CLAIM_STATUS_APPROVED,
+from app.constants.claims import CLAIM_STATUS_APPROVED
+from app.constants.core import TALLINN_TZ
+from app.constants.dedup import (
     DEDUP_LOOKBACK_DAYS,
-    TALLINN_TZ,
     TIME_WINDOW_HOURS,
     TITLE_RATIO_THRESHOLD,
     TITLE_RATIO_VENUE_BYPASS_THRESHOLD,
@@ -319,7 +319,7 @@ class TestClusterEvents:
         O(N^2) Python fallback) must fail loudly above DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS
         rather than silently running the quadratic scan on a large event list. Existing
         small-N white-box tests (all well under the cap) are unaffected."""
-        from app.constants import DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS
+        from app.constants.dedup import DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS
 
         events = [
             _event(i, "Distinct Title", _BASE + timedelta(days=i))

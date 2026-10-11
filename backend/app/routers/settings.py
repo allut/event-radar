@@ -8,17 +8,16 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import generate_session_token
-from app.constants import (
+from app._generated.shared_constants import VALID_LOCALES
+from app.constants.auth import (
     DETAIL_IDENTITY_UNLINKED,
     ERROR_IDENTITY_NOT_FOUND,
-    ERROR_NO_UPDATE_FIELDS,
-    LOG_EVENT_IDENTITY_UNLINKED,
-    RATE_LIMIT_AUTHENTICATED_WRITE,
-    SECONDS_PER_DAY,
     SESSION_COOKIE_NAME,
     SESSION_COOKIE_PATH,
-    VALID_LOCALES,
 )
+from app.constants.core import ERROR_NO_UPDATE_FIELDS, SECONDS_PER_DAY
+from app.constants.log_events import LOG_EVENT_IDENTITY_UNLINKED
+from app.constants.rate_limits import RATE_LIMIT_AUTHENTICATED_WRITE
 from app.config import settings
 from app.db import get_db
 from app.models.models import Persona, User, UserIdentity, UserPersona

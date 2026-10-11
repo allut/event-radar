@@ -13,7 +13,8 @@ from urllib.parse import SplitResult, urljoin, urlsplit
 import httpx
 from bs4 import BeautifulSoup
 
-from app.constants import HTML_PARSER, LOCALIZED_TEXT_HREFLANG_NORMALIZE
+from app.constants.core import HTML_PARSER
+from app.constants.ingestion import LOCALIZED_TEXT_HREFLANG_NORMALIZE
 from app.ingestion.html_utils import attr_str
 
 log = logging.getLogger(__name__)

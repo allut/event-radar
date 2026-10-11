@@ -7,8 +7,8 @@ from collections.abc import Awaitable, Callable
 from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
-    AGGREGATE_LAST_VALUE_FIELDS,
+from app.constants.dedup import AGGREGATE_LAST_VALUE_FIELDS
+from app.constants.jobs import (
     JOB_ID_BACKFILL_PUBLISHER_IDS,
     JOB_ID_CLASSIFY_PENDING,
     JOB_ID_GEOCODE_PENDING,
@@ -16,11 +16,13 @@ from app.constants import (
     JOB_ID_REFETCH_EVENT_DETAILS,
     JOB_LABEL_DEDUP_DRAIN,
     JOB_LABEL_DEDUP_PASS,
+)
+from app.constants.llm import (
     LLM_BACKLOG_MAX_DRAIN_PASSES,
     LLM_BACKLOG_RETRY_SECONDS,
     LLM_CLASSIFY_BATCH_SIZE,
-    LOG_EVENT_LLM_DEGRADED,
 )
+from app.constants.log_events import LOG_EVENT_LLM_DEGRADED
 from app.db import AsyncSessionLocal
 from app.dedup.llm_tiebreaker import run_dedup_pass_llm
 from app.ingestion.registry import ADAPTER_REGISTRY
