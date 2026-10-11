@@ -294,6 +294,8 @@ A Fienta organizer here is a ticketing-source id that gets polled. It is not an 
 4. **Retire** — after `STALE_ORGANIZER_RETIRE_DAYS` (30) stale, the id moves to `retired_organizer_ids`. `_upsert_fienta` subtracts retired ids on every startup, so a retired seed id never comes back.
 5. **Discover** — a city-filtered scan (`FIENTA_CITY_FILTER`) adds any unknown organizer with at least `ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD` (3) Tallinn events. A retired organizer can rejoin this way.
 
+- **The sync holds no DB connection during its ~2 min HTTP phase.** It rolls back after reading the config, then re-reads the source before writing. A server-side drop during the HTTP phase once killed a whole weekly run, since Neon keeps an idle-in-transaction connection alive but can still restart the compute.
+- **The write phase retries once on a lost connection** (`ORGANIZER_SYNC_DB_WRITE_ATTEMPTS`). Config keys the sync doesn't own survive a concurrent admin edit.
 - **`POST /admin/sync-organizers` runs the sync synchronously.** It is also stage 1 of `POST /admin/pipeline/run`.
 
 ### Publisher Mirroring

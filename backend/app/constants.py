@@ -383,6 +383,8 @@ LOCALIZED_TEXT_MAX_TITLE_CHARS = 500
 LOCALIZED_TEXT_MAX_DESC_CHARS = 5000
 
 ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD = 3
+# Write-phase attempts for the weekly organizer sync: one retry when the server dropped the connection during the HTTP phase (#530).
+ORGANIZER_SYNC_DB_WRITE_ATTEMPTS = 2
 # Publisher.name (models/models.py) column width.
 PUBLISHER_NAME_MAX_LEN = 255
 FIENTA_ORGANIZER_SCAN_LIMIT = 1000
