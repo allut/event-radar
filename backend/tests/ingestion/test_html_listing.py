@@ -61,6 +61,13 @@ def _mock_response(text: str, status: int = 200):
     return resp
 
 
+def _status_error(status: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://example.test/listing")
+    return httpx.HTTPStatusError(
+        "err", request=request, response=httpx.Response(status, request=request)
+    )
+
+
 def _known_ids(known_ids=()):
     return set(known_ids)
 
@@ -189,6 +196,37 @@ class TestBasePagination:
             mock_get.side_effect = [httpx.ConnectError("boom")]
             with pytest.raises(httpx.ConnectError):
                 await adapter.fetch_raw(_known_ids())
+
+    @pytest.mark.asyncio
+    async def test_listing_error_tolerated_when_a_page_loaded_without_new_cards(self):
+        """#534: a transient page error must not fail a run whose other pages
+        loaded fine but held only already-stored events."""
+        card_a = {"external_id": "a", "title": "A", "url": "https://example.test/a"}
+        adapter = _StubAdapter(
+            _make_source(), pages_cards=[[card_a], [], []], max_pages=3
+        )
+
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
+            mock_get.side_effect = [
+                _mock_response("0"),
+                _status_error(404),
+                _mock_response("2"),
+            ]
+            results = await adapter.fetch_raw(_known_ids({"a"}))
+
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_every_page_failing_raises_first_error(self):
+        adapter = _StubAdapter(_make_source(), pages_cards=[[], []], max_pages=2)
+        first = _status_error(404)
+
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
+            mock_get.side_effect = [first, httpx.ConnectError("boom")]
+            with pytest.raises(httpx.HTTPStatusError) as exc_info:
+                await adapter.fetch_raw(_known_ids())
+
+        assert exc_info.value is first
 
     @pytest.mark.asyncio
     async def test_listing_error_tolerated_when_other_pages_succeed(self):

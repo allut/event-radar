@@ -198,6 +198,7 @@ class HtmlListingAdapter(SourceAdapter):
         seen_ids: set[str] = set()
         cards: list[dict[str, Any]] = []
         listing_errors: list[Exception] = []
+        pages_loaded = 0
 
         base_host = urlsplit(str(self.source.config["url"])).hostname
         allowed_hosts = frozenset({base_host}) | self.extra_allowed_hosts
@@ -232,6 +233,7 @@ class HtmlListingAdapter(SourceAdapter):
                     page += 1
                     continue
 
+                pages_loaded += 1
                 soup = BeautifulSoup(resp.text, HTML_PARSER)
                 # Count new external ids regardless of passes_filter, so a page
                 # consisting entirely of filtered-out events (e.g. non-Tallinn
@@ -259,8 +261,9 @@ class HtmlListingAdapter(SourceAdapter):
                 page += 1
 
             # Partial tolerance: only raise when ALL listing pages failed so a
-            # single unavailable page doesn't suppress a real run.
-            if not cards and listing_errors:
+            # single unavailable page doesn't fail a run whose other pages
+            # loaded (forward-only runs often have no new cards).
+            if pages_loaded == 0 and listing_errors:
                 raise listing_errors[0]
 
             if self.needs_detail:
