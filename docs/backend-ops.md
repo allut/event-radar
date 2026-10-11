@@ -20,7 +20,7 @@ Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). B
 - **`BACKEND_URL` is a `value:` literal, not `sync: false`.** It's the service's own public URL (`https://event-radar-api-r7l6.onrender.com`), not a secret, so a blueprint sync sets it with no dashboard step. Leaving it unset once took production down.
 - **`BACKEND_URL` feeds the digest's `List-Unsubscribe` header and `HostCheckMiddleware`'s allowlist.** Render injects `RENDER_EXTERNAL_HOSTNAME` as the allowlist's second, self-correcting source; it never appears in `render.yaml`. See [security.md](security.md)'s Host Check section.
 - **Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET`, not `GOOGLE_CLIENT_*`.** `GOOGLE_SIGNIN_CONSUMER_ENABLED` and `GOOGLE_SIGNIN_ORGANIZER_ENABLED` default to `false`.
-- **The `CLOUDINARY_*` trio backs organizer image upload.** See [organizer-portal.md](organizer-portal.md).
+- **The `CLOUDINARY_*` trio backs organizer image upload.** See [organizer-portal.md](organizer-portal.md)'s Image Upload section.
 - **`ADMIN_TOTP_SECRET` comes from `backend/scripts/admin_totp_enroll.py`.** See Maintenance Scripts.
 - **`EDGE_SHARED_SECRET` must match the Cloudflare Pages Secret of the same name.** See API Proxy.
 

@@ -21,7 +21,6 @@ REPO = Path(__file__).parent.parent.parent
 NOT_YET_REWRITTEN = {
     "docs/conventions.md",
     "docs/data-model.md",
-    "docs/organizer-portal.md",
 }
 
 MAX_UNIT_WORDS = 60
