@@ -55,7 +55,7 @@ An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter
 
 ## Trust Gating and Review
 
-- **A submission goes live at once only if its organizer is `verified`** and it clears the normal publish gate ([pipeline.md](pipeline.md) §6). Every submitted or edited event is also flagged `Event.needs_review`.
+- **A submission goes live at once only if its organizer is `verified`** and it clears the normal publish gate (see [pipeline.md](pipeline.md)'s Publish Gate section). Every submitted or edited event is also flagged `Event.needs_review`.
 - **A new organizer starts `verified=false`.** Their first submission waits in `classified` until an admin approves it. Otherwise anyone who can receive one magic-link email could push an event with an arbitrary link into every feed and digest.
 - **`submitted_by_organizer_id` (indexed) ties an event to its organizer.**
 - **`app/publish.py::publish_pending()` enforces the gate itself**, not only the inline call in `submit_event`. An unapproved submission can't slip through on the next scheduled pass.

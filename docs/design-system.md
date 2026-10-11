@@ -109,7 +109,7 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 - **The base is the light palette.** A client that strips `<style>` still gets a readable, intentional render.
 - **A `prefers-color-scheme: dark` block repaints it dark.** `_THEME_CLASS_RULES` in `styles.py` drives the `e-*` class hooks in `templates.py`.
 - **`EMAIL_DOCUMENT` declares `color-scheme: light dark` in its meta tags.** Without the declaration, Apple Mail and others apply their own dark inversion. That can turn a dark render into a washed-out, contrast-broken one.
-- **Email presentation splits three ways:** CSS in `styles.py`, markup in `templates.py`, assembly in the delivery module.
+- **CSS stays in `styles.py`, apart from markup and delivery.** See [frontend.md](frontend.md)'s Email section for the three-way split.
 
 ## 6. Shape
 

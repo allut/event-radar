@@ -15,11 +15,6 @@ from pathlib import Path
 
 REPO = Path(__file__).parent.parent.parent
 
-# Ratchet: docs not yet rewritten to the house style, exempt from the style test
-# (never from the pointer test). Each rewrite removes its doc in the same commit;
-# the list only shrinks.
-NOT_YET_REWRITTEN: set[str] = set()
-
 MAX_UNIT_WORDS = 60
 MAX_BANNER_WORDS = 30
 MAX_TOTAL_WORDS = {"CLAUDE.md": 1500, "README.md": 1500}
@@ -79,7 +74,8 @@ def _units(text: str) -> list[tuple[int, str]]:
     blockquotes (a GitHub admonition is one blockquote). Headings, table rows
     and horizontal rules are skipped."""
     units: list[tuple[int, str]] = []
-    start, buf, kind = 0, [], ""
+    start, kind = 0, ""
+    buf: list[str] = []
 
     def flush() -> None:
         nonlocal buf, kind
@@ -147,16 +143,9 @@ def _banner_failures(name: str, text: str) -> list[str]:
     return []
 
 
-def test_ratchet_lists_only_existing_docs() -> None:
-    stale = NOT_YET_REWRITTEN - set(_governed_docs())
-    assert not stale, f"NOT_YET_REWRITTEN names docs that don't exist: {stale}"
-
-
 def test_docs_follow_house_style() -> None:
     failures: list[str] = []
     for name in _governed_docs():
-        if name in NOT_YET_REWRITTEN:
-            continue
         failures.extend(_style_failures(name, (REPO / name).read_text(encoding="utf-8")))
     assert not failures, "House-style violations (see docs/writing-docs.md):\n" + "\n".join(
         failures

@@ -17,7 +17,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 
 - **`localizedPath()` and `stripLocalePrefix()` live in `frontend/src/lib/urlLocale.ts`, re-exported through `utils.ts`.** They're the one deliberate exception to "shared helpers live in `utils.ts`". The module's own comment says why.
 - **`StaticPage/`'s component has no importer, but its stylesheet is live.** `Contact.module.css` composes `.page`, `.main`, `.title` and `.body` from it. It stays as the scaffold for future static pages.
-- **`components/shared/` is the shared CSS layer.** See [design-system.md](design-system.md)'s §7 for the composing rules.
+- **`components/shared/` is the shared CSS layer.** See [design-system.md](design-system.md) §7 for the composing rules.
 - **`GoogleSignInButton/` is a plain `<a href>` to the backend's OAuth `start` endpoint, with no client-side OAuth.** Its plate colors are Google-mandated, held as `--google-btn-*` tokens in `index.css`. The mark itself is covered by design-system.md's Google Sign-In Mark section.
 - **The `VITE_GOOGLE_SIGNIN_*` build flags are a frontend convenience gate only.** The backend `start` endpoint 404s on its own when its flag is off. [backend-ops.md](backend-ops.md)'s Cloudflare Pages Frontend section says where the flags are set.
 

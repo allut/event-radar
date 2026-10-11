@@ -60,4 +60,4 @@ What's in here: the house style for `CLAUDE.md`, `README.md` and `docs/*.md`, th
 
 - **`backend/tests/test_docs_style.py` enforces the mechanical rules in CI:** the 60-word cap (skipping fences, headings, HTML comments and table rows), the banner, no `path:line` cites, the 1,500-word limits, and code→doc pointer resolution.
 - **The rest is judgement:** sentence length, what to cut, one home per fact, and positive phrasing.
-- **`NOT_YET_REWRITTEN` is a ratchet.** A doc on it is exempt from the style checks, never from pointer resolution. A rewrite removes its doc from the list in the same commit, so the list only shrinks.
+- **Every governed doc is checked, with no exemptions.** A new `docs/*.md` passes the style checks from its first commit.
