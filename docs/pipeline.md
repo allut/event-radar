@@ -201,7 +201,7 @@ The LLM classifies each event against a fixed category and vibe taxonomy (`VALID
 
 ### Venue-Name Extract
 
-- **An LLM moves street addresses glued into `venue_name` into `venue_address`.** A Python prefilter (digit, comma, direction keyword, length) sends only suspect names to the LLM.
+- **An LLM moves street addresses glued into `venue_name` into `venue_address`.** A prefilter (ASCII digit, comma, direction keyword, length), pushed into SQL with a collation-independent twin, sends only suspect names to the LLM.
 - **Decisions are cached in `llm_calls` by content hash.** Fresh calls per run are capped at `VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN`.
 - **A "no address" answer stamps `venue_extract_attempted_at`.** The event is skipped for `VENUE_EXTRACT_RETRY_INTERVAL_DAYS`, so it can't starve newer candidates.
 

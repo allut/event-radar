@@ -40,11 +40,12 @@ _DIRECTION_KEYWORD_RE = alternation_pattern(VENUE_NAME_DIRECTION_KEYWORDS)
 def is_suspect_venue_name(name: str) -> bool:
     """Return True if name likely contains an address or is a direction phrase.
 
-    Flags when: contains a digit, contains a comma, matches a direction keyword,
-    or exceeds VENUE_NAME_SUSPECT_MAX_LEN. Clean names like "KUMU" or
-    "Sõltumatu Tantsu Lava (STL)" return False.
+    Flags when: contains an ASCII digit, contains a comma, matches a direction
+    keyword, or exceeds VENUE_NAME_SUSPECT_MAX_LEN. Clean names like "KUMU" or
+    "Sõltumatu Tantsu Lava (STL)" return False. ASCII digits only, matching
+    ``suspect_venue_name_sql``'s ``[0-9]``: a street number is never "²".
     """
-    if any(ch.isdigit() for ch in name):
+    if any(ch.isascii() and ch.isdigit() for ch in name):
         return True
     if "," in name:
         return True

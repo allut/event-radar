@@ -856,6 +856,19 @@ class TestIsSuspectVenueName:
     def test_in_front_of_flags_suspect(self):
         assert is_suspect_venue_name("in front of the town hall") is True
 
+    def test_non_ascii_digit_not_suspect(self):
+        assert is_suspect_venue_name("Studio²") is False
+
+
+class TestSqlAlternationPattern:
+    def test_non_ascii_letter_spells_both_cases(self):
+        from app.ingestion.patterns import sql_alternation_pattern
+        assert sql_alternation_pattern(frozenset({"kõrval"})) == r"\y(?:k[õÕ]rval)\y"
+
+    def test_ascii_keyword_left_to_case_insensitive_operator(self):
+        from app.ingestion.patterns import sql_alternation_pattern
+        assert sql_alternation_pattern(frozenset({"next to"})) == r"\y(?:next\ to)\y"
+
 
 class TestExtractAddressFromVenueName:
     """Tests for the LLM venue-address extraction pass."""
