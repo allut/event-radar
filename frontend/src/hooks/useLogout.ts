@@ -1,7 +1,8 @@
 import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
-import { API, ROUTES } from '../constants';
+import { API } from '../constants/api';
+import { ROUTES } from '../constants/routes';
 import { beginLogout, clearSignedInHint } from '../lib/auth';
 import { useLocaleNavigate } from './useLocaleNavigate';
 

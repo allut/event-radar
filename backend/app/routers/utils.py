@@ -9,59 +9,67 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import httpx
 from fastapi import HTTPException, Response, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
-from sqlalchemy import ColumnElement, select, update
+from sqlalchemy import ColumnElement, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
 from app.auth.tokens import oauth_state_ttl_seconds
 from app.config import settings
-from app.constants import (
-    ALLOWED_IMAGE_HOSTS,
-    CLOUDINARY_DELIVERY_PATH_TEMPLATE,
-    ERROR_IMAGE_HOST_NOT_ALLOWED,
-    CLAIM_DNS_TXT_RECORD_LABEL,
-    CLAIM_DNS_VERIFICATION_MECHANISMS,
+from app._generated.shared_constants import (
     DEFAULT_USER_LOCALE,
-    ERROR_ADMIN_JOB_ALREADY_RUNNING,
-    ERROR_ADMIN_JOB_FAILED,
-    ERROR_INVALID_CURSOR,
-    ERROR_INVALID_REPORT_REASON,
-    ERROR_VENUE_NOT_FOUND,
-    EVENT_STATUS_CANCELLED,
-    EVENT_STATUS_CLASSIFIED,
-    EVENT_STATUS_PUBLISHED,
+    ORGANIZER_MAX_CATEGORIES,
+    VALID_CATEGORIES,
+    VALID_LOCALES,
+)
+from app.constants.admin import ERROR_ADMIN_JOB_ALREADY_RUNNING, ERROR_ADMIN_JOB_FAILED
+from app.constants.auth import (
     GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
     IDENTITY_PROVIDER_GOOGLE,
-    LOCALE_EN,
-    LOCALE_ET,
-    LOCALE_RU,
-    LOG_EVENT_ADMIN_ACTION,
-    LOG_EVENT_EMAIL_SEND_FAILED,
-    LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
     OAUTH_ERROR_QUERY_PARAM,
     OAUTH_STATE_COOKIE_SAMESITE,
-    ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
-    ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
-    PREFERENCE_SIGNALS,
-    PREFERRED_TASTE_MIN_WEIGHT,
-    ERROR_CLAIM_EDIT_CATEGORIES_CAP,
-    ORGANIZER_MAX_CATEGORIES,
-    REPORT_EMAIL_SEND_CONCURRENCY,
-    REPORT_STATUS_OPEN,
-    REPORT_STATUS_RESOLVED,
     SESSION_COOKIE_HTTPONLY,
     SESSION_COOKIE_SAMESITE,
     SESSION_COOKIE_SECURE,
-    TALLINN_TZ,
     UNVERIFIED_ACCOUNT_DAILY_BUDGET,
-    VALID_CATEGORIES,
-    VALID_LOCALES,
+)
+from app.constants.claims import (
+    CLAIM_DNS_TXT_RECORD_LABEL,
+    CLAIM_DNS_VERIFICATION_MECHANISMS,
+    ERROR_CLAIM_EDIT_CATEGORIES_CAP,
+)
+from app.constants.core import LOCALE_EN, LOCALE_ET, LOCALE_RU, TALLINN_TZ
+from app.constants.events import (
+    EVENT_STATUS_CANCELLED,
+    EVENT_STATUS_CLASSIFIED,
+    EVENT_STATUS_PUBLISHED,
+)
+from app.constants.log_events import (
+    LOG_EVENT_ADMIN_ACTION,
+    LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED,
+)
+from app.constants.organizer import (
+    CLOUDINARY_DELIVERY_PATH_TEMPLATE,
+    ERROR_IMAGE_HOST_NOT_ALLOWED,
+    ERROR_VENUE_NOT_FOUND,
+)
+from app.constants.ranking import (
+    ERROR_INVALID_CURSOR,
+    PREFERENCE_SIGNALS,
+    PREFERRED_TASTE_MIN_WEIGHT,
+)
+from app.constants.reports import (
+    ERROR_INVALID_REPORT_REASON,
+    REPORT_STATUS_OPEN,
     VALID_REPORT_REASONS,
+)
+from app.constants.security import (
+    ALLOWED_IMAGE_HOSTS,
+    ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
+    ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
 )
 from app.auth.utils import mask_email
 from app.events.queries import event_not_ended_filter
@@ -76,8 +84,6 @@ from app.events.venue import (
     resolve_venue_coords,
     resolve_venue_name,
 )
-from app.email.report_reporter import send_report_outcome_email
-from app.email.resend import resend_http_client
 from app.ingestion.content_filters import content_flags, localized_text_values
 from app.ingestion.http_client import safe_render_url
 from app.ingestion.pricing import normalize_currency
@@ -259,7 +265,7 @@ def acquire_admin_job_lock(key: str) -> None:
     #160): pipeline/run, cleanup, full ingest, send_digests, classify. Raises
     409 if *key* is already running instead of letting a retry click start a
     second concurrent run. In-memory only — fine given this app's
-    single-process topology (see CLAUDE.md's Architecture section)."""
+    single-process topology (see CLAUDE.md "Architecture")."""
     if key in _RUNNING_ADMIN_JOBS:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -648,117 +654,6 @@ async def load_user_reported_events(
     return {row.event_id for row in rows}
 
 
-
-
-async def resolve_open_reports(
-    db: AsyncSession, event: Event, resolution_note: str
-) -> list[EventReport]:
-    """Close every REPORT_STATUS_OPEN row on ``event`` with
-    ``resolution_note``, stamping ``resolved_at``. Shared by
-    POST /admin/reports/{event_id}/resolve, .../takedown, and every path that
-    cancels an event (admin retract, organizer retract, organizer
-    self-delete) — see issue #125. Caller commits, then calls
-    ``send_report_resolution_emails`` (issue #127) — deliberately NOT done
-    here, since sending before the caller's commit could notify a reporter
-    of a "resolved" status that a subsequent commit failure then rolls back.
-
-    A single UPDATE...RETURNING (not a SELECT followed by in-Python mutation)
-    so a report reopened concurrently (e.g. a fresh POST /reports upsert
-    landing between this call and the caller's commit) can't be missed —
-    the WHERE clause is evaluated atomically at execution time.
-    """
-    resolved_at = datetime.now(TALLINN_TZ)
-    stmt = (
-        update(EventReport)
-        .where(
-            EventReport.event_id == event.id,
-            EventReport.status == REPORT_STATUS_OPEN,
-        )
-        .values(
-            status=REPORT_STATUS_RESOLVED,
-            resolution_note=resolution_note,
-            resolved_at=resolved_at,
-        )
-        .returning(EventReport)
-    )
-    result = await db.execute(stmt)
-    reports = list(result.scalars().all())
-    # Belt-and-suspenders: reflect the update on the in-memory objects too,
-    # in case the driver's RETURNING rows aren't merged into already
-    # identity-mapped instances still referenced elsewhere in this request.
-    for report in reports:
-        report.status = REPORT_STATUS_RESOLVED
-        report.resolution_note = resolution_note
-        report.resolved_at = resolved_at
-    return reports
-
-
-async def send_report_resolution_emails(
-    db: AsyncSession, event: Event, reports: list[EventReport], resolution_note: str
-) -> None:
-    """Send one reporter-outcome email per row in ``reports`` (the list
-    ``resolve_open_reports``/``cancel_event_and_resolve_reports`` returned).
-    Call this AFTER the caller's ``db.commit()`` — see issue #127 and
-    ``resolve_open_reports``'s docstring for why the ordering matters. A
-    per-report send failure is swallowed and logged; the ``resolved`` status
-    transition (already committed) is the durable record."""
-    if not reports:
-        return
-    user_ids = {report.user_id for report in reports}
-    users = (await db.scalars(select(User).where(User.id.in_(user_ids)))).all()
-    users_by_id = {u.id: u for u in users}
-
-    semaphore = asyncio.Semaphore(REPORT_EMAIL_SEND_CONCURRENCY)
-
-    async def _send_one(report: EventReport, http_client: httpx.AsyncClient) -> None:
-        reporter = users_by_id.get(report.user_id)
-        if reporter is None:
-            return
-        async with semaphore:
-            try:
-                await send_report_outcome_email(
-                    reporter.email,
-                    event,
-                    resolution_note,
-                    reporter.locale,
-                    http_client=http_client,
-                )
-            except Exception:
-                log.error(
-                    "Failed to send report outcome email (report_id=%s, event_id=%s)",
-                    report.id,
-                    event.id,
-                    exc_info=True,
-                    extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
-                )
-
-    # return_exceptions=True is defence-in-depth, mirroring app/email/digest.py's
-    # fan-out: _send_one already catches every send error and logs it, but
-    # anything raised outside that try/except (e.g. a BaseException such as
-    # CancelledError) would otherwise cancel every other in-flight reporter
-    # email and propagate into the caller, after resolution has already
-    # been committed.
-    # One shared client for the whole fan-out (Big-O audit #5, item 2.7),
-    # mirroring digest.py's Big-O audit M7 fix.
-    async with resend_http_client() as http_client:
-        await asyncio.gather(
-            *(_send_one(report, http_client) for report in reports),
-            return_exceptions=True,
-        )
-
-
-async def cancel_event_and_resolve_reports(
-    db: AsyncSession, event: Event, cancellation_reason: str, resolution_note: str
-) -> list[EventReport]:
-    """Cancel ``event`` and resolve its open reports in one call — every
-    cancellation path (admin retract, organizer retract, organizer
-    self-delete, report takedown) must keep this pairing atomic so a
-    cancelled event never leaves an open report behind. See issue #125.
-    Caller commits.
-    """
-    event.status = EVENT_STATUS_CANCELLED
-    event.cancellation_reason = cancellation_reason
-    return await resolve_open_reports(db, event, resolution_note)
 
 
 def validate_tz_aware(v: datetime | None) -> datetime | None:

@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.constants import (
+from app.constants.core import TALLINN_TZ
+from app.constants.ingestion import (
     PUBLISHER_STATUS_ACTIVE,
     PUBLISHER_STATUS_RETIRED,
     SOURCE_KIND_API,
     SOURCE_SLUG_FIENTA,
     STALE_ORGANIZER_RETIRE_DAYS,
-    TALLINN_TZ,
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.models.models import Publisher, Source
@@ -251,3 +251,80 @@ async def test_existing_publisher_updated_not_duplicated(mock_db):
     assert _added_publishers(mock_db) == []
     assert existing_publisher.name == "New Name"
     assert existing_publisher.status == PUBLISHER_STATUS_ACTIVE
+
+
+@pytest.mark.asyncio
+async def test_connection_released_before_http_phase(mock_db):
+    source = _source({"organizer_ids": [42], "organizer_names": {"42": "Org"}})
+    mock_db.scalar.return_value = source
+    order: list[str] = []
+    mock_db.rollback.side_effect = lambda: order.append("rollback")
+
+    async def fake_get(*_a, **_k):
+        order.append("http")
+        return _resp([{"id": 1}])
+
+    with patch("app.ingestion.organizer_sync.http_get", side_effect=fake_get):
+        await sync_fienta_organizers(mock_db)
+
+    assert order[0] == "rollback"
+    assert "http" in order[1:]
+
+
+@pytest.mark.asyncio
+async def test_write_retried_once_on_invalidated_connection(mock_db):
+    from sqlalchemy.exc import DBAPIError
+
+    source = _source({"organizer_ids": [42], "organizer_names": {"42": "Org"}})
+    mock_db.scalar.return_value = source
+    dropped = DBAPIError("UPDATE", {}, Exception("server closed"), connection_invalidated=True)
+    mock_db.flush.side_effect = [dropped, None]
+
+    with patch(
+        "app.ingestion.organizer_sync.http_get",
+        new_callable=AsyncMock,
+        side_effect=[_resp([{"id": 1}]), _resp([])],
+    ):
+        result = await sync_fienta_organizers(mock_db)
+
+    assert result["stale"] == []
+    assert mock_db.flush.await_count == 2
+    assert "last_sync" in source.config
+
+
+@pytest.mark.asyncio
+async def test_non_connection_db_error_not_retried(mock_db):
+    from sqlalchemy.exc import DBAPIError
+
+    source = _source({"organizer_ids": [42], "organizer_names": {"42": "Org"}})
+    mock_db.scalar.return_value = source
+    mock_db.flush.side_effect = DBAPIError("UPDATE", {}, Exception("constraint"))
+
+    with patch(
+        "app.ingestion.organizer_sync.http_get",
+        new_callable=AsyncMock,
+        side_effect=[_resp([{"id": 1}]), _resp([])],
+    ):
+        with pytest.raises(DBAPIError):
+            await sync_fienta_organizers(mock_db)
+
+    assert mock_db.flush.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_write_preserves_concurrent_config_keys(mock_db):
+    first = _source({"organizer_ids": [42], "organizer_names": {"42": "Org"}})
+    fresh = _source(
+        {"organizer_ids": [42], "organizer_names": {"42": "Org"}, "admin_note": "keep"}
+    )
+    mock_db.scalar.side_effect = [first, fresh]
+
+    with patch(
+        "app.ingestion.organizer_sync.http_get",
+        new_callable=AsyncMock,
+        side_effect=[_resp([{"id": 1}]), _resp([])],
+    ):
+        await sync_fienta_organizers(mock_db)
+
+    assert fresh.config["admin_note"] == "keep"
+    assert "last_sync" in fresh.config

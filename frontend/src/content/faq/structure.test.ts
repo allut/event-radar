@@ -3,7 +3,7 @@ import faqEn from './faq.en';
 import faqEt from './faq.et';
 import faqRu from './faq.ru';
 import type { FaqBlock, FaqDoc, FaqInline } from './types';
-import { FAQ_ORGANIZERS_HASH } from '../../constants';
+import { FAQ_ORGANIZERS_HASH } from '../../constants/routes';
 
 // Guards translation drift, as legal/structure.test.ts does: ET and RU must match
 // the canonical English on section ids/order, item ids/order, answer block count

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
+import { API, QUERY_KEYS } from '../../constants/api';
+import { LOCALE_EN, LOCALE_RU, type ContentLang } from '../../constants/core';
 import {
-  API, LOCALE_EN, LOCALE_RU,
-  ORGANIZER_VENUE_NAME_MAX_LEN, ORGANIZER_VENUE_ADDRESS_MAX_LEN, QUERY_KEYS,
-  type ContentLang,
-} from '../../constants';
+  ORGANIZER_VENUE_NAME_MAX_LEN,
+  ORGANIZER_VENUE_ADDRESS_MAX_LEN,
+} from '../../constants/organizer';
 import { t, ti } from '../../i18n';
 import { apiErrorMessage, cx, localizedFieldLabel } from '../../utils';
 import styles from './VenuePicker.module.css';

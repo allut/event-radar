@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.constants import PERSONA_PRIMARY_WEIGHT
+from app._generated.shared_constants import PERSONA_PRIMARY_WEIGHT
 
 
 def _attach_empty_personas(db) -> None:

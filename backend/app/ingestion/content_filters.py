@@ -1,13 +1,13 @@
 """Ingest-time keyword prefilters (Layer 1 of the three-layer content gates).
 
 Word-boundary keyword matching that sets Event.is_explicit / Event.is_non_event
-before any LLM call — see CLAUDE.md "Content Safety" and "Non-Event Filter".
+before any LLM call — see docs/pipeline.md "Content Safety" and "Non-Event Filter".
 """
 
 import re
 from collections.abc import Iterable
 
-from app.constants import (
+from app.constants.ingestion import (
     CONTENT_FILTER_WHITESPACE_COLLAPSE_RE,
     EXPLICIT_KEYWORDS,
     NON_EVENT_TITLE_KEYWORDS,

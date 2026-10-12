@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.cleanup import cleanup_stale_data
-from app.constants import (
+from app.constants.ops import (
     DAILY_FEEDS_RETENTION_DAYS,
     INGESTION_RUNS_RETENTION_DAYS,
     LLM_CALLS_RETENTION_DAYS,

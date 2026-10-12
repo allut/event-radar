@@ -14,14 +14,14 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
+from app._generated.shared_constants import PERSONA_MAX_SELECTABLE
+from app.constants.ranking import (
     ERROR_PERSONA_COUNT,
     ERROR_PERSONA_DUPLICATE,
     ERROR_PERSONA_UNKNOWN,
-    PERSONA_MAX_SELECTABLE,
     PERSONA_RANK_WEIGHTS,
-    RATE_LIMIT_AUTHENTICATED_WRITE,
 )
+from app.constants.rate_limits import RATE_LIMIT_AUTHENTICATED_WRITE
 from app.db import get_db
 from app.models.models import Persona, User, UserPersona
 from app.ranking.score import build_daily_feed_for_user

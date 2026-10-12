@@ -1,58 +1,180 @@
-# Organizer Portal (self-service event submission)
+# Organizer Portal
 
-What's in here: the post-MVP self-service organizer portal — auth, submission, rich-text authoring, auto-publish trust gating, admin review queue, organizer settings, the authenticated organizer contact form, and event claiming. Read this before touching `app/routers/organizer_auth.py`, `app/routers/organizer_events.py`, `app/routers/organizer_profile.py`, `app/routers/organizer_contact.py`, `app/routers/organizer_claims.py`, `app/routers/organizer_claim_edits.py`, `app/claims/`, `frontend/src/routes/EventSubmit/`, or the claim routes/components (`ClaimEvents/`, `ClaimPending/`, `ClaimEventEdit/`, `OrganizerClaimVerify/`, `AdminClaims/`, `ClaimStrip/`, `ClaimEventPicker/`). Saved Venues (`app/routers/organizer_venues.py`, `VenuePicker`) are documented in `docs/data-model.md`'s `venues` entry.
+What's in here: organizer auth, event submission, trust gating and review, rich-text authoring, the organizer contact form, Organizer Settings, and Event Claiming.
 
-**Naming note:** this is a distinct concept from "Organizer Lifecycle (Fienta)" in `docs/pipeline.md` — a Fienta "organizer" there is a ticketing-source id being polled; an `Organizer` here (`app/models/models.py`) is its own account entity, a venue/promoter submitting events directly through a dedicated portal.
+An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter that submits events directly. It is not the Fienta organizer in [pipeline.md](pipeline.md), which is a ticketing-source id being polled. Saved Venues live in [data-model.md](data-model.md)'s Saved Venues section.
 
-- **Auth** — a parallel track to the user magic-link/session stack (`app/routers/organizer_auth.py`, prefix `/organizer/auth`), with its own DB table (`organizers`, `organizer_magic_links`) and distinct signing salts (`AUTH_ORGANIZER_MAGIC_SALT`, `AUTH_ORGANIZER_SESSION_SALT`, `app/constants.py`) so an organizer token can never verify as a user token or vice versa, even though both use the same `URLSafeTimedSerializer(settings.SECRET_KEY)`. TTLs (`ORGANIZER_MAGIC_LINK_TTL_MINUTES`, `ORGANIZER_SESSION_TTL_DAYS`) mirror the user-facing defaults. `organizers.session_token_version` supports the same logout-all revocation pattern as `users.session_token_version`. Like the user track, the organizer session token is set as an httpOnly + Secure + `SameSite=Strict` cookie (`ORGANIZER_SESSION_COOKIE_NAME`, `app/constants.py`) rather than returned to client JS — but scoped `Path=/api/organizer` instead of `/api`, so an organizer endpoint ever added outside `/organizer/*` would silently 401 (see `docs/security.md`'s Auth section and `docs/adr/0001-session-tokens-in-httponly-cookies.md`). **Google sign-in coexists with magic link, organizer-first:** per `docs/adr/0002-google-sign-in-oauth-pkce.md`'s rollout order, the organizer track got the server-side OAuth 2.0 + PKCE flow first (no real organizer users yet — the safe live-test surface), with the consumer track following once proven; magic link never goes away on either track. Gated by `GOOGLE_SIGNIN_ORGANIZER_ENABLED` (backend, authoritative) / `VITE_GOOGLE_SIGNIN_ORGANIZER_ENABLED` (frontend, cosmetic-only).
-- **Submission** — `app/routers/organizer_events.py` (prefix `/organizer/events`) lets an authenticated organizer `POST` a new event (inserted on the adapter-less `user_submission` source via the shared `insert_normalized_event()` helper, then classified + published inline within the request instead of waiting for the next scheduled pass), `PATCH`/`DELETE` (soft-delete via cancel) their own events, `GET` their own submission list (`GET /organizer/events`) or one event by id (`GET /organizer/events/{id}`, same row shape, 404 on a foreign event — it feeds the edit form's prefill, so events beyond the list's first page stay editable), and `POST /organizer/events/image` for a signed Cloudinary image upload (secrets: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, `app/config.py` — log-only/`501` when any of the three is unset, like the contact-email Resend fallback; server-side signature so the API secret never reaches the SPA, gated by `IMAGE_UPLOAD_ALLOWED_MIME` (415) and `IMAGE_UPLOAD_MAX_BYTES` (413)). `_cloudinary_signature`'s SHA-256 digest must match what the Cloudinary account accepts (both SHA-1 and SHA-256 by default) — `signature_algorithm` is an SDK-config-only knob and must never be sent as an upload param, or Cloudinary's signature check 401s (it verifies against the params it actually receives). A per-organizer daily submission cap (`ORGANIZER_DAILY_SUBMISSION_CAP`, 20) and a separate per-organizer daily **image upload** cap (`ORGANIZER_DAILY_IMAGE_UPLOAD_CAP`, 20, tracked via the `organizer_image_uploads` table since an upload can happen before any submission) are both DB-backed anti-abuse ceilings, since the IP-keyed rate limiter can't enforce a per-account cap (an organizer can trivially exceed it across IPs); both are a count-then-insert with no row lock, so both are soft ceilings (concurrent requests from one organizer can overshoot slightly) rather than a hard guarantee. **Per-locale text:** `title`/`description`/`important_info` each take optional `_en`/`_ru` siblings; `_localized()` folds them (et = the base field) into the `*_localized` JSONB columns, dropping blank locales. **Organizer-chosen categories:** an optional `categories` list (each slug validated against `VALID_CATEGORIES`, deduped keeping order, capped at `ORGANIZER_MAX_CATEGORIES` = 3 from `shared/app-config.json`; 422 otherwise — `validate_categories()` in `app/routers/utils.py`) *replaces* `EventClassification.categories` on an organizer's own submissions (create and edit) via `replace_organizer_categories()`, after inline classification. Replace, not merge, because persona affinity sums weights over every category, so keeping LLM categories alongside the organizer's would inflate the score. An empty list on `PATCH` is a no-op (an edit can never leave an event uncategorized, since the overwritten LLM set can't be restored); a bare classification row is created if the LLM call failed. `_persist_classification` keeps an organizer submission's categories on a later `classify_pending` retry (vibes/quality/etc. still refresh). The legacy single `category` key is a deprecated alias folded into `categories` by a `mode="before"` validator (`fold_legacy_category()`) because Cloudflare and Render deploy separately — remove it in a follow-up. Claim edits take the same `categories` list but stay prepend-only (`prepend_organizer_categories()`), and the event's *total* (existing + genuinely new) is capped at 3: over the cap is a 422 and nothing changes, and an event already at or over 3 cannot gain more. The frontend control is `CategoryPicker` (picked tags on top with ✕, remaining options as a quiet list below, dimmed at the cap; existing claim categories render as locked tags). `image_url` is additionally pinned to our own Cloudinary account's delivery path (`_check_image_host`, see `docs/security.md`). Both `url` and `image_url` are scheme-checked only (`safe_external_url()`, not the host-pinned `safe_fetchable_url()` — see `docs/security.md`'s External-URL sanitization bullet for the full fetched-vs-rendered rationale) — an organizer's own ticketing domain is never on `ALLOWED_SOURCE_HOSTS`, and these events are excluded from the daily refetch pass (see Data Flow §8 in `docs/pipeline.md`), so `url` is never fetched server-side and needs no host pin.
-- **Auto-publish + post-hoc review, gated on organizer trust** — a submitted/edited event is flagged `Event.needs_review` and goes live immediately if it clears the normal publish gate (see Data Flow §6 in `docs/pipeline.md`) **and** the submitting `Organizer.verified` is true; `submitted_by_organizer_id` (indexed) attributes it back to its organizer. A brand-new organizer defaults `verified=false`, so its first submission stays `classified`/`needs_review` — never auto-published — until an admin reviews it: this closes the hole where any address that can receive one magic-link email could otherwise push a plausible-looking event with an arbitrary link straight into every user's feed and inbox with no human in the loop. Admin review queue: `GET /admin/submissions` (paginated, excludes cancelled), `POST /admin/submissions/{event_id}/retract` (pulls a submission back out of `published`), `POST /admin/submissions/{event_id}/approve` (clears `needs_review`, flips the organizer to `verified`, and runs the publish gate — every subsequent submission from that organizer auto-publishes as before). `app/publish.py::publish_pending()` enforces the gate itself (excludes any `classified` event whose `submitted_by_organizer_id` resolves to an unverified organizer, NULL-safe for non-organizer events), not just the inline call in `submit_event` — so an unapproved submission can't slip through on the next scheduled `publish_pending` pass either.
+## Auth
 
-## Rich-text authoring (#267)
+- **The organizer track mirrors the consumer magic-link and session stack**, under `app/routers/organizer_auth.py` (prefix `/organizer/auth`). It has its own tables (`organizers`, `organizer_magic_links`) and the TTLs default to the consumer values.
+- **Its own salts keep the tracks apart.** `AUTH_ORGANIZER_MAGIC_SALT` and `AUTH_ORGANIZER_SESSION_SALT` (`app/constants/auth.py`) mean an organizer token never verifies as a consumer token, though both use the same `SECRET_KEY` serializer.
+- **`organizers.session_token_version` backs logout-all**, the same revocation pattern as the consumer track. See [security.md](security.md)'s Session Revocation section.
+- **The session cookie is scoped to `Path=/api/organizer`** (`ORGANIZER_SESSION_COOKIE_PATH`), not `/api`. Every organizer endpoint must stay under `/organizer/*`, or the browser never sends the cookie and the endpoint silently 401s.
+- **Google sign-in shipped on the organizer track first.** [ADR 0002](adr/0002-google-sign-in-oauth-pkce.md) picked it as the safe live-test surface while there were no real organizers. Magic link stays on both tracks. [security.md](security.md)'s Google Sign-In section has the flow.
+- **`GOOGLE_SIGNIN_ORGANIZER_ENABLED` is the authoritative gate.** `VITE_GOOGLE_SIGNIN_ORGANIZER_ENABLED` only hides the button.
 
-`description`/`important_info` (and their `_en`/`_ru` siblings) are authored as HTML in `RichTextEditor` (`frontend/src/components/RichTextEditor/`), a Tiptap toolbar wired into `EventSubmit` — bold, italic, underline, bullet/ordered list, link, heading 3-4, blockquote. Nothing else.
+## Event Submission
 
-- **The allowlist tracks the toolbar.** `ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS`/`ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS` (`app/constants.py`) are exactly the tags those extensions emit, and are backend-only (deliberately *not* generated into `shared/`, so the frontend never carries a second copy). `organizer_sanitize()` (`app/routers/utils.py`) passes them to `sanitize_html()` on every submit/edit (`organizer_events.py`) and every claim edit (`organizer_claim_edits.py`); the shared ingestion allowlist is wider and stays untouched. Add a Tiptap extension → add its tag here, in the same commit.
-- **Limits are per-field, not shared with ingestion:** `ORGANIZER_TITLE_MAX_LEN` (300), `ORGANIZER_DESCRIPTION_MAX_LEN` (30000), `ORGANIZER_IMPORTANT_INFO_MAX_LEN` (15000) — raised alongside rich text, since markup counts against the character budget.
-- **Rendering** — `EventDetail` and `AdminEventDetail` render these fields as sanitized HTML (client-side `dompurify` as defense in depth); the server-side sanitize at write time is the real boundary. See `docs/security.md`'s Stored-HTML sanitization bullet.
+`app/routers/organizer_events.py` (prefix `/organizer/events`) lets an organizer create, edit, cancel and list their own events.
 
-## Organizer contact form
+- **A submission is inserted on the adapter-less `user_submission` source** through `app/ingestion/adapter.py::insert_normalized_event()`. It is then classified and published inside the request, not on the next scheduled pass.
+- **`DELETE` is a soft delete:** it cancels the event.
+- **`GET /organizer/events/{id}` returns one of the caller's own events, with the list's row shape.** A foreign event is a 404. It feeds the edit form's prefill, so events past the list's first page stay editable.
 
-`app/routers/organizer_contact.py` (prefix `/organizer/contact`) is the sibling of the public `routers/contact.py` form, scoped to `get_current_organizer`: the body is a `message` only — name and email come off the session, so there is no honeypot and no spoofable identity. It reuses `send_contact_message()` (`app/email/contact.py`) and swallows send errors exactly as the public form does, and is rate-limited by `RATE_LIMIT_ORGANIZER_CONTACT`. The prefix must stay under `/organizer/*`: `ORGANIZER_SESSION_COOKIE_PATH` scopes the session cookie to `Path=/api/organizer`, so an organizer endpoint mounted anywhere else would silently 401. Frontend: `/organizer/contact` (`frontend/src/routes/OrganizerContact/`, `useOrganizerContactSubmit`), linked from `OrganizerTopBar`'s account menu (`AccountMenu`, `ORGANIZER_ACCOUNT_MENU_ITEMS`) and its `MobileMenu`.
+### Image Upload
+
+- **`POST /organizer/events/image` returns a signed Cloudinary upload**, so the API secret never reaches the SPA. It needs all three `CLOUDINARY_*` settings (`app/config.py`); with any unset it logs and returns 501.
+- **Uploads are gated by `IMAGE_UPLOAD_ALLOWED_MIME` (415) and `IMAGE_UPLOAD_MAX_BYTES` (413).**
+- **Never send `signature_algorithm` as an upload param.** It is an SDK-config knob. Cloudinary verifies against the params it receives, so sending it makes the check 401. `_cloudinary_signature` signs with SHA-256, which the account accepts by default.
+- **`image_url` is pinned to our own Cloudinary account.** See [security.md](security.md)'s Organizer Images section.
+
+### Daily Caps
+
+- **`ORGANIZER_DAILY_SUBMISSION_CAP` and `ORGANIZER_DAILY_IMAGE_UPLOAD_CAP` are per-account, DB-backed ceilings.** The IP-keyed rate limiter can't enforce a per-account cap, since one organizer can spread requests across IPs.
+- **Image uploads are counted in `organizer_image_uploads`**, because an upload can happen before any submission exists.
+- **Both caps are soft.** Each is a count-then-insert with no row lock, so concurrent requests from one organizer can overshoot slightly.
+
+### Localized Text
+
+- **`title`, `description` and `important_info` each take optional `_en`/`_ru` siblings.** `_localized()` folds them into the `*_localized` JSONB columns, with Estonian as the base field, and drops blank locales.
+
+### Organizer Categories
+
+- **An optional `categories` list replaces the LLM's categories** on an organizer's own submission, on create and edit, through `replace_organizer_categories()` after inline classification. Merging would inflate persona affinity, which sums weights over every category.
+- **`app/routers/utils.py::validate_categories()` checks the list.** Each slug must be in `VALID_CATEGORIES`; duplicates drop in order, and more than `ORGANIZER_MAX_CATEGORIES` (`shared/app-config.json`) is a 422.
+- **An empty list on `PATCH` is a no-op.** The overwritten LLM set can't be restored, so an edit can never leave an event uncategorized.
+- **A bare classification row is created if the LLM call failed**, so the organizer's categories still land.
+- **`app/llm/classifier.py::_persist_classification` keeps an organizer's categories on a later retry.** Vibes, quality and the other fields still refresh.
+- **The single `category` key is a deprecated alias**, folded in by `fold_legacy_category()`. It exists because Cloudflare and Render deploy separately. Remove it in a follow-up.
+- **Claim edits only prepend** (`prepend_organizer_categories()`). The event's total is capped at `ORGANIZER_MAX_CATEGORIES`; going over is a 422 that changes nothing.
+- **The frontend control is `CategoryPicker`.** Existing claim categories render as locked tags.
+
+### Submission URLs
+
+- **`url` and `image_url` go through `safe_render_url()`, and the stored value is its re-serialized form.** These URLs are only rendered, never fetched. See [security.md](security.md)'s Rendered-Only URLs section.
+
+## Trust Gating and Review
+
+- **A submission goes live at once only if its organizer is `verified`** and it clears the normal publish gate (see [pipeline.md](pipeline.md)'s Publish Gate section). Every submitted or edited event is also flagged `Event.needs_review`.
+- **A new organizer starts `verified=false`.** Their first submission waits in `classified` until an admin approves it. Otherwise anyone who can receive one magic-link email could push an event with an arbitrary link into every feed and digest.
+- **`submitted_by_organizer_id` (indexed) ties an event to its organizer.**
+- **`app/publish.py::publish_pending()` enforces the gate itself**, not only the inline call in `submit_event`. An unapproved submission can't slip through on the next scheduled pass.
+
+| Admin endpoint | Effect |
+|---|---|
+| `GET /admin/submissions` | Paginated queue, cancelled excluded |
+| `POST /admin/submissions/{event_id}/approve` | Clears `needs_review`, sets the organizer `verified`, runs the publish gate |
+| `POST /admin/submissions/{event_id}/retract` | Pulls a submission back out of `published` |
+
+- **Approval is per organizer, not per event.** After the first approval, every later submission from that organizer auto-publishes.
+
+## Rich-Text Authoring
+
+`description` and `important_info`, with their locale siblings, are authored as HTML in `RichTextEditor`, a Tiptap toolbar in `EventSubmit`. It offers bold, italic, underline, lists, links, headings 3–4 and blockquote.
+
+- **The sanitize allowlist tracks the toolbar.** `ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS`/`_ATTRS` (`app/constants/security.py`) are exactly the tags those extensions emit. Adding a Tiptap extension means adding its tag there in the same commit.
+- **The allowlist is backend-only**, deliberately kept out of `shared/` so the frontend carries no second copy.
+- **[security.md](security.md)'s Stored HTML section owns the sanitize boundary**: `organizer_sanitize()`, its callers and the frontend's defense-in-depth pass.
+- **Length limits are per field, separate from ingestion:** `ORGANIZER_TITLE_MAX_LEN`, `ORGANIZER_DESCRIPTION_MAX_LEN` and `ORGANIZER_IMPORTANT_INFO_MAX_LEN`. They were raised with rich text because markup counts against the budget.
+
+## Organizer Contact Form
+
+- **`app/routers/organizer_contact.py` is the signed-in twin of the public contact form.** The body is only a `message`; name and email come from the session, so there is no honeypot and no spoofable identity.
+- **It reuses `app/email/contact.py::send_contact_message()`** and swallows send errors as the public form does. It is rate-limited by `RATE_LIMIT_ORGANIZER_CONTACT`.
+- **The frontend route is `/organizer/contact`**, reached from `OrganizerTopBar`'s account menu (`ORGANIZER_ACCOUNT_MENU_ITEMS`) and its mobile menu.
 
 ## Organizer Settings
 
-An optional, lightweight organizer identity (#175) — a display name only, no logo or contact-info fields (out of scope per the parent spec, issue #173). Independent of the Saved Venues work (#171/#174, `app/routers/organizer_venues.py`): nothing on the profile prefills into `SubmitEventBody`. Restyled to match the consumer Settings page's section-based layout (Account / Display name / Security), replacing the old bespoke centered-card look.
+A dedicated `/organizer/settings` route (`frontend/src/routes/OrganizerSettings/`), laid out like the consumer Settings page and reached from the account menu.
 
-- **Backend** — `Organizer.name` (nullable `String(255)`, `app/models/models.py`). `app/routers/organizer_profile.py` (prefix `/organizer/profile`, scoped to `get_current_organizer`) exposes `GET`/`PATCH`; `PATCH` strips whitespace and stores a blank/whitespace-only name as `NULL` rather than an empty string. There is no theme field on the profile — theme is a per-browser, device-following override, never stored on an account (ADR 0003; migration 0040 dropped the old `theme_preference` columns); see `docs/design-system.md`'s theming section. The Security section's "log out everywhere" reuses `POST /organizer/auth/logout-all` (`app/routers/organizer_auth.py`), which mirrors the consumer `session_token_version`-bump logout-all pattern and previously had no frontend caller.
-- **Frontend** — a dedicated route, `/organizer/settings` (`frontend/src/routes/OrganizerSettings/`), not folded into `/organizer/dashboard`, reachable from `OrganizerTopBar`'s account menu (`ORGANIZER_ACCOUNT_MENU_ITEMS`) and `MobileMenu`. Renamed from `/organizer/profile` — the Account section (read-only email), Security section (log out everywhere), and Sign-in methods section (Google identity, below) are new; the display-name field/save is unchanged, just restyled into a Settings-style section.
-- **Sign-in methods** — `GET /organizer/profile` additionally returns `google_linked: bool` (an `organizer_identities` existence check, `app/routers/organizer_profile.py::_is_google_linked()`); the Settings page renders linked/not-linked copy off it and, when linked, an unlink button calling `DELETE /organizer/profile/identities/google` (unconditional, no last-factor guard, bumps `session_token_version` and re-issues the caller's own cookie — see ADR 0002). No prefill of name/photo — neither is ever stored.
-- **Nudge banner** — `OrganizerProfileNudge` (`frontend/src/components/OrganizerProfileNudge/`) is shown on the dashboard and submit form whenever the fetched profile's `name` is `null`, and never blocks submission. Dismissal is client-only (`localStorage`, `ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY`) — there's no backend field for it, so a cleared browser just re-shows the nudge once. Its own name is unchanged (it nudges toward filling in a name, not toward "the settings page" per se) — only its link target moved to `/organizer/settings`.
+- **The profile is a display name only.** `Organizer.name` is nullable; `PATCH /organizer/profile` (`app/routers/organizer_profile.py`) strips whitespace and stores a blank name as `NULL`. Nothing on the profile prefills a submission.
+- **There is no theme field.** Theme is a per-browser override, never stored on an account. See [design-system.md](design-system.md)'s Theme Resolution section.
+- **"Log out everywhere" calls `POST /organizer/auth/logout-all`.**
+
+### Sign-In Methods
+
+- **`GET /organizer/profile` returns `google_linked`**, from `app/routers/utils.py::is_identity_linked()`. The page shows linked or not-linked copy from it.
+- **Unlink calls `DELETE /organizer/profile/identities/google`.** It is unconditional, with no last-factor guard. It bumps `session_token_version` and re-issues the caller's own cookie, per [ADR 0002](adr/0002-google-sign-in-oauth-pkce.md).
+- **Google's name and photo are never stored**, so nothing prefills from them.
+
+### Profile Nudge
+
+- **`OrganizerProfileNudge` shows on the dashboard and submit form while `name` is `null`.** It never blocks submission.
+- **Dismissal lives only in `localStorage`** (`ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY`). There is no backend field, so a cleared browser shows the nudge once more.
 
 ## Event Claiming
 
-An organizer can claim ownership of an event Event Radar already ingested from Fienta, KUMU, Estonia Concert Hall, or Piletilevi — proving that ownership through a mechanism specific to the source — then edit the claimed content directly, with no per-edit human review once granted. `app/claims/` (`target_resolution.py`, `verification.py`, `lifecycle.py`, `pinning.py`, `dns_txt.py`, `fienta_token.py`, `piletilevi_promoter.py`) is the service; `app/routers/organizer_claims.py` and `app/routers/organizer_claim_edits.py` are the router boundary. See `CONTEXT.md`'s Event Claiming glossary for the vocabulary (Publisher, Proof channel, Series claim, Claim justification, Dormant claim) and `docs/adr/0004-claim-eligibility-tightening.md` for why the eligibility rules below look the way they do.
+An organizer can claim an event Event Radar ingested from Fienta, KUMU, Estonia Concert Hall or Piletilevi. They prove ownership through a source-specific Proof channel, then edit the claimed content directly with no per-edit review.
 
-- **Claim creation preconditions** (`create_claim()`, `app/claims/lifecycle.py`) — the target event must be `published` and canonical (`dedup_group_id IS NULL` or self-canonical; the same bar `public_event_filter()`/`canonical_event_filter()` apply elsewhere), and must not be the organizer's own direct submission (`submitted_by_organizer_id IS NULL`) — a direct submission has no ingested `EventSource` to claim against and stays on the separate `Organizer.verified` submission-trust track instead. Both rejections return the same 404/422 an id-probing attempt would get against a nonexistent event, so neither distinguishes "doesn't exist" from "not currently claimable." An already-ended event's target remains claimable — the claim covers future re-matched occurrences of the same Publisher/Series too, so there is no not-ended requirement here (discovery/search endpoints keep their own, stricter filtering).
+- **`app/claims/` is the service; `app/routers/organizer_claims.py` and `organizer_claim_edits.py` are the router boundary.**
+- **`CONTEXT.md`'s Event Claiming glossary defines the vocabulary:** Publisher, Proof channel, Publisher claim, Series claim, Claim justification, Dormant claim.
+- **[ADR 0004](adr/0004-claim-eligibility-tightening.md) explains the eligibility rules below.** [security.md](security.md)'s Claims section has the guards on this flow.
 
-- **Tiered target resolution** (`resolve_claim_target_live()`, `app/claims/target_resolution.py`) — the one resolution step reused by claim creation, claim recheck, and verification dispatch, resolved live per source rather than trusting a possibly-unstamped `EventSource.publisher_id` alone:
-  - **Fienta** — resolves the organizer id from the freshest matching `raw_events` payload, falling back to a live re-query of every configured organizer's listings (active and retired) via the existing `FientaAdapter.fetch_organizer` fetch/paginate logic. Always yields a Publisher claim, stamping the `EventSource` row on success — never a Series claim.
-  - **KUMU / Estonia Concert Hall** — always resolves to that source's single seeded constant Publisher (`external_id IS NULL`), independent of whether the row was ever stamped.
-  - **Piletilevi** — resolves the promoter identity from the live event page's schema.org `Event.organizer`. Any promoter identity that resolves — with a verifiable domain or not — always yields a Publisher claim, get-or-created and keyed on that promoter id. Only a promoter that fails to resolve at all falls back to a Series claim, keyed on `event_series_key` (normalized title + lowercased venue).
-  - **Any other case with no resolvable Publisher** (e.g. a dead listing on a non-Piletilevi source) raises `ClaimTargetError`, mapped to a 422 `ERROR_CLAIM_NOT_CLAIMABLE` — rejected outright, never silently downgraded to a Series or admin-review claim.
+### Claim Creation
 
-- **Auto-grant paths per source** (`app/claims/verification.py`), run once per claim at creation and decide `auto_grant` vs. `admin_review`:
-  - **Fienta** — a token round-trip: the claimant is asked to place a proof token somewhere Fienta's own organizer-facing surface exposes it back, verified server-side.
-  - **KUMU / Estonia Concert Hall** — DNS-TXT against that institution's hardcoded verification domain.
-  - **Piletilevi, domain-provable promoter** — DNS-TXT against the promoter's resolved contact domain, the same mechanism as KUMU/ECH.
-  - **Piletilevi, mailbox-provable promoter** — auto-grants only on an exact (case-insensitive) match between the promoter's published contact email and the claimant's own account email; any other outcome (mismatch, or no contact info resolved at all) falls to admin review, with both emails shown to the admin as evidence (`Claim.verification_contact`).
-  - **Series claims** — always admin review; there is no auto-grant path, and creating one requires a non-blank `justification` (stored on the claim, shown in the admin queue) since a Series claim carries no verifiable identity of its own to auto-check against.
+- **The target must be `published` and dedup-canonical**, the same bar `public_event_filter()` and `canonical_event_filter()` apply (`app/claims/lifecycle.py::create_claim()`).
+- **An organizer's own submission can't be claimed.** It has no ingested `EventSource` to claim against, and stays on the `Organizer.verified` trust track instead.
+- **Both rejections return the same 404/422 as a nonexistent event**, so an id probe can't tell "missing" from "not claimable".
+- **An ended event stays claimable.** The claim also covers future re-matched events of the same Publisher or Series. Discovery and search keep their own stricter filters.
+- **Each organizer has a daily claim cap** (`ORGANIZER_DAILY_CLAIM_CAP`).
 
-- **Preemption and expiry lifecycle** (#425 slice 1, reversing two of #409's original decisions — see ADR 0004):
-  - **Approved-only uniqueness** — the partial unique indexes on `publisher_id`/`event_series_key` (migration 0048) constrain only `approved` claims. Multiple `pending` claims may coexist on the same target, each with its own independent proof token; an attempt against a target that already has an *approved* claim still 409s (`ERROR_CLAIM_TARGET_ALREADY_APPROVED`) with a support-facing message — that case is unchanged.
-  - **Proof preempts assertion** — the moment any pending claim on a target passes automated verification (any of the four auto-grant paths above), `auto_decline_other_pending_claims()` (`app/claims/lifecycle.py`) flips every other still-pending claim on that same target to `revoked` and sends each declined claimant the existing decline email. Arrival order decides nothing; verified evidence does.
-  - **Two expiry windows**, both run by the existing expiry sweep and existing notification email: `CLAIM_EXPIRY_DAYS` (7 days of inactivity, reset by the self-service recheck button) for the three mechanisms an organizer can act on to fix — Fienta token, DNS-TXT, Piletilevi domain; and the longer `CLAIM_ADMIN_REVIEW_EXPIRY_DAYS` (30 days, never reset — there is no recheck button) for `admin_review` claims and for `piletilevi_mailbox` claims that fell to admin review, since a mismatched or missing contact mailbox is nothing the organizer can act on either.
-  - **Dormant claims** (#418, unrelated to the above) — an approved claim whose event lost a claimed-vs-claimed dedup collision to a better-quality duplicate goes dormant; its pins stop applying but the row is never deleted, and it reactivates automatically once its target is canonical again. See CONTEXT.md's Dormant claim glossary entry.
+### Target Resolution
 
-- **Surfaces** — organizer: the dashboard's `ClaimEventPicker` (search + email-domain-matched suggestions, #414), `/organizer/claims/:id/pending` (`ClaimPending/`, proof instructions + recheck), `/organizer/claims/:id/edit` and `/organizer/claims/:id/events` (`ClaimEventEdit/`/`ClaimEvents/`, the claim-editing surface over `organizer_claim_edits.py`, writing `Event.pinned_fields` and counted against `claim_edit_attempts`), and `/organizer/claims/verify` (`OrganizerClaimVerify/`) — the landing for `POST /organizer/claims/request-link`'s sign-in link, which encodes the claim intent (`event_id`) in the token itself so it survives a device switch. Public: `ClaimPanel`/`ClaimPill` (`components/ClaimStrip/`) on `EventDetail`. Admin: `/admin/claims` (`AdminClaims/`, `GET /admin/claims` + grant/decline/revoke). Scheduler: `expire_stale_claims`, daily 05:00 Europe/Tallinn.
-- **Public discovery CTA visibility** (#414, narrowed by #423/#441, tightened by #451) — the public event page's "is this your event?" claim panel (`ClaimPanel`) renders for `unclaimed` and pending-only targets alike (#441/ADR 0004: a rival claimant must still be able to start proving ownership), and hides only once a claim is `claimed`/`not_claimable`. The read-only pending pill (`ClaimPill`), however, is **claimant-only**: `GET /events/{id}`'s `claim_status` never carries `pending` to any caller — it collapses into `unclaimed` before serialization (`app/routers/events.py`), so no anonymous visitor, signed-in customer, or *other* organizer can read a target's pending state off the public payload (organizer accounts are free to create, so "organizer-authed" alone was never a real access boundary — and the organizer session cookie, `Path=/api/organizer`, never even reaches this endpoint to make a per-claim distinction). An organizer-authed `EventDetail` instead calls the organizer-scoped `GET /organizer/claims/for-event/{event_id}` (`own_claim_for_event()`, `app/claims/lifecycle.py`) — the caller's own active claim on the event's target, or `null` — and only renders the pending pill when that comes back `pending`. `claimed` stays public (it backs "Organizer-verified" and "Listed by X" for every viewer, per #419).
+`app/claims/target_resolution.py::resolve_claim_target_live()` resolves the target live per source. Claim creation, recheck and verification all reuse it rather than trusting a possibly unstamped `EventSource.publisher_id`.
+
+- **Fienta resolves the organizer id from the freshest matching `raw_events` payload.** It falls back to re-querying every configured organizer's listings, active and retired, through `FientaAdapter.fetch_organizer`. It always yields a Publisher claim and stamps the `EventSource` row.
+- **KUMU and Estonia Concert Hall resolve to the source's single seeded Publisher** (`external_id IS NULL`), stamped or not.
+- **Piletilevi resolves the promoter from the live event page's schema.org `Event.organizer`.** Any promoter that resolves yields a Publisher claim, get-or-created on that promoter id, whether or not it has a verifiable domain.
+- **Only an unresolvable Piletilevi promoter falls back to a Series claim**, keyed on `event_series_key` (normalized title plus lowercased venue).
+- **Any other case with no Publisher raises `ClaimTargetError`**, a 422 `ERROR_CLAIM_NOT_CLAIMABLE`. It is rejected outright, never downgraded to a Series or admin-review claim.
+
+### Verification
+
+`app/claims/verification.py` runs once per claim at creation and picks `auto_grant` or `admin_review`.
+
+| Target | Proof channel |
+|---|---|
+| Fienta | Token round-trip through Fienta's organizer-facing surface |
+| KUMU, Estonia Concert Hall | DNS-TXT on the institution's hardcoded domain |
+| Piletilevi, domain-provable promoter | DNS-TXT on the promoter's contact domain |
+| Piletilevi, mailbox-provable promoter | Exact, case-insensitive match of promoter contact email to the claimant's account email |
+| Series claim | Admin review only |
+
+- **A mailbox mismatch, or no contact info at all, falls to admin review.** Both emails are shown to the admin as evidence (`Claim.verification_contact`).
+- **A Series claim requires a non-blank `justification`.** It carries no verifiable identity to auto-check, so the justification is what the admin reviews.
+
+### Preemption and Expiry
+
+- **Only `approved` claims are unique per target.** The partial unique indexes on `publisher_id` and `event_series_key` ignore `pending` rows, so rival pending claims coexist with their own proof tokens.
+- **A claim against an already-approved target still gets 409** (`ERROR_CLAIM_TARGET_ALREADY_APPROVED`) with a support-facing message.
+- **Proof preempts assertion.** When one pending claim passes automated verification, `auto_decline_other_pending_claims()` (`app/claims/lifecycle.py`) revokes every other pending claim on that target and emails each claimant the decline. Arrival order decides nothing.
+- **`CLAIM_EXPIRY_DAYS` expires a fixable pending claim after inactivity.** That covers Fienta token, DNS-TXT and Piletilevi domain claims. The self-service recheck button resets the window.
+- **`CLAIM_ADMIN_REVIEW_EXPIRY_DAYS` is the longer window, never reset**, for admin-review claims and mailbox claims that fell to review. The organizer can't act to fix those, so they get no recheck button.
+- **The `expire_stale_claims` job runs both windows daily** and sends the expiry email. [backend-ops.md](backend-ops.md)'s Scheduled Jobs section has its time.
+
+### Dormant Claims
+
+- **An approved claim goes dormant when its event loses a claimed-vs-claimed dedup collision** to a better-quality duplicate. Its pins stop applying, but the row is never deleted.
+- **It reactivates automatically** once its target is canonical again.
+
+### Claim Resolution
+
+- **Admin grant and decline send the claim-resolution email** (`app/email/claim_resolution.py`). Both go through `transition_pending_claim()`, so the loser of a race sends none.
+- **Admin revoke deletes the claim row and sends no email.**
+
+### Claim Surfaces
+
+- **The organizer dashboard's `ClaimEventPicker`** searches events and suggests ones whose domain matches the organizer's email.
+- **`/organizer/claims/:id/pending` (`ClaimPending/`)** shows the proof instructions and the recheck button.
+- **`/organizer/claims/:id/edit` and `/organizer/claims/:id/events`** (`ClaimEventEdit/`, `ClaimEvents/`) are the claim-editing surface over `organizer_claim_edits.py`. Edits write `Event.pinned_fields` and count against `claim_edit_attempts`.
+- **`/organizer/claims/verify` (`OrganizerClaimVerify/`) lands `POST /organizer/claims/request-link`'s sign-in link.** The token carries the `event_id`, so the claim intent survives a device switch.
+- **The public `EventDetail` shows `ClaimPanel` and `ClaimPill`** (`components/ClaimStrip/`).
+- **Admins resolve claims at `/admin/claims`** (`AdminClaims/`), over `GET /admin/claims` plus grant, decline and revoke.
+
+### Claim Status Visibility
+
+- **`ClaimPanel`, the "is this your event?" call to action, shows for unclaimed and pending-only targets.** A rival claimant must still be able to start proving ownership. It hides once a target is `claimed` or `not_claimable`.
+- **The public payload never shows `pending`.** `GET /events/{id}` (`app/routers/events.py`) collapses it to `unclaimed` before serialization, for every caller.
+- **Organizer auth alone was never a real boundary.** Organizer accounts are free to create, and the organizer cookie never reaches `/api/events` anyway.
+- **The pending pill (`ClaimPill`) is claimant-only.** A signed-in organizer's `EventDetail` calls `GET /organizer/claims/for-event/{event_id}` (`own_claim_for_event()`), which returns the caller's own active claim or `null`, and shows the pill only on `pending`.
+- **`claimed` stays public.** It backs the "Organizer-verified" and "Listed by X" labels for every viewer.

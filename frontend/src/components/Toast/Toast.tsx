@@ -1,4 +1,4 @@
-import { UI_STATE } from '../../constants';
+import { UI_STATE } from '../../constants/core';
 import styles from './Toast.module.css';
 
 interface ToastProps {

@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.constants import VALID_SIGNALS
+from app._generated.shared_constants import VALID_SIGNALS
 from tests.routers.conftest import execute_rows
 
 

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from 'react';
-import { DROPDOWN_DEFAULT_FOCUS_SELECTOR, MOBILE_BREAKPOINT_PX } from '../constants';
+import { DROPDOWN_DEFAULT_FOCUS_SELECTOR, MOBILE_BREAKPOINT_PX } from '../constants/core';
 import { shouldFlipPopover, shouldFlipPopoverLeft } from '../utils';
 
 export interface UseDropdownResult {

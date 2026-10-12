@@ -2,7 +2,7 @@
 
 import re
 
-from app.constants import SQL_REGEX_WORD_BOUNDARY
+from app.constants.core import SQL_REGEX_WORD_BOUNDARY
 
 
 def alternation_pattern(keywords: frozenset[str]) -> re.Pattern[str]:

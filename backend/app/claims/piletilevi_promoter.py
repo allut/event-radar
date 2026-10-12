@@ -27,14 +27,12 @@ from urllib.parse import urljoin, urlsplit
 import httpx
 from bs4 import BeautifulSoup
 
-from app.constants import (
+from app.constants.claims import (
     FREE_EMAIL_PROVIDER_DOMAINS,
-    HTML_PARSER,
-    JSONLD_ID_KEY,
-    JSONLD_TYPE_KEY,
-    MAILTO_PREFIX,
     PILETILEVI_PROMOTER_URL_MARKER,
 )
+from app.constants.core import HTML_PARSER, MAILTO_PREFIX
+from app.constants.ingestion import JSONLD_ID_KEY, JSONLD_TYPE_KEY
 from app.ingestion.http_client import host_matches_domain, http_get_stored_url
 from app.ingestion.jsonld import parse_jsonld_graph_items
 from app.ingestion.selectors import (

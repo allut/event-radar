@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.constants import LLM_REASONING_MAX_TOKENS
+from app.constants.llm import LLM_REASONING_MAX_TOKENS
 from app.llm.router import LLMError, _content_hash, content_hash, llm_json
 
 

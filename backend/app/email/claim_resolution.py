@@ -14,10 +14,8 @@ import html as html_lib
 import httpx
 
 from app.config import settings
-from app.constants import (
-    CLAIM_EXPIRY_DAYS,
-    ORGANIZER_DASHBOARD_PATH,
-)
+from app._generated.shared_constants import CLAIM_EXPIRY_DAYS
+from app.constants.core import ORGANIZER_DASHBOARD_PATH
 from app.email.links import frontend_url
 from app.email.resend import send_resend_email
 from app.email.brand import brand_mark_html

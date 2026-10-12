@@ -9,13 +9,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from app.constants import (
+from app.constants.core import TALLINN_TZ
+from app.constants.ingestion import (
     SOURCE_KIND_API,
     SOURCE_KIND_HTML_SCRAPE,
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
-    TALLINN_TZ,
     PUBLISHER_RESOLVE_RETRY_COOLDOWN,
 )
 from app.ingestion.publisher_backfill import (

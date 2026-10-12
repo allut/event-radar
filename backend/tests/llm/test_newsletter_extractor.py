@@ -211,7 +211,7 @@ async def test_extract_external_id_format(newsletter_db):
 @pytest.mark.asyncio
 async def test_extract_subject_and_body_truncated_to_constants(newsletter_db):
     """Oversized subject/body are truncated before reaching LLM."""
-    from app.constants import NEWSLETTER_BODY_MAX_LEN, NEWSLETTER_SUBJECT_MAX_LEN
+    from app.constants.llm import NEWSLETTER_BODY_MAX_LEN, NEWSLETTER_SUBJECT_MAX_LEN
 
     captured_prompts: list[str] = []
 

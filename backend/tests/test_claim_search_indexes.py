@@ -9,7 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.dialects import postgresql
 
-from app.constants import EVENT_SEARCH_TEXT_SQL
+from app.constants.events import EVENT_SEARCH_TEXT_SQL
 from app.models.models import Event
 from app.routers.organizer_claims import claim_search_text, claim_url_text
 

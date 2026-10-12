@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApi } from '../api/client';
-import { ADMIN_GENERIC_ERROR, API, ROUTES, UI_STATE, type LoginState } from '../constants';
+import { ADMIN_GENERIC_ERROR } from '../constants/admin';
+import { API } from '../constants/api';
+import type { LoginState } from '../constants/auth';
+import { UI_STATE } from '../constants/core';
+import { ROUTES } from '../constants/routes';
 import { setAdminSignedInHint } from '../lib/adminAuth';
 import { apiErrorMessage } from '../utils';
 

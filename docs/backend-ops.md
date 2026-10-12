@@ -1,93 +1,234 @@
 # Backend Operations
 
-What's in here: deployment topology, admin endpoints, data retention/cleanup, logging, and maintenance scripts.
-
-Read this before touching `render.yaml`, `frontend/wrangler.toml`, `frontend/public/_headers`, `frontend/functions/`, `app/routers/admin.py`, `app/routers/admin_auth.py`, `app/routers/reports.py`, `app/cleanup.py`, `app/logging_config.py`, or `backend/scripts/`.
+What's in here: Render and Cloudflare Pages deployment, secrets, the edge Functions and SPA headers, cron-job.org jobs, admin endpoints, scheduled jobs, CI, retention, logging and maintenance scripts.
 
 ## Deployment
 
-Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend).
+Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). Both build from the `release` branch.
 
-- **Backend — Render web service, Frankfurt, Starter plan** (`render.yaml`): `rootDir: backend`, health check `/health`, `plan: starter`, `region: frankfurt`, `PYTHON_VERSION=3.12` pinned to match CI (`.github/workflows/tests.yml`) and the devcontainer — Render's unpinned default drifted to a newer Python that CI never exercises. Migrations run via `preDeployCommand: alembic upgrade head`, run before `startCommand` (`uvicorn app.main:app ...`) on every deploy — the Starter plan makes `preDeployCommand` available, unlike the old free tier, which needed migrations chained onto `startCommand` instead (`alembic upgrade head && uvicorn ...`) because that feature was paid-only. Secrets (`DATABASE_URL` in asyncpg form `postgresql+asyncpg://...?ssl=require`, `ADMIN_PASSWORD`, LLM/Resend keys, `CORS_ORIGINS`, `FRONTEND_URL`, `CLOUDINARY_CLOUD_NAME`/`CLOUDINARY_API_KEY`/`CLOUDINARY_API_SECRET` — organizer image upload, see `docs/organizer-portal.md`) are `sync: false` env vars; `SECRET_KEY` is auto-generated. `BACKEND_URL` — the API's own absolute URL, `https://event-radar-api-r7l6.onrender.com` (a fresh Render service, so a different hostname from the old free-tier `event-radar-api.onrender.com`), needed by the digest email's RFC 8058 `List-Unsubscribe` header and as one source of `HostCheckMiddleware`'s allowlist (`docs/security.md`) — is a `value:` literal in `render.yaml`, **not** `sync: false`: it is the service's own public URL, not a secret, and a blueprint sync now sets it without a manual dashboard step (the 0.1.6 outage was exactly this var left unset). `RENDER_EXTERNAL_HOSTNAME` is platform-injected (never appears in `render.yaml`) and is the self-correcting second source for the same allowlist. There is **no Render cron service** — Render cron jobs are paid; the backend also no longer needs a keepalive cron job to begin with — the old free tier's 15-min idle sleep (which the removed `/internal/tick` cron-job.org hit, issue #349, kept alive) doesn't apply to Starter's always-on compute, confirmed under real production load before that endpoint and its `INTERNAL_TOKEN` were deleted.
-- **Frontend — Cloudflare Pages** (`frontend/wrangler.toml`, checked in as the build-config source of truth the same way `render.yaml` is for the backend): static Vite build, `pages_build_output_dir = "dist"`. Non-secret build-time vars (`NODE_VERSION`, `VITE_GOOGLE_SIGNIN_CONSUMER_ENABLED`/`VITE_GOOGLE_SIGNIN_ORGANIZER_ENABLED`, `PRERENDER_RENDER_BUDGET_MINUTES`) live in `wrangler.toml`'s `[vars]`; anything credential-shaped is a Cloudflare Pages **Secret** instead (dashboard or `wrangler pages secret put`), never checked in. The API client still calls a relative `/api` prefix; same-origin proxying (sidesteps CORS, and lets the backend's httpOnly session cookie work as a first-party cookie — `docs/adr/0001`) is done by two Cloudflare Pages Functions:
-  - `frontend/functions/api/[[path]].ts` — a catch-all that forwards every `/api/*` request to the Render backend (`BACKEND_ORIGIN`, `frontend/src/constants.ts`) with the `/api` prefix stripped, stripping the wire-encoding response headers (`content-encoding`/`content-length`/`transfer-encoding`/`connection`) that would otherwise describe bytes that no longer match what's re-emitted. Asserts `backendUrl.origin === BACKEND_ORIGIN` before fetching — `new URL(relative, base)` silently discards `base`'s authority for a protocol-relative path (`//host/...`), which would otherwise let a crafted `/api//host/...` request resolve to an arbitrary host with the visitor's session cookie forwarded (OWASP audit G-2). Also rewrites the real-client-IP headers for the two-hop topology (OWASP audit G-1): strips any inbound `X-Forwarded-For`/`X-Client-IP` (forgeable — `onrender.com` is directly reachable) and, when the Cloudflare Pages **Secret** `EDGE_SHARED_SECRET` is set (dashboard or `wrangler pages secret put`, never `wrangler.toml`'s checked-in `[vars]` — must match the backend's `EDGE_SHARED_SECRET`, `render.yaml`), sets `X-Client-IP` from Cloudflare's own `CF-Connecting-IP` header plus `X-Edge-Auth: <secret>`, which `app.rate_limit.client_key()` verifies before trusting the IP. Without the secret configured, rate limiting/lockout falls back to the old rightmost-XFF heuristic (a shared bucket behind the proxy — see `docs/security.md`).
-  - `frontend/functions/[[path]].ts` — the SPA fallback. Tries `env.ASSETS.fetch()` against the real request first (a prerendered route, a built `/assets/*` file, or any other real `dist/` file wins); only a genuine 404 falls through to `app-shell.html`. This explicit fetch-first order is load-bearing, not defensive boilerplate — issue #354 found Cloudflare Pages' documented precedence (serve a matching static asset before invoking any Function) did not hold in production, and this catch-all was observed swallowing every non-`/api` request including built JS/CSS, serving the app-shell for all of them.
+### Render Backend
 
-  Cloudflare's file-based routing matches an exact-path Function (`functions/api/seo-audit.ts`, `functions/api/prerender-cadence.ts`) ahead of the `functions/api/[[path]].ts` catch-all automatically, with no regex/negative-lookahead exclusion to keep in sync when a new function is added under `functions/api/`.
+- **`render.yaml` defines a Starter-plan web service in Frankfurt**, with `rootDir: backend` and a `/health` health check.
+- **`PYTHON_VERSION=3.12` is pinned to match CI and the devcontainer.** Render's unpinned default drifted to a newer Python that CI never runs.
+- **Migrations run as `preDeployCommand: alembic upgrade head`**, before `startCommand` on every deploy.
+- **There's no Render cron service and no keepalive ping.** Render cron jobs are paid, and Starter compute is always on, so nothing has to stop it idling. Timed backend work runs in the embedded scheduler; see Scheduled Jobs.
 
-  Security headers on the served HTML document (`X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, HSTS, `Permissions-Policy`, and a **tailored** CSP) live in `frontend/public/_headers` (Cloudflare's static-headers format, copied into `dist/` by the Vite build) — the backend's `default-src 'none'` CSP only covers JSON API responses, not the app document. The SPA CSP is `default-src 'self'` with `img-src 'self' https: data:` (event images come from arbitrary source hosts), `style-src 'self' 'unsafe-inline'` (React inline styles), and `script-src`/`connect-src`/`font-src` scoped to `'self'` plus the Google Analytics origins (`script-src` also carries a `sha256-…` hash entry pinning `index.html`'s inline pre-paint theme script — see `docs/security.md` for why a hash rather than `'unsafe-inline'`, and the drift guard that keeps it in sync) — self-hosted fonts (`@fontsource-variable/manrope` + `@fontsource/cormorant-garamond`, imported in `src/main.tsx`, bundled into the build) are what let `font-src` stay `'self'`. If any of those move off-origin (a CDN font host, an off-platform analytics beacon), the CSP must be widened to match or they break silently. `_headers` has no negative-lookahead syntax, so instead of excluding `/api/*` from the document-header block it applies the block broadly (`/*`) and then explicitly un-sets each header on `/api/*` (the `!` prefix) — those responses carry only the backend's own `add_security_headers` (`app/main.py`) headers. `/api/seo-audit` and `/api/prerender-cadence` get their own narrow, locked-down block layered on top (`default-src 'none'`, `Cache-Control: no-store`) since those two paths are claimed by their own Pages Functions and never reach the backend proxy at all. Google Analytics is the sole analytics surface (`App.tsx`'s `GoogleAnalytics` component); its pageview URLs pass through `maskAnalyticsUrl()` (`frontend/src/utils.ts`) first, which strips query/hash and collapses `/events/:id` to `/events/[id]` so no event id or token reaches the analytics vendor. Any new dynamic route added to the app must be masked the same way.
-- **Prerender cadence — cron-job.org**: keeps the prerendered snapshots + `sitemap.xml` + `robots.txt` (`frontend/scripts/prerender.ts`, see `docs/frontend.md`) from going stale, by rebuilding on a 6-hour timer. No GitHub Actions involvement (issue #46). Seven components work together; each is its own subsection below.
+### Env Vars and Secrets
 
-  1. **The timer.** A cron-job.org job POSTs to `https://eventradar.ee/api/prerender-cadence` every 6 hours, with an `X-Prerender-Cadence-Token` header (`PRERENDER_CADENCE_TOKEN_HEADER`, its own shared-secret header name, distinct from the SEO-audit job's — see the "Two Cloudflare Pages Function secrets" hardening note below). Six hours mirrors the backend's own dedup/classify/publish/geocode cadence (`LLM_PASS_INTERVAL_HOURS`); that backend cadence is an `interval` trigger from process boot rather than a fixed clock time, so the two jobs need no specific offset — both aim at the same freshness window.
+- **`render.yaml` lists every backend env var; each `sync: false` key is a dashboard secret.** `SECRET_KEY` is auto-generated.
+- **`DATABASE_URL` takes the asyncpg form**, `postgresql+asyncpg://...?ssl=require`.
+- **`BACKEND_URL` is a `value:` literal, not `sync: false`.** It's the service's own public URL (`https://event-radar-api-r7l6.onrender.com`), not a secret, so a blueprint sync sets it with no dashboard step. Leaving it unset once took production down.
+- **`BACKEND_URL` feeds the digest's `List-Unsubscribe` header and `HostCheckMiddleware`'s allowlist.** Render injects `RENDER_EXTERNAL_HOSTNAME` as the allowlist's second, self-correcting source; it never appears in `render.yaml`. See [security.md](security.md)'s Host Check section.
+- **Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET`, not `GOOGLE_CLIENT_*`.** `GOOGLE_SIGNIN_CONSUMER_ENABLED` and `GOOGLE_SIGNIN_ORGANIZER_ENABLED` default to `false`.
+- **The `CLOUDINARY_*` trio backs organizer image upload.** See [organizer-portal.md](organizer-portal.md)'s Image Upload section.
+- **`ADMIN_TOTP_SECRET` comes from `backend/scripts/admin_totp_enroll.py`.** See Maintenance Scripts.
+- **`EDGE_SHARED_SECRET` must match the Cloudflare Pages Secret of the same name.** See API Proxy.
 
-  2. **The gate.** `frontend/functions/api/prerender-cadence.ts` (issue #92, ported to a Cloudflare Pages Function in issue #344) does not POST to the Deploy Hook directly. It first reads the production branch's tip commit — an **authenticated** GitHub API request (Bearer `GH_PRERENDER_CHAIN_TOKEN`, the same `contents: write`-scoped PAT component 4 already uses to commit the round marker; `allut/event-radar` is private, so an unauthenticated read always 404s) — then calls `shouldSkipCadenceTick` (`frontend/src/lib/prerenderChain.ts`): if a chain round (component 4) is currently in flight, the gate skips (200, no-op); otherwise it forwards to the Deploy Hook. A missing token or a genuine GitHub API hiccup while reading the tip commit fails open — the gate fires the hook rather than the collision check silently killing the cadence forever (issue #99). Two Cloudflare Pages project Secrets (dashboard or `wrangler pages secret put`, never `wrangler.toml`'s checked-in `[vars]`) are required: `PRERENDER_CADENCE_TOKEN` (the shared secret cron-job.org sends back) and `PRERENDER_CADENCE_DEPLOY_HOOK_URL` (the real Deploy Hook URL — not given to cron-job.org directly). Without both set, the endpoint 500s rather than silently no-op'ing.
+### Cloudflare Pages Frontend
 
-  3. **The rebuild.** The Deploy Hook (Cloudflare Pages project → Settings → Builds & deployments → Deploy Hooks, `prerender-cadence`, production branch) triggers a Cloudflare Pages build that renders every route. `prerender.ts`'s `main()` runs this only on production builds — `isPreviewBuild()` checks `CF_PAGES === '1' && CF_PAGES_BRANCH !== <production branch>` and returns early otherwise, before any rendering, sitemap/robots write, validation, or marker commit (issue #95). Preview deployments (PR/branch builds) still get a working CSR shell for every route via the `functions/[[path]].ts` SPA-fallback Function; local/dev runs are unaffected since `CF_PAGES` is never set there.
+- **`frontend/wrangler.toml` is the build config's source of truth**, as `render.yaml` is for the backend. Pages serves the static Vite build from `dist`.
+- **Non-secret build vars live in `wrangler.toml`'s `[vars]`**: `NODE_VERSION`, the `VITE_GOOGLE_SIGNIN_*` flags and `PRERENDER_RENDER_BUDGET_MINUTES`.
+- **Anything credential-shaped is a Pages Secret**, set in the dashboard or with `wrangler pages secret put`. `wrangler.toml` is checked in, so a secret never goes in `[vars]`.
+- **`frontend/public/_routes.json` keeps static assets off the Functions path**, so serving them never invokes a Function.
+- **Exact-path Functions win over the catch-all automatically.** `functions/api/seo-audit.ts` and `functions/api/prerender-cadence.ts` match ahead of `functions/api/[[path]].ts`, so there's no exclusion pattern to keep in sync.
+- **Don't install `@cloudflare/workers-types`; extend the shim instead.** `frontend/functions/_shared/cloudflare.ts` hand-rolls `PagesFunction`, `EventContext` and a `jsonResponse` helper. The package would buy only two type names. The trade-off: `tsc` doesn't check a handler against the platform contract, so add a missing member to the shim by hand.
 
-  4. **Chained rounds** (issue #84, fixed in #89). One build can't always render every route in its budget. If work is still queued when the budget runs out, the build triggers its own continuation round — capped at `CHAIN_MAX_ROUNDS` (10) rounds per burst, aborted early on zero progress. See `frontend/src/lib/prerenderChain.ts` and `prerender.ts`'s `commitRoundMarker`. The *only* continuation trigger is the marker commit's git push: `commitRoundMarker` advances `heads/{branch}` via the GitHub Git Data API, and because the production branch is Cloudflare-Pages-git-connected, that push alone starts the next round's build. There is no separate chain Deploy Hook — an earlier version also POSTed to one (`maybeFireDeployHook` / `PRERENDER_CHAIN_DEPLOY_HOOK_URL`), but that fired a second, redundant build of the same commit the branch push already triggered (confirmed via two distinct deployment IDs on one commit, both `failure`), so it was removed. **If a `prerender-chain` Deploy Hook still exists in the dashboard from before this fix, delete it — it's unused.** Chaining needs `GH_PRERENDER_CHAIN_TOKEN` (a GitHub PAT with `contents: write` on `allut/event-radar`) to commit the round-state marker, which carries state between rounds via the commit message. Without `GH_PRERENDER_CHAIN_TOKEN`/`CF_PAGES_BRANCH` set, the marker commit — and thus chaining — is skipped rather than failing the build; the catalog then only catches up via the regular 6-hourly cadence (component 1).
+### API Proxy
 
-  5. **The resume check** (issue #85, fixed in #90). Before doing any work, every build reads the tip commit's marker (`resolveRoundStart`, `frontend/src/lib/prerenderChain.ts`) and decides how to treat it. Cloudflare Pages exposes only the tip commit's SHA as a build-time env var (`CF_PAGES_COMMIT_SHA`), not its message, so a Cloudflare build fetches the commit message itself via an authenticated GitHub API call (the same `GH_PRERENDER_CHAIN_TOKEN`) before applying the same freshness check:
-     - A **fresh** (< `CHAIN_STALENESS_TIMEOUT_MINUTES`, 30 min) `continuing` marker means this build *is* the legitimate continuation that the marker's own push (component 4) started — resume the same burst at `round + 1`.
-     - A **stale, missing, or `done`** marker means this is a new burst — proceed as a normal round 1. (A stale `continuing` marker is read as a crashed mid-chain build, not an active one.)
+`frontend/functions/api/[[path]].ts` forwards every `/api/*` request to Render. The browser sees one origin, so CORS never applies and the session cookie stays first-party (`docs/adr/0001`).
 
-     A build has no way to tell "I am the intended continuation" apart from "I am some other build racing on the same marker" except by this freshness check. An earlier version of the guard skipped (and failed) *both* cases, which meant the chain could never advance past round 1.
+- **It strips the `/api` prefix and targets `BACKEND_ORIGIN` (`frontend/src/constants/api.ts`).** It drops the wire-encoding response headers (`content-encoding`, `content-length`, `transfer-encoding`, `connection`), which would describe bytes that no longer match the re-emitted body.
+- **It asserts `backendUrl.origin === BACKEND_ORIGIN` before fetching.** `new URL(relative, base)` discards the base host for a protocol-relative path. Without the check, `/api//host/...` would send the visitor's cookie to an arbitrary host.
+- **It rewrites the client-IP headers for the two-hop topology.** It strips inbound `X-Forwarded-For` and `X-Client-IP`, then sends `CF-Connecting-IP` with `X-Edge-Auth` when `EDGE_SHARED_SECRET` is set. See [security.md](security.md)'s Client Key section.
+- **Without `EDGE_SHARED_SECRET`, every visitor shares a rate-limit bucket.** The backend falls back to the rightmost `X-Forwarded-For`, which is Cloudflare's egress address.
 
-  6. **The chain-state manifest (R2)** (spec #365, shipped in #366–#369) — a parallel optimization layer over components 4–5, never a correctness dependency. Round 2+ of a burst reads a resolved target's finalized HTML back out of Cloudflare R2 instead of re-fetching it from production, so change-detection traffic shrinks as a burst progresses. Mechanics and rationale are in `docs/frontend.md`'s prerender section; the operator-facing facts: bucket `event-radar-prerender-chain-state`, with the non-secret `CLOUDFLARE_ACCOUNT_ID`/`R2_BUCKET_NAME` in `frontend/wrangler.toml`'s `[vars]` and `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY` as Cloudflare Pages **Secrets** (dashboard or `wrangler pages secret put`, never `[vars]` — that file is checked in). Objects live under `prerender-chain-state/{sanitizedBurstId}/`; a `done` round deletes its own prefix, and an R2 **lifecycle rule** (`chain-state-crash-backstop`, prefix `prerender-chain-state/`, expire after 3 days = `CHAIN_STATE_LIFECYCLE_DAYS`) backstops a burst that crashed before cleaning up. **That rule is bucket configuration set through the Cloudflare dashboard** (R2 → bucket → Settings → Object lifecycle rules, issue #369) — the constant only documents the intended value, so editing it does not move the rule; change both together. Every R2 failure mode (unset credentials, read miss, write failure) degrades silently to the full-refetch behavior of components 4–5 and never fails a build, so an R2 outage shows up as a slower burst, not a broken deploy.
-  7. **The second watcher — live-audit cadence.** See the next bullet below. It observes production directly, so it catches a silently-dead prerender cadence that the six components above would otherwise miss.
+### SPA Fallback
 
-  **Cadence/chain race (issue #92, fixed):** the timer (1) fires on its own clock, independent of chain state (4–5). Without the gate (2), a 6-hourly tick landing while a chain round is genuinely in flight (marker < 30 min old) would fire a build that resumes the same fresh marker — racing the real continuation build for the marker's own branch push. The gate removes this race at its source: the cadence path simply doesn't fire the Deploy Hook while a round is in flight, rather than relying on the two builds' pushes to sort themselves out afterward.
-- **Live-audit cadence — cron-job.org**: a second cron-job.org job, offset from the prerender-cadence job above so the two don't fire simultaneously, hits `POST https://eventradar.ee/api/seo-audit` (`X-Seo-Audit-Token` header, `SEO_AUDIT_TOKEN_HEADER`, its own shared-secret header name) every 6 hours. This is the independent check (issue #54, `frontend/functions/api/seo-audit.ts`, detail in `docs/frontend.md`) that catches a silently-dead prerender cadence — it observes production directly rather than depending on a build having run. Two Cloudflare Pages project Secrets (dashboard or `wrangler pages secret put`) are required for this endpoint to work: `SEO_AUDIT_TOKEN` (the shared secret cron-job.org sends back) and `GH_ISSUE_TOKEN` (a GitHub PAT scoped to Issues: write on `allut/event-radar`, used to file/update/close the `seo-audit-failure` issue). Without both set, the endpoint 500s rather than silently no-op'ing.
+- **`frontend/functions/[[path]].ts` tries `env.ASSETS.fetch()` on the real request first.** A prerendered route, a built `/assets/*` file or any other real `dist/` file wins. Only a genuine 404 falls through to `app-shell.html`.
+- **That fetch-first order is load-bearing.** Pages' documented precedence, static asset before any Function, didn't hold in production. The catch-all served the app shell for every request, built JS and CSS included.
+- **It requests the shell at its extensionless path.** `env.ASSETS.fetch()` applies Pages' `.html`-stripping redirect, which would otherwise hand the browser a visible 308.
 
-**Two Cloudflare Pages Function secrets, two header names (hardening, not just style):** `SEO_AUDIT_TOKEN_HEADER` and `PRERENDER_CADENCE_TOKEN_HEADER` (`frontend/src/constants.ts`) are deliberately distinct from each other. Cloudflare's file-based routing matches `functions/api/seo-audit.ts` and `functions/api/prerender-cadence.ts` as exact paths ahead of the `functions/api/[[path]].ts` catch-all, so there's no regex-mismatch fallthrough that could carry one function's header to the other's endpoint. The distinct header names remain worth keeping regardless: if both functions ever shared one header name, a future refactor that merged their handlers could forward `SEO_AUDIT_TOKEN` or `PRERENDER_CADENCE_TOKEN` to the backend under a header it wasn't meant for. Rotate the corresponding cron-job.org job's configured header name if either constant ever changes again.
+### SPA Security Headers
+
+`frontend/public/_headers` sets the app document's headers in Cloudflare's static-headers format. The build copies it into `dist/`. The backend's `default-src 'none'` CSP covers only JSON API responses.
+
+- **The document gets `X-Frame-Options: DENY`, `X-Content-Type-Options`, `Referrer-Policy`, HSTS, `Permissions-Policy` and a tailored CSP.**
+- **The CSP is `default-src 'self'`, widened only where something needs it:**
+
+| Directive | Sources | For |
+|---|---|---|
+| `img-src` | `'self' https: data:` | event images from arbitrary source hosts |
+| `style-src` | `'self' 'unsafe-inline'` | React inline styles |
+| `script-src` | `'self'`, Google Analytics, one `sha256-…` hash | GA, and `index.html`'s pre-paint theme script |
+| `connect-src` | `'self'`, Google Analytics | GA beacons |
+| `font-src` | `'self'` | the `@fontsource` faces bundled in `src/main.tsx` |
+
+- **Moving a resource off-origin breaks it silently unless the CSP widens to match.** A CDN font host or an off-platform analytics beacon are the likely cases.
+- **The hash, its drift guard and the GA entries are in [security.md](security.md)'s Frontend CSP section.**
+- **The document block applies to `/*`, then un-sets each header on `/api/*` with the `!` prefix.** `_headers` has no negative lookahead. API responses carry only the backend's own `app/main.py::add_security_headers` headers.
+- **`/api/seo-audit` and `/api/prerender-cadence` get their own locked-down block** (`default-src 'none'`, `Cache-Control: no-store`). Their own Functions answer them, so they never reach the backend proxy.
+
+## External Cron Jobs
+
+Two cron-job.org jobs POST to Pages Functions every 6 hours, offset so they don't fire together. This section holds the operator setup. The Functions' mechanics are in [seo.md](seo.md).
+
+| Job | Endpoint | Header | Pages Secrets |
+|---|---|---|---|
+| Prerender cadence | `POST https://eventradar.ee/api/prerender-cadence` | `X-Prerender-Cadence-Token` | `PRERENDER_CADENCE_TOKEN`, `PRERENDER_CADENCE_DEPLOY_HOOK_URL`, `GH_PRERENDER_CHAIN_TOKEN` |
+| Live audit | `POST https://eventradar.ee/api/seo-audit` | `X-Seo-Audit-Token` | `SEO_AUDIT_TOKEN`, `GH_ISSUE_TOKEN` |
+
+- **Either endpoint returns 500 when its secrets are unset**, rather than silently doing nothing.
+- **Each job has its own header name on purpose** (`PRERENDER_CADENCE_TOKEN_HEADER`, `SEO_AUDIT_TOKEN_HEADER`). If the Functions shared one, a refactor merging their handlers could forward a token to the backend under the wrong header.
+- **Changing either header constant means updating that cron-job.org job's header too.**
+- **Six hours mirrors the backend's LLM pass cadence (`LLM_PASS_INTERVAL_HOURS`).** That cadence is an interval from process boot, not a clock time, so the prerender job needs no particular offset from it.
+
+### Prerender Cadence
+
+The prerender cadence rebuilds production every 6 hours, so snapshots, `sitemap.xml` and `robots.txt` stay fresh. The chain mechanics are in [seo.md](seo.md)'s Round Chaining section.
+
+1. **cron-job.org POSTs to `prerender-cadence.ts`, the gate.**
+2. **The gate fires the Deploy Hook unless a chain round is in flight.** cron-job.org never sees the hook's URL.
+3. **The Deploy Hook starts a production build.** It lives under the Pages project's Settings → Builds & deployments → Deploy Hooks, named `prerender-cadence`, on the production branch.
+4. **A build that runs out of budget commits a round marker.** That push to the git-connected production branch starts the next round.
+
+- **`GH_PRERENDER_CHAIN_TOKEN` is a GitHub PAT with `contents: write` on `allut/event-radar`.** The gate reads the tip commit with it, and the build reads and commits the marker. The repo is private, so an unauthenticated read 404s.
+- **Without `GH_PRERENDER_CHAIN_TOKEN` or `CF_PAGES_BRANCH`, chaining is skipped, not failed.** The catalog then catches up only on the 6-hour cadence.
+- **Delete any leftover `prerender-chain` Deploy Hook in the dashboard.** The marker push is the only continuation trigger. An older chain hook fired a second, redundant build of the same commit.
+
+### R2 Chain-State Bucket
+
+- **The bucket is `event-radar-prerender-chain-state`.** `CLOUDFLARE_ACCOUNT_ID` and `R2_BUCKET_NAME` sit in `wrangler.toml`'s `[vars]`. `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` are Pages Secrets.
+- **Its lifecycle rule is dashboard config**: `chain-state-crash-backstop`, prefix `prerender-chain-state/`, expire after 3 days. Set it under R2 → bucket → Settings → Object lifecycle rules.
+- **`CHAIN_STATE_LIFECYCLE_DAYS` only documents the rule's value.** Editing it doesn't move the rule, so change both together.
+- **An R2 outage shows up as a slower burst, never a broken deploy.** Every R2 failure falls back to a full re-fetch; see [seo.md](seo.md)'s Chain-State Manifest (R2) section.
+
+### Live Audit
+
+- **The live-audit job catches a dead prerender cadence** by checking production directly, independent of any build. See [seo.md](seo.md)'s Live Audit section.
+- **`GH_ISSUE_TOKEN` is a GitHub PAT with Issues: write on `allut/event-radar`.** The audit uses it to file, update and close the `seo-audit-failure` issue.
 
 ## Admin Endpoints
 
-**Operate the pipeline via the admin console, not curl** (issue #163 retired the curl-first workflow docs). Sign in at `/admin/login` (username/password + TOTP). `/admin` is the dashboard, `/admin/pipeline` triggers every job below with a live NDJSON result stream and danger-guard confirmation on destructive/expensive actions (digest send, cleanup delete), `/admin/dedup` reviews dedup groups (`GET /admin/dedup/groups`), `/admin/submissions` is the organizer-submission review queue, `/admin/claims` is the event-claim review queue, `/admin/reports` is the report queue, and `/admin/events/:id` is the single-event inspector. **Every `/admin/*` endpoint below requires the admin console session cookie — HTTP Basic is not accepted anywhere** (H-1 in the 2026-08-27 OWASP audit: the Basic branch only ever checked `ADMIN_USERNAME`/`ADMIN_PASSWORD`, never TOTP, so it made the console's second factor bypassable on every route that accepted it). `GET /admin/counts` and `GET /admin/stats` were the last Basic-eligible routes; OWASP audit #4 removed them from it too (password-only access doubled as a guess oracle the per-IP lockout can't slow across many IPs), so they are session-only like every other `GET` (`/admin/reports`, `/admin/submissions`, `/admin/claims`, `/admin/events/{id}`, `/admin/dedup/groups`) discloses reporter/organizer PII or moderation-sensitive event content and is session-only like the mutating routes (OWASP audit G-5 moved `/admin/dedup/groups` off Basic earlier — it returns `title`/`venue`/`url`/`is_explicit` for `draft`/`classified`/`rejected` events, not aggregate counts). A script that needs to trigger a job, or read a PII surface, must sign in via `POST /admin/auth/login` and reuse the resulting cookie instead.
+Operate the pipeline through the admin console at `/admin`, not curl. Its login, session, epoch claim and lockout are in [security.md](security.md)'s Admin Console Auth section.
 
-There is no HTTP Basic surface: every route, `GET /admin/counts` and `/admin/stats` included, takes only the admin console's own session cookie (`app/auth/dependencies.py::get_current_admin`); `ADMIN_USERNAME` (default `"admin"`, refused outside development) + `ADMIN_PASSWORD` are checked only at `POST /admin/auth/login`, with `secrets.compare_digest`. Every other route — every mutating (`POST`) route *and* the PII- or moderation-content-bearing `GET`s (`/admin/reports`, `/admin/submissions`, `/admin/claims`, `/admin/events/{id}`, `/admin/dedup/groups`) — accepts **only** the session cookie (`app/auth/dependencies.py::get_current_admin`) — see the H-1 note above; there is no Basic fallback for anything that writes. Failed logins log a warning (audit trail). With no password set, any credentials are accepted (logs a warning) **only** when both `APP_ENV=development` and `ALLOW_INSECURE_DEV=true` (`app/config.py`) — see `docs/security.md`'s `require_configured_secret` double gate for the full rationale (the same double gate protects the inbound webhook). Otherwise the password is required — unset = 503.
+- **Every `/admin/*` route takes only the console's session cookie** (`app/auth/dependencies.py::get_current_admin`). A script that needs a job or a PII view signs in through `POST /admin/auth/login` and reuses the cookie.
+- **`/admin/pipeline` triggers every job with a live result stream.** It asks for confirmation before an expensive or destructive run, such as a digest send or a cleanup delete.
+- **Every `/admin/*` route is rate-limited.** See [security.md](security.md)'s Rate Limiting section.
 
-**Admin console auth (`/admin/auth/*`, issue #154)** — a third auth track (`app/routers/admin_auth.py`) behind the lazy-loaded `/admin/*` frontend shell: `POST /admin/auth/login` takes username + password + a TOTP code (RFC 6238, secret in `ADMIN_TOTP_SECRET`, generated once via `backend/scripts/admin_totp_enroll.py`) in one submit, checked against `ADMIN_USERNAME`/`ADMIN_PASSWORD` (`admin_credentials_ok`, `app/auth/admin_lockout.py`). On success it sets an httpOnly/Secure/`SameSite=Strict` `admin_session` cookie (`ADMIN_SESSION_COOKIE_PATH = "/api/admin"`, `ADMIN_SESSION_TTL_SECONDS` = 12h) — no admins table, no per-admin identity, and no per-session revocation (the epoch claim below is the only revocation lever). Failed form logins feed a per-`client_key()` consecutive-failure lockout (`check_admin_lockout`/`record_admin_auth_failure`/`clear_admin_auth_failure`, `app/auth/admin_lockout.py`, used only by `admin_auth.py`). `POST /admin/auth/logout` clears the cookie; `GET /admin/auth/me`, and every mutating `/admin/*` route, goes through `get_current_admin` (defined in `app/auth/dependencies.py`, imported by both `admin.py` and `admin_auth.py`) — a cookie-only dependency mirroring `get_current_organizer`, with no Basic fallback, so the TOTP step this login enforces can't be bypassed on any route. `GET /admin/counts` and `/admin/stats` use it too. `generate_admin_session_token`/`verify_admin_session_token` (`app/auth/tokens.py`) also embed an `"e"` (epoch) claim derived (`_admin_session_epoch`) as a SHA-256 digest of `ADMIN_SESSION_EPOCH` + `ADMIN_PASSWORD` + `ADMIN_TOTP_SECRET` (OWASP audit F4) — bumping the epoch var on a redeploy, or rotating either credential, invalidates every outstanding admin session immediately, the cheapest durable revocation this no-admins-table design supports (see M-1 in the audit). TOTP verification (`app/auth/totp.py::verify_totp_code`) rejects an exact code reuse within its own still-valid drift window (`ADMIN_TOTP_VALID_WINDOW`), on top of the standard time-step check. `app/main.py`'s lifespan also logs an ERROR if `APP_ENV=development` but `DATABASE_URL` resolves to a non-local host (`DEV_DB_LOCAL_HOSTS`), flagging exactly that misconfiguration. `ENABLE_SCHEDULER=false` (`app/config.py`) disables the embedded scheduler via `app/main.py::_start_scheduler()`, but only when `APP_ENV=development` — ignored elsewhere — and it's absent from `render.yaml`, so production always defaults to on. Every `/admin/*` route is also rate-limited (`RATE_LIMIT_ADMIN`, see `docs/security.md`).
+### Job Triggers
 
-**Audit logging** — `log_admin_action()` (`app/routers/utils.py`) adds a durable `AdminAction` row to the caller's own open `db` session (rides the same transaction as the mutation it records — atomic, never a best-effort write) and returns a zero-arg closure that emits the Axiom `admin_action` log line. Callers with a transaction (submission retract/approve, claim grant/decline/revoke, report resolve/takedown, pipeline-run) must invoke that closure only *after* their own `await db.commit()` succeeds, so a rolled-back mutation (e.g. the `admin_actions`-table-missing incident, below) can never produce a log line claiming an action that never happened; the three `db=None` sites in `stream_admin_job` have no transaction to ride and invoke it immediately. A boot-time guard (`app/db.py::assert_schema_at_head`, called first thing in `app/main.py`'s `lifespan`) compares the DB's alembic revision against the migration head and raises before serving traffic in production (warns only in development) — added after a prod incident where code shipped a migration (`0030_admin_actions.py`) that the deployed DB never ran, so every audited admin action 500'd instead of failing at boot. The CI `migrations` job (see the root `CLAUDE.md`'s CI paragraph) now round-trips the alembic chain on every PR to catch that class of drift before it ships.
+- **Most scheduled jobs have a `POST /admin/<job>` trigger that runs them outside the schedule.** Dedup and classify use the drain-now variant; see [pipeline.md](pipeline.md)'s Backlog Drain section.
+- **`POST /admin/pipeline/run` runs the seven pipeline stages in dependency order.** Its digest stage defaults to `dry_run=true`.
+- **`/admin/geocode`, `/admin/refetch` and `/admin/cleanup` run standalone**, outside `/admin/pipeline/run`. Run refetch before a manual geocode to re-resolve coordinates an address change nulled.
+- **`POST /admin/cleanup` defaults to `dry_run=true`**, like every destructive admin or maintenance tool here. Pass `?dry_run=false` to delete.
+- **Claim grant and decline send the claim-resolution email; revoke deletes the row and sends none.** See [organizer-portal.md](organizer-portal.md)'s Event Claiming section.
 
-List endpoints that can grow unbounded (e.g. `/admin/dedup/groups`) are paginated via `limit`/`offset` query params with caps in `app/constants.py` (`ADMIN_*_PAGE_SIZE`, `ADMIN_*_MAX_PAGE_SIZE`). Pagination is by logical unit (dedup group, not row) so a single noisy cluster cannot dominate a page. Add the same pattern to any new admin list endpoint.
+### Streaming
 
-Manual pipeline triggers: `POST /admin/dedup`, `POST /admin/classify`, `POST /admin/publish`, `POST /admin/geocode`, `POST /admin/refetch` run the corresponding scheduled job synchronously (dedup/classify use the drain-now variant, see `docs/pipeline.md`'s Backlog drain) for ad-hoc operation outside the cron cadence. `POST /admin/geocode` and `POST /admin/refetch` run standalone (`geocode_pending_job` / `refetch_event_details_job`) — neither is part of `POST /admin/pipeline/run`. Run `/admin/refetch` before a manual `/admin/geocode` if you want coords NULLed by an address change re-resolved in the same operation. `POST /admin/cleanup` runs `cleanup_stale_data` (see Data Retention & Cleanup below) standalone, outside `/admin/pipeline/run`; defaults to `dry_run=true`. The remaining routes are `POST /admin/ingest` (runs ingestion for every enabled source) + `POST /admin/ingest/{slug}` (single source), `POST /admin/build-feeds`, `POST /admin/send-digests`, `GET /admin/dedup/groups`, `GET /admin/stats`, and the organizer submission review queue — `GET /admin/submissions` (paginated, excludes cancelled), `POST /admin/submissions/{event_id}/retract`, `POST /admin/submissions/{event_id}/approve` (see `docs/organizer-portal.md`), and the event-claim review queue — `GET /admin/claims`, `POST /admin/claims/{claim_id}/grant`, `POST /admin/claims/{claim_id}/decline`, `POST /admin/claims/{claim_id}/revoke` (see `docs/organizer-portal.md`'s Event Claiming section; grant/decline send the claim-resolution email, revoke deletes the row and sends none). **Streaming (issue #159):** all 12 job-trigger endpoints above stream NDJSON (one envelope line per stage, `Cache-Control: no-store`) instead of returning a single JSON body — `/admin/pipeline`'s frontend console consumes them live. The eleven single-stage triggers go through the shared `stream_admin_job()` helper (`routers/utils.py`) — use it for any new one rather than calling the job directly; a failure becomes a `status: "error"` line rather than an HTTP 500, since headers are already sent by the time a streamed job can fail. `POST /admin/pipeline/run` (`admin_pipeline_run`) hand-rolls its own per-stage loop instead, because it needs stop-on-first-failure semantics with a per-stage result dict that `stream_admin_job()`'s single-line envelope can't express. Both paths run the job as an independent `asyncio` task fed through a queue rather than a direct `await` inside the streaming generator — a client disconnect cancels the generator (Starlette's `StreamingResponse` races `listen_for_disconnect` against the body on uvicorn's pinned ASGI spec_version "2.3", cancelling whichever task is streaming), and a direct `await` would let that cancellation reach into the job and cut it off mid-run. `run_admin_job()` (JSON-response, 500-on-failure) itself is no longer used by any job trigger, but still backs every non-streaming mutating `/admin/*` action (report/submission resolution, takedown — see issues #155/#156).
+- **Job triggers stream NDJSON**, one envelope line per stage with `Cache-Control: no-store`. The `/admin/pipeline` console reads them live.
+- **Add a single-stage trigger through `app/routers/utils.py::stream_admin_job()`.** A failure becomes a `status: "error"` line, not a 500, because the headers are already sent when a streamed job fails.
+- **`app/routers/admin.py::admin_pipeline_run` hand-rolls its stage loop.** It needs stop-on-first-failure with a per-stage result dict, which the single-line envelope can't express.
+- **Both paths run the job as its own `asyncio` task fed through a queue.** A client disconnect cancels the streaming generator, because Starlette races `listen_for_disconnect` against the body. A direct `await` would let that cancellation cut the job off mid-run.
+- **`run_admin_job()` backs the non-streaming mutating actions**, such as report and submission resolution and takedown. It returns JSON, and a 500 on failure.
+
+### Audit Logging
+
+- **`app/routers/utils.py::log_admin_action()` adds an `AdminAction` row to the caller's own `db` session.** The row rides the mutation's transaction, so it's atomic, never a best-effort write.
+- **It returns a closure that emits the Axiom `admin_action` log line.** Call it only after `await db.commit()` succeeds, so a rolled-back mutation never logs an action that didn't happen.
+- **`stream_admin_job`'s `db=None` sites call the closure at once.** They have no transaction to wait for.
+- **`app/db.py::assert_schema_at_head` runs first in the lifespan.** It stops a production boot when the DB isn't at the migration head, and only warns in development. The CI `migrations` job catches the same drift before merge; see CI.
+
+### Pagination
+
+- **Unbounded admin lists page with `limit`/`offset`**, capped by `ADMIN_*_PAGE_SIZE` and `ADMIN_*_MAX_PAGE_SIZE` in `app/constants/admin.py`. Give a new admin list endpoint the same pattern.
+- **Pages count logical units, such as dedup groups, not rows**, so one noisy cluster can't fill a page.
+
+## Scheduled Jobs
+
+APScheduler runs embedded in the FastAPI process (`app/main.py::_register_scheduled_jobs()`), on Europe/Tallinn time. The cadence constants live in `app/constants/jobs.py`.
+
+| Cadence | Job |
+|---|---|
+| Hourly | `ingest_all_sources` (job id; the callable is `ingest_all_enabled`) |
+| Every 6h | `dedup_pass`, `classify_pending`, `publish_pending`, `geocode_pending`, `backfill_publisher_ids` |
+| Daily 04:30 | `refetch_event_details` |
+| Daily 05:00 | `expire_stale_claims` |
+| Daily 06:00 | `build_daily_feeds` |
+| Daily 07:00 | `send_daily_digests` |
+| Sun 03:00 | `sync_fienta_organizers` |
+| Sun 03:30 | `cleanup_stale_data` |
+
+- **The daily jobs run in a fixed order.** Refetch reconciles source detail pages, stale claims expire, then the feed build reads the result an hour before the digest sends it.
+- **`backfill_publisher_ids` and `expire_stale_claims` are scheduler-only.** Neither has an admin trigger. The publisher backfill has a CLI instead (see Maintenance Scripts).
+- **`ENABLE_SCHEDULER` turns the scheduler off in the devcontainer.** A `--reload` server left running overnight then can't arm live scrapes, LLM spend or digest email on a timer.
+- **`app/main.py::_start_scheduler()` honours `ENABLE_SCHEDULER=false` only when `APP_ENV=development`.** The var is absent from `render.yaml`, so production always runs the scheduler.
+
+## CI
+
+- **`.github/workflows/tests.yml` runs on every push and PR to `master`.** It runs `pytest --cov` on Python 3.12, `npm run test:coverage` on Node 24, and a `migrations` job. The two test jobs run no Postgres, because backend tests mock the DB.
+- **The `migrations` job round-trips the alembic chain against a `postgres:16` service.** It runs `upgrade head`, `downgrade base`, `upgrade head`, then `alembic check`, which fails when a model changed without a matching migration.
+- **That job exists because of a prod incident.** Code shipped the `admin_actions` model and its migration, but the deployed DB never ran it, so every audited admin action returned 500.
+- **Ruff, mypy, eslint and the TypeScript type-check don't run in CI.** Run them locally before committing. The dependency CVE audit is described in [security.md](security.md)'s Dependency Audit section.
 
 ## Data Retention & Cleanup
 
-`app/cleanup.py::cleanup_stale_data()` runs weekly (Sun 03:30 Europe/Tallinn, right after organizer sync) and prunes aged rows from satellite/audit tables via a fixed set of bulk `DELETE`s (one per table, no N+1). **`events` rows are never deleted** — only satellite data (auth tokens, LLM-call/ingestion-run logs, raw payloads, old feed snapshots, never-verified user/organizer account rows) — preserving event history and the `user_event_feedback` indirect-feedback signal indefinitely.
+`app/cleanup.py::cleanup_stale_data()` runs weekly, Sunday 03:30, right after the organizer sync. It prunes aged rows with one bulk `DELETE` per table.
 
-| Table | Retention window (`app/constants.py`) | Notes |
-|---|---|---|
-| `auth_magic_links` | `MAGIC_LINK_RETENTION_DAYS` (7) | sweeps both expired-unused and long-used rows |
-| `organizer_magic_links` | `MAGIC_LINK_RETENTION_DAYS` (7) | mirrors `auth_magic_links` (organizer auth track) |
-| `llm_calls` | `LLM_CALLS_RETENTION_DAYS` (90) | also the dedup/classification cache window — a content hash re-seen after 90 days costs one fresh LLM call instead of a cache hit |
-| `raw_events` | `RAW_EVENTS_RETENTION_DAYS` (90) | a one-off forensic/backfill script that reads `raw_events.payload` cannot recover a row pruned past this window |
-| `ingestion_runs` | `INGESTION_RUNS_RETENTION_DAYS` (90) | |
-| `raw_inbound_emails` | `RAW_INBOUND_EMAILS_RETENTION_DAYS` (90) | |
-| `daily_feeds` | `DAILY_FEEDS_RETENTION_DAYS` (30) | |
-| `users` (unverified only) | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) | only `email_verified = false` rows with no unused, unexpired magic link — a row `_get_or_create_user` inserts on an unauthenticated `POST /auth/request-link` before the address is proven reachable (see `docs/security.md`'s email verification gate for the full rationale) |
-| `organizers` (unverified only) | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) | only rows with `email_verified_at IS NULL` (stamped on every sign-in path: magic link, claim link, Google), `verified = false`, no unused-unexpired magic link, and no submitted event, linked identity, claim or venue. Magic-link rows are pruned earlier in the same job, so they are never the evidence (OWASP audit H-2) |
+- **`events` rows are never deleted.** Only satellite data goes, which preserves event history and the `user_event_feedback` signal indefinitely.
 
-`POST /admin/cleanup` triggers this on demand — like every other destructive admin/maintenance tool in this codebase, it **defaults to dry-run** (`?dry_run=false` to actually delete).
+| Table | Retention window (`app/constants/ops.py`) |
+|---|---|
+| `auth_magic_links` | `MAGIC_LINK_RETENTION_DAYS` (7), expired-unused and long-used rows |
+| `organizer_magic_links` | `MAGIC_LINK_RETENTION_DAYS` (7), same rule |
+| `llm_calls` | `LLM_CALLS_RETENTION_DAYS` (90) |
+| `raw_events` | `RAW_EVENTS_RETENTION_DAYS` (90) |
+| `ingestion_runs` | `INGESTION_RUNS_RETENTION_DAYS` (90) |
+| `raw_inbound_emails` | `RAW_INBOUND_EMAILS_RETENTION_DAYS` (90) |
+| `daily_feeds` | `DAILY_FEEDS_RETENTION_DAYS` (30) |
+| `users`, unverified only | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) |
+| `organizers`, unverified only | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) |
+
+- **The `llm_calls` window is also the dedup and classification cache window.** A content hash re-seen after 90 days costs one fresh LLM call.
+- **A forensic or backfill script can't recover a `raw_events` payload pruned past its window.**
+- **An unverified user is pruned only with `email_verified = false` and no unused, unexpired magic link.** `POST /auth/request-link` creates the row before the address is proven. See [security.md](security.md)'s Email Verification Gate section.
+- **An unverified organizer is pruned only with `email_verified_at IS NULL` and `verified = false`.** It must also have no unused, unexpired magic link, and no submitted event, linked identity, claim or venue.
+- **Every organizer sign-in path stamps `email_verified_at`**: magic link, claim link and Google.
+- **Magic-link rows never count as evidence for keeping an organizer.** The same job prunes them earlier in its run.
 
 ## Logging
 
-`app/logging_config.py::configure_logging()` is the single logging entry point. It is called at import time in `app/main.py` — deliberately *after* uvicorn configures its own logging, so it runs last and wins. It strips the framework loggers (`uvicorn`, `uvicorn.error`, `uvicorn.access`, `sqlalchemy.engine`) of their own handlers and re-points them at the root logger, so every line (app, uvicorn, SQL echo) shares one timestamped format. `configure_logging()` is idempotent (safe under `--reload` and in tests).
+`app/logging_config.py::configure_logging()` is the single logging entry point. `app/main.py` calls it at import time, after uvicorn configures its own logging, so it runs last and wins.
 
-- **Development** — human-readable text to the console **and** a rotating file under `backend/logs/` (sizes/names in the `LOG_*` constants). SQL echo logs at INFO.
-- **Production** (`APP_ENV != development`) — JSON-lines (`JsonLogFormatter`) to the console. SQL echo drops to WARNING. If `LOG_SHIP_URL` is set, logs are also shipped to an HTTP drain (e.g. Axiom) via a `QueueHandler` → background `QueueListener` thread so the request path never blocks; auth is `Bearer LOG_SHIP_TOKEN`. Two filters guard the access log: `_AccessPathStripFilter` (attached to the `uvicorn.access` logger itself, so it runs before *every* handler, console included) strips the query string from each access-line path (OWASP audit G-4 — OAuth codes, unsubscribe tokens, search terms), and `_AccessPathSuppressFilter` (shipping `QueueHandler` only) drops successful (`< 400`) uvicorn access lines for the paths in `LOG_SHIP_SUPPRESS_ACCESS_PATHS` (`/health`) before shipping, so the platform health probe doesn't dominate the drain; errors on those paths still ship. Each record is POSTed as a single-element JSON array (`[{…}]`) because Axiom's ingest endpoint expects an array of events, not a bare object — also accepted by other JSON drains.
-- **Never crash the app** — log-shipping network failures are swallowed (`handleError`); `shutdown_log_shipping()` stops the listener thread on app shutdown (wired into the lifespan in `main.py`).
-- **Log shipping is batched** — `HttpLogShipHandler` buffers formatted records and POSTs one JSON array per `LOG_SHIP_BATCH_SIZE` (100) records, with a daemon timer thread flushing a partial buffer every `LOG_SHIP_FLUSH_INTERVAL_SECONDS` (2s) and `close()` flushing the remainder. A failed POST drops that batch (never retried, never crashes the app).
-- All logging literals (formats, date format, file size/backup count, queue size, timeouts) live in `app/constants.py` (`LOG_*`); `LOG_LEVEL` / `LOG_SHIP_URL` / `LOG_SHIP_TOKEN` are settings in `app/config.py`.
-- **Monitoring spec** — `docs/observability.md` is the version-controlled source of truth for the Axiom side: the shipped log-record shape, the `LOG_EVENT_*` `event` taxonomy, and the APL queries behind each hand-created Axiom monitor (Axiom's free tier has no monitors-as-code, so the doc stands in for it). Update it whenever a `LOG_EVENT_*` constant or a shipped log field is added or renamed.
+- **It re-points the framework loggers at the root logger.** `uvicorn`, `uvicorn.error`, `uvicorn.access` and `sqlalchemy.engine` lose their own handlers, so app, uvicorn and SQL lines share one timestamped format.
+- **It's idempotent**, so it's safe under `--reload` and in tests.
+- **Development logs readable text to the console and a rotating file under `backend/logs/`.** SQL echo logs at INFO.
+- **Production (`APP_ENV != development`) logs JSON lines (`JsonLogFormatter`) to the console.** SQL echo drops to WARNING.
+- **The logging literals live in `app/constants/ops.py` (`LOG_*`).** `LOG_LEVEL`, `LOG_SHIP_URL` and `LOG_SHIP_TOKEN` are settings in `app/config.py`.
+
+### Log Shipping
+
+- **With `LOG_SHIP_URL` set, logs also ship to an HTTP drain such as Axiom.** A `QueueHandler` feeds a background `QueueListener` thread, so the request path never blocks. Auth is `Bearer LOG_SHIP_TOKEN`.
+- **`HttpLogShipHandler` batches.** It POSTs one JSON array per `LOG_SHIP_BATCH_SIZE` (100) records. A daemon timer flushes a partial buffer every `LOG_SHIP_FLUSH_INTERVAL_SECONDS` (2s), and `close()` flushes the rest.
+- **The body is always a JSON array**, because Axiom's ingest endpoint expects an array of events. Other JSON drains accept it too.
+- **Shipping never crashes the app.** `handleError` swallows network failures, and a failed batch is dropped, never retried. The lifespan calls `shutdown_log_shipping()` to stop the listener thread.
+- **`_AccessPathStripFilter` strips the query string from every access-log path.** It sits on the `uvicorn.access` logger, so it runs before every handler, console included. That keeps OAuth codes, unsubscribe tokens and search terms out of logs.
+- **`_AccessPathSuppressFilter` drops successful access lines for `LOG_SHIP_SUPPRESS_ACCESS_PATHS` (`/health`) before shipping.** The platform health probe would otherwise dominate the drain. Errors on those paths still ship.
+- **[observability.md](observability.md) is the source of truth for the Axiom side**: the shipped record shape, the `LOG_EVENT_*` taxonomy and each monitor's APL query. Axiom's free tier has no monitors-as-code. Update it when a `LOG_EVENT_*` constant or shipped field changes.
 
 ## Maintenance Scripts
 
-`backend/scripts/` holds one-off operational scripts run manually from `backend/` with the venv active (they add `backend/` to `sys.path`, so `from app.*` resolves regardless of CWD). **Naming convention:** an `_`-prefixed filename means a throwaway, machine-local one-off — `.gitignore` excludes `backend/scripts/_*`, so those are never committed. Give a script a plain name only when it is meant to live in version control; otherwise prefix it with `_` (a truly local working copy may exist there without appearing in this list).
+`backend/scripts/` holds one-off operational scripts, run by hand from `backend/` with the venv active. Each adds `backend/` to `sys.path`, so `from app.*` resolves from any working directory.
 
-- **`reset_events.py`** — wipes all event/pipeline data and resets IDs to 1. `TRUNCATE ... RESTART IDENTITY CASCADE` over `events`, `raw_events`, `event_sources`, `event_classifications`, `user_event_feedback`, `daily_feeds`, `ingestion_runs`, `llm_calls`, `raw_inbound_emails`, then sets `sources.last_run_at`/`last_status` back to `NULL` so ingestion re-fetches from scratch. **`users`, `personas`, and `sources` rows are preserved** (only the sources' run state is cleared). Dry run by default (prints the masked `DATABASE_URL` + per-table BEFORE counts); pass `--yes` to truncate. Verifies all targets are zero AFTER and warns on any nonzero. The truncate cannot be undone — intended for resetting a dev/staging DB or clearing bad ingested data, not routine use.
+- **An `_`-prefixed filename is a machine-local throwaway.** `.gitignore` excludes `backend/scripts/_*`. Give a script a plain name only when it belongs in version control.
+
+### reset_events.py
+
+- **`reset_events.py` wipes all event and pipeline data and resets IDs to 1.** It runs `TRUNCATE ... RESTART IDENTITY CASCADE` over `events`, `raw_events`, `event_sources`, `event_classifications`, `user_event_feedback`, `daily_feeds`, `ingestion_runs`, `llm_calls` and `raw_inbound_emails`.
+- **It then resets `sources.last_run_at` and `last_status` to `NULL`**, so ingestion re-fetches from scratch.
+- **Users, organizers, personas, sources, publishers and claims are preserved.** Only the sources' run state is cleared.
+- **`CASCADE` also empties `event_reports`**, and claim edits pinned onto the wiped events go with them.
+- **It's a dry run by default**, printing the masked `DATABASE_URL` and per-table counts. `--yes` truncates, then warns on any table that isn't empty afterwards.
+- **The truncate can't be undone.** It's for resetting a dev or staging DB or clearing bad ingested data, not routine use.
 
 ```bash
 cd backend                              # venv active
@@ -95,5 +236,9 @@ python scripts/reset_events.py          # dry run: target DB + row counts
 python scripts/reset_events.py --yes    # actually truncate (irreversible)
 ```
 
-- **`admin_totp_enroll.py`** — one-time local enrollment for the admin console's TOTP step: generates a fresh secret, prints it plus a scannable QR code (`--account` sets the label), and the operator sets the secret as `ADMIN_TOTP_SECRET` in the Render dashboard. Not an app endpoint. No backup codes — losing the authenticator means re-running this and rotating `ADMIN_TOTP_SECRET` (which also invalidates every outstanding admin session, see the epoch claim above).
-- **`backfill_publisher_ids.py`** — manual one-shot of `app/ingestion/publisher_backfill.py::backfill_publisher_ids()` (stamps `event_sources.publisher_id` for currently-claimable Fienta/KUMU/Estonia Concert Hall events — see `docs/pipeline.md`'s Publisher mirroring). The same function also runs every 6h as the `backfill_publisher_ids` scheduler job (a no-op once nothing is unstamped), so the script is only needed to force it immediately. Dry run by default (prints only the masked `DATABASE_URL`); `--yes` to write.
+### Other Scripts
+
+- **`admin_totp_enroll.py` enrolls the admin console's TOTP step locally.** It prints a fresh secret and a scannable QR code (`--account` sets the label). Set the secret as `ADMIN_TOTP_SECRET` in the Render dashboard.
+- **There are no backup codes.** A lost authenticator means re-running the script and rotating `ADMIN_TOTP_SECRET`, which also ends every admin session.
+- **`backfill_publisher_ids.py` runs `app/ingestion/publisher_backfill.py::backfill_publisher_ids()` once, now.** It stamps `event_sources.publisher_id` for claimable Fienta, KUMU and Estonia Concert Hall events; see [pipeline.md](pipeline.md)'s Organizer Lifecycle (Fienta) section.
+- **The scheduler already runs the backfill every 6 hours**, so the script only forces it early. It's a dry run by default; `--yes` writes.

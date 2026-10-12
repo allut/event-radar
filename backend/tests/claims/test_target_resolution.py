@@ -16,9 +16,8 @@ from app.claims.target_resolution import (
     _get_or_create_publisher,
     resolve_claim_target_live,
 )
-from app.constants import (
-    CLAIM_KIND_PUBLISHER,
-    CLAIM_KIND_SERIES,
+from app.constants.claims import CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES
+from app.constants.ingestion import (
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,

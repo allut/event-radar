@@ -11,13 +11,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from starlette.requests import Request
 
-from app.constants import (
+from app._generated.shared_constants import (
     DEFAULT_CURRENCY,
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
-    TALLINN_CENTER_LAT,
-    TALLINN_CENTER_LNG,
 )
+from app.constants.events import TALLINN_CENTER_LAT, TALLINN_CENTER_LNG
 
 
 @pytest.fixture

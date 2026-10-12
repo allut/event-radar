@@ -12,7 +12,7 @@ import {
   shouldCommitRoundMarker,
   type RoundMarker,
 } from './prerenderChain';
-import { CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES } from '../constants';
+import { CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES } from '../constants/prerender';
 
 function makeMarker(overrides: Partial<RoundMarker> = {}): RoundMarker {
   return {
@@ -333,7 +333,7 @@ describe('shouldCommitRoundMarker', () => {
       // This is the bug under test: scripts/prerender.ts's main() used to call
       // commitRoundMarker(marker) unconditionally here, instead of gating on
       // shouldCommitRoundMarker(marker) — so it always pushed, and the push
-      // alone triggers the next build (docs/backend-ops.md).
+      // alone triggers the next build (docs/seo.md "Round Chaining").
       if (shouldCommitRoundMarker(marker)) {
         selfTriggeredPushes++;
         commitMessage = `prerender: round ${marker.round} (${marker.status})\n\n${serializeRoundMarker(marker)}`;

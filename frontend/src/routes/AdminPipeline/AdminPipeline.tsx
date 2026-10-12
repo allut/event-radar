@@ -1,6 +1,7 @@
 import { memo, useState } from 'react';
 import type { NdjsonLine } from '../../api/client';
-import { ADMIN_PIPELINE_TRIGGERS, API, type AdminPipelineTrigger } from '../../constants';
+import { ADMIN_PIPELINE_TRIGGERS, type AdminPipelineTrigger } from '../../constants/admin';
+import { API } from '../../constants/api';
 import { useTriggerRun, type RunState } from '../../hooks/useTriggerRun';
 import ConfirmRunModal from './ConfirmRunModal';
 import PipelineRunBreakdown from './PipelineRunBreakdown';

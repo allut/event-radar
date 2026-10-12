@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Landing from './Landing';
 import { renderWithProviders, makeEvent } from '../../test/utils';
-import { API } from '../../constants';
+import { API } from '../../constants/api';
 
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),

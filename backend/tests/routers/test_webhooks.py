@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi import FastAPI
 
-from app.constants import (
-    APP_ENV_DEVELOPMENT,
+from app.constants.core import APP_ENV_DEVELOPMENT
+from app.constants.email import (
     SVIX_ID_HEADER,
     SVIX_SIGNATURE_HEADER,
     SVIX_TIMESTAMP_HEADER,

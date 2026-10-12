@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Navigate, useLocation } from 'react-router-dom';
-import { ROUTES, ROBOTS_NOINDEX } from '../../constants';
+import { ROUTES } from '../../constants/routes';
+import { ROBOTS_NOINDEX } from '../../constants/seo';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import AdminShell from '../../components/AdminShell';
 import AdminLogin from '../AdminLogin';

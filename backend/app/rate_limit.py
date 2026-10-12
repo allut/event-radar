@@ -18,13 +18,13 @@ from starlette.responses import Response
 from starlette.types import ExceptionHandler
 
 from app.config import settings
-from app.constants import (
+from app.constants.http import (
     HEADER_X_CLIENT_IP,
     HEADER_X_EDGE_AUTH,
     HEADER_X_FORWARDED_FOR,
-    LOG_EVENT_RATE_LIMIT_BLOCK,
-    RATE_LIMIT_IPV6_PREFIX_LEN,
 )
+from app.constants.log_events import LOG_EVENT_RATE_LIMIT_BLOCK
+from app.constants.rate_limits import RATE_LIMIT_IPV6_PREFIX_LEN
 
 log = logging.getLogger(__name__)
 

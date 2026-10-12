@@ -1,4 +1,4 @@
-import { GTAG_SCRIPT_SRC } from '../constants';
+import { GTAG_SCRIPT_SRC } from '../constants/analytics';
 import { maskAnalyticsUrl } from '../utils';
 
 declare global {

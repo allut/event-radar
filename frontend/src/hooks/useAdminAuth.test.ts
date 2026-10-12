@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAdminAuth } from './useAdminAuth';
 import { setAdminSignedInHint, clearAdminSignedInHint } from '../lib/adminAuth';
-import { ADMIN_SIGNED_IN_HINT_KEY } from '../constants';
+import { ADMIN_SIGNED_IN_HINT_KEY } from '../constants/auth';
 
 // Mirrors useOrganizerAuth.test.ts — same subscribe/getSnapshot shape, third
 // independent session track.

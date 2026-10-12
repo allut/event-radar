@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { organizerApi } from '../../api/client';
-import { API, EVENT_CLAIM_STATUS_CLAIMED, EVENT_CLAIM_STATUS_PENDING, ROUTES, UI_STATE } from '../../constants';
+import { API } from '../../constants/api';
+import { EVENT_CLAIM_STATUS_CLAIMED, EVENT_CLAIM_STATUS_PENDING } from '../../constants/claims';
+import { UI_STATE } from '../../constants/core';
+import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
 import { apiErrorMessage, isClaimJustificationRequiredError } from '../../utils';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';

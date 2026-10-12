@@ -22,33 +22,30 @@ import SelectMenu from '../../components/SelectMenu';
 import DateRangeMenu from '../../components/DateRangeMenu';
 import SignInModal from '../../components/SignInModal';
 import UpsellCard from './UpsellCard';
+import { CATEGORIES, VIBES } from '../../_generated/sharedConstants';
+import { ANALYTICS_EVENTS } from '../../constants/analytics';
+import { API, QUERY_KEYS } from '../../constants/api';
+import { UI_STATE } from '../../constants/core';
 import {
-  API,
-  ANALYTICS_EVENTS,
-  CATEGORIES,
-  VIBES,
   EXPLORE_AUDIENCE_ALL,
   EXPLORE_AUDIENCE_FOR_YOU,
   EXPLORE_FILTER_TYPES,
   EXPLORE_SEARCH_DEBOUNCE_MS,
   EXPLORE_UPSELL_CARD_POSITION,
-  PRERENDER_ERROR_ATTR,
-  PRERENDER_READY_ATTR,
-  QUERY_KEYS,
-  ROUTES,
   SORT_DEFAULT,
   SORT_OPTIONS,
   SIGNAL_TO_SIGNIN_TRIGGER,
   SIGNAL_TO_UPSELL_ACTION,
   SIGN_IN_TRIGGER_FOR_YOU,
-  UI_STATE,
   UPSELL_ACTION_FOR_YOU,
   type DatePreset,
   type ExploreFilterType,
-  type Signal,
   type SignInTrigger,
   type SortOption,
-} from '../../constants';
+} from '../../constants/explore';
+import type { Signal } from '../../constants/feedback';
+import { PRERENDER_ERROR_ATTR, PRERENDER_READY_ATTR } from '../../constants/prerender';
+import { ROUTES } from '../../constants/routes';
 import {
   activeFacetCount,
   buildExploreApiQuery,
@@ -153,7 +150,7 @@ export default function Explore() {
     [setSearchParams],
   );
   // filter_type is a fixed vocabulary (EXPLORE_FILTER_TYPES) — see
-  // ANALYTICS_EVENTS.exploreFilterChange in constants.ts's Code Quality Rule
+  // ANALYTICS_EVENTS.exploreFilterChange in constants/analytics.ts and the Code Quality Rule
   // on not inlining literal event/param values at call sites.
   const trackFilterChange = useCallback(
     (filterType: ExploreFilterType) =>

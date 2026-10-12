@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { ROUTES } from '../constants';
+import { ROUTES } from '../constants/routes';
 import { useAuth } from './useAuth';
 import { useLocaleNavigate } from './useLocaleNavigate';
 import { useLocalePath } from './useLocalePath';

@@ -1,4 +1,4 @@
-"""Tests for the admin organizer-submission review queue (Phase 2 §2.2):
+"""Tests for the admin organizer-submission review queue:
 GET /admin/submissions, POST /admin/submissions/{id}/retract,
 POST /admin/submissions/{id}/approve."""
 
@@ -8,12 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.constants import (
+from app.constants.admin import (
     ADMIN_ACTION_APPROVE_SUBMISSION,
     ADMIN_ACTION_RETRACT_SUBMISSION,
-    APP_ENV_DEVELOPMENT,
-    EVENT_STATUS_CANCELLED,
 )
+from app.constants.core import APP_ENV_DEVELOPMENT
+from app.constants.events import EVENT_STATUS_CANCELLED
 from tests.routers.conftest import patch_admin_settings, scalars_returning
 
 
@@ -186,7 +186,7 @@ async def test_retract_submission_auto_resolves_open_reports(
     with (
         patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
-        patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
+        patch("app.events.cancellation.send_report_outcome_email", new=AsyncMock()),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT

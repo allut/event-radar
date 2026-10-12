@@ -12,18 +12,17 @@ from bs4 import BeautifulSoup
 from sqlalchemy import ColumnElement, and_, false, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
+from app.constants.claims import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
-    EVENT_STATUS_CANCELLED,
-    HTML_PARSER,
     ORGANIZER_CLAIM_EDIT_CAP_CEILING,
     ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT,
     ORGANIZER_DAILY_CLAIM_EDIT_CAP,
-    REFETCH_PRICE_TOLERANCE,
-    TALLINN_TZ,
 )
+from app.constants.core import HTML_PARSER, TALLINN_TZ
+from app.constants.events import EVENT_STATUS_CANCELLED
+from app.constants.ingestion import REFETCH_PRICE_TOLERANCE
 from app.ingestion.http_client import http_get_stored_url, normalized_hostname
 from app.ingestion.jsonld import offers_from_jsonld_items, parse_jsonld_event_items
 from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS

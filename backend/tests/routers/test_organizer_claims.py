@@ -9,19 +9,19 @@ import pytest
 from fastapi import HTTPException
 
 from app.claims.lifecycle import ClaimError
-from app.constants import (
+from app.constants.auth import DETAIL_MAGIC_LINK_SENT
+from app.constants.claims import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
     CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
-    DETAIL_MAGIC_LINK_SENT,
     ERROR_CLAIM_EVENTS_NOT_PUBLISHER,
     ERROR_CLAIM_NOT_FOUND,
     ERROR_CLAIM_OWN_SUBMISSION,
     ERROR_DAILY_CLAIM_LIMIT,
-    ERROR_EVENT_NOT_FOUND,
 )
+from app.constants.events import ERROR_EVENT_NOT_FOUND
 
 
 def _fake_claim(**overrides) -> MagicMock:
@@ -311,7 +311,7 @@ class TestGetClaim:
     async def test_assembles_dns_instructions_for_dns_txt_mechanism(
         self, mock_db, make_request, make_organizer
     ):
-        from app.constants import CLAIM_VERIFICATION_MECHANISM_DNS_TXT
+        from app.constants.claims import CLAIM_VERIFICATION_MECHANISM_DNS_TXT
         from app.routers.organizer_claims import get_claim
 
         organizer = make_organizer(organizer_id=5)
@@ -360,7 +360,7 @@ class TestGetClaim:
     async def test_no_dns_instructions_for_admin_review_mechanism(
         self, mock_db, make_request, make_organizer
     ):
-        from app.constants import CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW
+        from app.constants.claims import CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW
         from app.routers.organizer_claims import get_claim
 
         organizer = make_organizer(organizer_id=5)
@@ -410,7 +410,7 @@ class TestGetClaim:
         a *pending* claim — a real admin revoke of a *granted* claim deletes
         the row outright (see the tombstone test below), so the API
         translates the stored value to CLAIM_STATUS_DECLINED here."""
-        from app.constants import CLAIM_STATUS_DECLINED, CLAIM_STATUS_REVOKED
+        from app.constants.claims import CLAIM_STATUS_DECLINED, CLAIM_STATUS_REVOKED
         from app.routers.organizer_claims import get_claim
 
         organizer = make_organizer(organizer_id=5)
@@ -435,7 +435,7 @@ class TestGetClaim:
         """#446: the row is gone (admin_revoke_claim deletes it), but the
         AdminAction audit row it left behind lets the pending screen render
         CLAIM_STATUS_REVOKED instead of a bare 404."""
-        from app.constants import CLAIM_STATUS_REVOKED
+        from app.constants.claims import CLAIM_STATUS_REVOKED
         from app.routers.organizer_claims import get_claim
 
         organizer = make_organizer(organizer_id=5)
@@ -543,7 +543,7 @@ class TestListOwnClaims:
         """(#447) list_own_claims only ever lists rows that still exist — a
         real admin revoke deletes its row — so a stored CLAIM_STATUS_REVOKED
         here is always a decline and must be reported as such."""
-        from app.constants import CLAIM_STATUS_DECLINED, CLAIM_STATUS_REVOKED
+        from app.constants.claims import CLAIM_STATUS_DECLINED, CLAIM_STATUS_REVOKED
         from app.routers.organizer_claims import list_own_claims
 
         organizer = make_organizer(organizer_id=5)

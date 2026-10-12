@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { EXPLORE_PARAM, ROUTES, SEARCH_MAX_LEN } from '../../constants';
+import { EXPLORE_PARAM, SEARCH_MAX_LEN } from '../../constants/explore';
+import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';

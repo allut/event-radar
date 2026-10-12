@@ -8,7 +8,7 @@ from collections import namedtuple
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from app.constants import DEFAULT_USER_CITY, DEFAULT_USER_LOCALE
+from app._generated.shared_constants import DEFAULT_USER_CITY, DEFAULT_USER_LOCALE
 
 import pytest
 from itsdangerous import BadSignature
@@ -80,7 +80,7 @@ class TestSessionToken:
         # Tokens minted before the "v" claim existed must keep working —
         # they decode to version 1, matching the new column's server_default.
         from app.auth.tokens import _serializer
-        from app.constants import AUTH_SESSION_SALT
+        from app.constants.auth import AUTH_SESSION_SALT
 
         legacy_token = _serializer().dumps({"uid": 5}, salt=AUTH_SESSION_SALT)
         assert verify_session_token(legacy_token) == (5, 1)

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { t } from '../../i18n';
-import { ORGANIZER_ACCOUNT_MENU_ITEMS, ORGANIZER_NAV_ITEMS, ROUTES } from '../../constants';
+import { ORGANIZER_ACCOUNT_MENU_ITEMS, ORGANIZER_NAV_ITEMS, ROUTES } from '../../constants/routes';
 import { useBarScrolled } from '../../hooks/useBarScrolled';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import AccountMenu from '../AccountMenu';

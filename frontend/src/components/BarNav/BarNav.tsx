@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { ROUTES, type NavItem } from '../../constants';
+import { ROUTES, type NavItem } from '../../constants/routes';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
 import { useLocalePath } from '../../hooks/useLocalePath';

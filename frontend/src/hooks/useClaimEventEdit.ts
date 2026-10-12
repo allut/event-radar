@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../api/client';
-import { API, CLAIM_ERROR_CODE_DORMANT, HTTP_STATUS_CONFLICT, ORGANIZER_MAX_CATEGORIES, QUERY_KEYS } from '../constants';
+import { ORGANIZER_MAX_CATEGORIES } from '../_generated/sharedConstants';
+import { API, HTTP_STATUS_CONFLICT, QUERY_KEYS } from '../constants/api';
+import { CLAIM_ERROR_CODE_DORMANT } from '../constants/claims';
 import { t } from '../i18n';
 import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, toggleCapped, type LocalizedTextFields } from '../utils';
 

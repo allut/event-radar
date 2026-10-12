@@ -23,8 +23,16 @@
  * (OWASP audit L-8); non-POST is answered 405 here instead.
  */
 import { StatusCodes } from 'http-status-codes';
-import { FAVICON_ICO_PATH, LOCALES, PRODUCTION_ORIGIN, ROBOTS_TXT_PATH, ROUTES, SEO_AUDIT_TOKEN_HEADER, SITEMAP_PATH } from '../../src/constants.js';
-import type { LocaleCode } from '../../src/constants.js';
+import { LOCALES } from '../../src/_generated/sharedConstants.js';
+import { ROUTES } from '../../src/constants/routes.js';
+import {
+  FAVICON_ICO_PATH,
+  PRODUCTION_ORIGIN,
+  ROBOTS_TXT_PATH,
+  SEO_AUDIT_TOKEN_HEADER,
+  SITEMAP_PATH,
+} from '../../src/constants/seo.js';
+import type { LocaleCode } from '../../src/constants/core.js';
 import { localizedPath } from '../../src/lib/urlLocale.js';
 import { evaluateLiveAudit, parseFirstSitemapEventUrl, parseSnapshotAssetUrls } from '../../src/lib/seoAudit.js';
 import { reportAuditFailure, reportAuditRecovery } from '../../src/lib/seoAuditIssue.js';

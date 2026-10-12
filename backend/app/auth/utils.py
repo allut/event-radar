@@ -7,11 +7,9 @@ from typing import Protocol
 
 from fastapi import HTTPException, status
 
-from app.constants import (
-    APP_ENV_DEVELOPMENT,
-    EMAIL_MASK_VISIBLE_CHARS,
-    ERROR_FEATURE_DISABLED,
-)
+from app.constants.auth import EMAIL_MASK_VISIBLE_CHARS
+from app.constants.core import APP_ENV_DEVELOPMENT
+from app.constants.security import ERROR_FEATURE_DISABLED
 
 log = logging.getLogger(__name__)
 

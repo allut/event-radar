@@ -23,13 +23,15 @@ from app.claims.lifecycle import (
 )
 from app.claims.target_resolution import ClaimTarget
 from app.claims.verification import VerificationResult
-from app.constants import (
+from app._generated.shared_constants import (
     CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
+    CLAIM_EXPIRY_DAYS,
+)
+from app.constants.claims import (
     CLAIM_DISCOVERY_STATUS_CLAIMED,
     CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
-    CLAIM_EXPIRY_DAYS,
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
@@ -44,9 +46,11 @@ from app.constants import (
     ERROR_CLAIM_NOT_CLAIMABLE,
     ERROR_CLAIM_OWN_SUBMISSION,
     ERROR_CLAIM_TARGET_ALREADY_APPROVED,
-    ERROR_EVENT_NOT_FOUND,
-    KUMU_VERIFICATION_DOMAIN,
     ORGANIZER_DAILY_CLAIM_CAP,
+)
+from app.constants.events import ERROR_EVENT_NOT_FOUND
+from app.constants.ingestion import (
+    KUMU_VERIFICATION_DOMAIN,
     SOURCE_SLUG_KUMU,
     SOURCE_SLUG_PILETILEVI,
 )
@@ -555,7 +559,7 @@ class TestRunVerificationSsrfGuard:
         raise out of verification, and not be fetched."""
         from app.claims.lifecycle import _run_verification
         from app.claims.verification import series_claim_result
-        from app.constants import CLAIM_KIND_PUBLISHER
+        from app.constants.claims import CLAIM_KIND_PUBLISHER
 
         es = fake_event_source(publisher_id=33, source_slug=SOURCE_SLUG_PILETILEVI)
         event = make_event()

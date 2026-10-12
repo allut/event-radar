@@ -9,14 +9,10 @@ import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';
 import SeoTags from '../../components/SeoTags';
 import { t, ti } from '../../i18n';
-import {
-  API,
-  CLAIM_EVENTS_PAGE_SIZE,
-  PAGE_PARAM,
-  QUERY_KEYS,
-  ROUTES,
-  UI_STATE,
-} from '../../constants';
+import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
+import { CLAIM_EVENTS_PAGE_SIZE } from '../../constants/claims';
+import { UI_STATE } from '../../constants/core';
+import { ROUTES } from '../../constants/routes';
 import { formatEventTime, nextOffsetParam, titleWithBrand, withLocaleQuery } from '../../utils';
 import styles from './ClaimEvents.module.css';
 

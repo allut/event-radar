@@ -1,7 +1,7 @@
 import { Link, NavLink } from 'react-router-dom';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import { NAV_ITEMS, ROUTES, SIGNED_OUT_NAV_ITEMS, type NavItem } from '../../constants';
+import { NAV_ITEMS, ROUTES, SIGNED_OUT_NAV_ITEMS, type NavItem } from '../../constants/routes';
 import { useDropdown } from '../../hooks/useDropdown';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { useScrollLock } from '../../hooks/useScrollLock';

@@ -7,11 +7,9 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup, Tag
 
-from app.constants import (
-    DEFAULT_CURRENCY,
-    PRICE_HINT_MAX_CHARS,
-    TALLINN_TZ,
-)
+from app._generated.shared_constants import DEFAULT_CURRENCY
+from app.constants.core import TALLINN_TZ
+from app.constants.ingestion import PRICE_HINT_MAX_CHARS
 from app.ingestion.pricing import eur_price_bounds_from_text, strip_fee_amounts
 from app.ingestion.sanitize import sanitize_html
 from app.ingestion.selectors import (

@@ -115,5 +115,5 @@ def test_notice_headers_carry_brand_mark():
     confirmation = build_google_link_confirmation_html(VERIFY_URL, 15, "a@b.com", "en")
     notice = build_identity_linked_html("a@b.com", "en")
 
-    assert "/email-mark.png" in confirmation
-    assert "/email-mark.png" in notice
+    assert "cid:event-radar-mark" in confirmation
+    assert "cid:event-radar-mark" in notice

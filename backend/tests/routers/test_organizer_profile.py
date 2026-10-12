@@ -168,7 +168,7 @@ class TestUpdateOwnProfile:
     def test_name_over_max_length_rejected(self):
         from pydantic import ValidationError
 
-        from app.constants import ORGANIZER_NAME_MAX_LEN
+        from app.constants.organizer import ORGANIZER_NAME_MAX_LEN
         from app.routers.organizer_profile import OrganizerProfilePatchBody
 
         with pytest.raises(ValidationError):

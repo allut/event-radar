@@ -3,7 +3,8 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ClaimPanel, ClaimPill } from './ClaimStrip';
 import { renderWithProviders } from '../../test/utils';
-import { CLAIM_JUSTIFICATION_REQUIRED_ERROR, ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants';
+import { ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants/auth';
+import { CLAIM_JUSTIFICATION_REQUIRED_ERROR } from '../../constants/claims';
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();

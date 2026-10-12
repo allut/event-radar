@@ -18,7 +18,7 @@ down_revision = "0050"
 branch_labels = None
 depends_on = None
 
-# Frozen copy of app.constants.EVENT_SEARCH_TEXT_SQL — the query side must
+# Frozen copy of app.constants.events.EVENT_SEARCH_TEXT_SQL — the query side must
 # match textually; tests/test_claim_search_indexes.py guards the drift.
 SEARCH_TEXT_SQL = (
     "coalesce(title_orig, '') || ' ' || "

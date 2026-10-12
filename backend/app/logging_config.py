@@ -12,12 +12,15 @@ from typing import Any
 import httpx
 
 from app.config import settings
-from app.constants import (
-    UVICORN_ACCESS_LOGGER,
-    APP_ENV_DEVELOPMENT,
+from app.constants.core import APP_ENV_DEVELOPMENT
+from app.constants.http import (
     AUTHORIZATION_HEADER,
     BEARER_PREFIX,
     HEADER_CONTENT_TYPE,
+    MIME_APPLICATION_JSON,
+)
+from app.constants.ops import (
+    UVICORN_ACCESS_LOGGER,
     LOG_DATE_FORMAT,
     LOG_DIR_NAME,
     LOG_FILE_BACKUP_COUNT,
@@ -32,7 +35,6 @@ from app.constants import (
     LOG_SHIP_QUEUE_MAXSIZE,
     LOG_SHIP_SUPPRESS_ACCESS_PATHS,
     LOG_SHIP_TIMEOUT_SECONDS,
-    MIME_APPLICATION_JSON,
     SQLALCHEMY_ENGINE_LOGGER_NAME,
     UVICORN_ACCESS_PATH_ARG_INDEX,
     UVICORN_ACCESS_STATUS_ARG_INDEX,

@@ -2,7 +2,8 @@
 
 from bs4 import BeautifulSoup
 
-from app.constants import DEFAULT_CURRENCY, HTML_PARSER
+from app._generated.shared_constants import DEFAULT_CURRENCY
+from app.constants.core import HTML_PARSER
 from app.ingestion.sources.kumu import kumu_price_bounds
 
 
@@ -44,7 +45,7 @@ class TestKumuPriceBounds:
         # A tier past PRICE_HINT_MAX_CHARS must not surface here either — it
         # never reached the stored price_hint at ingest time, so treating it
         # as a "price changed" diff would be a false positive.
-        from app.constants import PRICE_HINT_MAX_CHARS
+        from app.constants.ingestion import PRICE_HINT_MAX_CHARS
 
         padding = "x" * (PRICE_HINT_MAX_CHARS + 10)
         soup = _price_html(f"&euro;16 {padding} &euro;9999")

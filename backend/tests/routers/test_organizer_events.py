@@ -8,10 +8,12 @@ from pydantic import ValidationError
 
 from tests.conftest import build_event
 
-from app.constants import (
+from app.constants.events import (
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
+)
+from app.constants.organizer import (
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DAILY_SUBMISSION_CAP,
     ORGANIZER_DESCRIPTION_MAX_LEN,
@@ -244,7 +246,10 @@ class TestSubmitEvent:
 
     def test_more_than_cap_rejected(self):
         from pydantic import ValidationError
-        from app.constants import ORGANIZER_MAX_CATEGORIES, VALID_CATEGORIES
+        from app._generated.shared_constants import (
+            ORGANIZER_MAX_CATEGORIES,
+            VALID_CATEGORIES,
+        )
         from app.routers.organizer_events import SubmitEventBody
 
         with pytest.raises(ValidationError):
@@ -292,7 +297,7 @@ class TestSubmitEvent:
     async def test_organizer_categories_replace_after_classify(
         self, mock_db, make_request, make_organizer
     ):
-        from app.constants import VALID_CATEGORIES
+        from app._generated.shared_constants import VALID_CATEGORIES
         from app.routers.organizer_events import SubmitEventBody, submit_event
 
         picked = sorted(VALID_CATEGORIES)[:2]
@@ -665,7 +670,7 @@ class TestUpdateOwnEvent:
     async def test_categories_edit_replaces_via_helper(
         self, mock_db, make_request, make_organizer
     ):
-        from app.constants import VALID_CATEGORIES
+        from app._generated.shared_constants import VALID_CATEGORIES
         from app.routers.organizer_events import PatchEventBody, update_own_event
 
         picked = sorted(VALID_CATEGORIES)[:2]
@@ -993,7 +998,7 @@ class TestUpdateOwnEvent:
 
 
 class TestUploadEventImage:
-    """POST /organizer/events/image — signed Cloudinary upload (Phase 2 §2.1)."""
+    """POST /organizer/events/image — signed Cloudinary upload."""
 
     # Real PNG magic bytes — upload_event_image sniffs the leading bytes
     # rather than trusting content_type (M-3 in the OWASP audit), so a fake
@@ -1056,7 +1061,7 @@ class TestUploadEventImage:
     @pytest.mark.asyncio
     async def test_rejects_oversized_file(self, mock_db, make_request, make_organizer):
         from fastapi import HTTPException
-        from app.constants import IMAGE_UPLOAD_MAX_BYTES
+        from app.constants.organizer import IMAGE_UPLOAD_MAX_BYTES
         from app.routers.organizer_events import upload_event_image
 
         mock_db.scalar.return_value = 0
@@ -1079,7 +1084,7 @@ class TestUploadEventImage:
         """L5: a per-account daily image-upload cap, independent of the
         per-IP rate limiter (which an account can sidestep across IPs)."""
         from fastapi import HTTPException
-        from app.constants import ORGANIZER_DAILY_IMAGE_UPLOAD_CAP
+        from app.constants.organizer import ORGANIZER_DAILY_IMAGE_UPLOAD_CAP
         from app.routers.organizer_events import upload_event_image
 
         mock_db.scalar.return_value = ORGANIZER_DAILY_IMAGE_UPLOAD_CAP
@@ -1447,7 +1452,7 @@ class TestListOwnEvents:
 class TestDeleteOwnEvent:
     @pytest.mark.asyncio
     async def test_deletes_sets_cancelled(self, mock_db, make_request, make_organizer):
-        from app.constants import EVENT_STATUS_CANCELLED
+        from app.constants.events import EVENT_STATUS_CANCELLED
         from app.routers.organizer_events import delete_own_event
 
         organizer = make_organizer(organizer_id=5)
@@ -1484,7 +1489,7 @@ class TestDeleteOwnEvent:
         mock_db.commit = AsyncMock()
 
         with patch(
-            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+            "app.events.cancellation.send_report_outcome_email", new=AsyncMock()
         ) as mock_send:
             await delete_own_event(
                 10,

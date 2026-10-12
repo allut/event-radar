@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.constants import VALID_CATEGORIES, VALID_VIBES
+from app._generated.shared_constants import VALID_CATEGORIES, VALID_VIBES
 from tests.routers.conftest import scalars_returning as _scalars_result
 
 
@@ -70,7 +70,7 @@ class TestDateRangeFilter:
 
     def test_date_to_only_is_exclusive_next_day(self):
         from app.events.queries import event_date_range_filter as _date_range_filter
-        from app.constants import TALLINN_TZ
+        from app.constants.core import TALLINN_TZ
 
         cond = _date_range_filter(None, date(2026, 7, 20))
         compiled = str(cond.compile(compile_kwargs={"literal_binds": True}))

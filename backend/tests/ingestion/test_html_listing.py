@@ -9,7 +9,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from app.config import settings
-from app.constants import TALLINN_TZ
+from app.constants.core import TALLINN_TZ
 from app.ingestion.selectors import (
     ECH_SITE_TITLE_SUFFIX,
     ESTONIA_CONCERT_HALL_AJAX_ACTION,
@@ -42,6 +42,7 @@ from app.ingestion.sources.piletilevi import (
     _parse_piletilevi_date,
     _piletilevi_important_info,
     _price_bounds_from_store,
+    classify_store_price_400,
     full_res_piletilevi_image,
     piletilevi_localized_text,
 )
@@ -59,6 +60,13 @@ def _mock_response(text: str, status: int = 200):
     resp.text = text
     resp.status_code = status
     return resp
+
+
+def _status_error(status: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://example.test/listing")
+    return httpx.HTTPStatusError(
+        "err", request=request, response=httpx.Response(status, request=request)
+    )
 
 
 def _known_ids(known_ids=()):
@@ -189,6 +197,37 @@ class TestBasePagination:
             mock_get.side_effect = [httpx.ConnectError("boom")]
             with pytest.raises(httpx.ConnectError):
                 await adapter.fetch_raw(_known_ids())
+
+    @pytest.mark.asyncio
+    async def test_listing_error_tolerated_when_a_page_loaded_without_new_cards(self):
+        """#534: a transient page error must not fail a run whose other pages
+        loaded fine but held only already-stored events."""
+        card_a = {"external_id": "a", "title": "A", "url": "https://example.test/a"}
+        adapter = _StubAdapter(
+            _make_source(), pages_cards=[[card_a], [], []], max_pages=3
+        )
+
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
+            mock_get.side_effect = [
+                _mock_response("0"),
+                _status_error(404),
+                _mock_response("2"),
+            ]
+            results = await adapter.fetch_raw(_known_ids({"a"}))
+
+        assert results == []
+
+    @pytest.mark.asyncio
+    async def test_every_page_failing_raises_first_error(self):
+        adapter = _StubAdapter(_make_source(), pages_cards=[[], []], max_pages=2)
+        first = _status_error(404)
+
+        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
+            mock_get.side_effect = [first, httpx.ConnectError("boom")]
+            with pytest.raises(httpx.HTTPStatusError) as exc_info:
+                await adapter.fetch_raw(_known_ids())
+
+        assert exc_info.value is first
 
     @pytest.mark.asyncio
     async def test_listing_error_tolerated_when_other_pages_succeed(self):
@@ -816,7 +855,7 @@ class TestPiletileviLocalizedText:
         # Mirrors kumu_localized_text/estonia_concert_hall_localized_text: an
         # over-cap HTML description falls back to plain text truncated at
         # LOCALIZED_TEXT_MAX_DESC_CHARS, rather than storing unbounded HTML.
-        from app.constants import LOCALIZED_TEXT_MAX_DESC_CHARS
+        from app.constants.ingestion import LOCALIZED_TEXT_MAX_DESC_CHARS
 
         long_paragraph = "word " * (LOCALIZED_TEXT_MAX_DESC_CHARS // 4)
         html = (
@@ -1532,6 +1571,89 @@ def _piletilevi_response(payload: dict):
     resp = MagicMock(spec=httpx.Response)
     resp.json.return_value = payload
     return resp
+
+
+def _piletilevi_400(body) -> httpx.HTTPStatusError:
+    resp = MagicMock(spec=httpx.Response)
+    resp.status_code = 400
+    resp.json.return_value = body
+    return httpx.HTTPStatusError("400 Bad Request", request=MagicMock(), response=resp)
+
+
+class TestPiletileviPrice400:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("body", "outcome"),
+        [
+            (
+                {"code": "web_event_sale_has_not_started", "message": "Sale for this event has not started yet"},
+                "sale_not_started",
+            ),
+            ([{"message": "YBO client errors", "errors": [{"message": "This event is SOLD OUT."}]}], "sold_out"),
+        ],
+    )
+    async def test_business_state_400_logs_info_and_counts(self, body, outcome, caplog):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {"url": _PILETILEVI_DETAIL_URL}
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post"),
+            patch("app.ingestion.sources.piletilevi.http_get", side_effect=_piletilevi_400(body)),
+            caplog.at_level("INFO"),
+        ):
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert "price_min" not in card
+        assert adapter.price_outcomes == {outcome: 1}
+        assert not [r for r in caplog.records if r.levelname == "WARNING"]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("body", [{"code": "something_else"}, [{"errors": [{"message": "boom"}]}], "text", None])
+    async def test_other_400_still_warns(self, body, caplog):
+        adapter = _piletilevi_adapter()
+        soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+        card: dict = {"url": _PILETILEVI_DETAIL_URL}
+        with (
+            patch("app.ingestion.sources.piletilevi.http_post"),
+            patch("app.ingestion.sources.piletilevi.http_get", side_effect=_piletilevi_400(body)),
+            caplog.at_level("INFO"),
+        ):
+            await adapter.parse_detail(MagicMock(), soup, card)
+
+        assert adapter.price_outcomes == {}
+        assert [r for r in caplog.records if r.levelname == "WARNING" and "price fetch failed" in r.message]
+
+
+class TestClassifyStorePrice400:
+    @pytest.mark.parametrize(
+        ("body", "expected"),
+        [
+            ({"code": "web_event_sale_has_not_started"}, "sale_not_started"),
+            ([{"errors": [{"message": "  this event is sold out. "}]}], "sold_out"),
+            ({"code": "other"}, None),
+            ([], None),
+            ("x", None),
+        ],
+    )
+    def test_classify(self, body, expected):
+        assert classify_store_price_400(body) == expected
+
+    @pytest.mark.asyncio
+    async def test_non_json_400_and_500_still_warn(self, caplog):
+        for exc in (
+            _piletilevi_400(ValueError("no json")),
+        ):
+            exc.response.json.side_effect = ValueError("no json")
+            adapter = _piletilevi_adapter()
+            soup = BeautifulSoup(PILETILEVI_DETAIL_HTML, "html.parser")
+            with (
+                patch("app.ingestion.sources.piletilevi.http_post"),
+                patch("app.ingestion.sources.piletilevi.http_get", side_effect=exc),
+                caplog.at_level("INFO"),
+            ):
+                await adapter.parse_detail(MagicMock(), soup, {"url": _PILETILEVI_DETAIL_URL})
+            assert adapter.price_outcomes == {}
+        assert [r for r in caplog.records if r.levelname == "WARNING"]
 
 
 def _make_jwt(claims: dict) -> str:

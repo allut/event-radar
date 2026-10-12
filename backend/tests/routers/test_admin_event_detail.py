@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.constants import APP_ENV_DEVELOPMENT, ERROR_EVENT_NOT_FOUND
+from app.constants.core import APP_ENV_DEVELOPMENT
+from app.constants.events import ERROR_EVENT_NOT_FOUND
 from tests.routers.conftest import execute_rows, patch_admin_settings, scalars_returning
 
 

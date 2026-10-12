@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
-from app.constants import ORGANIZER_DAILY_VENUE_CREATION_CAP
+from app.constants.organizer import ORGANIZER_DAILY_VENUE_CREATION_CAP
 from tests.conftest import build_venue
 
 
@@ -191,7 +191,7 @@ class TestUpdateOwnVenue:
         """OWASP audit #5: a renamed venue is resolved onto every linked
         event at read time, so the rename must pass the same explicit-content
         scan as the submit path and queue the events for admin review."""
-        from app.constants import EVENT_STATUS_CLASSIFIED, EVENT_STATUS_PUBLISHED
+        from app.constants.events import EVENT_STATUS_CLASSIFIED, EVENT_STATUS_PUBLISHED
         from app.routers.organizer_venues import VenuePatchBody, update_own_venue
 
         organizer = make_organizer(organizer_id=5)
@@ -229,7 +229,7 @@ class TestUpdateOwnVenue:
     async def test_rename_to_explicit_name_pulls_published_event_back(
         self, mock_db, make_request, make_organizer, make_event
     ):
-        from app.constants import EVENT_STATUS_CLASSIFIED, EVENT_STATUS_PUBLISHED
+        from app.constants.events import EVENT_STATUS_CLASSIFIED, EVENT_STATUS_PUBLISHED
         from app.routers.organizer_venues import VenuePatchBody, update_own_venue
 
         organizer = make_organizer(organizer_id=5)

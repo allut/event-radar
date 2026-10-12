@@ -41,9 +41,9 @@ from app.auth.tokens import (
     verify_oauth_state_token,
 )
 from app.config import settings
-from app.constants import (
+from app._generated.shared_constants import DEFAULT_USER_LOCALE, VALID_LOCALES
+from app.constants.auth import (
     AUTH_TRACK_USER,
-    DEFAULT_USER_LOCALE,
     DETAIL_MAGIC_LINK_SENT,
     DETAIL_SIGNED_OUT,
     DETAIL_SIGNED_OUT_ALL,
@@ -59,21 +59,25 @@ from app.constants import (
     GOOGLE_SIGNIN_OUTCOME_EXISTING_LOGIN,
     GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT,
     GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL,
-    HEADER_ACCEPT_LANGUAGE,
-    HOME_PATH,
     IDENTITY_PROVIDER_GOOGLE,
-    LOG_EVENT_AUTH_FAILED,
-    LOG_EVENT_GOOGLE_SIGNIN,
-    LOG_EVENT_GOOGLE_SIGNIN_DEGRADED,
-    LOG_EVENT_IDENTITY_LINKED,
-    LOGIN_PATH,
     OAUTH_ERROR_DENIED,
     OAUTH_ERROR_STATE_INVALID,
     OAUTH_ERROR_TOKEN_EXCHANGE_FAILED,
     OAUTH_ERROR_VERIFICATION_FAILED,
     OAUTH_STATE_COOKIE_NAME,
     OAUTH_STATE_COOKIE_PATH,
-    ONBOARDING_PATH,
+    SESSION_COOKIE_NAME,
+    SESSION_COOKIE_PATH,
+)
+from app.constants.core import HOME_PATH, LOGIN_PATH, ONBOARDING_PATH, SECONDS_PER_DAY
+from app.constants.http import HEADER_ACCEPT_LANGUAGE
+from app.constants.log_events import (
+    LOG_EVENT_AUTH_FAILED,
+    LOG_EVENT_GOOGLE_SIGNIN,
+    LOG_EVENT_GOOGLE_SIGNIN_DEGRADED,
+    LOG_EVENT_IDENTITY_LINKED,
+)
+from app.constants.rate_limits import (
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
     RATE_LIMIT_BROWSE,
@@ -81,10 +85,6 @@ from app.constants import (
     RATE_LIMIT_GOOGLE_SIGNIN_START,
     RATE_LIMIT_LOGOUT,
     RATE_LIMIT_LOGOUT_ALL,
-    SECONDS_PER_DAY,
-    SESSION_COOKIE_NAME,
-    SESSION_COOKIE_PATH,
-    VALID_LOCALES,
 )
 from app.db import get_db
 from app.models.models import AuthMagicLink, User, UserIdentity, UserPersona
@@ -542,7 +542,7 @@ async def _link_new_google_identity(
     except IntegrityError:
         # A concurrent callback for the same Google account (double-click,
         # two tabs) won the identity-link race first — never surface a 500
-        # here (docs/security.md's callback invariant). Roll back (which also
+        # here (docs/security.md "Auth", callback invariant). Roll back (which also
         # undoes this request's own uncommitted User insert/email_verified
         # flip, if any — the winning request's row is what persists) and
         # fall back to that winner's identity.

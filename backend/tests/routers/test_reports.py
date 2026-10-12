@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.constants import REPORT_DETAIL_MAX_CHARS
+from app.constants.reports import REPORT_DETAIL_MAX_CHARS
 
 
 class TestSubmitReport:

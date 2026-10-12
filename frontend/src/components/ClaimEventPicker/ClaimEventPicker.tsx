@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
-import { API, CLAIM_SEARCH_DEBOUNCE_MS, CLAIM_SEARCH_MIN_CHARS, QUERY_KEYS, ROUTES } from '../../constants';
+import { API, QUERY_KEYS } from '../../constants/api';
+import { CLAIM_SEARCH_DEBOUNCE_MS, CLAIM_SEARCH_MIN_CHARS } from '../../constants/claims';
+import { ROUTES } from '../../constants/routes';
 import { t, ti } from '../../i18n';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { apiErrorMessage, formatEventTime, isClaimJustificationRequiredError, withLocaleQuery, withQueryParam } from '../../utils';

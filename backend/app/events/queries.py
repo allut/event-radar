@@ -4,10 +4,11 @@ claims and dedup — the one home for "which events count" definitions."""
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, and_, ColumnElement, false, func, or_, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy import Select, and_, ColumnElement, exists, false, func, or_, select
+from sqlalchemy.orm import aliased, selectinload
 
-from app.constants import EVENT_STATUS_PUBLISHED, TALLINN_TZ
+from app.constants.core import TALLINN_TZ
+from app.constants.events import EVENT_STATUS_CANCELLED, EVENT_STATUS_PUBLISHED
 from app.events.venue import resolve_venue_name
 from app.models.models import Event
 
@@ -175,4 +176,30 @@ def select_events_with_classification() -> Select[tuple[Event]]:
     (#177 — venue read-path resolution must not N+1). Callers add their own .where()."""
     return select(Event).options(
         selectinload(Event.classification), selectinload(Event.venue)
+    )
+
+
+def no_live_dedup_sibling_clause(now: datetime) -> ColumnElement[bool]:
+    """True when no other, still-live member points its ``dedup_group_id`` at
+    this event's id.
+
+    Guards every bulk-cancel sweep (classifier ended-draft sweep, refetch source-gone cancel): a dedup-canonical representative must not be
+    cancelled out from under a still-live sibling (same dedup group, not yet
+    ended, not already cancelled) — that sibling's ``dedup_group_id`` would
+    keep pointing at a cancelled id until the next ``dedup_pass`` reclusters,
+    stranding it outside ``canonical_event_filter()`` (and hence unreachable by
+    ``classify_pending``) for up to one 6h cycle. Ungrouped events (no row
+    references their id as a group) and events with only already-ended or
+    already-cancelled siblings are unaffected and cancel normally.
+    """
+    sibling = aliased(Event)
+    return ~exists(
+        select(1)
+        .select_from(sibling)
+        .where(
+            sibling.dedup_group_id == Event.id,
+            sibling.id != Event.id,
+            sibling.status != EVENT_STATUS_CANCELLED,
+            event_not_ended_filter(now, entity=sibling),
+        )
     )

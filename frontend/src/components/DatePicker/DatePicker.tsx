@@ -6,10 +6,19 @@ import {
 } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
 import {
-  CALENDAR_WEEK_START, CALENDAR_DAYS_PER_WEEK, HOURS_PER_DAY, MINUTES_PER_HOUR,
-  MIN_HOUR, MAX_HOUR, MIN_MINUTE, MAX_MINUTE, TIME_STEP_HOURS, TIME_STEP_MINUTES,
-  TIME_FIELD_MAX_LENGTH, PICKER_VALUE_PLACEHOLDER,
-} from '../../constants';
+  CALENDAR_WEEK_START,
+  CALENDAR_DAYS_PER_WEEK,
+  HOURS_PER_DAY,
+  MINUTES_PER_HOUR,
+  MIN_HOUR,
+  MAX_HOUR,
+  MIN_MINUTE,
+  MAX_MINUTE,
+  TIME_STEP_HOURS,
+  TIME_STEP_MINUTES,
+  TIME_FIELD_MAX_LENGTH,
+  PICKER_VALUE_PLACEHOLDER,
+} from '../../constants/core';
 import { t, ti } from '../../i18n';
 import { PrevIcon, NextIcon } from '../ChevronIcons';
 import styles from './DatePicker.module.css';

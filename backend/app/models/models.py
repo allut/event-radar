@@ -23,19 +23,19 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import UserDefinedType
 
-from app.constants import (
-    DEFAULT_USER_CITY,
-    DEFAULT_USER_LOCALE,
+from app._generated.shared_constants import DEFAULT_USER_CITY, DEFAULT_USER_LOCALE
+from app.constants.claims import CLAIM_STATUS_APPROVED, CLAIM_STATUS_PENDING
+from app.constants.events import (
     EVENT_SEARCH_TEXT_SQL,
     EVENT_STATUS_DRAFT,
     EVENT_STATUS_PUBLISHED,
-    CLAIM_STATUS_APPROVED,
-    CLAIM_STATUS_PENDING,
+)
+from app.constants.ingestion import PUBLISHER_STATUS_ACTIVE
+from app.constants.ranking import (
     PASSIVE_SIGNALS_SQL_PREDICATE,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
-    PUBLISHER_STATUS_ACTIVE,
-    REPORT_STATUS_OPEN,
 )
+from app.constants.reports import REPORT_STATUS_OPEN
 from app.db import Base
 
 
@@ -125,7 +125,7 @@ class UserIdentity(Base):
     """A linked external sign-in provider identity (ADR 0002) — e.g. Google's
     stable `sub`. Never shared with organizer_identities: the same Google
     account may hold both a User row and an Organizer row that never merge
-    (docs/security.md's track separation)."""
+    (docs/security.md "Auth", track separation)."""
 
     __tablename__ = "user_identities"
     __table_args__ = (
@@ -180,7 +180,7 @@ class Organizer(Base):
         Boolean, nullable=False, server_default="false"
     )
     # Optional display name (#175) — no logo/contact-info fields, out of scope
-    # per docs/organizer-portal.md's Organizer Profile section.
+    # per docs/organizer-portal.md "Organizer Settings".
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Durable "has authenticated" signal (mirrors User.email_verified). The
     # weekly cleanup prunes organizers where this is NULL; magic-link rows are
@@ -767,6 +767,12 @@ class Event(Base):
     geocode_attempted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # First time the detail-refetch saw the source page gone (404/410); cleared
+    # by any later successful fetch. Sync bookkeeping, untracked by the
+    # updated_at trigger like geocode_attempted_at.
+    source_gone_since: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     # Cooldown clock for the venue-extract sub-pass: stamped when the LLM
     # decided a suspect venue_name carries no street address. Sync bookkeeping,
     # untracked by the updated_at trigger like geocode_attempted_at.
@@ -784,7 +790,8 @@ class Event(Base):
     # `onupdate` — most writers (dedup/classify/publish/geocode) bulk-UPDATE
     # via SQLAlchemy Core, which bypasses ORM column defaults. The trigger
     # only bumps this when a column other than detail_refetched_at/
-    # detail_refetch_count/geocode_attempted_at/venue_extract_attempted_at (pure sync-bookkeeping,
+    # detail_refetch_count/geocode_attempted_at/venue_extract_attempted_at/
+    # source_gone_since (pure sync-bookkeeping,
     # written on every daily/6-hourly pass regardless of real change)
     # actually changed, so the prerender pipeline's change-detection (issue
     # #80) doesn't see a false "changed" marker on every ingestion pass.
@@ -792,7 +799,7 @@ class Event(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     # Organizer direct-submission fields (Phase 1). NULL for every
-    # scraper-ingested event. See CLAUDE.md Data Flow for the submit ->
+    # scraper-ingested event. See docs/organizer-portal.md for the submit ->
     # inline classify -> inline publish -> post-hoc review lifecycle.
     submitted_by_organizer_id: Mapped[int | None] = mapped_column(
         BigInteger,

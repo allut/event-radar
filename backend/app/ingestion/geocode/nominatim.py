@@ -5,7 +5,7 @@ import re
 
 import httpx
 
-from app.constants import (
+from app.constants.ingestion import (
     CONTENT_FILTER_WHITESPACE_COLLAPSE_RE,
     ESTONIAN_STREET_TYPE_WORDS,
     GEOCODE_COUNTRY_SUFFIX,

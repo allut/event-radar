@@ -1,13 +1,13 @@
 // .js extension required: this module is also imported (transitively) by
 // functions/api/prerender-cadence.ts, which Cloudflare Pages runs as
 // unbundled ESM.
+import { MS_PER_MINUTE } from '../constants/core.js';
 import {
   CHAIN_MARKER_PREFIX,
   CHAIN_MAX_ROUNDS,
   CHAIN_STALENESS_TIMEOUT_MINUTES,
-  MS_PER_MINUTE,
   ROUND_STATUS,
-} from '../constants.js';
+} from '../constants/prerender.js';
 
 /** Round-state carrier for the time-boxed incremental prerender pipeline
  * (issue #79) — standalone pure functions only (no I/O), so the chaining
@@ -211,7 +211,7 @@ export function resolveRoundContext(
  * hook-firing is wired up. */
 /** Gate for whether `main()` should push the round marker at all (issue
  * #101 — the overnight self-triggering incident). The marker commit's git
- * push is the chain's *only* continuation trigger (docs/backend-ops.md), so
+ * push is the chain's *only* continuation trigger (docs/seo.md "Round Chaining"), so
  * it must fire exactly when there is a next round to trigger — i.e. only for
  * a `continuing` marker. A `done` marker has nothing left to resume; pushing
  * it anyway still triggers a new build (any push to the git-connected

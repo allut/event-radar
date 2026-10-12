@@ -8,14 +8,16 @@ import type {
   WithContext,
 } from 'schema-dts';
 import type { EventData } from '../components/EventCard';
-import { DEFAULT_CURRENCY, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, ROUTES, SCHEMA_ORG_CONTEXT } from '../constants';
+import { DEFAULT_CURRENCY } from '../_generated/sharedConstants';
+import { ROUTES } from '../constants/routes';
+import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, SCHEMA_ORG_CONTEXT } from '../constants/seo';
 import { t } from '../i18n';
 import { localizedPath, safeUrl } from '../utils';
 
 /** JSON-LD builder for /events/:id (issue #49). Field mapping and omissions
  * (never `organizer`, never `offers.availability`) are documented on the
- * issue and in docs/frontend.md — don't add either without a data-model
- * change to back them with real data. */
+ * issue and in docs/seo.md "Structured Data" — don't add either without a
+ * data-model change to back them with real data. */
 export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
   const location: Place | undefined =
     event.venue_name || event.venue_address
@@ -83,7 +85,8 @@ export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
  * item pointing at our own locale-matched detail page (never emitted by
  * buildEventJsonLd itself, and distinct from its `offers.url`, the external
  * ticket vendor link). `numberOfItems`/`itemListOrder` are deliberately
- * omitted — see docs/frontend.md's prerender section. */
+ * omitted — see
+ * docs/seo.md "Structured Data". */
 export function buildExploreItemListJsonLd(events: EventData[], locale: string): WithContext<ItemList> {
   return {
     '@context': SCHEMA_ORG_CONTEXT,

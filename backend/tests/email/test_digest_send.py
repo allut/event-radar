@@ -51,6 +51,8 @@ async def test_success_calls_http_post(monkeypatch, make_event):
     assert body["subject"]
     assert body["html"]
     assert "app.radar.ee/en/unsubscribe?token=" in body["html"]
+    [mark] = body["attachments"]
+    assert mark["content_id"] == "event-radar-mark"
     headers = body["headers"]
     assert headers["List-Unsubscribe"].startswith("<")
     assert "/email/unsubscribe?token=" in headers["List-Unsubscribe"]

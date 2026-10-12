@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
-import type { AuthCardKind } from '../../constants';
+import type { AuthCardKind } from '../../constants/auth';
 import DialMark from '../DialMark';
 import styles from './AuthCard.module.css';
 

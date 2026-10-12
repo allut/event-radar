@@ -1,3 +1,4 @@
+import base64
 import logging
 from unittest.mock import AsyncMock, MagicMock
 
@@ -5,6 +6,7 @@ import httpx
 import pytest
 
 from app.email import resend
+from app.email.brand import BRAND_MARK_SRC
 
 
 @pytest.mark.asyncio
@@ -49,3 +51,23 @@ async def test_passed_client_is_reused(patch_client, monkeypatch):
     )
     client.post.assert_awaited_once()
     opener.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_branded_html_gets_inline_mark_attachment(patch_client, monkeypatch):
+    monkeypatch.setattr(resend.settings, "RESEND_API_KEY", "re_key")
+    post = patch_client(resend, MagicMock(status_code=httpx.codes.OK, text="ok"))
+    html = f'<img src="{BRAND_MARK_SRC}">'
+    await resend.send_resend_email({"html": html}, log_label="x", log_ref="ref")
+    [mark] = post.await_args.kwargs["json"]["attachments"]
+    assert mark["content_id"] == "event-radar-mark"
+    assert mark["filename"] == "email-mark.png"
+    assert base64.b64decode(mark["content"]).startswith(b"\x89PNG")
+
+
+@pytest.mark.asyncio
+async def test_unbranded_html_gets_no_attachment(patch_client, monkeypatch):
+    monkeypatch.setattr(resend.settings, "RESEND_API_KEY", "re_key")
+    post = patch_client(resend, MagicMock(status_code=httpx.codes.OK, text="ok"))
+    await resend.send_resend_email({"html": "<p>hi</p>"}, log_label="x", log_ref="ref")
+    assert "attachments" not in post.await_args.kwargs["json"]

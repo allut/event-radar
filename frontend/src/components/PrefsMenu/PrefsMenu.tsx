@@ -1,4 +1,5 @@
-import { LOCALES, THEME_OPTIONS } from '../../constants';
+import { LOCALES } from '../../_generated/sharedConstants';
+import { THEME_OPTIONS } from '../../constants/theme';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';

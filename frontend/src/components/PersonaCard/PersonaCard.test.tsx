@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PersonaCard from './PersonaCard';
-import { type PersonaData } from '../../constants';
+import type { PersonaData } from '../../_generated/i18nData';
 
 const persona: PersonaData = {
   slug: 'culture_buff',

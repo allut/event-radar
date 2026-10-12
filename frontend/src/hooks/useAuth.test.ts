@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAuth } from './useAuth';
 import { setSignedInHint, clearSignedInHint } from '../lib/auth';
-import { SIGNED_IN_HINT_KEY } from '../constants';
+import { SIGNED_IN_HINT_KEY } from '../constants/auth';
 
 beforeEach(() => {
   localStorage.clear();

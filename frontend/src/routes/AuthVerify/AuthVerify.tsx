@@ -2,7 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../../api/client';
 import { setSignedInHint } from '../../lib/auth';
-import { API, AUTH_REDIRECT_DELAY_MS, AUTH_TOKEN_PARAM, ROUTES, UI_STATE, VERIFY_STATE_TO_KIND, type VerifyState } from '../../constants';
+import { API } from '../../constants/api';
+import {
+  AUTH_REDIRECT_DELAY_MS,
+  AUTH_TOKEN_PARAM,
+  VERIFY_STATE_TO_KIND,
+  type VerifyState,
+} from '../../constants/auth';
+import { UI_STATE } from '../../constants/core';
+import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
 import { useDelayedAction } from '../../hooks/useDelayedAction';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';

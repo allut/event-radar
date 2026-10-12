@@ -1,9 +1,9 @@
 import { storageGet, storageSet, storageRemove } from './storage';
-import { ORGANIZER_SIGNED_IN_HINT_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
+import { ORGANIZER_SIGNED_IN_HINT_KEY, LOGOUT_FLAG_TTL_MS } from '../constants/auth';
 
 // Parallel session store to lib/auth.ts's consumer track — separate listener
 // set, separate storage key, separate logout flag. Two independent auth
-// tracks that must never be confused for one another (see constants.ts).
+// tracks that must never be confused for one another (see constants/auth.ts).
 const organizerAuthListeners = new Set<() => void>();
 function emitOrganizerAuthChange(): void {
   organizerAuthListeners.forEach((cb) => cb());

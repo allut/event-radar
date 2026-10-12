@@ -4,7 +4,7 @@ import {
   GOOGLE_SIGNIN_RESULT_PARAM,
   GOOGLE_SIGNIN_RESULT_TRACK_ORGANIZER,
   GOOGLE_SIGNIN_RESULT_TRACK_USER,
-} from '../constants';
+} from '../constants/auth';
 
 // Google sign-in is a server-side redirect: no app JS runs between the
 // backend setting the session cookie and the browser landing on the SPA, so

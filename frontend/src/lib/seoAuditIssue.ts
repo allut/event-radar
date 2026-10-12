@@ -1,6 +1,6 @@
 // .js extension required: this module is also imported (transitively) by
 // functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
-import { SEO_AUDIT_GITHUB_REPO, SEO_AUDIT_ISSUE_LABEL } from '../constants.js';
+import { SEO_AUDIT_GITHUB_REPO, SEO_AUDIT_ISSUE_LABEL } from '../constants/seo.js';
 import { githubRequest } from './githubRequest.js';
 
 interface GithubIssue {

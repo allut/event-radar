@@ -15,18 +15,17 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import Select, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
-    DEFAULT_USER_LOCALE,
+from app._generated.shared_constants import DEFAULT_USER_LOCALE, VALID_LOCALES
+from app.constants.core import TALLINN_TZ
+from app.constants.events import (
     PUBLIC_COUNTS_CACHE_TTL_SECONDS,
     PUBLIC_COUNTS_FALLBACK_WINDOW_DAYS,
     PUBLIC_COUNTS_TONIGHT_CAP,
-    RATE_LIMIT_PUBLIC,
     SHOWCASE_EVENT_COUNT,
     SHOWCASE_FALLBACK_WINDOW_DAYS,
     SHOWCASE_WINDOW_DAYS,
-    TALLINN_TZ,
-    VALID_LOCALES,
 )
+from app.constants.rate_limits import RATE_LIMIT_PUBLIC
 from app.db import get_db
 from app.models.models import Event, EventClassification, Venue
 from app.rate_limit import limiter
@@ -147,7 +146,7 @@ async def showcase(
     slicing to SHOWCASE_EVENT_COUNT — a recurring multi-day listing (e.g. a
     Tue/Thu/Sat workshop) is never dedup-grouped across days, so each
     date-instance is its own canonical row and could otherwise independently
-    qualify for the grid (docs/pipeline.md). The collapse's surviving
+    qualify for the grid (docs/pipeline.md "Landing Showcase"). The collapse's surviving
     representative per series isn't guaranteed to be the one _showcase_stmt's
     SQL ORDER BY would have picked first, so the post-collapse order is
     recomputed in Python with the same three keys (narrow-window first,
@@ -174,7 +173,7 @@ async def showcase(
 
 # Process-local TTL cache — single dict entry, keyed by locale, since the payload
 # is locale-sensitive (event titles/venue names). No new dependency: the app is
-# single-process/no-Redis (see CLAUDE.md Architecture), so a module-level dict is
+# single-process/no-Redis (see CLAUDE.md "Architecture"), so a module-level dict is
 # sufficient and matches the pattern of every other in-process cache here.
 _counts_cache: dict[str, tuple[float, dict]] = {}
 
@@ -199,8 +198,8 @@ def _tonight_stmt(now: datetime) -> Select[tuple[Event]]:
 
 
 def _tonight_fallback_stmt(now: datetime) -> Select[tuple[Event]]:
-    """A real empty-tonight is a valid, non-error state (docs/design-system.md,
-    Landing copy rules) — this widens to the next PUBLIC_COUNTS_FALLBACK_WINDOW_DAYS
+    """A real empty-tonight is a valid, non-error state (Landing copy,
+    docs/design-system.md §11) — this widens to the next PUBLIC_COUNTS_FALLBACK_WINDOW_DAYS
     days rather than rendering an empty ticker."""
     return (
         select_events_with_classification()

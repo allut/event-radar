@@ -165,8 +165,8 @@ def test_dashboard_link_carries_locale_prefix(monkeypatch, locale, prefix):
     assert f'href="https://radar.ee{prefix}/organizer/dashboard"' in html
 
 
-def test_header_carries_absolute_brand_mark():
+def test_header_carries_inline_brand_mark():
     html = claim_resolution.build_claim_granted_html("Jazz Night", "note", "en")
 
-    assert "/email-mark.png" in html
-    assert html.index("email-mark.png") < html.index("EVENT RADAR")
+    assert "cid:event-radar-mark" in html
+    assert html.index("cid:event-radar-mark") < html.index("EVENT RADAR")

@@ -31,7 +31,7 @@ import {
   PRERENDER_CADENCE_TOKEN_HEADER,
   PRERENDER_CADENCE_USER_AGENT,
   PRERENDER_CHAIN_GITHUB_REPO,
-} from '../../src/constants.js';
+} from '../../src/constants/prerender.js';
 import { githubRequest } from '../../src/lib/githubRequest.js';
 import { shouldSkipCadenceTick } from '../../src/lib/prerenderChain.js';
 import { isValidAuditToken } from '../../src/lib/seoAuditAuth.js';

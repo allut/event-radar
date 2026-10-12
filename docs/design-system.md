@@ -1,52 +1,44 @@
 # Design System
 
-What's in here: the visual language of Event Radar — the C1 direction, the token system in `frontend/src/index.css`, the shared CSS layer in `frontend/src/components/shared/`, the type/color/shape/motion rules, the per-surface registers (consumer, organizer, admin), the light/dark theming machinery, and the design decisions that are already settled and must not be re-litigated.
-
-Read this before touching any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, `frontend/src/lib/theme.ts`, `backend/app/email/styles.py`, or any component whose change is visual rather than behavioral. Structure/routing/i18n/SEO detail lives in `docs/frontend.md`; the *rule* form of the token/shared-class imperatives lives in `CLAUDE.md` and `docs/conventions.md`.
+What's in here: the C1 visual language, tokens, the shared CSS layer, type, color and theming, shape, motion, component rules, layout, Landing, and settled decisions.
 
 ## 1. The direction: C1 (cinematic-on-brand)
 
-The app runs one visual language, **C1**: editorial-cinematic type over the existing navy/gold brand. Its signature is type and hairline rules doing the work, not palette novelty or decorative chrome.
+The app runs one visual language, **C1**: editorial-cinematic type over the navy/gold brand. Type and hairline rules do the work, not palette novelty or decorative chrome.
 
-Concretely, C1 means:
-
-- **Display serif over imagery.** Cormorant Garamond at large sizes, hairline `--rule` separators between sections, gold used sparingly as an accent rather than as fill.
-- **Sharp interactive corners.** Every button, input, and menu popover is `border-radius: 0`. Cards, images, and chips keep `--radius`.
-- **No decorative iconography.** No pictographic emoji anywhere in the consumer or organizer surfaces (one carryover exception — the `👍 👎 🔖` signal glyphs in `FeedbackButtonRow` and the Saved page tabs — see §9). Structure and type carry meaning; a hairline is preferred over a box.
-- **Imagery amplifies, never load-bearing.** Every surface must still read with photography stripped — the Landing proof section and the plate rows are both designed to survive `noimg`.
-
-**History, so it isn't re-tried:** an alternative direction (C2 — oxblood/bone/silver palette + Playfair Display, dropping navy/gold entirely) was fully built, shipped, reviewed live at 2880×1620, and reverted: a new palette without new information architecture read stale rather than considered. C1 was then locked and migrated across every surface. A palette push is not an open question — reopening it means redoing the IA too.
+- **Display serif over imagery.** Cormorant Garamond at large sizes, hairline `--rule` separators between sections, and gold as a sparing accent rather than a fill.
+- **Interactive corners are sharp.** Buttons, inputs and menu popovers are `border-radius: 0`. Cards, images and chips keep `--radius`. See §6.
+- **No decorative iconography.** Structure and type carry meaning, and a hairline beats a box. The few functional glyphs and the one emoji carryover are listed in §9.
+- **Imagery amplifies; it never carries the page.** Every surface must still read with photography stripped. The Landing proof section and the plate rows are built to survive `noimg`.
+- **The palette is not an open question.** An alternative, C2 (oxblood/bone/silver with Playfair Display, no navy/gold), was built, shipped, reviewed live and reverted. A new palette without new information architecture read stale. Reopening it means redoing the IA too.
 
 ## 2. Surface registers
 
-Four registers share one token/geometry system. They differ only in type stack and imagery appetite.
+Four registers share one token and geometry system. They differ only in type stack and appetite for imagery.
 
 | Register | Surfaces | Type | Imagery |
 |---|---|---|---|
-| **Landing** | `routes/Landing/` | Cormorant display at hero scale, Manrope body | Full-bleed poster, grain, scrims, plate rows |
-| **Consumer app** | Feed, Explore, EventDetail, SavedEvents, Settings, auth, static/legal | Cormorant on page headings, section eyebrows, card/event titles; Manrope everywhere else | Event photography in cards/hero only |
-| **Organizer portal** | `/organizer/*` | Same as consumer — deliberately a *product* surface, not an admin panel | None beyond event images |
-| **Admin console** | `/admin/*` | `--font-system` (OS-native sans) + `--font-mono` for data. **Never** Cormorant, never Manrope | None, ever |
+| **Landing** | `routes/Landing/` | Cormorant at hero scale, Manrope body | Full-bleed poster, grain, scrims, plate rows |
+| **Consumer app** | Feed, Explore, EventDetail, Saved, Settings, auth, static/legal | Cormorant on headings, eyebrows and titles; Manrope elsewhere | Event photography in cards and hero only |
+| **Organizer portal** | `/organizer/*` | Same as consumer | Event images only |
+| **Admin console** | `/admin/*` | `--font-system`, `--font-mono` for data | None |
 
-**The admin boundary rule** (state it this way for any new admin screen, rather than listing screens): admin inherits colors, spacing, hairlines, and the sharp-corner geometry, but runs its own type stack and declines all display/imagery treatment. No `--font-display`, no `--font-size-display-*`, no scrims/grain/posters. Density biases to the small end of the `--fs-*` scale; emphasis comes from `font-weight`, not a bigger scale.
-
-Application mechanism: `--font-body` is set globally on `html` (`index.css`), so admin overrides it locally — `AdminShell.module.css`'s `.shell` sets `font-family: var(--font-system)` and cascades to every screen mounted inside it; `AdminLogin` renders *outside* `AdminShell` (see `AdminApp.tsx`) and carries its own declaration. `Page.module.css`'s `.adminPageTitle` and `AdminQueue.module.css`'s `.queueDetailTitle` are the shared admin-chrome classes that also pin `--font-system`.
+- **The organizer portal is a product surface, not an admin panel.** That's why it runs the consumer register.
+- **Admin inherits colors, spacing, hairlines and sharp corners, and declines everything display.** No `--font-display`, no `--font-size-display-*`, no Manrope, no scrims, grain or posters. State the rule this way for a new admin screen rather than listing screens.
+- **Admin density sits at the small end of the `--fs-*` scale.** Emphasis comes from `font-weight`, not a bigger size.
+- **Admin overrides the global `--font-body` locally.** `AdminShell.module.css`'s `.shell` sets `font-family: var(--font-system)` for every screen inside it. `AdminLogin` renders outside `AdminShell` (see `AdminApp.tsx`), so it carries its own declaration.
 
 ## 3. Tokens
 
-Every color, radius, shadow, z-index, transition, easing, duration, blur, spacing step, type size, tracking, leading, weight, and component-geometry value is a custom property in `:root` (`frontend/src/index.css`). **Never hardcode one in a `.module.css`** — define the token first, then `var(--token-name)`. This holds across the whole app: a grep for hex literals outside `index.css` and `Landing.module.css` returns nothing, and keeping it that way is what makes the light theme a token-swap rather than a rewrite.
+Every visual value is a custom property in `:root` in `frontend/src/index.css`. That covers color, radius, shadow, z-index, motion, spacing, type, blur and component geometry. Define the token first, then use `var(--token)`.
 
-The top bar's tokens (`--bar-h`, `--bar-h-condensed`, `--bar-h-phone`, `--bar-h-phone-condensed`, `--bar-mark`, `--bar-mark-condensed`, `--bar-control-h`, `--bar-search-w`, `--bar-nav-gap`, `--bar-rule-w`, `--fs-bar-word`, `--fs-bar-word-condensed`, `--fs-bar-kicker`, `--fs-drawer-nav`, `--bar-transition`) sit at the end of the geometry block, and `--accent-ink` is gold-as-text (dark value in `:root`, `#8f6316` in the light block). `--topbar-height` and `--topbar-height-mobile` are retired — nothing reads them.
-
-Token groups, in `index.css` order: palette primitives → semantic alpha/overlay derivations → typography (families, `--fs-*`, `--tracking-*`) → spacing scale (`--space-1`…`--space-9` plus explicitly-named fractional steps) → shape → layering → opacity → border widths → transforms → grid/flex geometry → blur → image caps → per-component geometry (spinner, toggle, DatePicker, SelectField, FileField, status circle, page widths, admin rail/queue) → heading scale → leading → weight → animation durations → shadows → atmosphere (`--rule`) → category gradients → Landing/C1 display + plate tokens.
-
-Rules that bite:
-
-- **Naming is semantic, not locational**, unless the token is deliberately scoped. `--hair-width` names a treatment; `--font-size-display-hero` names its one consumer on purpose.
-- **Hero-only tokens stay hero-only.** `--poster-frame`, `--grain`, `--scrim-vertical`, `--poster-glow-*`, `--font-size-display-hero` have exactly one consumer (`Landing.module.css`) and are documented as scoped rather than renamed. If a future surface genuinely needs one, that's a decision made against a real consumer — not a speculative generalization now.
-- **Breakpoint tokens are documentation only.** CSS custom properties cannot drive `@media` conditions, so `--bp-narrow: 640px` exists to name the value (with three single-consumer siblings in the same role — `--bp-desktop-gate: 1024px`, `--bp-landing-stats: 900px`, `--bp-onboarding-narrow: 560px`); the `@media` rules themselves still carry the literal. Keep the literal and the token in sync; don't try `@media (max-width: var(--bp-narrow))`. The wide band adds one `min-width` sibling in the same role, `--bp-wide: 2000px` (see §10). (An earlier `--bp-wide: 1680px` existed for the never-built Landing hero side panel and was removed with it; the name now means the 2000px wide-band floor.)
-- **Off-scale spacing is allowed but must be named.** Steps like `--space-0-42` exist because two or more call sites needed them; add a named step rather than inlining a rem literal or forcing a layout onto the wrong scale step.
-- **Category gradients mirror the taxonomy.** The `--gradient-<category>` keys mirror `VALID_CATEGORIES` in `shared/app-config.json`; anything without an entry falls through `categoryGradient()` (`utils.ts`) to `--gradient-fallback`. Add a category to the taxonomy → add both theme's gradient pair.
+- **Hex literals stay in `index.css` and `Landing.module.css`.** Keeping them out of every other stylesheet is what makes the light theme a token swap rather than a rewrite.
+- **Name tokens by treatment, not location**, unless the scoping is deliberate. `--hair-width` names a treatment; `--font-size-display-hero` names its one consumer on purpose.
+- **Hero-only tokens stay hero-only.** `--poster-frame`, `--grain`, `--scrim-vertical`, `--poster-glow-*` and `--font-size-display-hero` have one consumer, `Landing.module.css`. Generalise one only when a real second consumer arrives.
+- **Gold as text uses `--accent-ink`**, never `--accent` or `--accent-light`. Those fail AA as text on the light ground.
+- **Breakpoint tokens are documentation only.** Custom properties can't drive `@media` conditions, so `--bp-narrow`, `--bp-wide` and their single-consumer siblings name a value the `@media` rule still writes as a literal. Keep the two in sync, and leave `@media (max-width: var(--bp-narrow))` unwritten.
+- **An off-scale spacing step gets a name.** Steps like `--space-0-42` exist because two or more call sites needed them. Add a named step rather than inlining a rem literal or forcing the wrong step.
+- **Category gradients mirror the taxonomy.** The `--gradient-<category>` keys follow `VALID_CATEGORIES` in `shared/app-config.json`. A missing key falls through `utils.ts::categoryGradient()` to `--gradient-fallback`. A new category needs a gradient pair in both themes.
 
 ## 4. Typography
 
@@ -57,173 +49,236 @@ Rules that bite:
 --font-system:  -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
 ```
 
-**Two hard constraints on ever adding a face:**
+### Adding a Face
 
-1. **CSP.** The SPA serves `font-src 'self'` (see `docs/backend-ops.md`), so a face must ship as an `@fontsource` npm package imported in `frontend/src/main.tsx` and bundled by Vite. No Google Fonts `<link>`, no CDN. `--font-mono` and `--font-system` are system stacks precisely because of this.
-2. **Cyrillic.** `ru` is a first-class locale with its own routes and emails. A face without a `cyrillic` subset silently falls back to `system-ui` on every Russian character — this is why DM Sans was replaced by Manrope Variable (no Cyrillic cut) and why Cormorant Garamond survived (`cyrillic`, `cyrillic-ext`, `latin`, `latin-ext`, `vietnamese`). Check `node_modules/@fontsource*/<face>/metadata.json`'s `subsets` before proposing a face. Prefer the `@fontsource-variable/*` package where one exists: one file per subset covering the whole weight axis, usually cheaper than two static weights.
+- **A face ships as an `@fontsource` package imported in `frontend/src/main.tsx`.** The SPA's CSP is `font-src 'self'`, so a Google Fonts `<link>` or CDN is blocked. That's also why `--font-mono` and `--font-system` are system stacks.
+- **A face needs a `cyrillic` subset.** `ru` is a first-class locale, and a face without one silently falls back to `system-ui` on every Russian character. DM Sans was replaced by Manrope for this reason.
+- **Check `node_modules/@fontsource*/<face>/metadata.json`'s `subsets` before proposing a face.** Prefer an `@fontsource-variable/*` package: one file per subset covers the whole weight axis, usually cheaper than two static weights.
 
-Bundled weights today: Manrope Variable (200–800 axis, one file), Cormorant Garamond 300/300-italic/400/400-italic/500/600.
+### Where Display Type Goes
 
-**Where display type is allowed:** page headings (`Page.module.css`'s `.pageTitle`/`.gridHeading`, Feed's date heading, EventDetail's `h1`, Settings' title), section eyebrows, `LegalPage`'s section headings, the FAQ page's question rows (a `<summary>` whose text is the question heading) and closing heading, card/event titles (`EventCard`, `PersonaCard`'s `.name`), the auth brand lockup. **Never** on a control, a form field, a data value, a meta row, or anywhere inside `/admin/*`.
+- **Cormorant is for headings and titles.** That means page headings, section eyebrows, legal section headings, FAQ question rows, card and event titles, and the auth brand lockup.
+- **Never on a control, form field, data value or meta row**, and never inside `/admin/*`. Those take Manrope, or `--font-system` in admin.
 
-**Display scale.** The C1 display sizes are `clamp()`-based tokens, not per-component inline clamps: `--font-size-display-hero`, `--font-size-display-plate`, `--font-size-display-section`, `--font-size-display-card`, `--font-size-display-mark`, `--font-size-display-legal`. `clamp()` here is load-bearing, not decorative — Estonian and Russian UI strings run ~1.6× the English (`landing_personas_title` is 52 ch ET / 51 ch RU vs ~32 EN; `landing_hero_h1` goes 42 ch EN → 60 ch ET). **Test every display heading against the Estonian and Russian strings, never the English one.** A fixed-px hero breaks; a button sized to an English label wraps in Russian. Real catalogue event titles run to 60+ characters and must be allowed two or three lines in any listing layout.
+### Display Scale
 
-**Display tokens must grow under browser zoom (WCAG 1.4.4, #465).** Zoom shrinks the CSS viewport, so the `vw` term shrinks by as much as zoom enlarges it — inside the fluid range a display size doesn't grow at all, only once it hits its lower bound. Two rules, both drift-guarded by `frontend/src/displayTokens.test.ts`:
+- **Display sizes are `clamp()` tokens, never per-component clamps.** They're the `--font-size-display-*` family in `index.css`.
+- **Size for Estonian and Russian, not English.** ET and RU UI strings run about 1.6× the English; `landing_hero_h1` goes from 42 characters in EN to 60 in ET. A fixed-px hero breaks, and a button sized to an English label wraps in Russian.
+- **Real event titles run past 60 characters.** Any listing layout must allow them two or three lines.
 
-- **Bounds in `rem`, `max ÷ min ≤ 1.5`.** At zoom *z* every token renders at least *z* × its min, so 1.5 guarantees 2× its 100% size by 300% zoom (Safari's cap) at every window width. The common "≤ 2.5" rule only promises 2× by 500%, which Safari never reaches. A rem *intercept* doesn't help — rem and px scale identically under zoom — the ratio is the lever. `rem` bounds also make the token follow the user's browser default font size (`html { font-size: 100% }`, not a px pin).
-- **Never resize a display-token selector inside `@media`.** A zoomed desktop window crosses the 640px breakpoint: the Landing hero's old `≤640 { font-size: --heading-xl }` override made it *shrink* to 0.74× at 200% on a 1280 window. Let the token's own clamp floor do the mobile sizing.
+### Browser Zoom
 
-The cost is a narrower range: the hero runs 64px on phones → 96px on desktop (it was 34 → 96), so the phone Landing hero is taller. Budget for that when adding a display token, and check the phone layout in ET and RU at 375px. When the taller type pushes a call to action off the screen, change the layout, not the type size. On phones (≤640px), Landing reorders its hero to put the capture first (#498): `.heroTop` and `.heroBot` become `display: contents`, and flex `order` moves the sub and the counter (restyled as a one-line ledger) below the capture bar. This keeps the email input above the fold at 375×667. The default font size also stretches the layout: at 24px on a 320px phone, the controls and long words must wrap, not overflow.
+Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges it. Inside its fluid range a display size doesn't grow at all. `frontend/src/displayTokens.test.ts` guards both rules below (WCAG 1.4.4).
+
+- **Display bounds are in `rem`, with max ÷ min ≤ 1.5.** At zoom *z* a token renders at least *z* × its min, so 1.5 guarantees 2× by 300%, Safari's cap. The common "≤ 2.5" only promises 2× by 500%. `rem` bounds also follow the user's default font size.
+- **Never resize a display-token selector inside `@media`.** A zoomed desktop window crosses 640px, and the old Landing hero override made it shrink to 0.74× at 200%. Let the token's own clamp floor handle mobile sizing.
+- **The price is a narrower range.** The hero runs 64px on phones to 96px on desktop, so phone layouts get taller type. Check new display tokens at 375px in ET and RU.
+- **When taller type pushes a call to action off screen, change the layout, not the size.** On phones, Landing's `.heroTop` and `.heroBot` become `display: contents`, and flex `order` moves the capture bar above the sub and counter. The email input stays above the fold at 375×667.
+- **A larger default font size stretches the layout too.** At 24px on a 320px phone, controls and long words must wrap, not overflow.
 
 ## 5. Color and theming
 
-**Dark is the origin palette; light is a literal inversion.** The full dark palette is defined on bare `:root`. `:root[data-theme="light"]` redefines *only* the tokens that need a light value — backgrounds, text ramp, borders, success/danger (darkened for AA as text on white), card shadows (lighter, and the gold glow *stronger* since it nearly vanishes on white), the category gradients (hue and stop-2 saturation preserved, lightness relationship flipped), the poster scrim/glows, and `--bg-placeholder`/`--bg-overlay*` (inverted onto the light `--bg` rgb at the same alpha). Everything else — spacing, type scale, geometry, accent hue and all accent-alpha overlays, `--overlay-scrim` — is theme-neutral and inherited.
+### Light Palette
 
-When adding a token: if it encodes a color that reads differently on a near-white ground, it needs a light-block value. If it's an alpha overlay of the accent, it usually doesn't. Never define a color *only* inside the light block.
+- **Dark is the origin palette, on bare `:root`.** `:root[data-theme="light"]` redefines only the tokens that need a light value.
+- **The light block covers grounds, text, borders, status colors, shadows, gradients and scrims.** Success and danger darken for AA on white. The gold card glow gets stronger, since it nearly vanishes on white. Gradients keep hue and saturation but flip lightness.
+- **Everything else is theme-neutral:** spacing, type, geometry, the accent hue and its alpha overlays, `--overlay-scrim`, and every wide-band token.
+- **A new color token that reads differently on near-white needs a light value.** An accent alpha overlay usually doesn't. Define a color in `:root` first, never only inside the light block.
 
-**Resolution order** (`frontend/src/lib/theme.ts`, `resolveTheme` — pure, unit-tested): the **device theme** (OS `prefers-color-scheme`) is the default state; a **theme override**, held in `localStorage` (`theme_override` + `theme_override_device`, the device theme it was chosen under), wins only while its recorded device theme still matches the current one — a mismatch means the device flipped since, so the override expired and the device theme wins again (ADR 0003). The resolved value is always binary (`light`/`dark`) and lands on `document.documentElement.dataset.theme`. There is no third, "System" state to store — device-following is what a viewer falls back to, not a chosen value.
+### Theme Resolution
 
-- An inline script in `frontend/index.html` re-resolves this synchronously before first paint to avoid a flash of the wrong theme. It **duplicates** `resolveTheme`'s logic (it must run with zero module loading) — the two must never disagree, and the storage-key literals there must stay in sync with `THEME_OVERRIDE_KEY`/`THEME_OVERRIDE_DEVICE_KEY` in `constants.ts`. It also unconditionally wipes the legacy `theme_preference` key (the pre-ADR-0003 permanent tri-state preference) rather than reading it. This script's body is pinned by a `sha256-…` CSP hash in `frontend/public/_headers` (theme-revert-on-refresh fix) — editing the body means regenerating and updating that hash (`docs/security.md`'s CSP paragraph has the exact steps and the drift-guard test), or production silently falls back to the runtime `applyTheme()` self-heal below with a flash of the wrong theme on every load.
-- `lib/theme.ts` is imported in `main.tsx` for its `storage`/OS-theme-flip listeners **and** its `applyTheme()` is called directly at boot, immediately before `createRoot(...).render(...)`. This re-resolves from localStorage/OS and re-applies on every load — a deliberate self-heal in case the pre-paint script above is ever blocked (a CSP regression) or a prerendered snapshot shipped a baked-in `data-theme` (see the prerender bullet below): the wrong theme corrects itself the moment JS runs instead of persisting for the whole session. The OS `prefers-color-scheme` listener unconditionally re-resolves on every flip — there's no "System" mode to gate it on any more, so any live override is discarded the moment the device theme changes.
-- Prerendered snapshots (`frontend/scripts/prerender.ts`) are theme-neutral: `stripBakedThemeAttr` removes any `data-theme` the build browser baked onto `<html>` before every snapshot write, so a snapshot never ships a frozen copy of the build machine's own OS theme. See `docs/frontend.md`'s prerender section.
-- The override is scoped to the browser only, never an account (ADR 0003) — signing in on either track (magic link or Google) neither reads a theme from the account nor writes one to it.
-- UI: the `PrefsMenu` theme row (consumer + organizer top bars and the phone drawer, `useResolvedTheme`), `AdminThemeToggle` in the admin rail — both offer exactly two options, Light and Dark. The `PrefsMenu` trigger glyph is a fixed half-filled circle that never reflects the current theme, so the prerendered HTML can't show the wrong one.
+`frontend/src/lib/theme.ts::resolveTheme()` is pure and unit-tested. ADR 0003 records the model.
 
-**Email theming.** `backend/app/email/styles.py::get_email_styles()` returns the one bundle every email renders from (ADR 0003) — there's no per-recipient theme column to key off, since a stored theme can't track a device that changes after the mail is sent:
+- **The device theme (OS `prefers-color-scheme`) is the default.** A theme override in `localStorage` (`theme_override`, plus `theme_override_device` for the device theme it was chosen under) wins only while that device theme still matches.
+- **A device flip expires the override.** The OS listener re-resolves on every flip, so the device theme wins again.
+- **The result is always binary, `light` or `dark`,** written to `document.documentElement.dataset.theme`. There is no stored "System" state: following the device is the fallback, not a choice.
+- **The override lives in the browser, never on an account.** Signing in on either track neither reads nor writes a theme.
+- **Both theme controls offer exactly Light and Dark:** the `PrefsMenu` theme row (both top bars and the phone drawer) and `AdminThemeToggle` in the admin rail. The `PrefsMenu` trigger is a fixed half-filled circle, so prerendered HTML can't show the wrong theme.
 
-| bundle | declared `color-scheme` | dark override CSS |
-|---|---|---|
-| `EMAIL_STYLES` | `light dark` | yes |
+### Pre-Paint Script
 
-`EMAIL_STYLES` is the light palette as its base (so a client that strips `<style>` still gets a readable, intentional render) plus a `@media (prefers-color-scheme:dark)` override block (`_THEME_CLASS_RULES` in `styles.py`, driving `e-*` class hooks in `templates.py`) that repaints it dark for a client honoring OS theme. It declares its scheme via `<meta name="color-scheme">`/`<meta name="supported-color-schemes">` on `EMAIL_DOCUMENT` — without it, a client (notably Apple Mail) may apply its own undeclared dark-mode inversion, which can disagree with the palette actually rendered (e.g. inverting an already-dark email to a washed-out, contrast-broken "light" render). Presentation stays split three ways per the repo rule: CSS in `styles.py`, markup in `templates.py`, assembly in the delivery module.
+- **An inline script in `frontend/index.html` resolves the theme before first paint**, so there's no flash of the wrong theme. It duplicates `resolveTheme`'s logic because it must run with no module loading. The two must never disagree.
+- **Its storage keys mirror `THEME_OVERRIDE_KEY` and `THEME_OVERRIDE_DEVICE_KEY` in `frontend/src/constants/theme.ts`.** It also wipes the legacy `theme_preference` key unread.
+- **Its body is pinned by a CSP hash in `frontend/public/_headers`.** Editing it means updating the hash, or production silently falls back to the boot self-heal with a flash on every load. See [security.md](security.md)'s Frontend CSP section.
+- **`main.tsx` calls `applyTheme()` at boot, just before `createRoot(...).render(...)`.** It's a self-heal: if the pre-paint script is blocked or a snapshot shipped a baked `data-theme`, the theme corrects itself once JS runs.
+- **Prerendered snapshots are theme-neutral.** `stripBakedThemeAttr` drops the build browser's `data-theme`; see [seo.md](seo.md)'s Theme-Neutral Snapshots section.
+
+### Email Theming
+
+- **Every email renders from one bundle,** `backend/app/email/styles.py::get_email_styles()` returning `EMAIL_STYLES` (ADR 0003). There's no per-recipient theme: a stored theme can't track a device that changes after the mail is sent.
+- **The base is the light palette.** A client that strips `<style>` still gets a readable, intentional render.
+- **A `prefers-color-scheme: dark` block repaints it dark.** `_THEME_CLASS_RULES` in `styles.py` drives the `e-*` class hooks in `templates.py`.
+- **`EMAIL_DOCUMENT` declares `color-scheme: light dark` in its meta tags.** Without the declaration, Apple Mail and others apply their own dark inversion. That can turn a dark render into a washed-out, contrast-broken one.
+- **CSS stays in `styles.py`, apart from markup and delivery.** See [frontend.md](frontend.md)'s Email section for the three-way split.
 
 ## 6. Shape
 
-- **Interactive controls are square.** `border-radius: 0` is baked into the shared base classes — `Button.module.css`'s `.btnPrimary`/`.btnOutline`, `Field.module.css`'s `.fieldInput`/`.fieldWrap`, `Menu.module.css`'s popover/trigger chrome, `Bar.module.css`'s nav links. It is *not* an opt-in variant class; there is no `buttonSharp`/`fieldSharp`/`menuSharp` to compose (an earlier plan proposed those, then the treatment was made universal in the base classes instead — don't reintroduce the variants). Components that render a bordered control outside those bases (`SegmentedControl`, `SelectField`, `DatePicker`, `DateRangeMenu`, `FileField`, `VenuePicker`, `RichTextEditor`, `Modal`, `MobileMenu`, `Chip`, `EventOverflowMenu`, `FeedbackButtonRow`) carry their own `border-radius: 0`. `VenuePicker`'s `.miniForm` panel is the exception inside that folder: it is a container holding controls, so it keeps `--radius`.
-- **Containers are not.** `--radius` is untouched on cards, images, and chips-as-meta. `.card` keeps its rounding; a card row in the organizer dashboard is a card, not a control. Bordered sub-panels inside a form (the EventSubmit content-language group, the VenuePicker mini-form, the ClaimEventEdit locked panel) are containers too and take `--radius`. Organizer status badges and tags are square; the "chips-as-meta keep `--radius`" wording applies to consumer meta chips only.
-- **Hairlines, not boxes.** `--rule` (`1px solid var(--border-subtle)`) separates sections; `--hair-width` sizes the plate/empty-state hairline. Reach for a rule before a border or a background change.
+- **Interactive controls are square, in the base classes.** `border-radius: 0` lives in `Button`, `Field`, `Menu` and `Bar` modules' control classes. There is no opt-in `buttonSharp`/`fieldSharp`/`menuSharp` variant; leave those out.
+- **A bordered control outside those bases sets its own `border-radius: 0`.** That covers components like `SegmentedControl`, `SelectField`, `DatePicker`, `Modal`, `Chip` and `FeedbackButtonRow`.
+- **Containers keep `--radius`:** cards, images and consumer meta chips. A bordered sub-panel inside a form is a container too, like `VenuePicker`'s `.miniForm` or the EventSubmit content-language group.
+- **Organizer status badges and tags are square.** "Chips keep `--radius`" applies to consumer meta chips only.
+- **Hairlines, not boxes.** `--rule` (`1px solid var(--border-subtle)`) separates sections, and `--hair-width` sizes the plate and empty-state hairline. Reach for a rule before a border or a background change.
 
 ## 7. The shared CSS layer
 
-`frontend/src/components/shared/` holds 19 pure-CSS modules plus one component folder, `GoogleSignInButton/` (`.tsx` + `GoogleGMark.tsx` + test) — the one exception to the CSS-only rule. Consume the CSS modules with CSS Modules `composes:`; **never copy-paste** their rules into a route or component stylesheet. Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`.
+`frontend/src/components/shared/` holds pure-CSS modules for page, card, button, field, menu, bar, calendar, settings and prose chrome. `GoogleSignInButton/` is the one component folder in it.
 
-| Module | Holds |
-|---|---|
-| `Page.module.css` | Page shells (`.page`, `.pageCentered`, `.pageMain`, `.pageMainNarrow`, `.pageTitle`, `.proseBody`, `.pageHint`), the Explore/SavedEvents grid shell (`.gridMain`, `.gridMasthead`, `.gridHeading`, `.cardGrid`), admin route-header chrome (`.adminEyebrow`, `.adminPageTitle`) |
-| `Card.module.css` | `.card`, `.cardAccentTop`, `.cardDangerTop`, `.cardPage`, plus the auth shell (`.authCard`, `.authHeader`, `.authRadar`, `.authBrand`) |
-| `Button.module.css` | `.btnPrimary`, `.btnOutline`, `.btnSubmit`, `.textButton`, `.iconAction`, `.successBlock` |
-| `Field.module.css` | `.fieldLabel`, `.fieldInput`, `.fieldWrap` (chrome-only outer box for composite controls) |
-| `Menu.module.css` | Popover/trigger chrome for `FacetMenu`, `SelectMenu`, `DateRangeMenu`, `MobileMenu`, `DatePicker`, `SelectField`, including the equal-width option list (`.menuValue`, `.menuOptionList`, `.menuOptionRow`, `.menuOptionActive`) |
-| `Bar.module.css` | Top-bar layer (direction A · Programme) shared by `TopBar`, `OrganizerTopBar` and the bar sub-components `BarLogo`, `BarNav`, `PulseChip`, `BarSearch`, `AccountMenu`, `PrefsMenu` (bar, condense/transparent states, nav + gold active rule, square outline controls, popovers, joined `.seg` rows, phone/wide visibility). `DialMark/` owns its own module, sized by `--dial-size`/`--dial-color` which the bar sets. `MobileMenu.module.css` is the phone drawer. Every bar/drawer link sets its own `:hover` colour (index.css's global `a:hover` gold would otherwise outrank single-class link colours) |
-| `Animations.module.css` | Keyframes + classes — see §8 |
-| `AdminQueue.module.css` | Admin queue row/detail typography, resolved panel |
-| `Calendar.module.css` | Calendar grid chrome (`.calHead`, `.calNavBtn`, `.calMonthLabel`, `.calWeekdays`, `.calGrid`, `.calDay`, plus the day states `.calSpill`, `.calToday`, `.calSelected`) shared by `DatePicker` and `DateRangeMenu` |
-| `Settings.module.css` | Settings-page shell (`.settingsMain`, section/toggle-row/repick-button chrome) shared by `Settings` and `OrganizerSettings` |
-| `Prose.module.css` | Typography for sanitized-HTML bodies (`.prose` — paragraph/list/strong/heading/blockquote rules every render surface agrees on), composed by `EventDetail`'s `.description` and `AdminEventDetail`'s `.proseHtml`. `RichTextEditor`'s editing surface keeps its own margin model and does not compose it |
-| `Alert` (`.alert`, `.alertAccent` for non-error callouts), `Chip`, `Link`, `Media`, `Spinner`, `StatusCircle`, `Visually`, `DesktopGate` | Inline alert, chip pill, accent link, image backdrop, spinner rings + full-page overlay scrim, status circles, sr-only/offscreen utilities, the admin desktop-only gate |
-
-Add a new shared pattern here rather than growing a second copy. New variants follow base-class + modifier (`.card` / `.cardAccentTop`) — **never restyle a base class in place** to suit one consumer.
-
-**A note on Landing:** `Landing.module.css` is the least shared-dependent stylesheet (it composes `Page`, `Card`, `Alert`, `Spinner`, `StatusCircle`, `Animations`, `Media` and re-rolls the hero/ticker/plate/proof/footer chrome locally). That is deliberate — its hero treatment has no second consumer. Don't "fix" it by hoisting hero CSS into `shared/`.
-
-**One exception to "never copy-paste":** `composes:` resolves to a class-name string at build time, so it cannot be scoped inside a `@media` block — a shared rule that must apply only above/below a breakpoint has to be restated locally rather than composed. `Feed.module.css`'s media-scoped `.srOnly` override is the one live instance (`Visually.module.css`'s own `.srOnly` is unconditional); keep any such restatement in sync with the shared rule it mirrors.
+- **Consume shared modules with CSS Modules `composes:`.** Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`. Copy-pasting their rules is the drift this layer exists to stop.
+- **Add a new shared pattern here rather than growing a second copy.** Variants follow base class plus modifier, like `.card` and `.cardAccentTop`. Restyling a base class in place for one consumer changes every other consumer.
+- **`composes:` can't be scoped inside `@media`.** It resolves to a class-name string at build time. A shared rule needed only on one side of a breakpoint is restated locally, as `Feed.module.css`'s media-scoped `.srOnly` does. Keep a restatement in sync with its source.
+- **Every bar and drawer link sets its own `:hover` color.** `index.css`'s global gold `a:hover` otherwise outranks a single-class link color.
+- **`Prose.module.css` is the one typography for sanitized-HTML bodies.** `EventDetail` and `AdminEventDetail` compose it. `RichTextEditor`'s editing surface keeps its own margin model.
+- **`Landing.module.css` re-rolls its hero, ticker, plate and footer chrome locally, on purpose.** That treatment has no second consumer. Hoisting it into `shared/` adds indirection for nothing.
 
 ## 8. Motion
 
-App-wide vocabulary in `Animations.module.css`: `.spin`, `.breathe`, `.rise`, `.fadeIn`, `.fadeInScale`, tuned per call site via `--spin-duration`/`--breathe-duration`/`--rise-duration`/`--rise-distance` custom properties. `.rise` uses `animation-fill-mode: backwards`, **not `both`** — holding the end transform leaves a non-`none` computed transform forever, which makes the element a containing block for any `position: fixed` descendant and breaks popover positioning (`EventOverflowMenu`'s mobile popover). Don't "improve" it to `forwards`/`both`.
-
-Landing/C1 vocabulary, in the same file but Landing-exclusive: `heroRise` (masked headline lines translating up, staggered via `--hero-rise-delay`), `hairlineDraw` (a rule scaling in from zero width), `posterDrift` (26s slow scale/pan on the hero poster), `tickerSlide` (linear marquee). All four collapse to `animation: none` under `prefers-reduced-motion: reduce`. They live sitewide rather than inside `Landing.module.css` so a future surface reusing the poster/ticker treatment needn't re-prefix them.
-
-`--easing` is the app curve; `--easing-landing` is C1's single motion curve; `--easing-breathe` is the looping pulse. Two constraints on any new motion: it must collapse under reduced motion, and it must complete (or be irrelevant) within the prerender gate's wait — `frontend/scripts/prerender.ts` snapshots Landing, `/explore`, and every event page with Playwright, so a scroll-gated reveal that never fires headlessly ships as invisible content.
+- **The app vocabulary lives in `Animations.module.css`:** `.spin`, `.breathe`, `.rise`, `.fadeIn` and `.fadeInScale`. Call sites tune them through `--spin-duration`, `--breathe-duration`, `--rise-duration` and `--rise-distance`.
+- **`.rise` fills `backwards`, never `forwards` or `both`.** A held end transform leaves a non-`none` computed transform. That makes the element a containing block for any `position: fixed` descendant and breaks popovers, such as `EventOverflowMenu` on mobile.
+- **Landing's keyframes live in the same file:** `heroRise`, `hairlineDraw`, `posterDrift` and `tickerSlide`. They're sitewide so a future surface reusing the poster or ticker needn't re-prefix them.
+- **Three curves:** `--easing` for the app, `--easing-landing` for C1 motion, `--easing-breathe` for the looping pulse.
+- **New motion collapses to `animation: none` under `prefers-reduced-motion: reduce`.**
+- **New motion completes within the prerender's wait, or doesn't matter.** The prerender snapshots Landing, `/explore` and every event page headlessly. A scroll-gated reveal that never fires ships as invisible content. See [seo.md](seo.md)'s Readiness section.
 
 ## 9. Component-level rules
 
-- **`EventCard` has exactly two variants: `standard` and `featured`.** An `editorial` split-row plate variant was specced and built twice (Explore, SavedEvents) and reverted both times on product review against the standard grid. The variant and its shared plate CSS do not exist. Landing's `.plate` showcase rows are Landing-local and unrelated. Don't add a third variant without a live visual review first.
-- **`EmptyState` has no icon.** Its shape is: optional small-caps eyebrow (an existing i18n string reused from the route — not new copy) → `--rule` hairline → Cormorant title → Manrope message → optional hint, **left-aligned**, matching the flat-proof-section rhythm. There is no `icon` prop.
-- **`PageState` stays centered.** A viewport-centered spinner is the conventional pattern for a transient full-page load, not a "centered everything" tell. It is deliberately untouched by the C1 pass.
-- **No pictographic emoji in consumer or organizer UI.** `PersonaCard` renders no emoji (its `.name` is the visual anchor, with a hairline to `.vibe`); Settings' persona summary is text only. `shared/personas.json` still carries the `emoji` field as data — it is simply not rendered. Unicode *status* marks (`✓ ✕ ⚠ ☰`) are functional glyphs, not iconography, and are allowed on every surface (`AuthCard`, `MagicLinkForm`, `Modal`, `MobileMenu`, `Landing`/`Contact` success checks, and the admin console's run/queue status marks all use them). **One live exception:** `FeedbackButtonRow` still renders `👍 👎 🔖` (`SIGNAL_CONFIG` in `frontend/src/constants.ts`) on `EventCard` and `EventDetail` — a pre-C1 carryover that the migration never replaced. The same three glyphs also prefix the Saved page's `SegmentedControl` tabs (`SavedEvents.tsx`, via `SIGNAL_CONFIG`): kept deliberately (audit 2026-09-29, owner decision) so the tab reads as the same signal as the button that saved the event. They are one exception — the signal glyph set — used in two places; don't add a second set, and treat replacing them as open work rather than as a counter-example to the rule.
-- **`RichTextEditor`'s toolbar icons are functional controls, not iconography.** Its bold/italic/underline/list/link/quote glyphs are local inline SVGs (`RichTextEditor/icons.tsx`), not an icon library and not emoji — a toolbar button has no text label that could carry the meaning instead. This does not open the door to icons elsewhere; every other surface still uses type and hairlines.
-- **Other small inline SVGs are documented functional exceptions (audit 2026-09-29).** The `Footer` social-link marks (Instagram/Facebook/X — brand marks for label-less link targets), the `EventOverflowMenu` Share/Flag glyphs, the `Explore` search-field magnifier, the top bar's search glyph, static half-filled-circle preferences glyph and account-menu chevron, and the label-less kebab, chevron, calendar and remove controls all ship as local inline SVGs (`aria-hidden`, sized by CSS token — never `width`/`height` in markup). They mark a control or link target; none is standalone decoration. Same closing rule as above: this does not open the door to new icons — a new one needs a case in this list.
-- **Two top bars stay separate.** `OrganizerTopBar` does not converge on `TopBar`: `TopBar`'s nav/auth links are hardcoded to consumer routes, and each renders its own `<header>`/`<nav>` markup. They share `Bar.module.css`, the bar sub-components (`BarLogo`, `BarNav`, `AccountMenu`, `PrefsMenu`) and `MobileMenu` itself, parameterized via its `navItems`/`accountItems`/`track`/`navAriaLabelKey` props so each top bar passes its own link set (`NAV_ITEMS` vs `ORGANIZER_NAV_ITEMS`). Extracting a prop-driven base *header* component to save ~15 lines of JSX still costs more indirection than it returns; that's the part of the merge that stays rejected.
-- **The Dial is the brand mark, not an icon.** `DialMark` (rim, inner ring, pivot in `currentColor`; hand and tip dot in `--accent-ink`) replaces `BRAND_GLYPH` (`◉`) in both bars, `Footer` and `AuthCard`. The bars play its intro (hand turns once, rim draws in) on the first bar mount per page load only (a module-level flag — every route mounts its own bar); `Footer` and `AuthCard` render it static. `AdminShell` keeps `◉` — the admin sub-language gets no brand imagery — so `BRAND_GLYPH` stays in `constants.ts` for it alone. Animations are `backwards`-fill only, and the rim's `stroke-dasharray` lives only in the keyframes (on the resting ring it leaves a hairline gap at 12 o'clock). `AuthCard`, `Login` and `OrganizerLogin` share one `.authDial` base (`Card.module.css`); `AdminLogin` keeps `◉` + `.authRadar` like `AdminShell`, so `BRAND_GLYPH` stays for those two alone. **Off-page surfaces carry it too**, all emitted by `frontend/scripts/generate-icons.ts` onto a **sharp, opaque navy square tile** (`--bg`, rim/pivot/ring `--text`, hand/dot `--accent-ink` dark) — the tile is navy in every browser chrome theme, and iOS/Android apply their own masks. Two optical sizes from one geometry fn: *small* (`favicon.svg`/`.ico` 16–48, `email-mark.png` shown at 32px in every email header) is heavier — no inner ring, thicker rim/hand, bigger pivot and tip dot, dial ≈84% of the tile — and *large* (`icon-96/192/512`, apple-touch, maskable) is DialMark-faithful at ≈68%. Both stroke the tip dot in the tile colour (a halo) so it cuts the rim instead of merging into it. `icon-maskable-512.png` (`purpose: "maskable"`) keeps the rim and tip dot inside the 40%-radius safe zone. `og-fallback.png` is a 1200×630 navy composition: `EVENTRADAR.EE` eyebrow, hairline, stacked Cormorant `Event` / italic `Radar` (mirrors `BarLogo`) beside a large Dial, no tagline (one image for all three locales); its fonts are embedded from `@fontsource`, never a CDN.
-- **`OrganizerDashboard` stays a row-list**, on consumer-register typography (Cormorant heading, Manrope body) — not admin's sub-language, not Explore's grid. That line is what keeps the portal a self-service product surface.
-- **The organizer submit/edit form keeps its original structure** — content-language segmented control, stacked labeled fields, two-column date/price rows, `VenuePicker`/`SelectField`/`FileField`. A plate-anatomy rebuild (numbered plates, eyebrow labels, hairline-separated field rows) was prototyped and rejected. Cormorant heading over Manrope-with-sharp-corners fields is the *intended* contrast, not an inconsistency to resolve.
-- **`EventDetail` changes with the smallest structural diff.** Sharp-corner controls, Cormorant title. It's the most-linked, SEO-critical, prerender-gated page. The one sanctioned restructure is the wide-band `.rail`/`.body` split (§10): block *order* within `<main>` changed, content/JSON-LD/price marker did not, and narrow widths render the same stacked sequence.
-- **Static/legal is the editorial surface.** `LegalPage` section headings are Cormorant, each `.section` carries a `--rule` hairline above it so a legal document reads as a sequence of blocks rather than one text wall. Body copy stays Manrope.
+### Iconography
+
+- **No pictographic emoji in consumer or organizer UI.** `PersonaCard` and Settings' persona summary render none. `shared/personas.json` keeps its `emoji` field as data only.
+- **Unicode status marks (`✓ ✕ ⚠ ☰`) are functional glyphs, allowed everywhere.** Auth, modal, drawer and success states use them, and so do admin run and queue statuses.
+- **One emoji exception: the `👍 👎 🔖` signal glyphs.** They come from `SIGNAL_CONFIG` in `frontend/src/constants/feedback.ts`, on `FeedbackButtonRow` and the Saved page tabs. The tabs keep them by owner decision, so a tab reads as the same signal as the button that saved the event.
+- **Treat that exception as open work, not precedent.** Replacing the glyphs is fine; a second emoji set is not.
+- **`RichTextEditor`'s toolbar glyphs are controls, not iconography.** They're local inline SVGs in `RichTextEditor/icons.tsx`, because a toolbar button has no text label to carry the meaning.
+- **A few small inline SVGs are documented functional exceptions.** They're the footer social marks, the overflow menu's Share/Flag, the search magnifiers, the preferences glyph, the account chevron, and label-less kebab, chevron, calendar and remove controls.
+- **Each inline SVG is `aria-hidden` and sized by a CSS token,** never `width`/`height` in markup. A new icon needs a case added to this list first.
+
+### Google Sign-In Mark
+
+- **Third-party identity-provider brand marks are a class exception.** Google's branding terms forbid making the full-colour "G" monochrome, redrawing it or dropping it. The exception is scoped to the sign-in surface and doesn't reopen the no-iconography rule.
+- **The mark is a local inline SVG, never `<img>`.** That saves a request and an `img-src` CSP surface, and the test asserts it. It's the flat four-colour G, chosen over the gradient "super G" for legibility at 20px.
+- **The button is square,** composed unmodified from the shared `Button` module. Google's written guidelines set no corner radius, so this is a defensible reading even though it departs from Google's own assets. See `docs/adr/0002-google-sign-in-oauth-pkce.md`.
+
+### The Dial
+
+- **`DialMark` is the brand mark, not an icon.** Rim, inner ring and pivot are `currentColor`; hand and tip dot are `--accent-ink`. It appears in both bars, `Footer`, `AuthCard`, `Login` and `OrganizerLogin`.
+- **The intro plays on the first bar mount per page load only.** A module-level flag gates it, since every route mounts its own bar. `Footer` and `AuthCard` render it static.
+- **Its animations fill `backwards` only.** The rim's `stroke-dasharray` lives only in the keyframes; on the resting ring it leaves a hairline gap at 12 o'clock.
+- **Admin keeps `BRAND_GLYPH` (`◉`).** `AdminShell` and `AdminLogin` get no brand imagery, so the constant stays in `frontend/src/constants/core.ts` for those two alone.
+
+`frontend/scripts/generate-icons.ts` draws the off-page marks: favicons, app icons, the email header mark and the OG fallback image.
+
+- **Every off-page mark sits on a sharp, opaque navy square tile.** The tile stays navy under every browser chrome theme, and iOS and Android apply their own masks.
+- **The email mark is the exception: its tile is rounded (`--radius` at 32px) with transparent corners.** No OS mask rounds it, and a sharp navy square read as a black box on the light email palette. The tile stays navy in both email themes, because clients that force-invert dark mode leave images alone.
+- **Two optical sizes come from one geometry function.** The small size (favicons, the 32px email mark) drops the inner ring and thickens rim, hand, pivot and tip dot. The large size (app icons, apple-touch, maskable) stays faithful to `DialMark`.
+- **Both sizes stroke the tip dot in the tile color**, so it cuts the rim instead of merging into it. The maskable icon keeps rim and tip dot inside the 40%-radius safe zone.
+- **`og-fallback.png` is one image for all three locales,** so it carries no tagline. Its fonts are embedded from `@fontsource`, never a CDN.
+
+### Components
+
+- **`EventCard` has two variants: `standard` and `featured`.** An `editorial` split-row plate variant was built twice and reverted twice on product review. Add a third only after a live visual review. Landing's `.plate` rows are unrelated.
+- **`EmptyState` has no icon and is left-aligned.** Its shape is an optional small-caps eyebrow (an existing i18n string), a `--rule` hairline, a Cormorant title, a Manrope message, then an optional hint.
+- **`PageState` stays centered.** A viewport-centered spinner is the conventional pattern for a transient full-page load.
+- **The two top bars stay separate.** `TopBar` hardcodes consumer routes, and each bar renders its own `<header>`/`<nav>`. They share `Bar.module.css`, the bar sub-components and `MobileMenu`, which takes per-bar props. A shared base header would save about 15 lines for more indirection than it's worth.
+- **`OrganizerDashboard` stays a row list in the consumer register.** That's what keeps the portal a self-service product surface rather than admin or a browse grid.
+- **The organizer submit/edit form keeps its structure.** A plate-anatomy rebuild was prototyped and rejected. A Cormorant heading over sharp-cornered Manrope fields is the intended contrast.
+- **`EventDetail` changes with the smallest structural diff.** It's the most-linked, SEO-critical, prerender-gated page. The one sanctioned restructure is the wide-band rail/body split in §10.
+- **Legal pages are the editorial surface.** `LegalPage` section headings are Cormorant, and each `.section` has a `--rule` above it so a document reads as blocks, not a text wall.
 
 ## 10. Layout and breakpoints
 
-- One shared breakpoint: **640px** (mobile, the only one that recurs — ~20 stylesheets), tokenized as `--bp-narrow` but written as a literal in `@media` rules; see §3. Three one-off breakpoints exist where 640px didn't fit the layout, each documented by its own single-consumer token: **560px** (`Onboarding`, `--bp-onboarding-narrow`), **900px** (`Landing`'s stat row, `--bp-landing-stats`), and **1024px** (`DesktopGate`, the admin desktop gate, `--bp-desktop-gate`). **641px** (`Landing`) is the `min-width` complement to its own 640px `max-width` rule, not a separate breakpoint. The top bar adds one more, **1280px**, with no doc token: `shared/Bar.module.css`'s `max-width: 1279px` rule hides `.wideOnly` (the `PulseChip` and the inline underline search) and shows `.narrowOnly` (the search icon + popover) below it.
-- Page widths are tokenized per surface (`--page-max-narrow`/`-legal`/`-medium`/`-grid`/`-wide`/`-feed`/`-organizer`/`-settings`). Pick an existing one before adding another.
-- The browse grid is `Page.module.css`'s `.cardGrid` — `repeat(var(--card-grid-cols), minmax(var(--card-grid-col-min), 1fr))`: auto-fill over `--card-grid-min` below the wide band, fixed counts inside it (see below), collapsing to one column at 640px. Explore and SavedEvents both compose it; Feed deliberately does *not* (a lead `featured` card plus a list — five curated picks is a different problem from an unbounded browse list, and converging the two would flatten the curated-vs-browse distinction).
-- Admin geometry has its own tokens (`--admin-rail-width`, `--admin-queue-list-width`, `--admin-tile-min`, `--admin-trigger-min`, …) and its own desktop gate (`DesktopGate.module.css`).
+- **640px is the one shared breakpoint**, written as a literal and named by `--bp-narrow` (§3). `Landing`'s 641px is its `min-width` complement, not a new breakpoint.
+- **Three one-off breakpoints each have a single consumer and a doc token:** 560px for Onboarding, 900px for Landing's stat row and 1024px for the admin desktop gate.
+- **The top bar switches at 1280px, with no token.** Below it, `Bar.module.css` hides `.wideOnly` (pulse chip, inline search) and shows `.narrowOnly` (search icon and popover).
+- **Page widths are `--page-max-*` tokens per surface.** Pick an existing one before adding another.
+- **The browse grid is `Page.module.css`'s `.cardGrid`,** composed by Explore and Saved. It auto-fills below the wide band, uses fixed column counts inside it and collapses to one column at 640px.
+- **Feed doesn't use the browse grid.** Five curated picks (a lead `featured` card plus a list) are a different problem from an unbounded browse list. Converging them would flatten that distinction.
+- **Admin has its own geometry tokens and its own desktop gate** (`DesktopGate.module.css`).
+
+### Top Bar Height
+
+- **The bar condenses on scroll on every route.** Desktop goes from `--bar-h` to `--bar-h-condensed`; phones from `--bar-h-phone` to `--bar-h-phone-condensed`.
+- **Anything sticky or anchor-scrolled under the bar keys off the condensed height.** `EventDetail`'s rail `top` and `Faq`'s `scroll-margin-top` both do.
+- **Landing's hero runs up under the transparent bar** through a negative `margin-top` of `--bar-h`, with its grid padding and poster frame offset to match.
 
 ### Wide viewports (≥2000px)
 
-Locked via the wide-viewport map (#459), then revised on the real monitor. On a 3840×2160 monitor at ~150% scaling (2560×1440 CSS px) every surface used to sit in a narrow centre column. The fix is **pure reflow, no fluid tokens**: one wide band from a `min-width: 2000px` floor, fixed 1760px page centred above it, no intermediate step. The floor was first 1280px and moved up after review: a 2880×1620 laptop at 150% (1920×1080 CSS px) read better on the original layout, so the band sits between that laptop and the 2560px monitor. Everything ≤1999px — laptops, tablets, mobile — renders the original layout, and C1 is untouched. Every wide rule lives in a `@media (min-width: 2000px)` block.
+The wide band is **pure reflow**: one `@media (min-width: 2000px)` band, a fixed 1760px page centred above it, and no fluid tokens. Everything up to 1999px renders the original layout.
 
-- **Tokens.** One wide `:root` block at the end of `index.css` redefines `--page-max-wide` to **1760px** and points `--page-max-medium`/`-grid` at it. Doc token `--bp-wide: 2000px` (the literal still carries the `@media` rule). `--card-grid-cols` is `auto-fill` below the floor and **6** inside the band (the earlier 4-column step at 1280–1699 went with the old floor), with `--card-grid-col-min` dropping to `0` so six tracks fit; `cardGridColumns.test.ts` reads `index.css` and asserts every fixed count divides `BROWSE_PAGE_SIZE` and `SAVED_EVENTS_PAGE_SIZE` (24), so every page and load-more ends on a full row.
-- **Top bar layout.** Desktop bar height is `--bar-h` (72px) at the top and `--bar-h-condensed` (54px) once scrolled; phones `--bar-h-phone` (60px) → `--bar-h-phone-condensed` (52px). It condenses on every route (hysteresis 24px/4px). Anything sticky or anchor-scrolled under the bar keys off the condensed height: `EventDetail`'s rail `top` is `--bar-h-condensed` (the bar is condensed whenever the rail is stuck; `useFitsViewport` reads that CSS `top`) and `Faq`'s `scroll-margin-top` uses `--bar-h-condensed`/`--bar-h-phone-condensed`. Landing's hero runs up under the transparent bar (`margin-top: calc(-1 * var(--bar-h))`, grid padded by the same, poster frame `top: var(--bar-h)`).
-- **Chrome.** `TopBar`/`OrganizerTopBar` content aligns to the 1760 wrap via `padding-inline: var(--wrap-inset)` on the shared `.bar` (background stays full-bleed). `--wrap-inset` is `max(var(--space-6), calc((100% - var(--page-max-wide)) / 2 + var(--space-6)))`; its `100%` resolves at each use site, so any full-bleed strip can reuse it. `.gridMain` takes `--space-6` side padding inside the band so grid edges meet the bar. `Footer` unchanged (centred, follows `--page-max-wide`).
-- **Landing.** The hero still fills the available height (an 820px cap was prototyped and dropped); instead its small type steps up the `--fs-*` scale (counter/dateline/capbar labels `--fs-3xs` → `--fs-sm`, sub and browse CTA → `--fs-lg`, no-password note → `--fs-base`, email input → `--fs-xl`, email submit → `--fs-sm`, ticker label → `--fs-xs`, ticker items → `--fs-base`). The `h1` stays on `--font-size-display-hero` (96px max) — don't grow it against the 60-ch ET headline. Ticker strip stays full-bleed; its label and the marquee window are inset to the wrap on both sides (`.tkLabel` padding, `.tkView` margin + hairline), so items enter and leave at the same insets. Plates are **staggered**: each row is capped at `--plates-max-width` (1240px), `.plate` hugs the wrap's left edge and `.plateFlip` its right; the media panel is `--plate-media-width` = `--plate-media-min-height` (400px in the band) × `--plate-media-aspect` (16 / 9), the text column takes the rest. The width is fixed, so a row that grows past 400px (long ET/RU text) gets a taller-than-16:9 panel — accepted; the image is `contain` over a backdrop either way. Proof section and organizer CTA widen to the 1760 wrap with the same columns.
-- **EventDetail.** Two columns: `.rail` (hero → `.railHead` date/title/actions → `.railFoot` details/claim) beside `.body` (why-go, about, important info). Details/claim sit before why-go in the DOM; below the band `.rail` is `display: contents` and `order` puts `.railFoot` after `.body`, so the stacked sequence is unchanged. One copy of each block — never duplicate DOM for a layout. Inside the band the rail sticks under the TopBar only while it fits the viewport: `useFitsViewport` (`hooks/`) compares the rail's height plus its CSS `top` against `innerHeight` and toggles `.railFits`, so a tall ET/RU rail never clips. Content, JSON-LD, the `event-price` marker and the prerender gate are unchanged. **Known trade-off:** below the band, keyboard/reading order (DOM) reaches details/claim before why-go/about while they render after them — accepted to avoid duplicating blocks (#466); tab order inside the band matches the visual rail-then-body order.
-- **Explore / Saved.** Explore's search + filter rows sit in a `.toolbar` wrapper: a column below the band, one hairline-ruled row inside it with search capped at `--explore-search-max` (480px) and the category/vibe/free cluster pushed right; `flex-wrap` is the fallback when ET/RU labels outgrow the row. Saved follows the grid automatically.
-- **Unchanged at every width: Feed, organizer portal, admin console.** `--page-max-feed` stays 760, `--page-max-organizer` (Dashboard, ClaimEvents, AdminEventDetail) stays 840, `--admin-queue-list-width` stays 340. Widened versions (Feed ~1080, organizer lists at the 1760 wrap, wider admin caps) were prototyped and read too wide. Their TopBar still aligns to the 1760 wrap — accepted.
-- **Images.** No `srcset`/`sizes`; sources hold up at wide sizes. Only marginal case is Fienta on the Landing plate/hero (its CDN accepts `width` ≤ 1920 if needed).
-- **Prerender / theming.** Prerender's 1280×720 default viewport is harmless (DOM-only). Light theme is token-driven (hairlines via `--rule`); every wide token is theme-neutral, so the light block needs no counterpart.
+- **The floor sits between a laptop and a monitor.** It started at 1280px, but a 1920px-CSS laptop (2880×1620 at 150%) read better on the original layout. Re-check that laptop before lowering the floor below 1920.
+- **One wide `:root` block at the end of `index.css`** sets `--page-max-wide` to 1760px and points `--page-max-medium` and `-grid` at it. Every wide token is theme-neutral.
+- **The band has six grid columns.** `frontend/src/cardGridColumns.test.ts` asserts each fixed count divides the 24-event page size, so every page and load-more ends on a full row.
+- **Bar content aligns to the 1760 wrap through `--wrap-inset`;** the bar background stays full-bleed. The token's `100%` resolves at each use site, so any full-bleed strip can reuse it.
+
+#### Landing in the Band
+
+- **The hero still fills the height; its small type steps up the `--fs-*` scale.** An 820px height cap was prototyped and dropped.
+- **The `h1` stays on `--font-size-display-hero` (96px max).** Growing it fights the 60-character Estonian headline.
+- **The ticker stays full-bleed, with its label and marquee window inset to the wrap.** Items enter and leave at the same insets.
+- **Plates stagger:** `.plate` hugs the wrap's left edge and `.plateFlip` its right, each capped at `--plates-max-width`. The media panel has a fixed width, so long ET/RU text makes it taller than 16:9. That's accepted, since the image is `contain` over a backdrop.
+
+#### EventDetail in the Band
+
+- **Two columns: `.rail` (hero, date, title, actions, then details and claim) beside `.body` (why-go, about, important info).**
+- **There's one copy of each block; layout never duplicates DOM.** Below the band, `.rail` is `display: contents` and `order` restores the stacked sequence.
+- **Known trade-off:** below the band, DOM and tab order reach details and claim before why-go and about, while they render after.
+- **The rail sticks only while it fits the viewport.** `hooks/useFitsViewport` compares its height plus CSS `top` to `innerHeight` and toggles `.railFits`, so a tall ET/RU rail never clips.
+
+#### Other Surfaces in the Band
+
+- **Explore's search and filters become one hairline-ruled `.toolbar` row,** with search capped at `--explore-search-max`. `flex-wrap` is the fallback when ET/RU labels outgrow it. Saved follows the grid.
+- **Feed, the organizer portal and admin keep their narrow widths at every viewport.** Wider versions were prototyped on the real monitor and read too wide. Their top bar still aligns to the 1760 wrap.
+- **Images use no `srcset`;** sources hold up at wide sizes. The prerender's 1280×720 viewport is harmless, since snapshots are DOM-only.
 
 ## 11. Landing structure
 
-Section order, locked:
+Section order is locked:
 
-1. **Hero** — full-bleed poster with `--grain` overlay and `--scrim-vertical` for legibility, a `--poster-frame` gold hairline inset (hero-only, never repeated), dateline + live counts strip pinned top, headline + subcopy + email capture pinned bottom, plus a split-rail browse CTA.
-2. **Ticker** — single-line "tonight" marquee of time-stamped titles (`tickerSlide`), paused under reduced motion.
-3. **Showcase plates** — split-panel rows: a fixed-height image panel (`--plate-media-min-height`, compact variant on mobile) filled with `object-fit: cover`, text column beside it, alternating sides (`.plate`/`.plateFlip`), a `--hair-width` gold hairline, meta row beneath. A cover-filled fixed panel is ratio-proof by construction — that is the whole point of the shape. An earlier full-bleed treatment that fit posters into a viewport-shaped box needed a blurred backdrop, an edge mask, and a lateral scrim to disguise letterboxing, and three rounds of tuning those constants failed; the structural fix replaced them.
-4. **Flat proof section** — how-it-works steps plus a stat row, designed to read with imagery stripped.
-5. **Organizer CTA** — one row: headline, one line, outlined button.
-6. **Footer** — trust line (no password / no tracking / free), locale list, year.
+1. **Hero:** full-bleed poster with `--grain` and `--scrim-vertical`, a `--poster-frame` gold hairline inset, dateline and live counts at the top, then headline, subcopy, email capture and a browse CTA at the bottom.
+2. **Ticker:** a one-line "tonight" marquee of time-stamped titles, paused under reduced motion.
+3. **Showcase plates:** split rows with a fixed-height image panel (`object-fit: cover`) beside the text, alternating sides, with a gold hairline and meta row.
+4. **Flat proof section:** how-it-works steps and a stat row, built to read with imagery stripped.
+5. **Organizer CTA:** one row with a headline, one line and an outlined button.
+6. **Footer:** trust line, locale list and year.
 
-**Landing copy must be honest about the catalogue.** Numbers on the page come from the live counts endpoint (`app/routers/public.py`), never hardcoded. Settled rules:
+- **The plate's cover-filled fixed panel is ratio-proof by construction.** An earlier full-bleed fit needed a blurred backdrop, edge mask and lateral scrim to hide letterboxing. Three rounds of tuning failed before the structural fix.
 
-- Show **upcoming** published events, not all-time — and round it ("over 1,000 events") so daily attrition doesn't force copy edits.
-- Venue counts are **published-scoped**. An unscoped `count(distinct venue_name)` across all statuses is roughly 50% higher and is wrong for the page.
-- "Tonight" is genuinely volatile and can be zero — a real empty-tonight is a valid, non-error state, and the endpoint widens to a fallback window rather than rendering an empty ticker.
-- Do **not** ship: any "N new events every week" throughput claim (the data can't support it honestly), the price ceiling (quote only "tickets from €1"), or the thin category tail by name.
-- Safe permanent copy: five picks every morning at six, digest at seven, hourly source re-reads, three locales, 14 categories.
+### Honest Copy
+
+Landing's numbers come from the live counts endpoint, `GET /public/counts` in `app/routers/public.py`, never hardcoded.
+
+- **Show upcoming published events, rounded** ("over 1,000 events"), so daily attrition doesn't force copy edits.
+- **Venue counts are published-scoped.** Counting distinct venues across all statuses runs about 50% high.
+- **"Tonight" can be zero, and that's valid.** The endpoint widens to a fallback window rather than render an empty ticker.
+- **Leave out throughput claims, the price ceiling and the thin category tail.** The data can't honestly support "N new events every week". Quote prices only as "tickets from €1".
+- **Safe permanent copy:** five picks every morning at six, the digest at seven, hourly source re-reads, three locales, 14 categories.
+- **The top bar's pulse chip counts today, not tonight.** It matches exactly what its `/explore?date=today` link lists, hides at zero while keeping its slot, and is absent on Landing. [pipeline.md](pipeline.md) owns the query.
 
 ## 12. Settled — do not re-litigate
 
-| Decision | Status |
-|---|---|
-| Palette push (new accent/ground, dropping navy/gold) | Built, shipped, reverted after live review. Closed. |
-| App/favicon tile shape | Sharp square, not rounded-rect (C1 sharp corners). Rounded tile + old gold ring-and-dot `◉` replaced; platforms mask app icons themselves. |
-| `EventCard` `editorial`/plate variant | Built twice, reverted twice. The variant does not exist. |
-| `buttonSharp`/`fieldSharp`/`menuSharp` opt-in variants | Superseded — sharp corners are universal in the base classes. |
-| `Landing` retrofitted onto shared plate classes | Deliberately not done; its hero CSS stays local. |
-| `OrganizerTopBar` merged into `TopBar` | Rejected — indirection cost exceeds the saving. Stands after the bar restyle. |
-| Top bar direction | A · Programme shipped (wordmark + Dial, nav with a gold rule on the bar's hairline, pulse chip, underline search, account + preferences menus). B · Scope and C · Stub were built as prototypes and not chosen. |
-| Gold as text | Uses `--accent-ink` (`#e8a838` dark, `#8f6316` light), never `--accent`/`--accent-light` — the latter fails AA as text on the light ground. |
-| Pulse chip | Counts **today** (`today_count`, exactly what its `/explore?date=today` link lists), not tonight; hidden at zero (slot stays rendered so its arrival shifts nothing) and not rendered on Landing, whose hero keeps its own counts. |
-| Preferences glyph | A fixed half-filled circle that never reflects the current theme, so prerendered HTML can't show the wrong one. |
-| Organizer form rebuilt on plate anatomy | Prototyped, rejected. |
-| Cormorant anywhere in `/admin/*` | Removed, unqualified — no logotype exception. |
-| `--radius: 0` sitewide (containers too) | Rejected — controls only. |
-| Small inline SVGs (footer social marks, overflow-menu Share/Flag, search magnifier, kebab/chevron/calendar/remove) | Recorded as functional exceptions in §9 rather than removed; audit chose to document, not delete. No new icon ships without a §9 entry. |
-| Emoji as iconography | Removed from consumer/organizer surfaces; admin status glyphs stay. Exception: the `👍 👎 🔖` signal glyphs stay in `FeedbackButtonRow` and the Saved tabs (owner decision, 2026-09-29). |
-| Landing wide-screen hero side panel | Specced, never implemented, removed from scope. Re-opened and superseded by the wide-viewport layout (§10): Landing takes a pure-reflow wide composition, no side panel. |
-| Wide viewports: scale / fluid type / fluid tokens | Prototyped against reflow; reflow won. No `vw`-driven page tokens, no root font-size scaling. Page width is fixed 1760px from the 2000px floor, centred. |
-| Wide viewports: 1280px floor (4 → 6 columns) | Shipped, then raised to 2000px (2026-10-05): a 1920px-CSS laptop (2880×1620 @150%) read better on the original layout. Don't lower the floor below 1920 without re-checking that laptop. |
-| Wide viewports: widening Feed, organizer portal, admin console | Prototyped (Feed ~1080, organizer lists at 1760, wider admin caps) and rejected on the real monitor (2026-10-05) — too wide. They keep their narrow widths at every viewport (#480 closed wontfix). |
-| Wide viewports: Landing hero height cap | Prototyped at 820px and dropped — the hero fills the available height at every width; its small type grows in the band instead. |
-| Third-party identity-provider brand marks (class exception) | The full-colour Google "G" mark is pictographic iconography, which §1/§9 forbid, and per Google's branding guidelines it may not be made monochrome, redrawn, or dropped. Recorded as a **class** exception — third-party identity-provider brand marks, mandated by that provider's published branding terms, rendered as a local inline SVG (never `<img>` — one fewer request, no `img-src` CSP surface, and the test asserts it), scoped to the sign-in surface only. The mark is the flat four-colour G (legacy icon-only asset), chosen over Google's current gradient "super G" on legibility grounds at the 20px render size. Does not reopen §9's general no-iconography rule elsewhere. The button itself ships `border-radius: 0` (composed from the shared `Button` module, unmodified) — Google's written guidelines state no minimum size and no corner radius, so this is a defensible reading against the prose, not a violation, even though it visibly departs from Google's own shipped assets. See `docs/adr/0002-google-sign-in-oauth-pkce.md`. |
+Each of these was built or prototyped, reviewed and decided. Reopen one only with a new live review.
+
+- **Palette push (new accent and ground, no navy/gold):** shipped and reverted. See §1.
+- **`EventCard` `editorial`/plate variant:** built twice, reverted twice. It doesn't exist.
+- **`buttonSharp`/`fieldSharp`/`menuSharp` variants:** superseded; sharp corners live in the base classes.
+- **`--radius: 0` sitewide, containers included:** rejected. Controls only.
+- **App and favicon tile shape:** a sharp square, not a rounded rect. Platforms mask app icons themselves.
+- **Landing on shared plate classes:** not done. Its hero CSS stays local.
+- **`OrganizerTopBar` merged into `TopBar`:** rejected. The indirection costs more than it saves.
+- **Top bar direction:** A · Programme shipped (wordmark and Dial, nav with a gold rule, pulse chip, underline search, account and preferences menus). B · Scope and C · Stub were prototyped and not chosen.
+- **Organizer form on plate anatomy:** prototyped, rejected.
+- **Cormorant anywhere in `/admin/*`:** removed, with no logotype exception.
+- **Emoji as iconography:** removed from consumer and organizer surfaces. Admin status glyphs stay, and so does the signal-glyph exception in §9.
+- **Small inline SVGs:** documented in §9 rather than removed. No new icon ships without a §9 entry.
+- **Wide viewports by scaling, fluid type or fluid tokens:** prototyped against reflow; reflow won. No `vw`-driven page tokens and no root font-size scaling.
+- **Wide band at a 1280px floor:** shipped, then raised to 2000px. See §10.
+- **Widening Feed, the organizer portal or admin:** rejected on the real monitor as too wide.
+- **Landing hero height cap and side panel:** both dropped. The hero fills the height at every width.
 
 ## 13. Working checklist for a visual change
 
-1. Read the token list in `index.css` before writing any value. If the value you need isn't there, add the token first.
-2. Check `components/shared/` for an existing base class before writing chrome. Compose; don't copy.
-3. If it's a color, decide whether it needs a `:root[data-theme="light"]` value.
+1. Read the tokens in `index.css` before writing a value. If the one you need is missing, add it first.
+2. Check `components/shared/` for a base class before writing chrome. Compose; don't copy.
+3. For a color, decide whether it needs a `:root[data-theme="light"]` value.
 4. Test the layout against the **Estonian and Russian** strings, not English.
-5. Verify with imagery stripped, and under `prefers-reduced-motion: reduce`.
-   For display type, also zoom the browser to 300% and raise its default font size (§4, "Display tokens must grow under browser zoom").
-6. Verify visually before landing — a CSS retrofit that reads correct in the diff can still look wrong on screen. Ticket wording is not proof.
-7. Run `npm run lint` and `npm run type-check` (house rules; CI does not enforce them).
+5. Check with imagery stripped and under `prefers-reduced-motion: reduce`. For display type, also zoom to 300% and raise the default font size (§4's Browser Zoom).
+6. Verify visually before landing. A CSS retrofit that reads correctly in the diff can still look wrong on screen.
+7. Run `npm run lint` and `npm run type-check`; CI runs neither.

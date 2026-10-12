@@ -15,32 +15,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import generate_unsubscribe_token
 from app.config import settings
-from app.constants import (
-    AUTHORIZATION_HEADER,
-    BEARER_PREFIX,
+from app.constants.core import (
+    EVENTS_PATH,
+    HOME_PATH,
+    LOCALE_ET,
+    LOCALE_RU,
+    SETTINGS_PATH,
+    TALLINN_TZ,
+    UNSUBSCRIBE_PATH,
+)
+from app.constants.email import (
     DIGEST_CATEGORY_FALLBACK,
     DIGEST_MAX_WHY_GO_BULLETS,
     DIGEST_RESULT_SENT,
     DIGEST_RESULT_SKIPPED,
     DIGEST_SEND_CONCURRENCY,
-    EVENTS_PATH,
-    FEED_BUILD_USER_BATCH_SIZE,
     HEADER_LIST_UNSUBSCRIBE,
     HEADER_LIST_UNSUBSCRIBE_POST,
-    HOME_PATH,
     LIST_UNSUBSCRIBE_ONE_CLICK,
-    LOCALE_ET,
-    LOCALE_RU,
-    LOG_EVENT_EMAIL_SEND_FAILED,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
     RESEND_TIMEOUT_SECONDS,
-    SETTINGS_PATH,
-    TALLINN_TZ,
-    UNSUBSCRIBE_PATH,
 )
+from app.constants.http import AUTHORIZATION_HEADER, BEARER_PREFIX
+from app.constants.log_events import LOG_EVENT_EMAIL_SEND_FAILED
+from app.constants.ranking import FEED_BUILD_USER_BATCH_SIZE
 from app.email.links import frontend_url
-from app.email.brand import brand_mark_html
+from app.email.brand import brand_mark_attachments, brand_mark_html
 from app.email.styles import EmailStyles, get_email_styles
 from app.email.templates import (
     DIGEST_EMPTY_STATE,
@@ -230,7 +231,7 @@ def build_digest_html(
     settings_label = t("digest.unsubscribe", locale)
 
     header_html = DIGEST_HEADER.format(
-        brand_mark_html=brand_mark_html(s, frontend_base),
+        brand_mark_html=brand_mark_html(s),
         s_eyebrow=s.s_eyebrow,
         s_h1=s.s_h1,
         subject_label=subject_label,
@@ -321,6 +322,7 @@ async def send_digest_email(
                     "to": [to_email],
                     "subject": subject,
                     "html": html,
+                    "attachments": brand_mark_attachments(html),
                     "headers": {
                         HEADER_LIST_UNSUBSCRIBE: f"<{header_url}>",
                         HEADER_LIST_UNSUBSCRIBE_POST: LIST_UNSUBSCRIBE_ONE_CLICK,

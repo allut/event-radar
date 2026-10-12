@@ -7,15 +7,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.constants import (
+from app.constants.core import TALLINN_TZ
+from app.constants.events import (
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
     PUBLISH_DIAGNOSTICS_WINDOW_DAYS,
     PUBLISH_MIN_QUALITY_SCORE,
-    SOURCE_SLUG_FIENTA,
-    TALLINN_REGION_BBOX,
-    TALLINN_TZ,
 )
+from app.constants.ingestion import SOURCE_SLUG_FIENTA, TALLINN_REGION_BBOX
 from app.publish import publish_pending
 
 REJECT_ROW_ZERO = SimpleNamespace(
@@ -158,7 +157,7 @@ async def test_publish_pending_statement_encodes_gate_criteria(mock_db):
     assert str(lat_min) in compiled
     assert str(lng_max) in compiled
     # Unverified-organizer gate: NULL-safe OR around a NOT IN over unverified
-    # organizer ids (M2 — see CLAUDE.md Organizer Event Submission).
+    # organizer ids (M2 — see docs/organizer-portal.md).
     assert "submitted_by_organizer_id" in compiled
     assert "organizers" in compiled
     assert "verified" in compiled

@@ -16,7 +16,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.requests import Request
 
 from app.config import settings
-from app.constants import RATE_LIMIT_AUTH_REQUEST_LINK
+from app.constants.rate_limits import RATE_LIMIT_AUTH_REQUEST_LINK
 from app.rate_limit import client_key, limiter, rate_limit_exceeded_handler
 
 
@@ -186,7 +186,7 @@ def _build_organizer_auth_app() -> FastAPI:
 async def test_google_signin_start_returns_429_after_burst(monkeypatch):
     """RATE_LIMIT_GOOGLE_SIGNIN_START ("20/minute") enforced per-IP."""
     from app.config import settings
-    from app.constants import RATE_LIMIT_GOOGLE_SIGNIN_START
+    from app.constants.rate_limits import RATE_LIMIT_GOOGLE_SIGNIN_START
 
     monkeypatch.setattr(settings, "GOOGLE_SIGNIN_ORGANIZER_ENABLED", True)
     monkeypatch.setattr(settings, "GOOGLE_OAUTH_CLIENT_ID", "cid")
@@ -216,7 +216,7 @@ async def test_google_signin_callback_returns_429_after_burst(monkeypatch, mock_
     """RATE_LIMIT_GOOGLE_SIGNIN_CALLBACK ("30/minute") enforced per-IP — even
     a malformed callback (no code/state) still counts against the bucket."""
     from app.config import settings
-    from app.constants import RATE_LIMIT_GOOGLE_SIGNIN_CALLBACK
+    from app.constants.rate_limits import RATE_LIMIT_GOOGLE_SIGNIN_CALLBACK
     from app.db import get_db
 
     monkeypatch.setattr(settings, "GOOGLE_SIGNIN_ORGANIZER_ENABLED", True)

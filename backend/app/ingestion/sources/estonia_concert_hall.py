@@ -11,15 +11,10 @@ from urllib.parse import urlencode, urlsplit
 import httpx
 from bs4 import BeautifulSoup
 
-from app.constants import (
-    HTTP_ACCEPT_JSON_HEADERS,
-    BASE64_PAD_MULTIPLE,
-    DEFAULT_CURRENCY,
-    HTTP_METHOD_POST,
-    JWT_PAYLOAD_INDEX,
-    JWT_SEGMENT_COUNT,
-    TALLINN_TZ,
-)
+from app._generated.shared_constants import DEFAULT_CURRENCY
+from app.constants.auth import BASE64_PAD_MULTIPLE, JWT_PAYLOAD_INDEX, JWT_SEGMENT_COUNT
+from app.constants.core import TALLINN_TZ
+from app.constants.http import HTTP_ACCEPT_JSON_HEADERS, HTTP_METHOD_POST
 from app.ingestion.http_client import http_post
 from app.ingestion.pricing import to_float
 from app.ingestion.sanitize import sanitize_html

@@ -1,7 +1,7 @@
 import { StatusCodes } from 'http-status-codes';
 import { Link } from 'react-router-dom';
 import { t } from '../../i18n';
-import { ROUTES } from '../../constants';
+import { ROUTES } from '../../constants/routes';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { usePathLocale } from '../../hooks/usePathLocale';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';

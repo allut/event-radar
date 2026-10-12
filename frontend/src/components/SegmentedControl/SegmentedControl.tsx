@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { cx } from '../../utils';
-import type { ContentMarkerState } from '../../constants';
+import type { ContentMarkerState } from '../../constants/core';
 import styles from './SegmentedControl.module.css';
 
 export interface SegmentedOption {

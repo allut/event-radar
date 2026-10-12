@@ -7,15 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app._generated.i18n_data import PERSONAS as _PERSONAS_DATA
 from app.config import settings
-from app.constants import (
+from app._generated.shared_constants import VALID_CATEGORIES, VALID_VIBES
+from app.constants.ingestion import (
     PUBLISHER_STATUS_ACTIVE,
     SINGLE_INSTITUTION_SOURCES,
     SOURCE_KIND_API,
     SOURCE_SLUG_FIENTA,
-    VALID_CATEGORIES,
-    VALID_TIMES,
-    VALID_VIBES,
 )
+from app.constants.ranking import VALID_TIMES
 from app.ingestion.registry import SOURCE_CATALOG, SourceDef
 from app.models.models import Persona, Publisher, Source
 

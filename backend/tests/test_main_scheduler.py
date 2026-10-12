@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from app.constants import APP_ENV_DEVELOPMENT
+from app.constants.core import APP_ENV_DEVELOPMENT
 from app.main import _start_scheduler
 
 _KNOWN_JOB_IDS = {

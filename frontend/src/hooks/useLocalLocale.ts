@@ -1,5 +1,5 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { LOCALE_ET } from '../constants';
+import { LOCALE_ET } from '../constants/core';
 import { getStoredLocale, setLocale } from '../lib/auth';
 import { isValidLocale, localizedTo } from '../utils';
 

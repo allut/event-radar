@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pyotp
 import qrcode  # type: ignore[import-untyped]
 
-# Matches the FastAPI app title / product name (CLAUDE.md's Project Overview) —
+# Matches the FastAPI app title / product name (CLAUDE.md "Project Overview") —
 # not worth a shared constant for a script that runs once per admin enrolled.
 ISSUER_NAME = "Event Radar Admin"
 DEFAULT_ACCOUNT_NAME = "admin"

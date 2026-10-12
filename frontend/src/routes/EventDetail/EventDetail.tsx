@@ -24,7 +24,23 @@ import SeoTags from '../../components/SeoTags';
 import Toast from '../../components/Toast';
 import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
-import { API, CLAIM_STATUS_PENDING, EVENT_CLAIM_STATUS_CLAIMED, EVENT_CLAIM_STATUS_NOT_CLAIMABLE, EVENT_PRICE_TESTID, EXPLORE_PARAM, OG_FALLBACK_IMAGE_PATH, PRICE_DATA_ATTR, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, SEO_DESCRIPTION_MAX_LENGTH, UI_STATE, type ClaimStatus, type EventClaimStatus } from '../../constants';
+import { API, QUERY_KEYS } from '../../constants/api';
+import {
+  CLAIM_STATUS_PENDING,
+  EVENT_CLAIM_STATUS_CLAIMED,
+  EVENT_CLAIM_STATUS_NOT_CLAIMABLE,
+  type ClaimStatus,
+  type EventClaimStatus,
+} from '../../constants/claims';
+import { UI_STATE } from '../../constants/core';
+import { EXPLORE_PARAM } from '../../constants/explore';
+import { EVENT_PRICE_TESTID, PRICE_DATA_ATTR } from '../../constants/prerender';
+import { ROUTES } from '../../constants/routes';
+import {
+  OG_FALLBACK_IMAGE_PATH,
+  PRODUCTION_ORIGIN,
+  SEO_DESCRIPTION_MAX_LENGTH,
+} from '../../constants/seo';
 import styles from './EventDetail.module.css';
 import { ClaimPanel, ClaimPill } from '../../components/ClaimStrip';
 

@@ -7,8 +7,8 @@ see the ADR for why this library over google-auth). No refresh token is ever
 requested or stored (ADR 0002's "nothing on our side to revoke" invariant).
 
 `PyJWKClient`'s JWKS fetch bypasses http_get/http_post (it does its own sync
-urllib fetch, cached via cache_jwk_set) — documented as the 7th bypass site
-in docs/conventions.md, justified the same way the ADR justifies choosing
+urllib fetch, cached via cache_jwk_set) — documented as a Retry logic bypass
+site in docs/conventions.md, justified the same way the ADR justifies choosing
 PyJWKClient over google-auth: caching with no new async/sync-mixing cost.
 """
 
@@ -24,7 +24,7 @@ import jwt
 from jwt import PyJWKClient
 
 from app.config import settings
-from app.constants import (
+from app.constants.auth import (
     GOOGLE_AUTHORITATIVE_EMAIL_DOMAINS,
     GOOGLE_JWKS_CACHE_LIFESPAN_SECONDS,
     GOOGLE_OAUTH_AUTHORIZATION_ENDPOINT,

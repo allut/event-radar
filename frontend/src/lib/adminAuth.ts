@@ -1,9 +1,9 @@
 import { storageGet, storageSet, storageRemove } from './storage';
-import { ADMIN_SIGNED_IN_HINT_KEY, LOGOUT_FLAG_TTL_MS } from '../constants';
+import { ADMIN_SIGNED_IN_HINT_KEY, LOGOUT_FLAG_TTL_MS } from '../constants/auth';
 
 // Parallel session store to lib/auth.ts and lib/organizerAuth.ts — a third,
 // independent auth track (own listener set, own storage key, own logout
-// flag) that must never be confused with the other two (see constants.ts).
+// flag) that must never be confused with the other two (see constants/auth.ts).
 const adminAuthListeners = new Set<() => void>();
 function emitAdminAuthChange(): void {
   adminAuthListeners.forEach((cb) => cb());

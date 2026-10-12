@@ -7,16 +7,17 @@ import {
   ADMIN_EVENT_DETAIL_TABS,
   ADMIN_GENERIC_ERROR,
   ADMIN_TRANSLATABLE_FIELD_COUNT,
-  API,
+} from '../../constants/admin';
+import { API, QUERY_KEYS } from '../../constants/api';
+import { ADMIN_RESOLUTION_MESSAGES } from '../../constants/claims';
+import {
   CONTENT_LANG_ORDER,
-  QUERY_KEYS,
-  ROUTES,
   UI_STATE,
-  REPORT_STATUS,
-  ADMIN_RESOLUTION_MESSAGES,
   type ContentLang,
   type ContentMarkerState,
-} from '../../constants';
+} from '../../constants/core';
+import { REPORT_STATUS } from '../../constants/prerender';
+import { ROUTES } from '../../constants/routes';
 import { apiErrorMessage, sanitizeHtml, formatAdminTimestamp, localeLabel, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';

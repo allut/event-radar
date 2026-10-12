@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import Feed from './Feed';
 import Landing from '../Landing';
 import { useAuth } from '../../hooks/useAuth';
-import { SIGNED_IN_HINT_KEY } from '../../constants';
+import { SIGNED_IN_HINT_KEY } from '../../constants/auth';
 import { makeEvent, renderWithProviders } from '../../test/utils';
 
 // Reproduces the real App.tsx `Home` component: Feed for signed-in users,

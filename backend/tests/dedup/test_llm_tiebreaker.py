@@ -7,7 +7,7 @@ import pytest
 
 import app.dedup.llm_tiebreaker as tiebreaker
 import app.llm.router as router
-from app.constants import TALLINN_TZ
+from app.constants.core import TALLINN_TZ
 
 _BASE = datetime(2026, 7, 1, 20, 0, 0, tzinfo=TALLINN_TZ)
 

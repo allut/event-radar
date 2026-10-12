@@ -23,24 +23,24 @@ from sqlalchemy import Integer, cast, column, func, or_, select, update, values
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, load_only, selectinload
 
-from app.constants import (
+from app.constants.claims import CLAIM_STATUS_APPROVED
+from app.constants.core import SQL_IN_CHUNK_SIZE, SECONDS_PER_HOUR, TALLINN_TZ
+from app.constants.dedup import (
     DEDUP_BULK_UPDATE_CHUNK_SIZE,
-    CLAIM_STATUS_APPROVED,
     DEDUP_CANDIDATE_PAIR_MAX,
     DEDUP_CANDIDATE_PAIR_WARN_THRESHOLD,
     DEDUP_LOOKAHEAD_DAYS,
     DEDUP_LOOKBACK_DAYS,
     DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS,
-    EVENT_STATUS_CANCELLED,
-    EVENT_STATUS_CLASSIFIED,
-    EVENT_STATUS_PUBLISHED,
-    SQL_IN_CHUNK_SIZE,
-    SECONDS_PER_HOUR,
-    TALLINN_TZ,
     TIME_WINDOW_HOURS,
     TITLE_RATIO_THRESHOLD,
     TITLE_RATIO_VENUE_BYPASS_THRESHOLD,
     VENUE_RATIO_THRESHOLD,
+)
+from app.constants.events import (
+    EVENT_STATUS_CANCELLED,
+    EVENT_STATUS_CLASSIFIED,
+    EVENT_STATUS_PUBLISHED,
 )
 from app.events.venue import (
     resolve_venue_address,
@@ -636,8 +636,8 @@ async def candidate_pair_ids_in_window(
     satisfy ``a_id < b_id`` and are ordered by ``(a_id, b_id)`` for determinism.
 
     The fuzzy title/venue check runs in Python on these pairs via
-    ``is_candidate_pair`` — per CLAUDE.md, never push that into SQL, and never
-    push this time check into Python. The self-join is bounded by the existing
+    ``is_candidate_pair`` — never push that into SQL, and never push this time
+    check into Python (docs/pipeline.md "Pipeline Code Rules"). The self-join is bounded by the existing
     (starts_at, status) B-tree: the planner can range-scan ``b`` on a sargable
     BETWEEN around ``a.starts_at``.
 

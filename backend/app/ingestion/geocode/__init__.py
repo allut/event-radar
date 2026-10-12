@@ -18,15 +18,15 @@ from sqlalchemy import false, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
+from app.constants.core import TALLINN_TZ
+from app.constants.http import HTTP_TIMEOUT_SECONDS
+from app.constants.ingestion import (
     GEOCODE_COMMIT_INTERVAL_SECONDS,
     GEOCODE_DONOR_LOOKBACK_DAYS,
     GEOCODE_MAX_PER_RUN,
     GEOCODE_REQUEST_DELAY_SECONDS,
     GEOCODE_RETRY_INTERVAL_DAYS,
-    HTTP_TIMEOUT_SECONDS,
     TALLINN_REGION_BBOX,
-    TALLINN_TZ,
 )
 from app.events.queries import event_not_ended_filter
 from app.ingestion.adapter import coords_in_tallinn

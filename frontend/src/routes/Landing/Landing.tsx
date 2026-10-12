@@ -2,7 +2,21 @@ import { Fragment, memo, useMemo, type CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { ACCENT_MARKER_RE, ANALYTICS_EVENTS, API, CATEGORIES, COPYRIGHT_YEAR, EUR_SYMBOL, LANDING_BASE_FIG_COUNT, LANDING_PLATE_BODY_MAX_LENGTH, LANDING_SHOWCASE_PLATE_COUNT, LOCALES, MAGIC_LINK_EXPIRY_MINUTES, OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, QUERY_KEYS, ROUTES, STEP_KEYS, UI_STATE } from '../../constants';
+import { CATEGORIES, LOCALES, MAGIC_LINK_EXPIRY_MINUTES } from '../../_generated/sharedConstants';
+import { ANALYTICS_EVENTS } from '../../constants/analytics';
+import { API, QUERY_KEYS } from '../../constants/api';
+import {
+  ACCENT_MARKER_RE,
+  COPYRIGHT_YEAR,
+  EUR_SYMBOL,
+  LANDING_BASE_FIG_COUNT,
+  LANDING_PLATE_BODY_MAX_LENGTH,
+  LANDING_SHOWCASE_PLATE_COUNT,
+  STEP_KEYS,
+  UI_STATE,
+} from '../../constants/core';
+import { ROUTES } from '../../constants/routes';
+import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN } from '../../constants/seo';
 import { t, ti } from '../../i18n';
 import { categoryGradient, cx, formatCount, formatEventTime, formatHeroDateline, formatHourMinute, formatPrice, padIndex, safeUrl, stripHtmlToText, truncateForMeta, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';

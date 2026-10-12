@@ -38,12 +38,20 @@ from app.claims.lifecycle import (
 )
 from app.claims.pinning import bulk_resolve_series_events
 from app.ingestion.http_client import host_matches_domain
-from app.constants import (
+from app._generated.shared_constants import VALID_LOCALES
+from app.constants.admin import ADMIN_ACTION_REVOKE_CLAIM
+from app.constants.auth import (
     AUTH_TOKEN_MAX_LEN,
-    BROWSE_QUERY_MAX_LEN,
+    DETAIL_MAGIC_LINK_SENT,
+    ERROR_MAGIC_LINK_CONSUMED,
+    ERROR_MAGIC_LINK_EXPIRED,
+    ERROR_MAGIC_LINK_INVALID,
+    ORGANIZER_SESSION_COOKIE_NAME,
+    ORGANIZER_SESSION_COOKIE_PATH,
+    ORGANIZER_SESSION_TTL_DAYS,
+)
+from app.constants.claims import (
     ORGANIZER_OWN_CLAIMS_LIST_LIMIT,
-    EVENT_SEARCH_TEXT_SQL,
-    ADMIN_ACTION_REVOKE_CLAIM,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
     CLAIM_EVENTS_MAX_PAGE_SIZE,
     CLAIM_EVENTS_PAGE_SIZE,
@@ -57,32 +65,28 @@ from app.constants import (
     CLAIM_STATUS_PENDING,
     CLAIM_STATUS_REVOKED,
     CLAIM_SUGGESTIONS_LIMIT,
-    DETAIL_MAGIC_LINK_SENT,
     ERROR_CLAIM_EVENTS_NOT_PUBLISHER,
     ERROR_CLAIM_JUSTIFICATION_REQUIRED,
     ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
-    ERROR_EVENT_NOT_FOUND,
-    ERROR_MAGIC_LINK_CONSUMED,
-    ERROR_MAGIC_LINK_EXPIRED,
-    ERROR_MAGIC_LINK_INVALID,
-    ERROR_ORGANIZER_NOT_FOUND,
     FREE_EMAIL_PROVIDER_DOMAINS,
-    HTTP_TIMEOUT_SECONDS,
-    LOG_EVENT_AUTH_FAILED,
     ORGANIZER_CLAIM_VERIFY_PATH,
-    ORGANIZER_SESSION_COOKIE_NAME,
-    ORGANIZER_SESSION_COOKIE_PATH,
-    ORGANIZER_SESSION_TTL_DAYS,
+)
+from app.constants.core import SECONDS_PER_DAY, TALLINN_TZ
+from app.constants.events import EVENT_SEARCH_TEXT_SQL, ERROR_EVENT_NOT_FOUND
+from app.constants.http import HTTP_TIMEOUT_SECONDS
+from app.constants.log_events import LOG_EVENT_AUTH_FAILED
+from app.constants.organizer import ERROR_ORGANIZER_NOT_FOUND
+from app.constants.ranking import (
+    BROWSE_QUERY_MAX_LEN,
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
+)
+from app.constants.rate_limits import (
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
     RATE_LIMIT_BROWSE,
     RATE_LIMIT_CLAIM,
-    SECONDS_PER_DAY,
-    TALLINN_TZ,
-    VALID_LOCALES,
 )
 from app.db import get_db
 from app.models.models import AdminAction, Claim, Event, EventSource, Organizer, OrganizerMagicLink
@@ -135,7 +139,7 @@ class ClaimLinkVerifyBody(BaseModel):
 
 def _api_status(status_value: str) -> str:
     """A still-existing row's CLAIM_STATUS_REVOKED always means declined, not
-    revoked — see CLAIM_STATUS_DECLINED's docstring in constants.py (#447)."""
+    revoked — see CLAIM_STATUS_DECLINED's docstring in app/constants/claims.py (#447)."""
     return CLAIM_STATUS_DECLINED if status_value == CLAIM_STATUS_REVOKED else status_value
 
 

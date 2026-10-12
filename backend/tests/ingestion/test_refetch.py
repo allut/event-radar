@@ -10,12 +10,17 @@ import pytest
 
 from bs4 import BeautifulSoup
 
-from app.constants import (
-    LOCALIZED_TEXT_FIENTA_LOCALES,
-    REFETCH_MIN_INTERVAL_DAYS,
+from app.constants.core import TALLINN_TZ
+from app.constants.events import (
+    EVENT_CANCELLATION_REASON_SOURCE_GONE,
+    EVENT_STATUS_CANCELLED,
     TALLINN_CENTER_LAT,
     TALLINN_CENTER_LNG,
-    TALLINN_TZ,
+)
+from app.constants.ingestion import (
+    LOCALIZED_TEXT_FIENTA_LOCALES,
+    REFETCH_GONE_CANCEL_AFTER_DAYS,
+    REFETCH_MIN_INTERVAL_DAYS,
 )
 from app.claims.pinning import pin_key
 from app.ingestion.locale_urls import locale_from_url_path
@@ -104,6 +109,7 @@ def _future_event(**overrides) -> MagicMock:
     e.is_non_event = False
     e.detail_refetched_at = None
     e.detail_refetch_count = 0
+    e.source_gone_since = None
     for k, v in overrides.items():
         setattr(e, k, v)
     return e
@@ -217,6 +223,60 @@ class TestPriceReconcile:
         summary = await _run(mock_db, event, html)
         assert event.price_min is None
         assert summary["price_changed"] == 0
+
+
+    @pytest.mark.asyncio
+    async def test_piletilevi_fills_price_from_store_api_when_unpriced(self, mock_db):
+        """Piletilevi pages carry no JSON-LD offers (#535); an unpriced event
+        gets its price from the store API once the sale opens."""
+        event = _future_event(url="https://www.piletilevi.ee/en/tickets/EIHT67B2EC/x")
+        payload = {"eventSections": [{"priceZones": [{"ticketTypes": [{"price": 26.9}, {"price": 36.9}]}]}]}
+        store_resp = MagicMock()
+        store_resp.json.return_value = payload
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        get = AsyncMock(side_effect=[_resp("<html></html>"), store_resp])
+        with (
+            patch("app.ingestion.refetch.http_get", new=get),
+            patch("app.ingestion.sources.piletilevi.http_get", new=get),
+            patch("app.ingestion.sources.piletilevi.http_post", new=AsyncMock()),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        ):
+            summary = await refetch_event_details(mock_db)
+        assert event.price_min == 26.9
+        assert event.price_max == 36.9
+        assert summary["price_changed"] == 1
+
+    @pytest.mark.asyncio
+    async def test_piletilevi_pre_sale_stays_unpriced_for_next_refetch(self, mock_db):
+        event = _future_event(url="https://www.piletilevi.ee/en/tickets/DZA5RNPAZJ/x")
+        err_resp = MagicMock(spec=httpx.Response)
+        err_resp.status_code = 400
+        err_resp.json.return_value = {"code": "web_event_sale_has_not_started"}
+        err = httpx.HTTPStatusError("400", request=MagicMock(), response=err_resp)
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        refetch_get = AsyncMock(return_value=_resp("<html></html>"))
+        with (
+            patch("app.ingestion.refetch.http_get", new=refetch_get),
+            patch("app.ingestion.sources.piletilevi.http_get", new=AsyncMock(side_effect=err)),
+            patch("app.ingestion.sources.piletilevi.http_post", new=AsyncMock()),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        ):
+            summary = await refetch_event_details(mock_db)
+        assert event.price_min is None
+        assert summary["price_changed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_piletilevi_priced_event_skips_store_api(self, mock_db):
+        event = _future_event(url="https://www.piletilevi.ee/en/tickets/EIHT67B2EC/x", price_min=10.0)
+        store_get = AsyncMock()
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        with (
+            patch("app.ingestion.refetch.http_get", new=AsyncMock(return_value=_resp("<html></html>"))),
+            patch("app.ingestion.sources.piletilevi.http_get", new=store_get),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        ):
+            await refetch_event_details(mock_db)
+        store_get.assert_not_called()
 
 
 # --- address <-> coords coupling --------------------------------------------
@@ -1050,3 +1110,154 @@ async def test_refetch_locale_redirect_to_root_rejected(mock_db: MagicMock) -> N
     # et must NOT be set (the homepage redirect was rejected)
     if event.title_localized:
         assert "et" not in event.title_localized
+
+
+# --- Source-gone retirement (#531) -------------------------------------------
+
+
+def _status_error(code: int) -> httpx.HTTPStatusError:
+    request = httpx.Request("GET", "https://fienta.com/some-event-1")
+    return httpx.HTTPStatusError(
+        f"HTTP {code}", request=request, response=httpx.Response(code, request=request)
+    )
+
+
+async def _run_failing(
+    mock_db, event, exc: Exception, *, spared: set[int] | None = None
+) -> tuple[dict, AsyncMock, AsyncMock]:
+    """Drive one candidate whose fetch raises ``exc``. ``spared`` = ids the
+    sibling guard keeps alive. Returns (summary, cancel mock, email mock)."""
+    mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+    cancel = AsyncMock(return_value=[])
+    emails = AsyncMock()
+    cancelable = {event.id} - (spared or set())
+    with (
+        patch("app.ingestion.refetch.http_get", new=AsyncMock(side_effect=exc)),
+        patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+        patch(
+            "app.ingestion.refetch._ids_without_live_sibling",
+            new=AsyncMock(return_value=cancelable),
+        ),
+        patch("app.ingestion.refetch.cancel_event_and_resolve_reports", new=cancel),
+        patch("app.ingestion.refetch.send_report_resolution_emails", new=emails),
+    ):
+        summary = await refetch_event_details(mock_db)
+    return summary, cancel, emails
+
+
+class TestSourceGone:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("code", [404, 410])
+    async def test_first_gone_sets_marker_without_cancelling(self, mock_db, code):
+        event = _future_event()
+        summary, cancel, _ = await _run_failing(mock_db, event, _status_error(code))
+        assert event.source_gone_since is not None
+        assert summary["source_gone"] == 1
+        assert summary["failed"] == 0
+        cancel.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_gone_event_is_marked_synced(self, mock_db):
+        event = _future_event()
+        await _run_failing(mock_db, event, _status_error(404))
+        assert event.detail_refetched_at is not None
+        assert event.detail_refetch_count == 1
+
+    @pytest.mark.asyncio
+    async def test_marker_not_reset_on_repeat_gone(self, mock_db):
+        first_seen = datetime.now(TALLINN_TZ) - timedelta(hours=20)
+        event = _future_event(source_gone_since=first_seen)
+        await _run_failing(mock_db, event, _status_error(404))
+        assert event.source_gone_since == first_seen
+
+    @pytest.mark.asyncio
+    async def test_cancelled_after_threshold(self, mock_db):
+        since = datetime.now(TALLINN_TZ) - timedelta(days=REFETCH_GONE_CANCEL_AFTER_DAYS)
+        event = _future_event(source_gone_since=since)
+        summary, cancel, emails = await _run_failing(mock_db, event, _status_error(404))
+        cancel.assert_awaited_once()
+        assert cancel.await_args.args[1] is event
+        assert cancel.await_args.args[2] == EVENT_CANCELLATION_REASON_SOURCE_GONE
+        assert summary["cancelled_gone"] == 1
+        # reporter emails go out only after the commit that persists the cancel
+        mock_db.commit.assert_awaited()
+        emails.assert_not_awaited()  # no reports resolved -> nothing to send
+
+    @pytest.mark.asyncio
+    async def test_not_cancelled_before_threshold(self, mock_db):
+        since = datetime.now(TALLINN_TZ) - timedelta(days=REFETCH_GONE_CANCEL_AFTER_DAYS - 1)
+        event = _future_event(source_gone_since=since)
+        summary, cancel, _ = await _run_failing(mock_db, event, _status_error(404))
+        cancel.assert_not_awaited()
+        assert summary["cancelled_gone"] == 0
+
+    @pytest.mark.asyncio
+    async def test_dedup_representative_with_live_sibling_spared(self, mock_db):
+        since = datetime.now(TALLINN_TZ) - timedelta(days=REFETCH_GONE_CANCEL_AFTER_DAYS + 1)
+        event = _future_event(source_gone_since=since)
+        summary, cancel, _ = await _run_failing(
+            mock_db, event, _status_error(404), spared={event.id}
+        )
+        cancel.assert_not_awaited()
+        assert summary["cancelled_gone"] == 0
+        assert event.source_gone_since == since
+
+    @pytest.mark.asyncio
+    async def test_already_cancelled_event_not_recancelled(self, mock_db):
+        since = datetime.now(TALLINN_TZ) - timedelta(days=5)
+        event = _future_event(source_gone_since=since, status=EVENT_STATUS_CANCELLED)
+        _, cancel, _ = await _run_failing(mock_db, event, _status_error(404))
+        cancel.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_reporter_emails_sent_after_commit(self, mock_db):
+        since = datetime.now(TALLINN_TZ) - timedelta(days=5)
+        event = _future_event(source_gone_since=since)
+        report = MagicMock()
+        order: list[str] = []
+        mock_db.commit.side_effect = lambda: order.append("commit")
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        emails = AsyncMock(side_effect=lambda *a, **k: order.append("email"))
+        with (
+            patch("app.ingestion.refetch.http_get", new=AsyncMock(side_effect=_status_error(410))),
+            patch("app.ingestion.refetch.asyncio.sleep", new=AsyncMock()),
+            patch(
+                "app.ingestion.refetch._ids_without_live_sibling",
+                new=AsyncMock(return_value={event.id}),
+            ),
+            patch(
+                "app.ingestion.refetch.cancel_event_and_resolve_reports",
+                new=AsyncMock(return_value=[report]),
+            ),
+            patch("app.ingestion.refetch.send_report_resolution_emails", new=emails),
+        ):
+            await refetch_event_details(mock_db)
+        assert order[-2:] == ["commit", "email"]
+
+    @pytest.mark.asyncio
+    async def test_success_clears_marker(self, mock_db):
+        event = _future_event(source_gone_since=datetime.now(TALLINN_TZ) - timedelta(days=1))
+        await _run(mock_db, event, "<html><body>no jsonld here</body></html>")
+        assert event.source_gone_since is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            _status_error(500),
+            _status_error(503),
+            _status_error(403),
+            httpx.ReadTimeout("slow"),
+            ValueError("host not allowed"),
+        ],
+    )
+    async def test_transient_failures_leave_event_untouched(self, mock_db, exc):
+        since = datetime.now(TALLINN_TZ) - timedelta(days=5)
+        event = _future_event(source_gone_since=since)
+        summary, cancel, _ = await _run_failing(mock_db, event, exc)
+        assert summary["failed"] == 1
+        assert summary["source_gone"] == 0
+        assert event.source_gone_since == since
+        assert event.detail_refetched_at is None
+        assert event.detail_refetch_count == 0
+        cancel.assert_not_awaited()

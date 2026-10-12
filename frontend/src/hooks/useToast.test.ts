@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useToast } from './useToast';
-import { SAVE_MSG_CLEAR_DELAY_MS } from '../constants';
+import { SAVE_MSG_CLEAR_DELAY_MS } from '../constants/core';
 
 beforeEach(() => {
   vi.useFakeTimers();

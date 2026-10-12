@@ -6,10 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from rapidfuzz.fuzz import token_set_ratio
 
-from app.constants import (
-    CLAIM_STATUS_APPROVED,
+from app.constants.claims import CLAIM_STATUS_APPROVED
+from app.constants.core import TALLINN_TZ
+from app.constants.dedup import (
     DEDUP_LOOKBACK_DAYS,
-    TALLINN_TZ,
     TIME_WINDOW_HOURS,
     TITLE_RATIO_THRESHOLD,
     TITLE_RATIO_VENUE_BYPASS_THRESHOLD,
@@ -319,7 +319,7 @@ class TestClusterEvents:
         O(N^2) Python fallback) must fail loudly above DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS
         rather than silently running the quadratic scan on a large event list. Existing
         small-N white-box tests (all well under the cap) are unaffected."""
-        from app.constants import DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS
+        from app.constants.dedup import DEDUP_UNFILTERED_FALLBACK_MAX_EVENTS
 
         events = [
             _event(i, "Distinct Title", _BASE + timedelta(days=i))
@@ -579,7 +579,7 @@ class TestBuildClusterAssignments:
         # An organizer-submitted event (source=user_submission) dedup-merges with
         # a scraped copy of the same real-world event exactly like any other pair
         # — representative selection (status pin, then data-quality rank) has no
-        # source-awareness, per CLAUDE.md Phase 2 §2.3 ("no special-casing").
+        # source-awareness ("no special-casing").
         submitted = _event(1, "Show", _BASE, status="published")
         submitted.submitted_by_organizer_id = 7
         scraped = _event(
@@ -618,7 +618,7 @@ class TestBuildClusterAssignmentsClaimedTiebreak:
         assert self._cluster([claimed, unclaimed], frozenset({2})) == {1: 2, 2: 2}
 
     def test_claimed_beats_richer_unclaimed_quality(self):
-        # Ranked between status-rank and quality-rank (docs/pipeline.md) —
+        # Ranked between status-rank and quality-rank (docs/pipeline.md "Group Representative") —
         # claimed outranks quality-completeness outright: a data-poor claimed
         # member still wins over a richer unclaimed one.
         claimed = _event(1, "Show", _BASE)

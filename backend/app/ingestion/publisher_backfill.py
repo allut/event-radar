@@ -21,16 +21,16 @@ from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants import (
-    EVENT_STATUS_PUBLISHED,
+from app.constants.core import TALLINN_TZ
+from app.constants.events import EVENT_STATUS_PUBLISHED
+from app.constants.http import HTTP_TIMEOUT_SECONDS
+from app.constants.ingestion import (
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
-    HTTP_TIMEOUT_SECONDS,
     PUBLISHER_BACKFILL_SOURCE_SLUGS,
     PUBLISHER_RESOLVE_RETRY_COOLDOWN,
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
-    TALLINN_TZ,
 )
 from app.ingestion.adapter import load_publisher_lookup
 from app.ingestion.http_client import AsyncRateLimiter, host_guard_hook

@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
-import { API, REPORT_DETAIL_MAX_CHARS, REPORT_DETAIL_TEXTAREA_ROWS, REPORT_REASON_OTHER, REPORT_REASONS } from '../../constants';
+import { API } from '../../constants/api';
+import {
+  REPORT_DETAIL_MAX_CHARS,
+  REPORT_DETAIL_TEXTAREA_ROWS,
+  REPORT_REASON_OTHER,
+  REPORT_REASONS,
+} from '../../constants/feedback';
 import { apiErrorMessage } from '../../utils';
 import Modal from '../Modal';
 import styles from './ReportModal.module.css';

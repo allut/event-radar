@@ -3,16 +3,15 @@ import type { EventData } from '../components/EventCard';
 // .js extensions required: this module is also imported (transitively) by
 // functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
 import { t } from '../i18n.js';
+import { EVENT_PRICE_SELECTOR, PRICE_DATA_ATTR } from '../constants/prerender.js';
 import {
   CANONICAL_LINK_SELECTOR,
-  EVENT_PRICE_SELECTOR,
   ICON_LINK_SELECTOR,
   JSONLD_SCRIPT_SELECTOR,
-  PRICE_DATA_ATTR,
   ROBOTS_INDEX_FOLLOW,
   SEO_HREFLANG_CODES,
   SEO_RICH_ITEM_LIST_MIN,
-} from '../constants.js';
+} from '../constants/seo.js';
 
 /** In-build validation gate for the prerender pipeline (issue #53) — pure
  * functions only (no filesystem/network access), so the same logic parses

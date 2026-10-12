@@ -293,9 +293,9 @@ class TestBuildDigestHtml:
         assert "MUSIC" in html  # default classification category from make_event
         assert html.count("<img") == 1  # only the header brand mark, no event image
 
-    def test_header_carries_brand_mark_on_given_base(self, make_event):
+    def test_header_carries_inline_brand_mark(self, make_event):
         html = build_digest_html([make_event()], date(2026, 5, 20), "en", "https://eventradar.ee")
-        assert '<img src="https://eventradar.ee/email-mark.png"' in html
+        assert '<img src="cid:event-radar-mark"' in html
 
     def test_feed_button_links_to_frontend_root(self, make_event):
         html = build_digest_html([make_event()], date(2026, 5, 20), "en", "https://eventradar.ee")

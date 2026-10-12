@@ -1,4 +1,4 @@
-import { GITHUB_API_BASE_URL, GITHUB_API_VERSION } from '../constants.js';
+import { GITHUB_API_BASE_URL, GITHUB_API_VERSION } from '../constants/seo.js';
 
 /** Authenticated GitHub REST API request, shared by every caller that reads
  * or writes `allut/event-radar` (private, so unauthenticated calls 404).

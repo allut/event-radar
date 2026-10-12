@@ -15,19 +15,27 @@ import re
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, exists, select, update
+from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import aliased, selectinload
+from sqlalchemy.orm import selectinload
 
-from app.constants import (
-    CURRENCY_CODE_MAX_LEN,
+from app._generated.shared_constants import (
     DEFAULT_CURRENCY,
     DEFAULT_USER_LOCALE,
+    VALID_CATEGORIES,
+    VALID_LOCALES,
+    VALID_VIBES,
+)
+from app.constants.core import TALLINN_TZ
+from app.constants.events import (
+    CURRENCY_CODE_MAX_LEN,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_DRAFT,
-    FREE_TIER_KEYWORDS,
+)
+from app.constants.ingestion import FREE_TIER_KEYWORDS, PRICE_HINT_MAX_CHARS
+from app.constants.llm import (
     IMPORTANT_INFO_MAX_CHARS,
     LLM_BATCH_FANOUT_CONCURRENCY,
     LLM_CLASSIFY_BATCH_SIZE,
@@ -47,13 +55,8 @@ from app.constants import (
     LLM_OUTPUT_URL_OR_EMAIL_RE,
     LLM_MAX_PROMPT_CHARS,
     LLM_TASK_CLASSIFY,
-    ORGANIZER_SUBMISSION_QUALITY_SCORE_CEILING,
-    PRICE_HINT_MAX_CHARS,
-    TALLINN_TZ,
-    VALID_CATEGORIES,
-    VALID_LOCALES,
-    VALID_VIBES,
 )
+from app.constants.organizer import ORGANIZER_SUBMISSION_QUALITY_SCORE_CEILING
 from app.llm.prompts import LLM_CLASSIFY_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.ingestion.pricing import (
     eur_amounts_from_text,
@@ -80,6 +83,7 @@ from app.events.queries import (
     canonical_event_filter,
     event_ended_filter,
     event_not_ended_filter,
+    no_live_dedup_sibling_clause,
 )
 
 log = logging.getLogger(__name__)
@@ -465,43 +469,17 @@ async def classify_event(
     return True
 
 
-def _no_live_dedup_sibling_clause(now: datetime) -> ColumnElement[bool]:
-    """True when no other, still-live member points its ``dedup_group_id`` at
-    this event's id.
-
-    Guards the bulk-cancel below: a dedup-canonical representative must not be
-    cancelled out from under a still-live sibling (same dedup group, not yet
-    ended, not already cancelled) — that sibling's ``dedup_group_id`` would
-    keep pointing at a cancelled id until the next ``dedup_pass`` reclusters,
-    stranding it outside ``canonical_event_filter()`` (and hence unreachable by
-    ``classify_pending``) for up to one 6h cycle. Ungrouped events (no row
-    references their id as a group) and events with only already-ended or
-    already-cancelled siblings are unaffected and cancel normally.
-    """
-    sibling = aliased(Event)
-    return ~exists(
-        select(1)
-        .select_from(sibling)
-        .where(
-            sibling.dedup_group_id == Event.id,
-            sibling.id != Event.id,
-            sibling.status != EVENT_STATUS_CANCELLED,
-            event_not_ended_filter(now, entity=sibling),
-        )
-    )
-
-
 async def _cancel_ended_drafts(db: AsyncSession, now: datetime) -> int:
     """Bulk-cancel drafts that already ended — they can never pass the publish
     gate, so an LLM call (or batch slot) on them is wasted. Skips a
     dedup-canonical representative with a still-live sibling (see
-    _no_live_dedup_sibling_clause) so that sibling isn't orphaned."""
+    no_live_dedup_sibling_clause) so that sibling isn't orphaned."""
     cancel_result = await db.execute(
         update(Event)
         .where(
             Event.status == EVENT_STATUS_DRAFT,
             event_ended_filter(now),
-            _no_live_dedup_sibling_clause(now),
+            no_live_dedup_sibling_clause(now),
         )
         .values(status=EVENT_STATUS_CANCELLED)
     )
@@ -574,7 +552,7 @@ async def classify_pending(
     forever would otherwise strand it there indefinitely once its FIFO
     position falls behind newer arrivals. Excludes a dedup-canonical
     representative that still has a live sibling (see
-    ``_no_live_dedup_sibling_clause``) so that sibling isn't orphaned.
+    ``no_live_dedup_sibling_clause``) so that sibling isn't orphaned.
 
     Returns a summary dict with ``attempted``, ``succeeded``, ``failed``,
     ``cancelled`` keys. The caller must commit the session.

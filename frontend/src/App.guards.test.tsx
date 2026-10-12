@@ -11,7 +11,7 @@ import { t } from './i18n';
 // stay focused on routing.
 vi.mock('./api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./api/client')>();
-  const { NETWORK_ERROR_CODE } = await import('./constants');
+  const { NETWORK_ERROR_CODE } = await import('./constants/api');
   const fail = () => Promise.reject(new actual.ApiError(0, 'network error', NETWORK_ERROR_CODE));
   const failing = { get: fail, post: fail, patch: fail, delete: fail };
   return { ...actual, api: failing, organizerApi: failing, adminApi: failing };

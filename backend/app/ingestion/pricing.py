@@ -10,21 +10,22 @@ from typing import Any
 
 from bs4 import BeautifulSoup
 
-from app.constants import (
-    CURRENCY_AMOUNT_RE,
+from app._generated.shared_constants import DEFAULT_CURRENCY
+from app.constants.core import HTML_PARSER
+from app.constants.events import (
     CURRENCY_CODE_MAX_LEN,
-    DEFAULT_CURRENCY,
-    HTML_PARSER,
     VALID_CURRENCY_CODES,
-    PRICE_CONTEXT_INPUT_MAX_CHARS,
-    PRICE_CONTEXT_MAX_CHARS,
-    PRICE_FEE_CLAUSE_RE,
     PRICE_MAX_VALUE,
+)
+from app.constants.ingestion import (
+    CURRENCY_AMOUNT_RE,
+    PRICE_FEE_CLAUSE_RE,
     PRICE_FEE_KEYWORDS,
     PRICE_FROM_STRING_FREE_SUFFIX,
     PRICE_FROM_STRING_FREE_TOKEN,
     PRICE_FROM_STRING_RE,
 )
+from app.constants.llm import PRICE_CONTEXT_INPUT_MAX_CHARS, PRICE_CONTEXT_MAX_CHARS
 
 def normalize_currency(raw: Any, has_price: bool) -> str | None:
     """Coerce a raw currency value; fall back to DEFAULT_CURRENCY only when a price exists.

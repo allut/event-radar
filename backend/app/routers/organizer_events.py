@@ -5,7 +5,8 @@ A submitted event is inserted on the adapter-less `user_submission` source
 then pushed inline through classify_event()+publish_pending() so it goes live
 within the request instead of waiting for the next scheduled pass. It is
 flagged needs_review so it still surfaces in the Phase-2 admin review queue
-after going live (auto-publish + retractable post-hoc review — see CLAUDE.md).
+after going live (auto-publish + retractable post-hoc review — see
+docs/organizer-portal.md).
 """
 
 import hashlib
@@ -22,30 +23,32 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants import (
-    BROWSE_MAX_PAGE_SIZE,
-    BROWSE_PAGE_SIZE,
+from app._generated.shared_constants import BROWSE_PAGE_SIZE, IMAGE_UPLOAD_ALLOWED_MIME
+from app.constants.core import TALLINN_TZ
+from app.constants.events import (
+    ERROR_EVENT_CANCELLED,
+    ERROR_EVENT_NOT_FOUND,
+    ERROR_EVENT_URL_SCHEME,
+    EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT,
+    EVENT_STATUS_CANCELLED,
+    EVENT_STATUS_CLASSIFIED,
+    EVENT_STATUS_PUBLISHED,
+)
+from app.constants.http import HTTP_TIMEOUT_SECONDS
+from app.constants.ingestion import SOURCE_SLUG_USER_SUBMISSION
+from app.constants.organizer import (
     CLOUDINARY_UPLOAD_URL_TEMPLATE,
     ERROR_DAILY_IMAGE_UPLOAD_LIMIT,
     ERROR_DAILY_SUBMISSION_LIMIT,
-    ERROR_EVENT_CANCELLED,
     ERROR_EVENT_CREATE_FAILED,
-    ERROR_EVENT_NOT_FOUND,
-    ERROR_EVENT_URL_SCHEME,
     ERROR_IMAGE_TOO_LARGE,
     ERROR_IMAGE_UPLOAD_FAILED,
     ERROR_IMAGE_UPLOAD_NOT_CONFIGURED,
     ERROR_IMAGE_URL_SCHEME,
     ERROR_SUBMISSION_SOURCE_NOT_CONFIGURED,
     ERROR_UNSUPPORTED_IMAGE_TYPE,
-    EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT,
-    EVENT_STATUS_CANCELLED,
-    EVENT_STATUS_CLASSIFIED,
-    EVENT_STATUS_PUBLISHED,
-    HTTP_TIMEOUT_SECONDS,
     IMAGE_EXTENSION_BY_MIME,
     IMAGE_MAGIC_BYTES,
-    IMAGE_UPLOAD_ALLOWED_MIME,
     IMAGE_UPLOAD_MAX_BYTES,
     MIME_IMAGE_WEBP,
     ORGANIZER_CURRENCY_MAX_LEN,
@@ -55,20 +58,21 @@ from app.constants import (
     ORGANIZER_IMPORTANT_INFO_MAX_LEN,
     ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX,
     ORGANIZER_TITLE_MAX_LEN,
-    URL_MAX_LEN,
     ORGANIZER_VENUE_ADDRESS_MAX_LEN,
     ORGANIZER_VENUE_NAME_MAX_LEN,
-    PAGINATION_MAX_OFFSET,
-    PAGINATION_MIN_LIMIT,
-    PAGINATION_MIN_OFFSET,
-    RATE_LIMIT_SUBMIT,
-    REPORT_AUTO_RESOLVE_NOTE,
-    SOURCE_SLUG_USER_SUBMISSION,
-    TALLINN_TZ,
     WEBP_FOURCC,
     WEBP_FOURCC_OFFSET,
     WEBP_RIFF_MAGIC,
 )
+from app.constants.ranking import (
+    BROWSE_MAX_PAGE_SIZE,
+    PAGINATION_MAX_OFFSET,
+    PAGINATION_MIN_LIMIT,
+    PAGINATION_MIN_OFFSET,
+)
+from app.constants.rate_limits import RATE_LIMIT_SUBMIT
+from app.constants.reports import REPORT_AUTO_RESOLVE_NOTE
+from app.constants.security import URL_MAX_LEN
 from app.db import get_db
 from app.ingestion.adapter import NormalizedEvent, insert_normalized_event
 from app.ingestion.content_filters import content_flags
@@ -85,10 +89,13 @@ from app.models.models import (
 from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
+from app.events.cancellation import (
+    cancel_event_and_resolve_reports,
+    send_report_resolution_emails,
+)
 from app.routers.utils import (
     apply_moderation_flags,
     apply_price_edit,
-    cancel_event_and_resolve_reports,
     check_image_host,
     fold_legacy_category,
     localized_dict,
@@ -97,7 +104,6 @@ from app.routers.utils import (
     own_venue_or_404,
     replace_organizer_categories,
     resolve_locale_param,
-    send_report_resolution_emails,
     serialize_event,
     validate_categories,
     validate_price_ordering,
@@ -108,7 +114,7 @@ from app.events.queries import select_events_with_classification
 
 log = logging.getLogger(__name__)
 # Stays under /organizer/* deliberately: ORGANIZER_SESSION_COOKIE_PATH (app/
-# constants.py) scopes the organizer_session cookie to Path=/api/organizer —
+# constants/auth.py) scopes the organizer_session cookie to Path=/api/organizer —
 # a route added outside that prefix would silently never receive the cookie
 # and 401 on every call, however correct get_current_organizer's logic is.
 router = APIRouter(prefix="/organizer/events", tags=["organizer-events"])
@@ -530,8 +536,8 @@ async def delete_own_event(
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Soft-delete: cancel the event. Events are never hard-deleted (CLAUDE.md
-    Data Retention)."""
+    """Soft-delete: cancel the event. Events are never hard-deleted
+    (docs/backend-ops.md "Data Retention")."""
     event = await _own_event_or_404(db, event_id, current_organizer.id)
     resolved = await cancel_event_and_resolve_reports(
         db, event, EVENT_CANCELLATION_REASON_ORGANIZER_RETRACT, REPORT_AUTO_RESOLVE_NOTE

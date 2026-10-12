@@ -9,7 +9,7 @@ import pytest
 
 from app import logging_config
 from app.config import settings
-from app.constants import (
+from app.constants.ops import (
     LOG_FILE_NAME,
     LOG_FRAMEWORK_LOGGER_NAMES,
     LOG_QUIET_LOGGER_NAMES,

@@ -28,7 +28,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { S3_MAX_KEYS_PER_PAGE } from '../constants';
+import { S3_MAX_KEYS_PER_PAGE } from '../constants/prerender';
 
 let cachedClient: { credsKey: string; client: S3Client } | null = null;
 

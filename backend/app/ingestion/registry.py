@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from app.constants import (
+from app.constants.ingestion import (
     SOURCE_SLUG_NEWSLETTER,
     SOURCE_SLUG_PILETILEVI,
     SOURCE_SLUG_USER_SUBMISSION,

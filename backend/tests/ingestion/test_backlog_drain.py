@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from app.constants import LLM_BACKLOG_MAX_DRAIN_PASSES, LLM_CLASSIFY_BATCH_SIZE
+from app.constants.llm import LLM_BACKLOG_MAX_DRAIN_PASSES, LLM_CLASSIFY_BATCH_SIZE
 from app.ingestion.jobs import (
     _drain_backlog,
     classify_pending_drain_now,

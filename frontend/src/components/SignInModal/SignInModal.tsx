@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { t } from '../../i18n';
-import { ANALYTICS_EVENTS, SIGN_IN_TRIGGER_COPY, type SignInTrigger } from '../../constants';
+import { ANALYTICS_EVENTS } from '../../constants/analytics';
+import { SIGN_IN_TRIGGER_COPY, type SignInTrigger } from '../../constants/explore';
 import { trackEvent } from '../../lib/gtag';
 import Modal from '../Modal';
 import MagicLinkForm from '../MagicLinkForm';

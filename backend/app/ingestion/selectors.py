@@ -3,12 +3,12 @@ fixed-venue tables for the HTML-listing adapters (and Fienta's detail page).
 
 Everything here is tied to a live site's DOM/URL structure, not business
 logic — a markup change on a source site should be a one-line fix here.
-Cross-source tuning knobs (caps, timeouts) stay in app/constants.py.
+Cross-source tuning knobs (caps, timeouts) stay in app/constants/ingestion.py.
 """
 
 from typing import NamedTuple
 
-from app.constants import (
+from app.constants.ingestion import (
     ESTONIA_CONCERT_HALL_VERIFICATION_DOMAIN,
     KUMU_VERIFICATION_DOMAIN,
 )
@@ -55,6 +55,13 @@ PILETILEVI_IMAGE_HEIGHT = 1009
 PILETILEVI_LOGIN_EXPRESS_URL = "https://www.piletilevi.ee/api/v1/login/express"
 PILETILEVI_PRICES_URL = "https://www.piletilevi.ee/api/v1/store/events/{code}/prices"
 PILETILEVI_PRICES_LANGUAGE = "en"
+# Business states the prices endpoint reports as HTTP 400 (not request errors):
+# a pre-sale event answers {"code": ...}, a sold-out one a list of
+# [{"errors": [{"message": ...}]}].
+PILETILEVI_SALE_NOT_STARTED_CODE = "web_event_sale_has_not_started"
+PILETILEVI_SOLD_OUT_MESSAGE = "This event is SOLD OUT."
+PILETILEVI_PRICE_OUTCOME_SALE_NOT_STARTED = "sale_not_started"
+PILETILEVI_PRICE_OUTCOME_SOLD_OUT = "sold_out"
 
 # --- KUMU (kumu.ekm.ee) ---
 KUMU_HOST = KUMU_VERIFICATION_DOMAIN

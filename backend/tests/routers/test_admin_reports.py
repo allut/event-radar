@@ -8,10 +8,12 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.constants import (
+from app.constants.admin import (
     ADMIN_ACTION_RESOLVE_REPORTS,
     ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT,
-    APP_ENV_DEVELOPMENT,
+)
+from app.constants.core import APP_ENV_DEVELOPMENT
+from app.constants.events import (
     EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
     EVENT_STATUS_CANCELLED,
 )
@@ -227,7 +229,7 @@ async def test_resolve_reports_closes_open_reports_no_event_mutation(
         patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch(
-            "app.routers.utils.send_report_outcome_email", new=AsyncMock()
+            "app.events.cancellation.send_report_outcome_email", new=AsyncMock()
         ) as mock_send,
         caplog.at_level("INFO"),
     ):
@@ -341,7 +343,7 @@ async def test_takedown_cancels_event_and_resolves_reports(
     with (
         patch_admin_settings() as mock_settings,
         patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
-        patch("app.routers.utils.send_report_outcome_email", new=AsyncMock()),
+        patch("app.events.cancellation.send_report_outcome_email", new=AsyncMock()),
         caplog.at_level("INFO"),
     ):
         mock_settings.ADMIN_PASSWORD = ""

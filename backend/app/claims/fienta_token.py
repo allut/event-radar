@@ -9,7 +9,7 @@ import secrets
 
 import httpx
 
-from app.constants import CLAIM_TOKEN_BYTE_LENGTH, CLAIM_TOKEN_PREFIX
+from app.constants.claims import CLAIM_TOKEN_BYTE_LENGTH, CLAIM_TOKEN_PREFIX
 from app.ingestion.http_client import http_get
 
 

@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import OrganizerProfileNudge from './OrganizerProfileNudge';
 import { renderWithProviders } from '../../test/utils';
-import { ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY } from '../../constants';
+import { ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY } from '../../constants/organizer';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),

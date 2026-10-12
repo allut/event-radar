@@ -18,12 +18,12 @@ import httpx
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
+from app.constants.http import HTTP_TIMEOUT_SECONDS
+from app.constants.ingestion import (
     GEOCODE_COMMIT_INTERVAL_SECONDS,
     GEOCODE_MAX_PER_RUN,
     GEOCODE_REQUEST_DELAY_SECONDS,
     GEOCODE_RETRY_INTERVAL_DAYS,
-    HTTP_TIMEOUT_SECONDS,
 )
 from app.ingestion.geocode.nominatim import (
     geocode_address,

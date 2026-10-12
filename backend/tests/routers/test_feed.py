@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.constants import TALLINN_TZ
+from app.constants.core import TALLINN_TZ
 
 
 # ---------------------------------------------------------------------------

@@ -10,13 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
-from app.constants import (
+from app.constants.core import APP_ENV_DEVELOPMENT
+from app.constants.log_events import LOG_EVENT_SCHEMA_DRIFT
+from app.constants.ops import (
     MASK_DB_URL_PASSWORD_RE,
     ALEMBIC_DIR_NAME,
-    APP_ENV_DEVELOPMENT,
     DB_POOL_RECYCLE_SECONDS,
     ERROR_SCHEMA_DRIFT,
-    LOG_EVENT_SCHEMA_DRIFT,
 )
 
 log = logging.getLogger(__name__)

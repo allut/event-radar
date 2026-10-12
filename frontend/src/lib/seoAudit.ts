@@ -1,16 +1,15 @@
 // .js extensions required: this module is also imported (transitively) by
 // functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
+import { LOCALE_ET, MS_PER_HOUR } from '../constants/core.js';
 import {
   CRAWLABLE_ASSETS_PATH,
   CRAWLABLE_ICON_PATHS,
-  LOCALE_ET,
-  MS_PER_HOUR,
   OG_FALLBACK_IMAGE_PATH,
   PRODUCTION_ORIGIN,
   SEO_AUDIT_STALE_THRESHOLD_HOURS,
   SITEMAP_PATH,
-} from '../constants.js';
-import type { LocaleCode } from '../constants.js';
+} from '../constants/seo.js';
+import type { LocaleCode } from '../constants/core.js';
 import { parseSnapshotHtml, validateSnapshotStructure } from './seoValidation.js';
 
 /** One `Allow:`/`Disallow:` rule parsed out of a `User-agent: *` group,

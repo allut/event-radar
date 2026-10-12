@@ -18,10 +18,10 @@ from sqlalchemy import delete, func, literal, select, text, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
+from app._generated.shared_constants import BROWSE_PAGE_SIZE, VALID_SIGNALS
+from app.constants.events import ERROR_EVENT_NOT_FOUND
+from app.constants.ranking import (
     BROWSE_MAX_PAGE_SIZE,
-    BROWSE_PAGE_SIZE,
-    ERROR_EVENT_NOT_FOUND,
     ERROR_INVALID_PREFERENCE_SIGNAL,
     ERROR_INVALID_SIGNAL,
     PAGINATION_CURSOR_MAX_LEN,
@@ -30,9 +30,8 @@ from app.constants import (
     PAGINATION_MIN_OFFSET,
     PREFERENCE_SIGNALS,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
-    RATE_LIMIT_FEEDBACK,
-    VALID_SIGNALS,
 )
+from app.constants.rate_limits import RATE_LIMIT_FEEDBACK
 from app.db import get_db
 from app.models.models import Event, User, UserEventFeedback
 from app.rate_limit import limiter

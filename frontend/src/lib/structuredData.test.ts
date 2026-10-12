@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildEventJsonLd, buildExploreItemListJsonLd, buildWebsiteJsonLd } from './structuredData';
 import { makeEvent } from '../test/utils';
-import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN } from '../constants';
+import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN } from '../constants/seo';
 
 describe('buildEventJsonLd', () => {
   it('maps the documented fields for a fully-populated event', () => {

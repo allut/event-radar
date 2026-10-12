@@ -4,7 +4,7 @@
    every color it would otherwise inherit is overridden below since Google's
    triple is fixed, not theme-derived from our accent.
    min-height (not height) + padding let the box grow when the label wraps —
-   ET/RU run ~1.6x EN (design-system §4) and wrap at narrow widths. */
+   ET/RU run ~1.6x EN (docs/design-system.md §4) and wrap at narrow widths. */
 .button {
   composes: btnOutline from '../Button.module.css';
   display: flex;

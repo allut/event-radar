@@ -13,18 +13,17 @@ from sqlalchemy import delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import generate_organizer_session_token
-from app.constants import (
+from app.constants.auth import (
     DETAIL_IDENTITY_UNLINKED,
     ERROR_IDENTITY_NOT_FOUND,
-    LOG_EVENT_IDENTITY_UNLINKED,
-    ORGANIZER_NAME_MAX_LEN,
     ORGANIZER_SESSION_COOKIE_NAME,
     ORGANIZER_SESSION_COOKIE_PATH,
     ORGANIZER_SESSION_TTL_DAYS,
-    RATE_LIMIT_AUTHENTICATED_WRITE,
-    RATE_LIMIT_SUBMIT,
-    SECONDS_PER_DAY,
 )
+from app.constants.core import SECONDS_PER_DAY
+from app.constants.log_events import LOG_EVENT_IDENTITY_UNLINKED
+from app.constants.organizer import ORGANIZER_NAME_MAX_LEN
+from app.constants.rate_limits import RATE_LIMIT_AUTHENTICATED_WRITE, RATE_LIMIT_SUBMIT
 from app.db import get_db
 from app.models.models import Organizer, OrganizerIdentity
 from app.rate_limit import limiter

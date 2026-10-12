@@ -14,7 +14,7 @@ from pydantic import ValidationError
 
 from app.claims.lifecycle import ClaimError
 from app.claims.pinning import FreshPrice
-from app.constants import (
+from app.constants.claims import (
     CLAIM_ERROR_CODE_DORMANT,
     CLAIM_ERROR_CODE_NOT_GRANTED,
     CLAIM_KIND_PUBLISHER,
@@ -24,11 +24,10 @@ from app.constants import (
     ERROR_CLAIM_EDIT_URL_DOMAIN,
     ERROR_CLAIM_NOT_GRANTED,
     ERROR_DAILY_CLAIM_EDIT_LIMIT,
-    EVENT_STATUS_CLASSIFIED,
-    EVENT_STATUS_PUBLISHED,
     ORGANIZER_CLAIM_EDIT_CAP_CEILING,
     ORGANIZER_DAILY_CLAIM_EDIT_CAP,
 )
+from app.constants.events import EVENT_STATUS_CLASSIFIED, EVENT_STATUS_PUBLISHED
 
 MODULE = "app.routers.organizer_claim_edits"
 
@@ -536,7 +535,7 @@ class TestUpdateClaimEvent:
     async def test_categories_prepend_only_delegates_to_shared_helper(
         self, mock_db, make_request, make_organizer, make_event
     ):
-        from app.constants import ORGANIZER_MAX_CATEGORIES
+        from app._generated.shared_constants import ORGANIZER_MAX_CATEGORIES
         from app.routers.organizer_claim_edits import PatchClaimEventBody, update_claim_event
 
         organizer = make_organizer(organizer_id=5)

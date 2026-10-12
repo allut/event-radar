@@ -16,11 +16,9 @@ from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import get_current_admin
 from app.cleanup import cleanup_stale_data
-from app.constants import (
+from app._generated.shared_constants import DEFAULT_USER_LOCALE, VALID_LOCALES
+from app.constants.admin import (
     ADMIN_ACTION_APPROVE_SUBMISSION,
-    ADMIN_RESOLUTION_NOTE_MAX_CHARS,
-    MIME_APPLICATION_NDJSON,
-    SECURITY_HEADERS,
     ADMIN_ACTION_BUILD_FEEDS,
     ADMIN_ACTION_CLEANUP,
     ADMIN_ACTION_CLASSIFY,
@@ -32,7 +30,6 @@ from app.constants import (
     ADMIN_ACTION_INGEST_SOURCE,
     ADMIN_ACTION_PIPELINE_RUN,
     ADMIN_ACTION_REVOKE_CLAIM,
-    PIPELINE_RUN_OVERLAPPING_LOCK_KEYS,
     ADMIN_ACTION_PUBLISH,
     ADMIN_ACTION_REFETCH,
     ADMIN_ACTION_RESOLVE_REPORTS,
@@ -47,36 +44,45 @@ from app.constants import (
     ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT,
     ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
     ADMIN_REVIEW_QUEUE_PAGE_SIZE,
+    ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE,
+    ADMIN_REPORTS_QUEUE_PAGE_SIZE,
+)
+from app.constants.claims import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
     CLAIM_STATUS_REVOKED,
-    DEFAULT_USER_LOCALE,
     ERROR_CLAIM_ALREADY_RESOLVED,
     ERROR_CLAIM_NOT_APPROVED,
     ERROR_CLAIM_NOT_FOUND,
     ERROR_CLAIM_QUEUE_INVALID_STATUS,
     ERROR_CLAIM_TARGET_ALREADY_APPROVED,
-    ERROR_SUBMISSION_NOT_FOUND,
-    ERROR_UNKNOWN_SOURCE,
-    ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE,
-    ADMIN_REPORTS_QUEUE_PAGE_SIZE,
+)
+from app.constants.core import TALLINN_TZ
+from app.constants.events import (
     ERROR_EVENT_NOT_FOUND,
-    ERROR_RESOLUTION_NOTE_REQUIRED,
     EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
     EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
     EVENT_STATUS_CANCELLED,
-    HTTP_TIMEOUT_SECONDS,
-    LOG_EVENT_EMAIL_SEND_FAILED,
+)
+from app.constants.http import MIME_APPLICATION_NDJSON, HTTP_TIMEOUT_SECONDS
+from app.constants.ingestion import ERROR_UNKNOWN_SOURCE
+from app.constants.jobs import PIPELINE_RUN_OVERLAPPING_LOCK_KEYS
+from app.constants.log_events import LOG_EVENT_EMAIL_SEND_FAILED
+from app.constants.organizer import ERROR_SUBMISSION_NOT_FOUND
+from app.constants.ranking import (
     PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
-    RATE_LIMIT_ADMIN,
+)
+from app.constants.rate_limits import RATE_LIMIT_ADMIN
+from app.constants.reports import (
+    ADMIN_RESOLUTION_NOTE_MAX_CHARS,
+    ERROR_RESOLUTION_NOTE_REQUIRED,
     REPORT_AUTO_RESOLVE_NOTE,
     REPORT_STATUS_OPEN,
-    TALLINN_TZ,
-    VALID_LOCALES,
 )
+from app.constants.security import SECURITY_HEADERS
 from app.claims.lifecycle import (
     approved_claim_exists,
     auto_decline_other_pending_claims,
@@ -108,19 +114,21 @@ from app.models.models import (
     RawEvent,
     Source,
 )
+from app.events.cancellation import (
+    cancel_event_and_resolve_reports,
+    resolve_open_reports,
+    send_report_resolution_emails,
+)
 from app.publish import publish_pending
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import limiter
 from app.routers.utils import (
     acquire_admin_job_lock,
-    cancel_event_and_resolve_reports,
     claim_dns_record_name,
     log_admin_action,
     ndjson_line,
     release_admin_job_lock,
-    resolve_open_reports,
     run_admin_job,
-    send_report_resolution_emails,
     serialize_event,
     stream_admin_job,
     validate_report_reason,

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import FeedbackButtonRow from './FeedbackButtonRow';
-import { SIGNAL_CONFIG, type Signal } from '../../constants';
+import { SIGNAL_CONFIG, type Signal } from '../../constants/feedback';
 
 describe('FeedbackButtonRow', () => {
   const signals = Object.keys(SIGNAL_CONFIG) as Signal[];

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useOrganizerAuth } from './useOrganizerAuth';
 import { setOrganizerSignedInHint, clearOrganizerSignedInHint } from '../lib/organizerAuth';
-import { ORGANIZER_SIGNED_IN_HINT_KEY } from '../constants';
+import { ORGANIZER_SIGNED_IN_HINT_KEY } from '../constants/auth';
 
 // Mirrors useAuth.test.ts — same subscribe/getSnapshot shape, separate
 // organizer session track (own storage key, own listener set).

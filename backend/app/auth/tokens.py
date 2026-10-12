@@ -2,7 +2,7 @@
 
 Magic-link token: URLSafeTimedSerializer signed payload {user_id}, 15-min TTL.
 Session token: same serializer with a different salt, SESSION_TTL_DAYS TTL
-(2 days as of shared/app-config.json — see CLAUDE.md Auth).
+(2 days as of shared/app-config.json — see docs/security.md "Auth").
 The magic-link token hash (SHA-256 hex) is stored in auth_magic_links.token_hash
 so a compromised DB row cannot be turned back into a valid token.
 """
@@ -15,7 +15,7 @@ from typing import TypedDict
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
 from app.config import settings
-from app.constants import (
+from app.constants.auth import (
     ADMIN_SESSION_EPOCH_HASH_LEN,
     ADMIN_SESSION_TTL_SECONDS,
     AUTH_ADMIN_SESSION_SALT,
@@ -30,10 +30,9 @@ from app.constants import (
     OAUTH_STATE_TTL_MINUTES,
     ORGANIZER_MAGIC_LINK_TTL_MINUTES,
     ORGANIZER_SESSION_TTL_DAYS,
-    SECONDS_PER_DAY,
-    SECONDS_PER_MINUTE,
-    UNSUBSCRIBE_TOKEN_TTL_DAYS,
 )
+from app.constants.core import SECONDS_PER_DAY, SECONDS_PER_MINUTE
+from app.constants.email import UNSUBSCRIBE_TOKEN_TTL_DAYS
 
 
 def magic_ttl_seconds() -> int:

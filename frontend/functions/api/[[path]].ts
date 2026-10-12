@@ -1,7 +1,7 @@
 /**
  * Catch-all backend proxy (issue #345) — a Cloudflare Pages Function that
  * forwards every `/api/*` request to the Render Frankfurt backend
- * (BACKEND_ORIGIN, src/constants.ts) with the `/api` prefix stripped — the
+ * (BACKEND_ORIGIN, src/constants/api.ts) with the `/api` prefix stripped — the
  * backend's own route shape carries no `/api` prefix.
  *
  * Same-origin proxying (rather than the SPA fetching Render directly) is
@@ -15,12 +15,9 @@
  * "Routing note" comment in each of those files.
  */
 import { StatusCodes } from 'http-status-codes';
-import {
-  API_BASE,
-  BACKEND_ORIGIN,
-  PRERENDER_CADENCE_TOKEN_HEADER,
-  SEO_AUDIT_TOKEN_HEADER,
-} from '../../src/constants.js';
+import { API_BASE, BACKEND_ORIGIN } from '../../src/constants/api.js';
+import { PRERENDER_CADENCE_TOKEN_HEADER } from '../../src/constants/prerender.js';
+import { SEO_AUDIT_TOKEN_HEADER } from '../../src/constants/seo.js';
 import type { PagesFunction } from '../_shared/cloudflare.js';
 
 // Stripped from the backend's response before it's re-emitted: `fetch()`

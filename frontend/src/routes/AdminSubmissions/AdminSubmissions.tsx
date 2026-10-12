@@ -2,7 +2,15 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
-import { ADMIN_GENERIC_ERROR, ADMIN_RESOLUTION_MESSAGES, ADMIN_QUEUE_DETAIL_LINK_LABEL, ADMIN_REVIEW_QUEUE_PAGE_SIZE, API, PAGE_PARAM, QUERY_KEYS, ROUTES, UI_STATE } from '../../constants';
+import {
+  ADMIN_GENERIC_ERROR,
+  ADMIN_QUEUE_DETAIL_LINK_LABEL,
+  ADMIN_REVIEW_QUEUE_PAGE_SIZE,
+} from '../../constants/admin';
+import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
+import { ADMIN_RESOLUTION_MESSAGES } from '../../constants/claims';
+import { UI_STATE } from '../../constants/core';
+import { ROUTES } from '../../constants/routes';
 import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';

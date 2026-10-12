@@ -21,14 +21,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants import (
-    AUTHORIZATION_HEADER,
-    BEARER_PREFIX,
-    LLM_MAX_TOKENS,
-    LLM_PROVIDERS,
-    LLM_REQUEST_TIMEOUT_SECONDS,
-    LOG_EVENT_LLM_DEGRADED,
-)
+from app.constants.http import AUTHORIZATION_HEADER, BEARER_PREFIX
+from app.constants.llm import LLM_MAX_TOKENS, LLM_PROVIDERS, LLM_REQUEST_TIMEOUT_SECONDS
+from app.constants.log_events import LOG_EVENT_LLM_DEGRADED
 
 log = logging.getLogger(__name__)
 

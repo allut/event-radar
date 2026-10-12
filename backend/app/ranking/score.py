@@ -22,7 +22,14 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
-from app.constants import (
+from app.constants.core import SECONDS_PER_DAY, TALLINN_TZ
+from app.constants.events import (
+    TALLINN_CENTER_LAT,
+    TALLINN_CENTER_LNG,
+    TALLINN_LAT_DELTA,
+    TALLINN_LNG_DELTA,
+)
+from app.constants.ranking import (
     FEEDBACK_HISTORY_LOOKBACK_DAYS,
     DAILY5_SERIES_COOLDOWN_DAYS,
     DAILY_5_BACKFILL_MAX_PER_CATEGORY,
@@ -45,14 +52,8 @@ from app.constants import (
     SCORE_WEIGHT_LOCALITY,
     SCORE_WEIGHT_QUALITY,
     SCORE_WEIGHT_RECENCY,
-    SECONDS_PER_DAY,
     SIGNAL_DISLIKE,
     SIGNAL_LIKE,
-    TALLINN_CENTER_LAT,
-    TALLINN_CENTER_LNG,
-    TALLINN_LAT_DELTA,
-    TALLINN_LNG_DELTA,
-    TALLINN_TZ,
     TIME_DAYTIME_START,
     TIME_EVENING_START,
     TIME_LATE_NIGHT_START,

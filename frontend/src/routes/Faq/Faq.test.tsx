@@ -8,7 +8,7 @@ import enDoc from '../../content/faq/faq.en';
 import etDoc from '../../content/faq/faq.et';
 import ruDoc from '../../content/faq/faq.ru';
 import type { SeoMetaResult } from '../../hooks/useSeoMeta';
-import { REDUCED_MOTION_QUERY } from '../../constants';
+import { REDUCED_MOTION_QUERY } from '../../constants/theme';
 
 // Reconfigurable loaders (vi.hoisted so the vi.mock factory can reference them).
 // `loaders` holds the stable vi.fn()s; `mockedLoaderMap` is the FAQ_LOADERS the

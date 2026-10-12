@@ -8,7 +8,9 @@ from typing import Any
 import httpx
 from bs4 import BeautifulSoup, NavigableString, Tag
 
-from app.constants import HTTP_ACCEPT_JSON_HEADERS, TALLINN_TZ
+from app.constants.core import TALLINN_TZ
+from app.constants.http import HTTP_ACCEPT_JSON_HEADERS
+from app.constants.ingestion import SOURCE_SLUG_PILETILEVI
 from app.ingestion.http_client import http_get, http_post
 from app.ingestion.jsonld import (
     location_from_jsonld_items,
@@ -33,8 +35,12 @@ from app.ingestion.selectors import (
     PILETILEVI_INFO_BLOCK_CLASS,
     PILETILEVI_LOGIN_EXPRESS_URL,
     PILETILEVI_MAX_PAGES,
+    PILETILEVI_PRICE_OUTCOME_SALE_NOT_STARTED,
+    PILETILEVI_PRICE_OUTCOME_SOLD_OUT,
     PILETILEVI_PRICES_LANGUAGE,
     PILETILEVI_PRICES_URL,
+    PILETILEVI_SALE_NOT_STARTED_CODE,
+    PILETILEVI_SOLD_OUT_MESSAGE,
     PILETILEVI_TALLINN_FILTER,
     PILETILEVI_TITLE_SELECTOR,
     PILETILEVI_VENUE_SELECTOR,
@@ -84,6 +90,75 @@ def _price_bounds_from_store(data: dict[str, Any]) -> tuple[float | None, float 
     if has_free:
         return (0.0, 0.0, False)
     return (None, None, False)
+
+
+def classify_store_price_400(body: Any) -> str | None:
+    """Name the business state a 400 from the store prices API carries.
+
+    Returns PILETILEVI_PRICE_OUTCOME_SALE_NOT_STARTED or PILETILEVI_PRICE_OUTCOME_SOLD_OUT, or None
+    for any other body (a genuine request error).
+    """
+    if isinstance(body, dict):
+        if body.get("code") == PILETILEVI_SALE_NOT_STARTED_CODE:
+            return PILETILEVI_PRICE_OUTCOME_SALE_NOT_STARTED
+        return None
+    if isinstance(body, list):
+        sold_out = PILETILEVI_SOLD_OUT_MESSAGE.casefold()
+        for entry in body:
+            if not isinstance(entry, dict):
+                continue
+            for error in entry.get("errors") or []:
+                if isinstance(error, dict) and str(error.get("message") or "").strip().casefold() == sold_out:
+                    return PILETILEVI_PRICE_OUTCOME_SOLD_OUT
+    return None
+
+
+async def piletilevi_store_login(client: httpx.AsyncClient, slug: str) -> bool | None:
+    """Login POST establishing the store session cookie; None on failure."""
+    try:
+        await http_post(
+            client,
+            PILETILEVI_LOGIN_EXPRESS_URL,
+            headers=HTTP_ACCEPT_JSON_HEADERS,
+        )
+        return True
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        log.warning("%s login-express failed: %s", slug, exc)
+        return None
+
+
+async def fetch_store_prices(
+    client: httpx.AsyncClient, code: str, slug: str
+) -> tuple[dict[str, Any] | None, str | None]:
+    """GET the store prices for one event code (session cookie already set).
+
+    Returns ``(payload, outcome)``. ``outcome`` is set only for a pre-sale or
+    sold-out 400, logged at INFO; every other failure logs a WARNING and
+    returns ``(None, None)``.
+    """
+    try:
+        resp = await http_get(
+            client,
+            PILETILEVI_PRICES_URL.format(code=code),
+            params={"language": PILETILEVI_PRICES_LANGUAGE},
+        )
+        data = resp.json()
+    except httpx.HTTPStatusError as exc:
+        outcome = None
+        if exc.response.status_code == 400:
+            try:
+                outcome = classify_store_price_400(exc.response.json())
+            except ValueError:
+                pass
+        if outcome is not None:
+            log.info("%s price unavailable code=%s: %s", slug, code, outcome)
+            return None, outcome
+        log.warning("%s price fetch failed code=%s: %s", slug, code, exc)
+        return None, None
+    except (httpx.RequestError, ValueError) as exc:
+        log.warning("%s price fetch failed code=%s: %s", slug, code, exc)
+        return None, None
+    return (data if isinstance(data, dict) else None), None
 
 
 def full_res_piletilevi_image(url: str | None) -> str | None:
@@ -199,6 +274,15 @@ class PiletileviAdapter(HtmlListingAdapter):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._store_session: OnceAsync[bool] = OnceAsync(self._bootstrap_store_session)
+        self.price_outcomes: dict[str, int] = {}
+
+    async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]:
+        self.price_outcomes = {}
+        try:
+            return await super().fetch_raw(known_ids)
+        finally:
+            if self.price_outcomes:
+                log.info("%s price unavailable: %s", self.source.slug, self.price_outcomes)
 
     async def _bootstrap_store_session(self, client: httpx.AsyncClient) -> bool | None:
         """Login POST establishing the Piletilevi store session cookie.
@@ -208,16 +292,7 @@ class PiletileviAdapter(HtmlListingAdapter):
         signals success/failure to OnceAsync, the real effect is the
         side-effecting cookie.
         """
-        try:
-            await http_post(
-                client,
-                PILETILEVI_LOGIN_EXPRESS_URL,
-                headers=HTTP_ACCEPT_JSON_HEADERS,
-            )
-            return True
-        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
-            log.warning("%s login-express failed: %s", self.source.slug, exc)
-            return None
+        return await piletilevi_store_login(client, self.source.slug)
 
     def listing_url_for_page(self, page: int) -> str | None:
         return f"{self.source.config['url']}{PILETILEVI_ALL_PATH}?page={page}"
@@ -298,17 +373,10 @@ class PiletileviAdapter(HtmlListingAdapter):
         if not await self._store_session.get(client):
             return
 
-        try:
-            resp = await http_get(
-                client,
-                PILETILEVI_PRICES_URL.format(code=match.group(1)),
-                params={"language": PILETILEVI_PRICES_LANGUAGE},
-            )
-            price_data = resp.json()
-        except (httpx.HTTPStatusError, httpx.RequestError, ValueError) as exc:
-            log.warning("%s price fetch failed code=%s: %s", self.source.slug, match.group(1), exc)
-            return
-        if not isinstance(price_data, dict):
+        price_data, outcome = await fetch_store_prices(client, match.group(1), self.source.slug)
+        if outcome is not None:
+            self.price_outcomes[outcome] = self.price_outcomes.get(outcome, 0) + 1
+        if price_data is None:
             return
 
         price_min, price_max, has_free_tier = _price_bounds_from_store(price_data)
@@ -317,3 +385,24 @@ class PiletileviAdapter(HtmlListingAdapter):
             card["price_max"] = price_max
             card["currency"] = normalize_currency(None, price_min is not None)
             card["has_free_tier"] = has_free_tier
+
+
+async def piletilevi_store_price_fields(
+    client: httpx.AsyncClient, url: str, session: OnceAsync[bool]
+) -> tuple[float | None, float | None, str | None, bool]:
+    """Refetch-side store price lookup for an event with no stored price.
+
+    Returns the ``(price_min, price_max, currency, has_free_tier)`` shape of
+    ``offers_from_jsonld_items``; all-empty while the event is pre-sale or
+    sold out, or on any failure, so a later refetch retries.
+    """
+    match = _PILETILEVI_CODE_RE.search(url)
+    if not match or not await session.get(client):
+        return None, None, None, False
+    price_data, _ = await fetch_store_prices(client, match.group(1), SOURCE_SLUG_PILETILEVI)
+    if price_data is None:
+        return None, None, None, False
+    price_min, price_max, has_free_tier = _price_bounds_from_store(price_data)
+    if price_min is None:
+        return None, None, None, False
+    return price_min, price_max, normalize_currency(None, True), has_free_tier

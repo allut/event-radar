@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { GOOGLE_SIGNIN_ERROR_DENIED, GOOGLE_SIGNIN_ERROR_PARAM } from '../constants';
+import { GOOGLE_SIGNIN_ERROR_DENIED, GOOGLE_SIGNIN_ERROR_PARAM } from '../constants/auth';
 import { t } from '../i18n';
 
 /** Login/OrganizerLogin's shared Google-callback error banner: reads

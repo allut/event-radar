@@ -4,7 +4,8 @@ import {
   parseISODateLocal, toDateStr, tallinnToday, isSameDay, addMonths,
 } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
-import { CALENDAR_WEEK_START, DATE_PRESETS, type DatePreset } from '../../constants';
+import { CALENDAR_WEEK_START } from '../../constants/core';
+import { DATE_PRESETS, type DatePreset } from '../../constants/explore';
 import { t } from '../../i18n';
 import { PrevIcon, NextIcon } from '../ChevronIcons';
 import styles from './DateRangeMenu.module.css';

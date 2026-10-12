@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import BackgroundTasks
 
-from app.constants import PERSONA_RANK_WEIGHTS
+from app.constants.ranking import PERSONA_RANK_WEIGHTS
 
 
 async def _fake_get_db_yielding(session):

@@ -1,5 +1,6 @@
 import { StatusCodes } from 'http-status-codes';
-import { API, API_BASE, NETWORK_ERROR_CODE, ROUTES, VALIDATION_ERROR_CODE } from '../constants';
+import { API, API_BASE, NETWORK_ERROR_CODE, VALIDATION_ERROR_CODE } from '../constants/api';
+import { ROUTES } from '../constants/routes';
 import { clearSignedInHint, isLoggingOut, getLocale } from '../lib/auth';
 import { clearOrganizerSignedInHint, isOrganizerLoggingOut } from '../lib/organizerAuth';
 import { clearAdminSignedInHint, isAdminLoggingOut } from '../lib/adminAuth';

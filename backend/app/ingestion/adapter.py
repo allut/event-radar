@@ -7,6 +7,7 @@ SourceAdapter.run(): fetch -> raw_events -> normalize -> events(draft).
 import hashlib
 import logging
 import re
+import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -16,22 +17,27 @@ from sqlalchemy import select
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants import (
+from app.constants.core import (
+    SLUG_CYRILLIC_TO_LATIN,
+    SLUG_EMPTY_TITLE_FALLBACK,
     SLUG_DATE_FORMAT,
-    ESTONIA_BBOX,
-    EVENT_STATUS_DRAFT,
-    INGEST_REJECT_RECHECK_DAYS,
-    INGEST_SKIP_ID_LOOKBACK_DAYS,
-    INGESTION_ERROR_MAX_LEN,
     SLUG_HASH_HEX_LEN,
     SLUG_SANITIZE_RE,
     SLUG_TITLE_MAX_LEN,
+    TALLINN_TZ,
+)
+from app.constants.events import EVENT_STATUS_DRAFT
+from app.constants.ingestion import (
+    ESTONIA_BBOX,
+    INGEST_REJECT_RECHECK_DAYS,
+    INGEST_SKIP_ID_LOOKBACK_DAYS,
+    INGESTION_ERROR_MAX_LEN,
     SOURCE_KIND_USER_SUBMISSION,
     SOURCE_STATUS_ERROR,
     SOURCE_STATUS_OK,
     TALLINN_REGION_BBOX,
-    TALLINN_TZ,
 )
+from app.events.queries import event_not_ended_filter
 from app.ingestion.content_filters import content_flags, localized_text_values
 from app.ingestion.http_client import safe_external_url, safe_fetchable_url
 from app.ingestion.pricing import normalize_currency
@@ -98,25 +104,34 @@ class NormalizedEvent:
         )
 
 
+def _transliterate(text: str) -> str:
+    """Lowercase to ASCII-friendly text: drop diacritics (õäöüšž), map Cyrillic."""
+    decomposed = unicodedata.normalize("NFKD", text.lower())
+    stripped = "".join(c for c in decomposed if not unicodedata.combining(c))
+    return "".join(SLUG_CYRILLIC_TO_LATIN.get(c, c) for c in stripped)
+
+
 def _make_slug(title: str, starts_at: datetime, external_id: str) -> str:
-    safe = _SLUG_SANITIZE_PATTERN.sub("-", title.lower()).strip("-")
+    safe = _SLUG_SANITIZE_PATTERN.sub("-", _transliterate(title)).strip("-")
+    safe = safe[:SLUG_TITLE_MAX_LEN].strip("-") or SLUG_EMPTY_TITLE_FALLBACK
     date_part = starts_at.strftime(SLUG_DATE_FORMAT)
     # short hex keeps collision probability <0.1% up to ~10k events/run
     h = hashlib.md5(external_id.encode(), usedforsecurity=False).hexdigest()[
         :SLUG_HASH_HEX_LEN
     ]
-    return f"{safe[:SLUG_TITLE_MAX_LEN]}-{date_part}-{h}"
+    return f"{safe}-{date_part}-{h}"
 
 
 async def existing_external_ids(db: AsyncSession, source_id: int) -> set[str]:
     """Return external_ids already stored in event_sources for this source,
-    for events that started within INGEST_SKIP_ID_LOOKBACK_DAYS (or later).
+    for events that ended within INGEST_SKIP_ID_LOOKBACK_DAYS (or later).
 
     Lets adapters skip detail fetches for already-ingested events (forward-only
     + self-healing: new events get fetched every run until stored). Bounded by
-    join to Event.starts_at — a source's live listing never re-surfaces an
-    external_id belonging to an event that started long ago, and events rows
-    are never deleted, so an unbounded query here grows forever (see
+    join to coalesce(ends_at, starts_at), not starts_at alone — a source keeps
+    long-running listings (exhibitions, gift cards) live long past their start,
+    but never re-surfaces an event that ended long ago. Events rows are never
+    deleted, so an unbounded query here grows forever (see
     INGEST_SKIP_ID_LOOKBACK_DAYS). Correctness is unaffected if a stale
     external_id drops out of this set: the event_sources unique index plus the
     IntegrityError handler in insert_normalized_event still catch a re-insert.
@@ -125,7 +140,7 @@ async def existing_external_ids(db: AsyncSession, source_id: int) -> set[str]:
     rows = await db.scalars(
         select(EventSource.external_id)
         .join(Event, Event.id == EventSource.event_id)
-        .where(EventSource.source_id == source_id, Event.starts_at >= cutoff)
+        .where(EventSource.source_id == source_id, event_not_ended_filter(cutoff))
         .distinct()
     )
     return {r for r in rows.all() if r is not None}
@@ -200,7 +215,8 @@ async def insert_normalized_event(
     collision-handling behavior — the latter never passes
     publisher_id_by_external_id, so its EventSource.publisher_id stays NULL.
 
-    Returns None on a slug collision (IntegrityError) — the savepoint rolls
+    Returns None on an IntegrityError (a re-insert of a stored external_id,
+    or a genuine slug collision) — the savepoint rolls
     back just this event, not the whole batch. Callers that need description/
     important_info sanitized must call sanitize_html() before building
     ``normalized`` — this function does not sanitize (that lives in each
@@ -268,6 +284,24 @@ async def insert_normalized_event(
                 )
             )
     except IntegrityError:
+        # The savepoint has rolled back. The slug is deterministic per
+        # external_id, so a re-insert of a stored event also trips events.slug
+        # first; only a missing event_sources row is a genuine collision.
+        already_stored = await db.scalar(
+            select(EventSource.id)
+            .where(
+                EventSource.source_id == source.id,
+                EventSource.external_id == normalized.external_id,
+            )
+            .limit(1)
+        )
+        if already_stored is not None:
+            log.debug(
+                "already stored source=%s external_id=%s — skipped",
+                source.slug,
+                normalized.external_id,
+            )
+            return None
         log.warning(
             "slug collision source=%s external_id=%s slug=%s — skipped",
             source.slug,

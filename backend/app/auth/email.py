@@ -6,11 +6,9 @@ Falls back to log-only when RESEND_API_KEY is unset (dev / CI).
 import logging
 
 from app.config import settings
-from app.constants import (
-    APP_ENV_DEVELOPMENT,
-    AUTH_VERIFY_PATH,
-    DEFAULT_USER_LOCALE,
-)
+from app._generated.shared_constants import DEFAULT_USER_LOCALE
+from app.constants.auth import AUTH_VERIFY_PATH
+from app.constants.core import APP_ENV_DEVELOPMENT
 from app.email.identity_link import (
     build_google_link_confirmation_html,
     build_google_link_confirmation_text,

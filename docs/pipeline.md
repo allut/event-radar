@@ -1,67 +1,377 @@
 # Pipeline
 
-What's in here: ingestion, dedup, classification, ranking, the Daily 5 builder, the publish gate, geocoding, detail-refetch, the four read paths, Fienta organizer lifecycle, LLM usage constraints, and the NSFW / non-event content filters.
-
-Read this before touching `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/publish.py`, `app/ranking/`, `app/routers/browse.py`, `app/routers/public.py`, or `app/routers/feedback.py`.
+What's in here: the stage sequence, ingestion, dedup, classification, ranking, the Daily 5 builder, the publish gate, geocoding, detail-refetch, read paths, the Fienta organizer lifecycle, LLM limits and content filters.
 
 ## Data Flow
 
-1. **Ingestion** — 3 live source types plus one stored-but-not-yet-ingested path: Fienta API (~10 seed Tallinn organizer IDs, with a full stale/retire lifecycle — see Organizer Lifecycle below; for each *new* event — not yet in `event_sources` — the adapter concurrently fetches the detail page and parses its schema.org JSON-LD into `raw["_detail"]`, capped at `DETAIL_FETCH_CONCURRENCY`; `normalize()` (`app/ingestion/sources/fienta.py`) merges listing + detail per a fixed per-field authority table — deterministic, no LLM: `venue_name` listing-wins/detail-fallback; `venue_address` prefers whichever side carries a 5-digit postal code, else listing-wins/detail-fills-when-empty; `lat`/`lng` come only from detail JSON-LD, bbox-gated to Estonia (`coords_in_estonia`); `price_min`/`price_max` use the listing's deterministic `parse_price_from_string` (`app/ingestion/pricing.py`) as the baseline, overridden per-bound by a present detail offer price — absent `_detail` degrades cleanly to listing-only behavior, same as before this merge existed), HTML listing scrapers (Piletilevi, KUMU, Estonia Concert Hall) sharing `HtmlListingAdapter` (`app/ingestion/sources/html_base.py`; adapters in `piletilevi.py`, `kumu.py`, `estonia_concert_hall.py`), and organizer self-submission (adapter-less `user_submission` source, `app/routers/organizer_events.py` — see `docs/organizer-portal.md`) — an organizer's `POST /organizer/events` inserts directly via the shared `insert_normalized_event()` helper rather than through a polling adapter. Per-source full-res image normalization happens at ingest: `full_res_wp_image()` strips the WordPress `-WxH` thumbnail suffix for concert.ee and kumu.ekm.ee; `full_res_piletilevi_image()` rewrites the `/height=N/` path segment for piletilevi.ee (`full_res_wp_image` in `html_base.py`, `full_res_piletilevi_image` in `piletilevi.py`; constants in `app/ingestion/selectors.py`). Telliskivi, Kultuurikatel, and Fotografiska are disabled (`enabled=False`) in `app/ingestion/registry.py` (Telliskivi's data was unfixably mis-dated; Kultuurikatel/Fotografiska pending a rewrite onto the shared base). Eventbrite was never added (its API was deprecated for non-partners before integration). **Skip set per run:** adapters call `ingest_skip_ids()` (`app/ingestion/adapter.py`) rather than `existing_external_ids()` alone — it unions the already-stored `event_sources` external_ids with every `raw_events` external_id fetched within `INGEST_REJECT_RECHECK_DAYS` (7), so an event that was fetched but rejected by `normalize()` isn't re-fetched and re-stored on every hourly run; it gets one recheck a week. **Newsletter inbound (stored, not yet ingested):** `app/routers/webhooks.py` accepts a Resend Inbound email webhook and can parse it via `app/llm/newsletter_extractor.py`, but `app/ingestion/registry.py` registers the newsletter source with no adapter (excluded from `ADAPTER_REGISTRY`), so its `raw_events` rows never become `events`; `NEWSLETTER_SENDER_ALLOWED_DOMAINS` is also empty by default, so extraction is skipped for every sender until that allowlist is populated. Treat this as a landed-but-dormant path, not a live ingestion source, until an adapter is wired up. (`event.url` host-guard choice for organizer submissions — see `docs/security.md`'s External-URL sanitization bullet.)
-2. **Deduplication** — Two-stage: rule-based pre-filter (SQL time-window self-join + Python fuzzy title/venue, `app/dedup/rules.py`), then LLM tiebreaker only on the surviving candidate pairs (keeps token usage low, `app/dedup/llm_tiebreaker.py`). The scheduled job (`jobs.dedup_pass`) runs `run_dedup_pass_llm`, which degrades to the rule-only `run_dedup_pass` when no LLM provider key is configured. Near-exact title matches (`title_ratio >= TITLE_RATIO_VENUE_BYPASS_THRESHOLD`, 85) bypass the venue check on the LLM path, so cross-source dupes with differently-spelled venues (incl. cross-language spellings) still reach the LLM tiebreaker. Before the tiebreaker, `apply_same_day_title_unions` deterministically collapses events that share a normalized title **and** Tallinn calendar day **and** a compatible venue (`_venue_compatible`, unknown = compatible) into one group with no LLM call — folding timed-entry / session ticket slots (e.g. a museum's many same-day slots) into one canonical event; these pairs are skipped on the LLM path (`same_group`). Multi-day series are intentionally **not** collapsed across days (one canonical event per day). The representative (canonical `dedup_group_id == id`) of each group is chosen by sorting on `_representative_status_rank` first (an already-published/classified member is pinned ahead of a merely-drafted one), then claimed-beats-unclaimed (`claimed_event_ids`, #418 — see below), then `_event_quality_rank` (price/address/coords/description) as the tiebreak, then `min(event_id)` as the final fallback — not simply the lowest id. **Claimed tiebreak (#418):** `load_claims_for_events()` bulk-resolves each candidate event's APPROVED `Claim`, if any, via the same durable keys `create_claim()` used to grant it — a resolved `EventSource.publisher_id` (Fienta `organizer_id` / KUMU-ECH `source_id`, transitively via `Publisher`), or, absent a Publisher, a freshly re-computed Piletilevi `event_series_key` from *that row's own* `title_orig` and resolved venue name (a linked `Venue`'s name, same as `resolve_venue_name()`, preferred over the bare `Event.venue_name`) — never the event's primary key, so a brand-new re-ingested occurrence row re-matches its claim exactly like the original row did. Organizer retirement/revival and source disablement need no claim-side handling: they change `Publisher.status`/`Source.enabled`, neither of which this lookup joins against. When two *claimed* events collide as duplicates, `resolve_claim_dormancy()` resolves it the same way as any other collision (quality-rank) and marks the losing member's `Claim.dormant = True` — its pins stop applying while dormant, but the claim row itself is never deleted or revoked (unlike `status`, which still gates duplicate-claim creation regardless of dormancy); the representative's own claim, if any, reactivates (`dormant = False`) in the same pass.
-3. **Classification** — LLM assigns fixed 14-category / 10-vibe taxonomy, quality score 0–1, 3-bullet "why go?" text, an `is_explicit` flag (NSFW layer 2, see below), a `non_event` flag (OR-merged into `Event.is_non_event` — non-event filter layer 2, see below), an `in_target_city` flag (location signal, inverted and stored as `Event.is_out_of_area`; feeds the publish gate), `price_min`/`price_max`/`currency` parsed from the ingested `price_hint` (capped at `PRICE_HINT_MAX_CHARS`), and a `has_free_tier` flag (a paid event that also has a free/companion/member tier — OR-merged into `Event.has_free_tier`, never un-set once true). Fixed taxonomy prevents ontology drift. **Ingest-set prices are authoritative:** `classify_event` only writes LLM-derived prices when `event.price_min is None` — a source that parses price deterministically at ingest (Fienta, see below) keeps its values; the LLM, which sees "not stated" for those events, must not clobber them. On the LLM-priced path (`price_min` was None), `_reconcile_event_price_fields` first deterministically **widens** — never shrinks — the LLM's envelope to cover any literal €/EUR amount found in `price_hint` (`eur_price_bounds_from_text` over `strip_fee_amounts`), catching a tier the model under-reported; gated to a None/EUR currency so a correctly-detected non-EUR price isn't polluted by an incidental €-looking match. `has_free_tier` only makes sense alongside a paid price (`price_min > 0`); the classifier zeroes a model-hallucinated `has_free_tier` on an otherwise-free event. Events already flagged `is_explicit`/`is_non_event` by the layer-1 keyword prefilters skip the LLM call but **still advance to `classified`**, so a flagged dedup-group representative doesn't strand its cluster in `draft`. Before each batch, `classify_pending` bulk-cancels (`draft` → `cancelled`) drafts that have already ended — they can never pass the publish gate, so an LLM slot on them is wasted — skipping any dedup-canonical representative that still has a live sibling (`_no_live_dedup_sibling_clause`), which would otherwise orphan that sibling outside `canonical_event_filter()` until the next dedup pass.
-4. **Ranking** — `score = 0.45·persona_affinity + 0.20·recency_boost + 0.20·feedback_signal + 0.10·quality_score + 0.05·locality_bonus` (`feedback_signal` is `fb_normalized`, the raw `[-1, 1]` feedback score mapped to `[0, 1]` via `(fb + 1.0) / 2.0` before weighting, `app/ranking/score.py`). Signed-out reads (Explore without a session) use the anonymous weight set instead — `SCORE_WEIGHT_ANON_RECENCY` (0.25), `SCORE_WEIGHT_ANON_QUALITY` (0.125), `SCORE_WEIGHT_ANON_LOCALITY` (0.0625), `app/constants.py`: `feedback_signal` drops out entirely and `persona_affinity` is held at a neutral constant, with its dropped 0.20 redistributed across the three remaining differentiating terms by scaling them by `1/0.80`.
-5. **Daily 5 builder** — runs 06:00 Europe/Tallinn; scores events in next 14 days; MMR-lite diversity, capped at `DAILY_5_MAX_PER_CATEGORY` (2) per category; writes to `daily_feeds`. **Series-duplicate collapse:** before scoring, `collapse_series_duplicates()` (`app/events/queries.py`, shared with the public showcase below) reduces the candidate pool to one representative `Event` row per `event_series_key` — a multi-date listing (e.g. a workshop running Tue/Thu/Sat) ingests as several rows sharing a series key but distinct `dedup_group_id`s (recurring series are intentionally not dedup-grouped at ingestion), so without this collapse more than one date-instance could score well and land in the same user's Daily 5 on the same day. The nearest (earliest) `starts_at` wins; ties break by event id for a deterministic survivor across builds. The candidate load is column-trimmed: `_load_candidate_events()` applies `load_only(*_CANDIDATE_EVENT_COLUMNS)` (`id`, `starts_at`, `title_orig`, `venue_name`, `venue_id`, `lat`, `lng`, `dedup_group_id`) — a new downstream read of any other `Event` column must be added to that tuple or it raises `MissingGreenlet` on the deferred attribute. Runs once per build, upstream of scoring/cooldown/MMR, so every downstream mechanism below operates on an already-deduped pool. **Series cooldown:** before scoring, a candidate whose `event_series_key` (`normalized_title` + lowercased venue, `app/events/queries.py`) appeared in that user's feeds within the last `DAILY5_SERIES_COOLDOWN_DAYS` (3) days is routed into a separate `cooled_scored` pool instead of the primary candidate pool — so a recurring multi-day series (one canonical event per day) isn't re-picked night after night *while the primary pool is healthy*. The window is bulk-fetched (one feed query + one event query, no per-user N+1); suppression is per-build and never persisted. **Backfill tiers:** `_select_with_backfill()` (`app/ranking/score.py`) guarantees `n=5` events when the primary pool is thin by relaxing constraints tier by tier: tier 1 is `_mmr_pick` on the primary (fresh) pool at the true `DAILY_5_MAX_PER_CATEGORY` cap; tiers 2–3 are `_greedy_fill` at the relaxed `DAILY_5_BACKFILL_MAX_PER_CATEGORY` (3) cap — tier 2 over the fresh pool again, tier 3 over the cooled pool; tiers 4–5 repeat that fresh-then-cooled order with the per-category cap dropped entirely (`max_per_category=None`) as a last resort. Diversity is preferred over freshness in the relaxed tiers; each pool is sorted by score once up front and the sorted list reused across every tier that consumes it (fresh feeds tiers 1/2/4, cooled feeds tiers 3/5). So a series-cooled event *can* reappear the next day, and a thin candidate pool can legitimately yield 3+ events in one category — the 2-per-category cap and series cooldown are both soft under scarcity, not hard guarantees.
-6. **Publish gate** (canonical criteria — cross-referenced from Content Safety and Non-Event Filter below) — `app/publish.py::publish_pending()` promotes `classified` events to `published` once `quality_score >= PUBLISH_MIN_QUALITY_SCORE` (0.4), `is_explicit` is false, `is_non_event` is false, `is_out_of_area` is false (LLM `in_target_city` signal, set in `classify_event`), the event hasn't ended yet (`event_not_ended_filter()`, `app/events/queries.py` — live until `ends_at`, or `starts_at` when `ends_at` is unset; a past `starts_at` with a future `ends_at` stays live, covering multi-day runs and ongoing exhibitions), `title_orig` is present, and — defense-in-depth — any present `lat`/`lng` fall within `TALLINN_REGION_BBOX` (coords-less events still pass; only an out-of-bbox coord blocks). It also excludes any `classified` event whose `submitted_by_organizer_id` resolves to an unverified organizer (NULL-safe for non-organizer events — see `docs/organizer-portal.md`). Events failing the gate stay `classified`; the returned summary breaks down reject counts by reason (`fail_quality`/`fail_explicit`/`fail_non_event`/`fail_out_of_area`/`fail_ended`/`fail_no_title`/`fail_coords_bbox`, non-exclusive). The same `event_not_ended_filter()` also gates the Daily 5 feed builder's candidate window (`app/ranking/score.py`). Runs every 6h via `publish_pending_job`.
-7. **Geocoding backfill** — `app/ingestion/geocode/__init__.py::geocode_pending()` (sub-passes in `geocode/nominatim.py`, `geocode/venue_extract.py`, `geocode/sibling_copy.py`, `geocode/venue_pass.py`) fills `lat`/`lng` for events that have `venue_address` but no coordinates, via Nominatim (1 req/sec, `GEOCODE_REQUEST_DELAY_SECONDS`, capped at `GEOCODE_MAX_PER_RUN` events per run; an address that fails is not retried for `GEOCODE_RETRY_INTERVAL_DAYS`, tracked via `geocode_attempted_at`). It runs six sub-passes in order: (0) `_self_heal_out_of_bbox_coords()` — NULLs any stored coord outside `TALLINN_REGION_BBOX`, run **first** so a bad donor coord can't propagate into the sibling copy or the Nominatim cache in the same run. (0.5) `geocode_pending_venues()` (`geocode/venue_pass.py`, #179) — resolves any organizer-saved `Venue` (`app/models/models.py::Venue`) with an address but no coords via the same serial Nominatim/retry-cooldown pattern, keyed on the venue's own `geocode_attempted_at` column (organizer create/edit never geocodes inline — see `docs/organizer-portal.md`); then `_sync_venue_linked_coords()` copies each linked venue's resolved `lat`/`lng` onto its `Event`s in one bulk `UPDATE ... FROM` — both filling an event submitted before its venue resolved, and propagating a later venue address correction forward onto already-published events at that venue. A venue-linked event (`Event.venue_id` set) has `venue_name`/`venue_address` left `NULL` at write time (#176), so it never enters the `venue_address`-driven sub-passes below — this venue pass is its only coordinate path. (a) `extract_address_from_venue_name()` — LLM pass that mines street addresses glued into `venue_name` into `venue_address` so events with no prior address become geocodable; uses a Python prefilter (digit / comma / direction keyword / length) to limit LLM calls to suspect names only; caches decisions in `llm_calls` by content hash; caps fresh calls at `VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN`; an event the LLM resolves to "no address" is stamped `venue_extract_attempted_at` and skipped for `VENUE_EXTRACT_RETRY_INTERVAL_DAYS` so it cannot starve newer candidates. (b) `copy_venue_from_siblings()` — copies `venue_address`+`lat`/`lng` onto address-less events from a geocoded sibling. Matching is on the **canonical** venue name (`canonical_venue_name` strips a `(parens)` suffix and any glued-on address tail after the first comma) via symmetric `fuzz.ratio >= VENUE_SIBLING_RATIO_THRESHOLD` (90; canonicalization makes intended matches near-exact — a symmetric ratio avoids `token_set_ratio` scoring a short comma-split core 100 against an unrelated longer donor), so `"Sõltumatu Tantsu Lava"` matches a `"Sõltumatu Tantsu Lava (STL)"` donor. The ambiguity guard keys on distinct **coordinates** — one physical venue legitimately carries several address spellings at one coord, so only a name spanning >1 distinct coord is skipped + logged; a single coord copies a representative (most-common, lex tie-broken) `venue_address`. Non-physical venue names (`NON_GEOCODABLE_VENUE_NAMES`, e.g. `"online"`) are skipped on both target and donor sides. (c) the Nominatim pass itself (`geocode/nominatim.py`), seeded from a normalized-query→coords cache built over **all** already-geocoded events, so spelling/format variants of a known address cost no HTTP call. Runs every 6h via `geocode_pending_job`.
-8. **Detail-refetch sync** — `app/ingestion/refetch.py::refetch_event_details()` re-fetches every future event's detail page (`event.url`), parses the schema.org JSON-LD `Event` block via the shared `app/ingestion/jsonld.py` module (`extract_jsonld_event_location`/`_offers`/`_text`), and reconciles stored `venue_name`/`venue_address`/`lat`/`lng`/price fields against the source — updating on a differing value, filling when empty, never clobbering a good stored value with nothing. It also backfills missing locale keys of `title_localized`/`description_localized` from the page's locale variants (`_backfill_localized_text`), gated per-locale (not per-column) and merged into the existing dict so a partially-filled column self-heals; a stored title that looks like site-level homepage boilerplate (`_is_suspect_locale_title`) counts as missing and is re-fetched. A locale an organizer pinned via event claiming (`Event.pinned_fields`, `pin_key()` in `app/claims/pinning.py`) is skipped by this backfill — unless the pinning claim is dormant (`bulk_dormant_pinned_event_ids()`), in which case the pin is treated as absent; price fields are never pinned, so price reconciliation is unaffected. Generic JSON-LD parsing, not Fienta-specific (no-ops on pages without an `Event` block; the same module also backs Fienta's own detail-page parsing at ingest); HTML-listing sources already fetch detail at ingest so Fienta is the main beneficiary today. Candidates exclude organizer submissions on two independent signals (`_select_candidates`): `Event.submitted_by_organizer_id IS NULL`, plus a `NOT EXISTS` check that the event isn't linked to a `user_submission`-kind source — the latter guards against a future insert that forgets to set `submitted_by_organizer_id`, since that's the same `source.kind` signal `insert_normalized_event()` keys its host-pin decision off (see `docs/security.md`'s External-URL sanitization bullet for the full host-pin rationale). Throttled like geocoding (`REFETCH_REQUEST_DELAY_SECONDS` per source host — candidates are grouped by host, each host walked sequentially while up to `REFETCH_HOST_CONCURRENCY` hosts run in parallel; capped at `REFETCH_MAX_PER_RUN`/run, re-checks an event only after `REFETCH_MIN_INTERVAL_DAYS`). A coord NULLed by a detail-driven address change is repaired by the next `geocode_pending` pass. Runs daily 04:30 Europe/Tallinn via `refetch_event_details_job`, before the 06:00 feed build.
+Each stage runs as a scheduled job. [backend-ops.md](backend-ops.md)'s Scheduled Jobs section owns the cadences and their order.
 
-## Read Paths (Daily 5 feed vs. Explore)
+1. **Ingestion** — source adapters fetch and normalize events. See Ingestion.
+2. **Deduplication** — rules, then an LLM tiebreaker, group duplicates under one canonical event. See Deduplication.
+3. **Classification** — the LLM assigns taxonomy, quality, prices and filter flags. See Classification.
+4. **Ranking** — a weighted score orders events per user. See Ranking.
+5. **Daily 5 builder** — picks five diverse events per user. See Daily 5 Builder.
+6. **Publish gate** — promotes `classified` events to `published`. See Publish Gate.
+7. **Geocoding backfill** — fills missing coordinates. See Geocoding Backfill.
+8. **Detail-refetch sync** — reconciles stored fields against each event's source page. See Detail-Refetch Sync.
 
-Four user-facing surfaces read `published` events — two authenticated, one optional-auth, one public — plus two auxiliary public reads (Landing counts, the prerender id snapshot):
+## Ingestion
 
-- **Daily 5 feed** (`GET /feed`, route `/`) — serves the pre-built `daily_feeds` snapshot (built 06:00, see Daily 5 builder).
-- **Explore** (`GET /explore`, `app/routers/browse.py`, route `/explore`) — searchable/filterable/sortable discovery grid over all upcoming published events. Query params: `q` (keyword, capped at `BROWSE_QUERY_MAX_LEN` — `_keyword_filter` builds a `%...%` pattern against two trigram GIN indexes, so an unbounded string is cheap to send and expensive to scan), `category`/`vibe` (comma-separated slugs, validated against `VALID_CATEGORIES`/`VALID_VIBES`), `date_from`/`date_to`, `free`, `for_you` (default true), `sort` (`VALID_BROWSE_SORTS` = relevance/date/price/quality), `limit`/`offset` (`BROWSE_PAGE_SIZE`/`BROWSE_MAX_PAGE_SIZE`) plus an opaque `cursor` (the `date` sort on the SQL path is keyset-paginated on `(starts_at, id)` — response carries `next_cursor`, and a cursor request skips `offset` and `total`; `price`/`quality`/scored paths stay on OFFSET and ignore it; helpers `encode_page_cursor`/`decode_page_cursor` in `routers/utils.py`, malformed → 422), `locale` (per-request override of the user's stored locale, via the shared `resolve_locale_param()`). **Two execution paths:** a pure-SQL path (`_browse_sql_path`) for the non-personalized `date`/`price`/`quality` sorts, and a Python-scored path (`_browse_scored_path`, reuses `ranking/score.py`) whenever `for_you` narrowing or `relevance` ranking is requested (persona affinity + feedback soft-filter aren't expressible as SQL `ORDER BY`). Optional-auth (`get_optional_user`) — signed-out callers get the anonymous weight set (see Ranking above), signed-in callers get personalization; rate-limited `RATE_LIMIT_BROWSE`. Paginate any new list output via the same `limit`/`offset` + cap pattern.
-- **Saved Events** (`GET /feedback/events`, `app/routers/feedback.py`, route `/saved`) — lists the current user's published events carrying a given preference `signal` (like/dislike/bookmark — restricted to `PREFERENCE_SIGNALS`, not the full `VALID_SIGNALS`, since passive view/click_external rows are multi-row per event — at most one per UTC day, migration 0055), most-recently-signaled first. Shares the `public_event_filter()` + `select_events_with_classification()` + `serialize_event()` read stack with the other surfaces; paginated via `limit` + keyset `cursor` on `(feedback.created_at, feedback.id)` (`next_cursor` in the response; `offset` still accepted for the first page), rate-limited `RATE_LIMIT_FEEDBACK`. Powers the Saved Events page tabs (`routes/SavedEvents/`, infinite-query).
-- **Landing showcase** (`GET /public/showcase`, `app/routers/browse.py`'s sibling `app/routers/public.py`, route `/` when signed out) — the only *user-facing list* read path with zero auth-dependent behavior — Explore above is also reachable signed-out (optional-auth), but branches on whether a user is present; showcase never does (the single-event `GET /events/{id}` detail endpoint is also public — optional-auth, see `docs/conventions.md`; `GET /public/prerender-events` below is also unauthenticated but is a build-time consumer, not a user-facing surface): a fixed-size grid of `SHOWCASE_EVENT_COUNT` (6) top-quality published events happening this week (`SHOWCASE_WINDOW_DAYS`, widening to `SHOWCASE_FALLBACK_WINDOW_DAYS` on a thin week). Pure SQL, mirroring `_browse_sql_path`'s quality sort minus every user/persona/feedback concern — no PII, no personalization. Rate-limited `RATE_LIMIT_PUBLIC`. Reuses the same `public_event_filter()` + `select_events_with_classification()` + `serialize_event()` stack; keep it that way, and never add a user-scoped field to this response. **Series-duplicate collapse:** the same `collapse_series_duplicates()` used by the Daily 5 builder above runs here too — the SQL query is unlimited (a LIMIT before the collapse could discard a series' only surviving instance), then `showcase()` collapses to one representative per `event_series_key`, re-sorts in Python by the same three keys the SQL `ORDER BY` uses (narrow-window first, `quality_score` desc/nulls-last, `starts_at` asc — the collapse survivor isn't guaranteed to be the SQL-preferred row), and slices to `SHOWCASE_EVENT_COUNT`. Without this, a recurring multi-day series (never dedup-grouped across days) could show the same title 2-3 times in the grid.
-- **Landing counts** (`GET /public/counts`, same router) — the live numbers Landing's hero, ticker and stat row render (`upcoming_count`, `venue_count`, `furthest_date`, `cheapest_price`, `tonight_events` + `tonight_is_fallback`), cached in-process for `PUBLIC_COUNTS_CACHE_TTL_SECONDS` per locale. It also carries `today_count`, the top bar pulse chip's number (`PulseChip`, via the shared `[counts, locale]` React Query entry): an exact `COUNT` of exactly what `/explore?date=today` lists — `public_event_filter()` + `canonical_event_filter()` + `event_not_ended_filter(now)` + `event_date_range_filter(today, today)`, so an ongoing exhibition counts and the chip always agrees with the page its link lands on. It is a separate scalar query (`_today_count_stmt`), not a `FILTER` on `_aggregates_stmt`, whose `starts_at >= now` WHERE would drop ongoing runs; `event_date_range_filter` lives in `app/events/queries.py` and is shared with `browse.py` (a router must not import another router's private). `tonight_events` / `tonight_is_fallback` are unchanged — the hero and ticker still read them; the chip does not.
-- **Prerender id snapshot** (`GET /public/prerender-events`, `app/routers/public.py`) — unauthenticated, unpaginated `{id, updated_at}` list of every published/canonical/not-yet-ended event; the single source of truth `frontend/scripts/prerender.ts` reads at build time to decide which routes to snapshot, reused as-is for `sitemap.xml` generation (see `docs/frontend.md`'s prerender pipeline section). Deliberately unpaginated — the build-time consumer needs one atomic snapshot of the id set, which paging would break. Rate-limited `RATE_LIMIT_PUBLIC`.
+### Sources
+
+- **Fienta is polled through its API.** `app/ingestion/sources/fienta.py` reads its organizer ids from the database; see Organizer Lifecycle (Fienta).
+- **Piletilevi, KUMU and Estonia Concert Hall are HTML listing scrapers.** All three subclass `app/ingestion/sources/html_base.py::HtmlListingAdapter`.
+- **Organizer self-submission has no polling adapter.** `POST /organizer/events` inserts on the `user_submission` source through `app/ingestion/adapter.py::insert_normalized_event()`. See [organizer-portal.md](organizer-portal.md).
+- **Telliskivi, Kultuurikatel and Fotografiska are `enabled=False`** in `app/ingestion/registry.py`. Telliskivi's data was unfixably mis-dated. The other two wait for a rewrite onto `HtmlListingAdapter`.
+- **Eventbrite was never added.** Its API closed to non-partners before integration.
+
+### Fienta Detail Merge
+
+For each new Fienta event, one not yet in `event_sources`, the adapter also fetches the detail page. It parses the schema.org JSON-LD into `raw["_detail"]`, with fetches bounded by `DETAIL_FETCH_CONCURRENCY`.
+
+`fienta.py::normalize()` merges listing and detail by a fixed per-field authority, with no LLM involved:
+
+| Field | Authority |
+|---|---|
+| `venue_name` | Listing wins; detail fills when missing |
+| `venue_address` | The side carrying a 5-digit postal code; else listing wins, detail fills when empty |
+| `lat` / `lng` | Detail JSON-LD only, gated to Estonia by `coords_in_estonia` |
+| `price_min` / `price_max` | Listing's `app/ingestion/pricing.py::parse_price_from_string` baseline; a present detail offer price overrides each bound |
+
+- **A missing `_detail` degrades to listing-only.** The merge never blocks ingest on a failed detail fetch.
+
+### Skip Set
+
+- **Adapters skip ids from `app/ingestion/adapter.py::ingest_skip_ids()`, not just stored ones.** It unions stored `event_sources` external ids with `raw_events` ids fetched within `INGEST_REJECT_RECHECK_DAYS` (7).
+- **That stops a rejected event from being re-fetched every hourly run.** An event `normalize()` rejected gets one recheck a week instead.
+
+### Images
+
+- **Image URLs are rewritten to full resolution at ingest.** `html_base.py::full_res_wp_image()` strips WordPress's `-WxH` thumbnail suffix for concert.ee and kumu.ekm.ee. `piletilevi.py::full_res_piletilevi_image()` rewrites the `/height=N/` path segment. Their constants live in `app/ingestion/selectors.py`.
+
+### Newsletter Inbound
+
+- **The newsletter path is landed but dormant.** `app/routers/webhooks.py` accepts a Resend Inbound webhook, and `app/llm/newsletter_extractor.py` can parse it.
+- **Its `raw_events` rows never become `events`.** `registry.py` registers the newsletter source without an adapter, so it is absent from `ADAPTER_REGISTRY`.
+- **Extraction is skipped for every sender by default.** `NEWSLETTER_SENDER_ALLOWED_DOMAINS` is empty. See [security.md](security.md)'s Inbound Mail Webhook section before adding a domain.
+
+## Deduplication
+
+### Candidate Pairs
+
+- **Dedup has two stages so the LLM sees few pairs.** A rule pre-filter (`app/dedup/rules.py`) runs first. The LLM tiebreaker (`app/dedup/llm_tiebreaker.py`) judges only the pairs that survive.
+- **The scheduled `dedup_pass` runs `run_dedup_pass_llm`.** It falls back to the rule-only `run_dedup_pass` when no LLM provider key is set.
+- **Near-exact titles bypass the venue check on the LLM path.** At `title_ratio >= TITLE_RATIO_VENUE_BYPASS_THRESHOLD` (85), cross-source duplicates with differently spelled venues still reach the tiebreaker. That includes cross-language spellings.
+
+### Same-Day Title Unions
+
+- **`apply_same_day_title_unions` groups same-day slots without an LLM call.** Events sharing a normalized title, a Tallinn calendar day and a compatible venue collapse into one group. `_venue_compatible` treats an unknown venue as compatible.
+- **This folds timed-entry slots into one canonical event**, such as a museum's many same-day slots. The LLM path skips these pairs (`same_group`).
+- **Multi-day series are not grouped across days.** Each day keeps its own canonical event. The Daily 5 builder and the Landing showcase collapse series at read time instead.
+
+### Group Representative
+
+The canonical member of a group is the one with `dedup_group_id == id`. It is chosen by these keys, in order:
+
+1. **Status** — `_representative_status_rank` pins a published or classified member ahead of a draft one.
+2. **Claim** — a claimed member beats an unclaimed one (`claimed_event_ids`).
+3. **Quality** — `_event_quality_rank` prefers price, address, coordinates and description.
+4. **Id** — `min(event_id)` breaks any remaining tie.
+
+### Claimed Events
+
+- **`load_claims_for_events()` finds each candidate's approved Claim by durable key, never by event id.** The key is a resolved `EventSource.publisher_id`, or else a recomputed Piletilevi `event_series_key`. So a re-ingested occurrence row re-matches its claim like the original did.
+- **The recomputed series key uses that row's own `title_orig` and resolved venue name.** A linked `Venue`'s name wins over `Event.venue_name`, as in `resolve_venue_name()`.
+- **Organizer retirement and source disablement need no claim-side handling.** They change `Publisher.status` and `Source.enabled`, and the claim lookup joins neither.
+- **When two claimed events collide, `resolve_claim_dormancy()` makes the losing Claim a Dormant claim.** The winner is chosen as for any collision. The loser's pins stop applying, but the row is never deleted or revoked. The representative's own claim reactivates in the same pass.
+- **Dormancy doesn't loosen duplicate-claim creation.** `Claim.status` still gates it. See `CONTEXT.md`'s Dormant claim entry.
+
+## Classification
+
+The LLM classifies each event against a fixed category and vibe taxonomy (`VALID_CATEGORIES`, `VALID_VIBES`). A fixed taxonomy prevents ontology drift. It also returns a 0–1 quality score and three "why go?" bullets.
+
+| LLM output | Stored as |
+|---|---|
+| `is_explicit` | `Event.is_explicit` (NSFW layer 2) |
+| `non_event` | OR-merged into `Event.is_non_event` (non-event layer 2) |
+| `in_target_city` | Inverted into `Event.is_out_of_area`, read by the publish gate |
+| `price_min` / `price_max` / `currency` | Parsed from `price_hint`, capped at `PRICE_HINT_MAX_CHARS` |
+| `has_free_tier` | OR-merged into `Event.has_free_tier`; never unset once true |
+
+### Prices
+
+- **Ingest-set prices are authoritative.** `classify_event` writes LLM prices only when `event.price_min is None`. A source that parses prices at ingest, like Fienta, shows the LLM "not stated", so its answer must not overwrite them.
+- **On the LLM-priced path, `_reconcile_event_price_fields` widens the envelope and never shrinks it.** It covers any literal €/EUR amount in `price_hint` (`eur_price_bounds_from_text` over `strip_fee_amounts`), catching a tier the model missed.
+- **The widening only applies when the currency is unset or EUR.** A correctly detected non-EUR price stays clean of incidental €-looking matches.
+- **`has_free_tier` only applies to a paid event (`price_min > 0`).** The classifier zeroes a hallucinated flag on a free event.
+
+### Skipped and Ended Events
+
+- **Events flagged by a layer-1 keyword prefilter skip the LLM call but still advance to `classified`.** Otherwise a flagged dedup representative would strand its whole group in `draft`.
+- **`classify_pending` cancels ended drafts before each batch.** They can never pass the publish gate, so an LLM call on them is wasted.
+- **The sweep spares a dedup representative with a live sibling** (`app/events/queries.py::no_live_dedup_sibling_clause()`). Cancelling it would orphan the sibling outside `canonical_event_filter()` until the next dedup pass.
+
+## Ranking
+
+`app/ranking/score.py` sums weighted terms. The weights are `SCORE_WEIGHT_*` constants in `app/constants/ranking.py`.
+
+| Term | Signed in | Signed out |
+|---|---|---|
+| `persona_affinity` | 0.45 | 0.45 × a neutral constant |
+| `recency_boost` | 0.20 | 0.25 |
+| `feedback_signal` | 0.20 | dropped |
+| `quality_score` | 0.10 | 0.125 |
+| `locality_bonus` | 0.05 | 0.0625 |
+
+- **`feedback_signal` maps the raw `[-1, 1]` feedback score to `[0, 1]` before weighting**, as `(fb + 1.0) / 2.0`.
+- **Signed-out reads redistribute the dropped feedback weight.** Explore without a session has no feedback and no persona. The three remaining differentiating terms scale by `1/0.80` to absorb feedback's 0.20.
+
+## Feedback Decay
+
+- **Feedback decays as `FEEDBACK_DECAY_BASE ** days_since_feedback`** (0.9 per day, `app/ranking/score.py`). Recent signals weigh more than old ones.
+- **A dislike is a hard exclude, not a negative weight.** The Daily 5 builder skips a disliked event and every event in its dedup group (`SCORE_HARD_EXCLUDE`).
+
+## Daily 5 Builder
+
+- **The builder scores events starting in the next 14 days and writes `daily_feeds`.** MMR-lite diversity caps each category at `DAILY_5_MAX_PER_CATEGORY` (2).
+- **Its candidate window uses the publish gate's `event_not_ended_filter()`.** An ongoing event stays a candidate until it ends.
+
+### Series Collapse
+
+- **`app/events/queries.py::collapse_series_duplicates()` keeps one row per `event_series_key` before scoring.** A multi-date listing ingests as several rows with distinct dedup groups. Without the collapse, two of its dates could land in one Daily 5.
+- **The nearest `starts_at` survives, with ties broken by event id.** The survivor is deterministic across builds. The collapse runs once per build, before scoring, cooldown and MMR.
+- **`_load_candidate_events()` loads only `_CANDIDATE_EVENT_COLUMNS`.** A new downstream read of any other `Event` column must join that tuple. Otherwise the deferred attribute raises `MissingGreenlet`.
+
+### Series Cooldown
+
+- **A series shown to a user in the last `DAILY5_SERIES_COOLDOWN_DAYS` (3) moves to a cooled pool.** The series key is normalized title plus lowercased venue. So a recurring series isn't re-picked nightly while the fresh pool is healthy.
+- **The cooldown window is bulk-fetched**: one feed query and one event query, with no per-user N+1. Suppression is per build and never persisted.
+
+### Backfill Tiers
+
+`app/ranking/score.py::_select_with_backfill()` guarantees five events by relaxing constraints tier by tier:
+
+| Tier | Pool | Per-category cap | Picker |
+|---|---|---|---|
+| 1 | fresh | `DAILY_5_MAX_PER_CATEGORY` (2) | `_mmr_pick` |
+| 2 | fresh | `DAILY_5_BACKFILL_MAX_PER_CATEGORY` (3) | `_greedy_fill` |
+| 3 | cooled | `DAILY_5_BACKFILL_MAX_PER_CATEGORY` (3) | `_greedy_fill` |
+| 4 | fresh | none | `_greedy_fill` |
+| 5 | cooled | none | `_greedy_fill` |
+
+- **Relaxed tiers prefer diversity over freshness.** Each pool is sorted by score once and reused by every tier that reads it.
+- **The category cap and series cooldown are soft under scarcity.** A cooled series can reappear the next day, and a thin pool can yield three or more events in one category.
+
+## Publish Gate
+
+`app/publish.py::publish_pending()` promotes a `classified` event to `published` when every criterion holds. A failing event stays `classified`, and the returned summary counts each failure. The counters overlap.
+
+| Criterion | Reject counter |
+|---|---|
+| `quality_score >= PUBLISH_MIN_QUALITY_SCORE` (0.4) | `fail_quality` |
+| `is_explicit` is false | `fail_explicit` |
+| `is_non_event` is false | `fail_non_event` |
+| `is_out_of_area` is false | `fail_out_of_area` |
+| Not ended (`event_not_ended_filter()`) | `fail_ended` |
+| `title_orig` is present | `fail_no_title` |
+| Any present `lat`/`lng` lies in `TALLINN_REGION_BBOX` | `fail_coords_bbox` |
+
+- **An event is live until `ends_at`, or `starts_at` when `ends_at` is unset.** A past start with a future end stays live, which covers multi-day runs and exhibitions.
+- **The bbox check is defense in depth.** An event without coordinates passes; only an out-of-bbox coordinate blocks.
+- **The gate also holds back events from an unverified organizer** (`submitted_by_organizer_id`, NULL-safe for other events). See [organizer-portal.md](organizer-portal.md) for the review flow.
+
+## Geocoding Backfill
+
+`app/ingestion/geocode/__init__.py::geocode_pending()` fills missing coordinates in six sub-passes, in this order:
+
+1. **Self-heal** — `_self_heal_out_of_bbox_coords()` clears stored coordinates outside `TALLINN_REGION_BBOX`. It runs first so a bad coordinate can't spread through sibling copy or the Nominatim cache.
+2. **Venues** — `geocode/venue_pass.py::geocode_pending_venues()` geocodes organizer-saved `Venue` rows that have an address but no coordinates.
+3. **Venue sync** — `_sync_venue_linked_coords()` copies each venue's coordinates onto its events.
+4. **Venue-name extract** — `geocode/venue_extract.py::extract_address_from_venue_name()` mines addresses out of `venue_name`.
+5. **Sibling copy** — `geocode/sibling_copy.py::copy_venue_from_siblings()` copies an address from a geocoded sibling.
+6. **Nominatim** — `geocode/nominatim.py` geocodes the remaining addresses.
+
+- **Nominatim calls run at 1 per second** (`GEOCODE_REQUEST_DELAY_SECONDS`), up to `GEOCODE_MAX_PER_RUN` per run. A failed address waits `GEOCODE_RETRY_INTERVAL_DAYS`, tracked by `geocode_attempted_at`. The venue pass uses the same cooldown on the venue's own column.
+
+### Venue-Linked Events
+
+- **A venue-linked event stores `venue_name` and `venue_address` as NULL.** With `Event.venue_id` set, it never enters the address-driven sub-passes 4–6. The venue pass is its only coordinate path.
+- **Organizer create and edit never geocode inline.** The venue pass picks the venue up on its next run.
+- **The venue sync is one bulk `UPDATE ... FROM`.** It fills events submitted before their venue resolved. It also carries a later venue address correction onto already-published events.
+
+### Venue-Name Extract
+
+- **An LLM moves street addresses glued into `venue_name` into `venue_address`.** A Python prefilter (digit, comma, direction keyword, length) sends only suspect names to the LLM.
+- **Decisions are cached in `llm_calls` by content hash.** Fresh calls per run are capped at `VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN`.
+- **A "no address" answer stamps `venue_extract_attempted_at`.** The event is skipped for `VENUE_EXTRACT_RETRY_INTERVAL_DAYS`, so it can't starve newer candidates.
+
+### Sibling Copy
+
+- **Siblings match on the canonical venue name.** `canonical_venue_name` strips a `(parens)` suffix and any address tail after the first comma. So "Sõltumatu Tantsu Lava" matches a "Sõltumatu Tantsu Lava (STL)" donor.
+- **Matching uses a symmetric `fuzz.ratio >= VENUE_SIBLING_RATIO_THRESHOLD` (90).** `token_set_ratio` would score a short comma-split core 100 against an unrelated longer donor.
+- **The ambiguity guard counts distinct coordinates, not addresses.** One venue often has several address spellings at one coordinate. A name spanning more than one coordinate is skipped and logged. Otherwise the most common address is copied, ties broken lexically.
+- **`NON_GEOCODABLE_VENUE_NAMES`, such as "online", are skipped** as both target and donor.
+
+### Nominatim Pass
+
+- **The pass seeds a normalized-query → coordinates cache from every geocoded event.** A spelling variant of a known address costs no HTTP call.
+
+## Detail-Refetch Sync
+
+- **`app/ingestion/refetch.py::refetch_event_details()` re-reads every future event's `event.url`.** It parses the JSON-LD `Event` block through `app/ingestion/jsonld.py`. Then it reconciles venue, coordinates and price fields against the source.
+- **Reconciliation updates a differing value and fills an empty one.** It never replaces a good stored value with nothing.
+- **The parsing is generic JSON-LD, not Fienta-specific.** It no-ops on pages without an `Event` block. HTML-listing sources already fetch detail at ingest, so Fienta benefits most.
+- **Piletilevi prices come from the store API, not JSON-LD.** Its detail pages carry no `offers`. Ingest and refetch both call `piletilevi.py::fetch_store_prices()`. Refetch asks only for events with no stored price (`piletilevi_store_price_fields()`), so a pre-sale event is priced on the first refetch after its sale opens.
+- **A store-API 400 for a pre-sale or sold-out event is a business state, not a failure.** It logs at INFO, and the adapter logs a per-run count. Any other 400 still logs a WARNING. The codes live in `app/ingestion/selectors.py`.
+- **A coordinate cleared by an address change is repaired by the next geocoding pass.**
+- **A changed `venue_name` re-runs the explicit and non-event checks.** A published event that newly fails is demoted.
+
+### Localized Text Backfill
+
+- **Missing locales of `title_localized`/`description_localized` are filled from the page's locale variants** (`_backfill_localized_text`). The check is per locale and merges into the stored dict, so a partly filled column self-heals.
+- **A stored title that looks like site boilerplate counts as missing** (`_is_suspect_locale_title`).
+- **A locale pinned by a claim is skipped** (`Event.pinned_fields`, `app/claims/pinning.py::pin_key()`). A Dormant claim's pins count as absent (`bulk_dormant_pinned_event_ids()`). Price fields are never pinned.
+
+### Candidates and Throttling
+
+- **`_select_candidates` excludes organizer submissions on two independent signals:** `submitted_by_organizer_id IS NULL`, and no link to a `user_submission` source. The second catches a future insert that forgets the first.
+- **That exclusion is a security boundary.** An organizer's `url` isn't host-pinned, so it must never be fetched. See [security.md](security.md)'s External URLs section.
+- **Candidates are grouped by host.** Each host is walked sequentially with `REFETCH_REQUEST_DELAY_SECONDS` between requests. Up to `REFETCH_HOST_CONCURRENCY` hosts run in parallel.
+- **A run handles at most `REFETCH_MAX_PER_RUN` events.** An event is re-checked only after `REFETCH_MIN_INTERVAL_DAYS`.
+
+### Source-Gone Retirement
+
+- **A detail page answering 404 or 410 (`REFETCH_GONE_STATUS_CODES`) means the source removed the event.** It isn't counted in `failed`. The run stamps `events.source_gone_since` on the first sighting and marks the event synced, so it moves to the back of the queue.
+- **Any other status, a `RequestError` or an SSRF-guard `ValueError` is transient.** It counts in `failed` and leaves the event untouched.
+- **A later successful fetch clears `source_gone_since`.**
+- **An event gone for `REFETCH_GONE_CANCEL_AFTER_DAYS` is cancelled** with `cancellation_reason = source_gone`, through `app/events/cancellation.py::cancel_event_and_resolve_reports()` like every other cancel path. The wait keeps one bad response from the source from cancelling a live event.
+- **A dedup representative with a live sibling is spared** (`no_live_dedup_sibling_clause()`) and retried next run.
+- **Cancellations run once after the host walk, in one batched sibling query.** The run commits, then sends the reporter emails, so no one is told about a cancel that rolled back. The summary counts `source_gone` and `cancelled_gone`.
+
+## Read Paths
+
+Four user-facing surfaces read `published` events, plus two auxiliary public reads. They share the `public_event_filter()` + `select_events_with_classification()` + `serialize_event()` stack. [security.md](security.md)'s Public Reads section explains why visibility filters live in the query.
+
+### Daily 5 Feed
+
+- **`GET /feed` serves the pre-built `daily_feeds` snapshot.** It requires a session. See Daily 5 Builder.
+
+### Explore
+
+- **`GET /explore` (`app/routers/browse.py`) is optional-auth** (`get_optional_user`). Signed-out callers get the signed-out weights; signed-in callers get personalization. It is rate-limited by `RATE_LIMIT_BROWSE`.
+- **It has two execution paths.** `_browse_sql_path` serves the non-personalized `date`/`price`/`quality` sorts in SQL. `_browse_scored_path` reuses `ranking/score.py` for `for_you` or `relevance`, since persona affinity and the feedback soft-filter can't be a SQL `ORDER BY`.
+- **`q` is capped at `BROWSE_QUERY_MAX_LEN`.** `_keyword_filter` matches `%...%` against two trigram GIN indexes, so an unbounded string is cheap to send and expensive to scan.
+- **Only the SQL `date` sort uses a keyset cursor**, on `(starts_at, id)`. A cursor request returns `next_cursor` and skips `offset` and `total`. Other paths stay on OFFSET and ignore the cursor.
+- **Paginate any new list output the same way:** `limit`/`offset` with a cap (`BROWSE_PAGE_SIZE`, `BROWSE_MAX_PAGE_SIZE`).
+
+### Saved Events
+
+- **`GET /feedback/events` (`app/routers/feedback.py`) lists the user's events carrying one preference signal**, most recent first. It is rate-limited by `RATE_LIMIT_FEEDBACK`.
+- **The signal must be in `PREFERENCE_SIGNALS`** (like, dislike, bookmark), not the full `VALID_SIGNALS`. Passive `view`/`click_external` rows repeat per event, up to one per UTC day.
+- **It pages by keyset cursor on `(feedback.created_at, feedback.id)`.** `offset` is still accepted for the first page.
+
+### Landing Showcase
+
+- **`GET /public/showcase` (`app/routers/public.py`) is the only user-facing list with no auth-dependent behaviour.** Explore is reachable signed out but branches on the user; the showcase never does. Never add a user-scoped field to its response.
+- **It shows `SHOWCASE_EVENT_COUNT` (6) top-quality events this week** (`SHOWCASE_WINDOW_DAYS`). A thin week widens to `SHOWCASE_FALLBACK_WINDOW_DAYS`. It is rate-limited by `RATE_LIMIT_PUBLIC` and cached in-process per locale.
+- **The SQL mirrors `_browse_sql_path`'s quality sort without any personalization.** The query is unlimited, because a LIMIT before the series collapse could drop a series' only surviving row.
+- **After `collapse_series_duplicates()`, Python re-sorts and slices.** The keys match the SQL `ORDER BY`: narrow window first, `quality_score` descending with nulls last, then `starts_at`. The collapse survivor isn't always the row SQL ranked first.
+
+### Landing Counts
+
+- **`GET /public/counts` returns the live numbers behind Landing's hero, ticker and stat row.** It is cached in-process per locale for `PUBLIC_COUNTS_CACHE_TTL_SECONDS`.
+- **`today_count` drives the top bar's pulse chip.** It counts exactly what `/explore?date=today` lists, so the chip agrees with the page its link opens. An ongoing exhibition counts.
+- **That count combines four filters:** `public_event_filter()`, `canonical_event_filter()`, `event_not_ended_filter(now)` and `event_date_range_filter(today, today)`. The last lives in `app/events/queries.py`, shared with `browse.py`.
+- **`today_count` is its own scalar query (`_today_count_stmt`).** A `FILTER` on `_aggregates_stmt` would inherit its `starts_at >= now` clause and drop ongoing runs.
+- **The hero and ticker still read `tonight_events` and `tonight_is_fallback`.** The chip doesn't.
+
+### Prerender Id Snapshot
+
+- **`GET /public/prerender-events` returns `{id, updated_at}` for every published, canonical, not-ended event.** It is unauthenticated and rate-limited by `RATE_LIMIT_PUBLIC`. The prerender and the sitemap both read it; see [seo.md](seo.md)'s Targets section.
+- **It is unpaginated on purpose.** The build needs one atomic snapshot of the id set, which paging would break.
 
 ## Organizer Lifecycle (Fienta)
 
-`settings.FIENTA_ORGANIZER_IDS`/`FIENTA_ORGANIZER_NAMES` (`app/config.py`) are a **bootstrap seed floor only** — used to populate `sources.config` on a fresh DB (`app/seeds.py::_upsert_fienta`). At runtime, `sources.config["organizer_ids"]` (DB) is the source of truth; `FientaAdapter.fetch_raw()` (`app/ingestion/sources/fienta.py`) reads only from there.
+A Fienta organizer here is a ticketing-source id that gets polled. It is not an `Organizer` account; see [organizer-portal.md](organizer-portal.md).
 
-`app/ingestion/organizer_sync.py::sync_fienta_organizers()` runs weekly (Sun 03:00 Europe/Tallinn) and manages the full lifecycle:
+- **`FIENTA_ORGANIZER_IDS`/`FIENTA_ORGANIZER_NAMES` (`app/config.py`) are only a bootstrap seed.** `app/seeds.py::_upsert_fienta` copies them into `sources.config` on a fresh database.
+- **At runtime `sources.config["organizer_ids"]` is the source of truth.** `FientaAdapter.fetch_raw()` reads only from there.
 
-1. **Detect** — each current organizer is probed; one returning 0 events is marked stale, recorded with a first-seen timestamp in `sources.config["stale_since"]` (JSONB, keyed by organizer id). A transient HTTP error neither flags nor clears staleness that run (avoids false stale/revival flips on a network blip).
-2. **Skip at ingest** — `FientaAdapter.fetch_raw()` filters out any id in `sources.config["stale_organizer_ids"]` before the hourly poll, so a known-dead organizer stops burning API calls immediately. The weekly sync still re-probes every id in `organizer_ids` (including stale ones), so a revival is still detected.
-3. **Revive** — an organizer that returns events again has its `stale_since` entry cleared (rejoins normal polling); one already retired can also rejoin via auto-discovery (below) if it resurfaces with enough events.
-4. **Retire** — an organizer continuously stale for `STALE_ORGANIZER_RETIRE_DAYS` (30, `app/constants.py`) is dropped out of `organizer_ids` into `sources.config["retired_organizer_ids"]`. `app/seeds.py::_upsert_fienta` subtracts `retired_organizer_ids` from its seed union on every startup, so a retired **hardcoded** id is never resurrected.
-5. **Discover** — a city-filtered scan (`FIENTA_CITY_FILTER`) auto-adds any organizer not already known with `>= ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD` (3) Tallinn events, same as before this lifecycle existed.
+`app/ingestion/organizer_sync.py::sync_fienta_organizers()` runs weekly and walks each organizer through these steps:
 
-`POST /admin/sync-organizers` triggers this synchronously; it is also stage 1 of `POST /admin/pipeline/run`.
+1. **Detect** — an organizer returning 0 events is marked stale, with a first-seen time in `sources.config["stale_since"]`. A transient HTTP error neither flags nor clears staleness, so a network blip can't flip it.
+2. **Skip at ingest** — `fetch_raw()` drops ids in `stale_organizer_ids` from the hourly poll. The weekly sync still re-probes them, so a revival is noticed.
+3. **Revive** — an organizer returning events again has its `stale_since` entry cleared.
+4. **Retire** — after `STALE_ORGANIZER_RETIRE_DAYS` (30) stale, the id moves to `retired_organizer_ids`. `_upsert_fienta` subtracts retired ids on every startup, so a retired seed id never comes back.
+5. **Discover** — a city-filtered scan (`FIENTA_CITY_FILTER`) adds any unknown organizer with at least `ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD` (3) Tallinn events. A retired organizer can rejoin this way.
 
-**Publisher mirroring (#409/#411):** every run, `sync_fienta_organizers()` also mirrors a `publishers` row per organizer id (active or retired) via `_sync_publishers()` — a read mirror of `organizer_ids`/`retired_organizer_ids`, never the other way around. `FientaAdapter.fetch_organizer()` stamps each collected item with its requesting `organizer_id`; `normalize()` carries it as `NormalizedEvent.publisher_external_id`, resolved to `EventSource.publisher_id` by `insert_normalized_event()` against a per-run bulk-loaded lookup (`load_publisher_lookup()`, `app/ingestion/adapter.py`) — never a per-row SELECT. KUMU/Estonia Concert Hall get one constant `publishers` row each (`external_id` NULL, seeded once by `app/seeds.py::seed_publishers()`), matched the same way since their `NormalizedEvent.publisher_external_id` is always `None`. Piletilevi never populates `EventSource.publisher_id` at ingest time — its Publisher instead resolves live, at claim time, from the event page's promoter identity (`app.claims.target_resolution::resolve_claim_target_live()`, #427), which stamps `EventSource.publisher_id` on successful resolution so a later call for the same listing skips the network round trip. `app/ingestion/publisher_backfill.py::backfill_publisher_ids()` stamps `publisher_id` onto currently-claimable (published, not-yet-ended) Fienta/KUMU/Estonia Concert Hall `event_sources` rows still missing it, for Fienta in two steps — one bulk SQL read of each listing's freshest `raw_events.payload->>'organizer_id'` stamp (`_raw_organizer_by_external_id`), then a live organizer re-query only for rows still unresolved (skipped entirely when none are); the request path (`resolve_claim_target_live()`) never crawls Fienta live — an unstamped listing with no raw stamp is rejected as not-claimable until the next backfill run. A row the crawl could not resolve gets `event_sources.publisher_resolve_attempted_at` stamped (migration 0054) and is skipped by the re-query until `PUBLISHER_RESOLVE_RETRY_COOLDOWN` (7 days) passes; the crawl is skipped entirely when every unresolved row is cooling down, and a failed organizer fetch stamps nothing. Piletilevi is out of scope for it. It runs every 6h as the `backfill_publisher_ids` scheduler job (`jobs.backfill_publisher_ids_job`, one bounded batch per call, a no-op once nothing is unstamped); `backend/scripts/backfill_publisher_ids.py` forces it on demand. See CONTEXT.md's Event Claiming glossary.
+- **The sync holds no DB connection during its ~2 min HTTP phase.** It rolls back after reading the config, then re-reads the source before writing. A server-side drop during the HTTP phase once killed a whole weekly run, since Neon keeps an idle-in-transaction connection alive but can still restart the compute.
+- **The write phase retries once on a lost connection** (`ORGANIZER_SYNC_DB_WRITE_ATTEMPTS`). Config keys the sync doesn't own survive a concurrent admin edit.
+- **`POST /admin/sync-organizers` runs the sync synchronously.** It is also stage 1 of `POST /admin/pipeline/run`.
+
+### Publisher Mirroring
+
+- **Every sync mirrors one `publishers` row per organizer id, active or retired** (`_sync_publishers()`). The mirror only reads `organizer_ids`/`retired_organizer_ids`, never writes them.
+- **Ingest stamps each Fienta listing with its Publisher.** `FientaAdapter.fetch_organizer()` tags each item with its `organizer_id`, and `normalize()` carries it as `NormalizedEvent.publisher_external_id`.
+- **`insert_normalized_event()` resolves that to `EventSource.publisher_id` from a per-run bulk lookup** (`adapter.py::load_publisher_lookup()`), never a per-row SELECT.
+- **KUMU and Estonia Concert Hall each have one constant `publishers` row** with a NULL `external_id`, seeded by `seeds.py::seed_publishers()`. They match the same way, since their `publisher_external_id` is always `None`.
+- **Piletilevi never stamps `publisher_id` at ingest.** Its Publisher resolves at claim time from the event page's promoter, through `app/claims/target_resolution.py::resolve_claim_target_live()`. See [organizer-portal.md](organizer-portal.md).
+
+### Publisher Backfill
+
+- **`app/ingestion/publisher_backfill.py::backfill_publisher_ids()` stamps missing `publisher_id`s on claimable listings.** That means published, not-ended Fienta, KUMU and Estonia Concert Hall `event_sources` rows. Piletilevi is out of scope.
+- **Each call handles one bounded batch** and is a no-op once nothing is unstamped. [backend-ops.md](backend-ops.md) covers its schedule and CLI.
+- **Fienta resolves in two steps.** One bulk SQL read takes each listing's freshest `raw_events.payload->>'organizer_id'` (`_raw_organizer_by_external_id`). A live organizer re-query then runs only for rows still unresolved.
+- **The request path never crawls Fienta live.** An unstamped listing with no raw stamp is not claimable until the next backfill run.
+- **An unresolved row waits `PUBLISHER_RESOLVE_RETRY_COOLDOWN` (7 days)**, tracked by `publisher_resolve_attempted_at`. The crawl is skipped when every unresolved row is cooling down. A failed organizer fetch stamps nothing.
 
 ## LLM Usage Constraints
 
-- **Default cap:** `LLM_MAX_TOKENS = 400` per call to avoid quota exhaustion; `LLM_REASONING_MAX_TOKENS = 600` is the project hard-cap ceiling, used by the Groq and Cloudflare Workers AI entries (see below).
-- **Dedup cache:** Cache decisions by content hash — never re-call LLM for identical pairs.
-- **Fallback order:** Groq (primary, `openai/gpt-oss-120b`) → Cloudflare Workers AI (`@cf/openai/gpt-oss-120b`, 10,000 free Neurons/day) → Mistral (`mistral-small-latest`, overnight batch, 1B tok/mo). Provider chain defined in `app/constants.py::LLM_PROVIDERS`. Both Groq and Cloudflare Workers AI serve the `gpt-oss-120b` reasoning model — their entries override `reasoning_effort=low` and a 600-token cap (`LLM_REASONING_MAX_TOKENS`, vs the 400-token default) so reasoning tokens don't crowd out the JSON answer.
-- Groq's 30 req/min burst means no sleep loop needed in the classification batch job.
-- **Backlog drain** — `dedup_pass` and `classify_pending` run via `_drain_backlog()` (`app/ingestion/jobs.py`): each re-runs its single pass while work remains, retrying every `LLM_BACKLOG_RETRY_SECONDS` (15 min) up to `LLM_BACKLOG_MAX_DRAIN_PASSES` (12) before deferring the remainder to the next 6h cycle. Admin-triggered runs (`POST /admin/dedup`, `POST /admin/classify`) use `*_drain_now()`, which drains synchronously with no inter-pass sleep since the caller is blocking on the HTTP response.
+`app/constants/llm.py::LLM_PROVIDERS` defines the fallback chain:
+
+| Order | Provider | Model | Budget |
+|---|---|---|---|
+| 1 | Groq | `openai/gpt-oss-120b` | 30 requests/min burst |
+| 2 | Cloudflare Workers AI | `@cf/openai/gpt-oss-120b` | 10,000 free Neurons/day |
+| 3 | Mistral | `mistral-small-latest` | 1B tokens/month, overnight batch |
+
+- **Calls are capped at `LLM_MAX_TOKENS` (400)** to avoid quota exhaustion.
+- **The two `gpt-oss-120b` entries use `reasoning_effort=low` and `LLM_REASONING_MAX_TOKENS` (600).** That is the project hard cap. It keeps reasoning tokens from crowding out the JSON answer.
+- **Dedup decisions are cached by content hash.** An identical pair never reaches the LLM twice.
+- **The classification batch needs no sleep loop.** Groq's burst limit absorbs it.
+
+### Backlog Drain
+
+- **`dedup_pass` and `classify_pending` drain their backlog** through `app/ingestion/jobs.py::_drain_backlog()`. Each re-runs while work remains, every `LLM_BACKLOG_RETRY_SECONDS` (15 min), up to `LLM_BACKLOG_MAX_DRAIN_PASSES` (12). The rest waits for the next cycle.
+- **Admin triggers drain synchronously with no sleep between passes** (`dedup_pass_drain_now()`, `classify_pending_drain_now()`). The caller is blocking on the HTTP response.
 
 ## Content Safety (NSFW / Explicit Content Filter)
 
 Three layers, each cheaper than the next:
 
-1. **Ingest-time keyword prefilter** — `app/ingestion/content_filters.py::is_explicit_text()` (variadic — called with title/description/venue_name/important_info) matches `EXPLICIT_KEYWORDS` (frozenset of en/et/ru phrases in `app/constants.py`, covering porn/striptease/escort and kink/BDSM/fetish content) via word-boundary regex, setting `Event.is_explicit`. Events flagged here skip the LLM classification call entirely (token savings) but still advance to `classified` (see Data Flow §3).
-2. **LLM classification flag** — `app/llm/classifier.py` asks the model to set `is_explicit` for events that pass layer 1, catching content the keyword list misses.
-3. **Publish gate** — blocked at the publish gate (§6 above), `fail_explicit`.
+1. **Ingest-time keyword prefilter** — `app/ingestion/content_filters.py::is_explicit_text()` matches `EXPLICIT_KEYWORDS` (en/et/ru) by word-boundary regex and sets `Event.is_explicit`. It takes title, description, venue name and important info. A flagged event skips the LLM call; see Classification.
+2. **LLM classification flag** — `app/llm/classifier.py` asks the model for `is_explicit` on events that pass layer 1, catching what the keyword list misses.
+3. **Publish gate** — blocks the event as `fail_explicit`.
+
+- **Localized values are scanned too.** See [security.md](security.md)'s Untrusted Values section.
 
 ## Non-Event Filter (gift cards / merch / webinars)
 
-Mirrors the NSFW three-layer pattern for listings that are not real attendable events — gift cards/vouchers, merchandise (books, VIP/club cards), donations, and online-only webinars/courses/recordings (target audience wants in-person Tallinn events):
+The same three layers catch listings that aren't attendable events. That covers gift cards and vouchers, merchandise, donations, and online-only webinars, courses and recordings. The audience wants in-person Tallinn events.
 
-1. **Ingest-time keyword prefilter** — `app/ingestion/content_filters.py::is_non_event_text()` matches `NON_EVENT_TITLE_KEYWORDS` against the **title only** (descriptions mention "gift cards available" as a payment option — false positive) and `NON_EVENT_VENUE_KEYWORDS` (online/онлайн/veebis/mamaonline) against `venue_name`, setting `Event.is_non_event`. Flagged events skip the LLM classification call (like `is_explicit`) but still advance to `classified`.
-2. **LLM classification flag** — `app/llm/classifier.py` asks the model for a `non_event` boolean, OR-merged into `Event.is_non_event` (never un-sets a layer-1 flag). In-person workshops/trainings with a set time are explicitly NOT non-events.
-3. **Publish gate + read paths** — blocked at the publish gate (§6 above), `fail_non_event`; the Daily 5 candidate query (`ranking/score.py`), feed hydration (`routers/feed.py`), event detail (`routers/events.py`), and the email digest event query (`email/digest.py`) all filter it as defense-in-depth. The detail-refetch sync (`ingestion/refetch.py`) re-runs `is_non_event_text()` after a `venue_name` change (mirroring its `is_explicit` re-check) and demotes a newly-flagged published event.
+1. **Ingest-time keyword prefilter** — `content_filters.py::is_non_event_text()` matches `NON_EVENT_TITLE_KEYWORDS` against the title and `NON_EVENT_VENUE_KEYWORDS` against `venue_name`. It sets `Event.is_non_event`, and a flagged event skips the LLM call.
+2. **LLM classification flag** — the model's `non_event` boolean is OR-merged into `Event.is_non_event`, never clearing a layer-1 flag.
+3. **Publish gate** — blocks the event as `fail_non_event`.
+
+- **Title keywords never match the description.** Descriptions mention "gift cards available" as a payment option.
+- **In-person workshops and trainings with a set time are events.** The prompt says so explicitly.
+- **Read paths filter `is_non_event` again as defense in depth.** That covers the Daily 5 candidate query, feed hydration (`routers/feed.py`), event detail (`routers/events.py`) and the digest query (`email/digest.py`).
+
+## Pipeline Code Rules
+
+- **New HTML-scraped sources subclass `HtmlListingAdapter`** (`app/ingestion/sources/html_base.py`). It owns pagination, parsing, dedup and detail fetches, so an adapter supplies only its selectors and field mapping.
+- **Locale discovery lives in `app/ingestion/locale_urls.py`.** Per-locale page discovery and `fetch_locale_variants` are shared by `html_base.py`, `fienta.py` and `refetch.py`. Reuse them instead of writing hreflang logic in an adapter.
+- **`app/ingestion/html_utils.py` holds the low-level BeautifulSoup helpers** such as `attr_str`. They sit apart from `html_base.py` to avoid a circular import with `locale_urls.py`.
+- **`fetch_raw()` lets HTTP failures propagate to `SourceAdapter.run()`.** That is how `IngestionRun.error` and `source.last_status` get set. A swallowed exception makes a failed scrape look like a clean, empty run.
+- **Filter LLM classification output against `VALID_CATEGORIES`/`VALID_VIBES` before persisting.** Unknown values are dropped silently (`app/llm/classifier.py::_parse_classification()`).
+- **Dedup's time-window check stays in SQL; the fuzzy check stays in Python.** `app/dedup/rules.py::candidate_pair_ids_in_window()` pre-filters pairs with a sargable `BETWEEN` self-join. `run_dedup_pass` and `run_dedup_pass_llm` both consume it, and `is_candidate_pair` runs only on the pairs it returns.

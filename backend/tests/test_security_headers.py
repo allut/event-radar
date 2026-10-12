@@ -7,12 +7,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from app.constants import (
-    APP_ENV_DEVELOPMENT,
-    HSTS_HEADER_NAME,
-    HSTS_HEADER_VALUE,
-    SECURITY_HEADERS,
-)
+from app.constants.core import APP_ENV_DEVELOPMENT
+from app.constants.security import HSTS_HEADER_NAME, HSTS_HEADER_VALUE, SECURITY_HEADERS
 from app.main import app
 
 client = TestClient(app)

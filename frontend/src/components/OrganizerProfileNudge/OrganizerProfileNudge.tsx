@@ -5,7 +5,9 @@ import { organizerApi } from '../../api/client';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { t } from '../../i18n';
 import { storageGet, storageSet } from '../../lib/storage';
-import { API, ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY, QUERY_KEYS, ROUTES } from '../../constants';
+import { API, QUERY_KEYS } from '../../constants/api';
+import { ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY } from '../../constants/organizer';
+import { ROUTES } from '../../constants/routes';
 import styles from './OrganizerProfileNudge.module.css';
 
 interface OrganizerProfileNudgeProps {

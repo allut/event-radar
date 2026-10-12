@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-from app.constants import DEFAULT_USER_LOCALE, DEFAULT_USER_CITY
+from app._generated.shared_constants import DEFAULT_USER_LOCALE, DEFAULT_USER_CITY
 
 revision = "0001"
 down_revision = None

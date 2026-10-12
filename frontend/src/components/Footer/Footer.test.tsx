@@ -4,7 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { renderWithProviders } from '../../test/utils';
 import { setLocale } from '../../lib/auth';
 import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
-import { LOCALE_KEY, ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants';
+import { ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants/auth';
+import { LOCALE_KEY } from '../../constants/core';
 import Footer from './Footer';
 
 describe('Footer', () => {

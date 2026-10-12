@@ -1,4 +1,4 @@
-import { AKI_URL, CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants';
+import { AKI_URL, CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants/core';
 import type { LegalDoc } from './types';
 
 const doc: LegalDoc = {
