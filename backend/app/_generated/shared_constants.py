@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-APP_VERSION: str = "0.1.33"
+APP_VERSION: str = "0.1.34"
 MAGIC_LINK_TTL_MINUTES: int = 15
 SESSION_TTL_DAYS: int = 2
 PERSONA_PRIMARY_WEIGHT: float = 1.0
