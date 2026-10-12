@@ -88,6 +88,7 @@ import {
   buildRoundMarker,
   isChainDepthExceeded,
   isZeroProgress,
+  predictRoundContinues,
   resolveRoundStart,
   serializeRoundMarker,
   shouldCommitRoundMarker,
@@ -861,6 +862,54 @@ function createLimiter(limit: number): {
   };
 }
 
+/** Chain-state PUTs, held until the round looks `continuing` (issue #537).
+ * Only a `continuing` round's chain state is ever read back; a `done` round
+ * deletes the whole burst prefix, so PUTting there is pure waste. While
+ * held, `record` keeps just the target — its finalized HTML already sits in
+ * dist/ — and `release` re-reads each one from disk into the PUT queue. Once
+ * released, `record` PUTs straight from memory. Never releasing drops every
+ * held target. PUTs stay fail-open through createLimiter. */
+export interface ChainStatePersister {
+  record: (target: PrerenderTarget, finalizedHtml: string) => void;
+  release: () => void;
+  drain: () => Promise<void>;
+  held: () => number;
+  queued: () => number;
+}
+
+export function createChainStatePersister(
+  persist: (target: PrerenderTarget, finalizedHtml: string) => Promise<void>,
+  readHtml: (target: PrerenderTarget) => Promise<string>,
+): ChainStatePersister {
+  const limiter = createLimiter(R2_PERSIST_CONCURRENCY);
+  let heldTargets: PrerenderTarget[] = [];
+  let released = false;
+  let queued = 0;
+  return {
+    record: (target, finalizedHtml) => {
+      if (target.eventId === undefined) return;
+      if (!released) {
+        heldTargets.push(target);
+        return;
+      }
+      queued++;
+      limiter.run(() => persist(target, finalizedHtml));
+    },
+    release: () => {
+      if (released) return;
+      released = true;
+      for (const target of heldTargets) {
+        queued++;
+        limiter.run(async () => persist(target, await readHtml(target)));
+      }
+      heldTargets = [];
+    },
+    drain: () => limiter.drain(),
+    held: () => heldTargets.length,
+    queued: () => queued,
+  };
+}
+
 async function runPool<T>(items: T[], concurrency: number, worker: (item: T) => Promise<void>): Promise<void> {
   await mapPool(items, concurrency, worker);
 }
@@ -1228,8 +1277,14 @@ export async function main(): Promise<void> {
   // R2 chain-state PUTs are fire-and-forget from the workers' point of view
   // (Big-O audit M14): render/copy-forward workers never block on them, and
   // `allSettled` after the pools drains them. persistChainStateTarget fails
-  // open, so a rejected entry can only mean a lost optimization.
-  const persistLimiter = createLimiter(R2_PERSIST_CONCURRENCY);
+  // open, so a rejected entry can only mean a lost optimization. They start
+  // held (issue #537) — see the release points after change detection and
+  // after the render pool.
+  const chainStatePersister = createChainStatePersister(
+    (target, finalizedHtml) =>
+      persistChainStateTarget(sanitizedBurstId, round, target, finalizedHtml, chainStateIndex),
+    (target) => readFile(outputFilePath(target.bare, target.locale), 'utf-8'),
+  );
   // Phase split for the build log (#455 copy-forward tuning). fetchMs sums
   // every worker's classify time, so it overlaps itself across the pool;
   // finalizeMs is synchronous JSDOM work on the one main thread, so it adds
@@ -1268,9 +1323,7 @@ export async function main(): Promise<void> {
       // already in the bucket under this exact key — re-PUTting identical
       // bytes would be a pure-waste duplicate write (issue #368).
       if (!resolvedFromManifest.has(target)) {
-        persistLimiter.run(() =>
-          persistChainStateTarget(sanitizedBurstId, round, target, finalized, chainStateIndex),
-        );
+        chainStatePersister.record(target, finalized);
       }
     } else if (liveHtml !== null) {
       // Needs a fresh render, but a live page exists — held for now rather
@@ -1309,6 +1362,15 @@ export async function main(): Promise<void> {
   console.log(
     `prerender: copied forward ${copiedForward}/${targets.length} unchanged route(s), rendering ${renderQueue.length}`,
   );
+  // First release point (issue #537): a queue the budget likely can't
+  // finish means a `continuing` round, so its held PUTs start now and
+  // overlap rendering instead of piling up after it.
+  if (predictRoundContinues(renderQueue.length, round, RENDER_BUDGET_MS)) {
+    console.log(
+      `prerender: round likely continues — releasing ${chainStatePersister.held()} held chain-state PUT(s) now`,
+    );
+    chainStatePersister.release();
+  }
 
   let newlyRendered = 0;
   let skippedTargets: PrerenderTarget[] = [];
@@ -1346,9 +1408,7 @@ export async function main(): Promise<void> {
               const finalizedHtml = await snapshotTarget(page, resolvedPreviewOrigin, target);
               newlyRendered++;
               renderedHtmlByTarget.set(target, finalizedHtml);
-              persistLimiter.run(() =>
-                persistChainStateTarget(sanitizedBurstId, round, target, finalizedHtml, chainStateIndex),
-              );
+              chainStatePersister.record(target, finalizedHtml);
             } catch (error) {
               failures.push({ target, error, diagnostics: recentEvents() });
             } finally {
@@ -1405,6 +1465,17 @@ export async function main(): Promise<void> {
   // nothing on disk, which falls through to the CSR shell via
   // `functions/[[path]].ts`'s SPA fallback rather than a build failure —
   // see outputFilePath above.
+  // Second release point (issue #537): the round's real outcome is known
+  // now. A `continuing` round flushes whatever is still held, overlapping
+  // the stale-fallback writes below; a `done` round drops it, since
+  // finalizeChainState deletes the burst prefix anyway.
+  const roundProgress = { newlyRendered, copiedForward, queueRemaining: skippedTargets.length };
+  const commitMarker = shouldCommitRoundMarker(buildRoundMarker(burstId, round, roundProgress, new Date()));
+  if (commitMarker) {
+    chainStatePersister.release();
+  } else if (chainStatePersister.held() > 0) {
+    console.log(`prerender: round is done — skipped ${chainStatePersister.held()} held chain-state PUT(s)`);
+  }
   let staleFallbackWritten = 0;
   // runPool, not a sequential for-of — same rationale as the copy-forward
   // loop above (Big-O audit #5, Tier 4).
@@ -1417,7 +1488,11 @@ export async function main(): Promise<void> {
     staleFallbackWritten++;
   });
 
-  await persistLimiter.drain();
+  const drainStart = Date.now();
+  await chainStatePersister.drain();
+  console.log(
+    `prerender: chain-state drain took ${formatSeconds(Date.now() - drainStart)} (${chainStatePersister.queued()} PUT(s) this round)`,
+  );
 
   console.log(
     `prerender: round summary — newly-rendered ${newlyRendered}, copied-forward ${copiedForward}, queue-remaining ${skippedTargets.length} (${staleFallbackWritten} of those still serving stale-but-real content)`,
@@ -1472,12 +1547,7 @@ export async function main(): Promise<void> {
   // progress being invisible to the next build's resume logic, which then
   // just starts a fresh burst (see resolveRoundContext's missing-marker
   // fallback) rather than resuming — degraded, not broken.
-  const marker = buildRoundMarker(
-    burstId,
-    round,
-    { newlyRendered, copiedForward, queueRemaining: skippedTargets.length },
-    new Date(),
-  );
+  const marker = buildRoundMarker(burstId, round, roundProgress, new Date());
   // Chaining (issue #84, fixed in #89, gated in #101): the branch push
   // inside commitRoundMarker is the chain's sole continuation trigger — the
   // production branch is git-connected to Cloudflare Pages, so advancing its
@@ -1492,7 +1562,6 @@ export async function main(): Promise<void> {
   // fails, the chain simply resumes via the next 6-hourly cron tick instead
   // of self-triggering (degraded, not broken — same fallback as any other
   // lost marker commit).
-  const commitMarker = shouldCommitRoundMarker(marker);
   if (commitMarker) {
     try {
       await commitRoundMarker(marker);
@@ -1502,7 +1571,11 @@ export async function main(): Promise<void> {
   }
   // Chain-state manifest write (issue #367) — see finalizeChainState's doc
   // comment for why a `done` round deletes instead of writing.
+  const finalizeStart = Date.now();
   await finalizeChainState(sanitizedBurstId, chainStateIndex, commitMarker);
+  console.log(
+    `prerender: chain-state finalize (${commitMarker ? 'index write' : 'prefix delete'}) took ${formatSeconds(Date.now() - finalizeStart)}`,
+  );
   logZeroProgressAbort(marker);
 }
 

@@ -83,6 +83,8 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **A release that changes asset hashes skips JSDOM for no copy.** That run logged 0/5,472. The fast path pays off on a rebuild of the same commit.
 - **Classify and copy-forward share one pool.** Each route's live HTML is written and released as soon as its fetch returns, so fetches overlap JSDOM work and the round never holds every body at once.
 - **`finalizeSnapshotHtml` skips JSDOM for a copy that is already final.** `isAlreadyFinalized` string-checks that the `<head>` asset tags equal the shell's JSDOM-serialized tags, in order, and that `<html>` has no `data-theme`. Any mismatch takes the JSDOM path. A JSDOM pass costs 25–40 ms per page; the check costs about 0.01 ms.
+- **Eager PUTs on a `done` round stalled its summary (2026-10-12).** About 5.7k chain-state PUTs at roughly 12 a second held `wrote` → `round summary` for 1 min 55 s, then were deleted. Held PUTs fix that; see Chain-State Manifest's Write Path.
+- **Each round logs `prerender: chain-state drain took` and `chain-state finalize … took`.** They split the end-of-build time between the PUT drain and the index write or prefix delete.
 - **Each round logs a `prerender: change detection took` line.** It splits fetch time (summed across workers) from finalize time and counts the copies that skipped JSDOM.
 - **The other cost trims stay in place.** `extractChangeMarker` regex-scans the first JSON-LD script instead of re-parsing the DOM, and the live-API staleness check runs for the default locale only.
 
@@ -129,7 +131,10 @@ An optimization layer over the `RoundMarker` chain. It gives resumed rounds per-
 - **A target earns an entry only with finalized HTML in hand**: on copy-forward, or after a successful `snapshotTarget` render. `persistChainStateTarget` writes the index entry only after the content PUT succeeds.
 - **The stale-fallback write never earns an entry.** Budget-skipped content still owes a real render; marking it resolved would skip it for the rest of the burst.
 - **A target already sourced from the manifest isn't re-PUT.**
-- **Content objects are PUT eagerly; the index is PUT once**, at the end of `main()` beside `commitRoundMarker`. Concurrent read-modify-write on one shared object would race. PUTs drain with `Promise.allSettled` after the pools.
+- **The index is PUT once**, at the end of `main()` beside `commitRoundMarker`. Concurrent read-modify-write on one shared object would race.
+- **Content PUTs start held (`frontend/scripts/prerender.ts::createChainStatePersister()`).** Only a `continuing` round's chain state is read back, and a `done` round deletes the prefix, so a `done` round makes no PUTs. A held target keeps no HTML; its bytes already sit in `dist/`.
+- **`frontend/src/lib/prerenderChain.ts::predictRoundContinues()` releases them after change detection** when the render queue exceeds the budget × `PRERENDER_ROUTES_PER_MINUTE` × `PRERENDER_CONTINUE_PREDICTION_MARGIN`. Released PUTs re-read `dist/` and overlap rendering, and later records PUT straight from memory.
+- **After rendering, the real marker status decides.** A `continuing` round flushes anything still held; a `done` round drops it. A wrong `done` guess costs only that late flush, so the margin sits below 1. PUTs drain with `Promise.allSettled` before the round summary.
 
 ### Cleanup
 

@@ -159,6 +159,13 @@ export const CHANGE_MARKER_JSONLD_FIELD = 'dateModified';
 // stop-at-cap behavior is verifiable without a real 10-minute wait (e.g.
 // `PRERENDER_RENDER_BUDGET_MINUTES=0 npm run build`).
 export const DEFAULT_RENDER_BUDGET_MINUTES = 10;
+// Measured render throughput (~100 routes/min, docs/seo.md "Measured Cost")
+// and the share of it predictRoundContinues trusts (issue #537). The margin
+// sits below 1 because a wrong "done" guess costs a continuing round — the
+// one already near the build cap — a post-render flush of its held PUTs,
+// while a wrong "continuing" guess only wastes R2 writes.
+export const PRERENDER_ROUTES_PER_MINUTE = 100;
+export const PRERENDER_CONTINUE_PREDICTION_MARGIN = 0.75;
 // Diagnostic ring buffer size per Playwright page, and the extra ms the request
 // rate gate waits past the window edge so the next slot is really free.
 export const PRERENDER_DIAGNOSTIC_MAX_EVENTS = 20;

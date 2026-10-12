@@ -15,6 +15,7 @@ import {
   chainStateContentKey,
   chainStateIndexKey,
   contentReadySelector,
+  createChainStatePersister,
   fetchLiveExploreCount,
   fetchResolvedTarget,
   finalizeChainState,
@@ -726,6 +727,97 @@ describe('chain-state manifest write path (issue #367)', () => {
       await expect(finalizeChainState('burst-1', {}, true)).resolves.toBeUndefined();
       await expect(finalizeChainState('burst-1', {}, false)).resolves.toBeUndefined();
     });
+  });
+});
+
+describe('createChainStatePersister — deferred chain-state PUTs (issue #537)', () => {
+  const event = (eventId: number): PrerenderTarget => ({ bare: `/events/${eventId}`, locale: 'en', eventId });
+
+  function setup(readHtml: (target: PrerenderTarget) => Promise<string> = async (t) => `<html>disk ${t.eventId}</html>`) {
+    const persisted: [PrerenderTarget, string][] = [];
+    const persist = vi.fn(async (target: PrerenderTarget, html: string) => {
+      persisted.push([target, html]);
+    });
+    const read = vi.fn(readHtml);
+    return { persister: createChainStatePersister(persist, read), persist, read, persisted };
+  }
+
+  it('holds every recorded target while unreleased, so a round that ends done makes no PUTs', async () => {
+    const { persister, persist, read } = setup();
+
+    persister.record(event(1), '<html>1</html>');
+    persister.record(event(2), '<html>2</html>');
+    await persister.drain();
+
+    expect(persist).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+    expect(persister.held()).toBe(2);
+    expect(persister.queued()).toBe(0);
+  });
+
+  it('flushes held targets from disk on release, so a continuing round still resolves each one', async () => {
+    const { persister, persisted, read } = setup();
+    persister.record(event(1), '<html>1</html>');
+    persister.record(event(2), '<html>2</html>');
+
+    persister.release();
+    await persister.drain();
+
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(persisted).toEqual([
+      [event(1), '<html>disk 1</html>'],
+      [event(2), '<html>disk 2</html>'],
+    ]);
+    expect(persister.held()).toBe(0);
+    expect(persister.queued()).toBe(2);
+  });
+
+  it('PUTs straight from memory once released, without a disk read', async () => {
+    const { persister, persisted, read } = setup();
+    persister.release();
+
+    persister.record(event(3), '<html>rendered 3</html>');
+    await persister.drain();
+
+    expect(read).not.toHaveBeenCalled();
+    expect(persisted).toEqual([[event(3), '<html>rendered 3</html>']]);
+  });
+
+  it('flushes held targets only once across repeated releases', async () => {
+    const { persister, persist } = setup();
+    persister.record(event(1), '<html>1</html>');
+
+    persister.release();
+    persister.release();
+    await persister.drain();
+
+    expect(persist).toHaveBeenCalledTimes(1);
+  });
+
+  it('never holds or PUTs a home/explore target (no eventId)', async () => {
+    const { persister, persist } = setup();
+
+    persister.record({ bare: '/explore', locale: 'en' }, '<html>explore</html>');
+    persister.release();
+    persister.record({ bare: '/', locale: 'en' }, '<html>home</html>');
+    await persister.drain();
+
+    expect(persist).not.toHaveBeenCalled();
+    expect(persister.held()).toBe(0);
+  });
+
+  it('fails open on a disk-read miss — the other held targets still PUT and drain resolves', async () => {
+    const { persister, persisted } = setup(async (t) => {
+      if (t.eventId === 1) throw new Error('ENOENT');
+      return `<html>disk ${t.eventId}</html>`;
+    });
+    persister.record(event(1), '<html>1</html>');
+    persister.record(event(2), '<html>2</html>');
+
+    persister.release();
+
+    await expect(persister.drain()).resolves.toBeUndefined();
+    expect(persisted).toEqual([[event(2), '<html>disk 2</html>']]);
   });
 });
 
