@@ -75,7 +75,11 @@ from app.constants.ranking import (
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
 )
-from app.constants.rate_limits import RATE_LIMIT_ADMIN
+from app.constants.rate_limits import (
+    RATE_LIMIT_ADMIN,
+    RATE_LIMIT_BROWSE,
+    RATE_LIMIT_SCOPE_ADMIN_READ,
+)
 from app.constants.reports import (
     ADMIN_RESOLUTION_NOTE_MAX_CHARS,
     ERROR_RESOLUTION_NOTE_REQUIRED,
@@ -242,7 +246,7 @@ def _serialize_dedup_groups(rows: Sequence[Event]) -> dict[int, list[dict]]:
 
 
 @router.get("/dedup/groups", dependencies=[Depends(get_current_admin)])
-@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
 async def admin_dedup_groups(
     request: Request,
     limit: int = Query(
@@ -261,20 +265,16 @@ async def admin_dedup_groups(
     list of distinct dedup_group_ids.
     """
     async with AsyncSessionLocal() as db:
-        # total only on the first page — see admin_list_submissions's identical
-        # pattern. has_more below no longer needs it (limit+1 sentinel instead),
-        # so this full-table distinct COUNT only ever runs once per queue view,
-        # not once per page (Big-O audit M2).
-        total_groups: int | None = None
-        if offset == 0:
-            total_groups = (
-                await db.scalar(
-                    select(func.count(func.distinct(Event.dedup_group_id))).where(
-                        Event.dedup_group_id.is_not(None),
-                        Event.status != EVENT_STATUS_CANCELLED,
-                    )
+        # Exact total on every page (spec #551): the numbered pager derives
+        # its last page and past-end clamp from it.
+        total = (
+            await db.scalar(
+                select(func.count(func.distinct(Event.dedup_group_id))).where(
+                    Event.dedup_group_id.is_not(None),
+                    Event.status != EVENT_STATUS_CANCELLED,
                 )
-            ) or 0
+            )
+        ) or 0
 
         page_group_ids = (
             await db.scalars(
@@ -296,7 +296,7 @@ async def admin_dedup_groups(
             return {
                 "group_count": 0,
                 "event_count": 0,
-                "total_groups": total_groups,
+                "total": total,
                 "limit": limit,
                 "offset": offset,
                 "has_more": False,
@@ -320,7 +320,7 @@ async def admin_dedup_groups(
     return {
         "group_count": len(groups),
         "event_count": len(rows),
-        "total_groups": total_groups,
+        "total": total,
         "limit": limit,
         "offset": offset,
         "has_more": has_more,

@@ -29,10 +29,16 @@ RATE_LIMIT_CLAIM = "10/minute"
 # ID-enumeration / scraping abuse (GET /events/{id} takes no auth).
 RATE_LIMIT_EVENTS_DETAIL = "120/minute"
 # Admin Basic-auth surface — applied via limiter.shared_limit(..., scope="admin")
-# so every /admin/* route shares ONE bucket per client, not one bucket each
+# so every /admin/* action route shares ONE bucket per client, not one each
 # (a per-route @limiter.limit would let an attacker cycling all admin routes
 # attempt far more than this per minute). Pair with a strong ADMIN_PASSWORD.
 RATE_LIMIT_ADMIN = "10/minute"
+# Shared-limit scope for the admin queue list GETs (spec #551), which run at
+# RATE_LIMIT_BROWSE instead: a numbered pager plus refetch-after-action costs
+# several reads per admin action, more than the 10/minute action bucket
+# allows. Still ONE bucket per client across every admin read, for the same
+# route-cycling reason as RATE_LIMIT_ADMIN's scope.
+RATE_LIMIT_SCOPE_ADMIN_READ = "admin_read"
 
 # Authenticated feedback writes — generous cap on a per-signal DB write.
 RATE_LIMIT_FEEDBACK = "60/minute"

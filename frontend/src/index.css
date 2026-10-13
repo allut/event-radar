@@ -302,6 +302,11 @@
   --bp-desktop-gate: 1024px;      /* shared/DesktopGate.module.css */
   --bp-landing-stats: 900px;      /* Landing.module.css */
   --bp-onboarding-narrow: 560px;  /* Onboarding.module.css */
+  /* Pager.module.css's @container widths (the pager's own width, not the
+     viewport): the range label stacks over the buttons, then the p±1
+     siblings drop to first/current/last (340px admin column, 390px phone). */
+  --bp-pager-stack: 560px;
+  --bp-pager-collapse: 440px;
   /* Wide band (docs/design-system.md §10): floor where page widths jump to the
      1760px wrap and the card grid locks to 6 columns. Above a 1920px
      laptop viewport (2880×1620 @150%), below a 2560px monitor. */

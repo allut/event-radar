@@ -1,0 +1,132 @@
+/* The shared numbered pager (spec #551). Page links compose the shared
+   outline button with 44px targets (--space-2-75). The typeface is
+   inherited, so the admin shell's --font-system applies there with no
+   audience variant. */
+
+.pager {
+  container: pager / inline-size;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+}
+
+.range {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.range strong {
+  color: var(--text);
+  font-weight: var(--fw-semibold);
+}
+
+.pages {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pageLink,
+.current,
+.step,
+.stepDead {
+  composes: btnOutline from '../shared/Button.module.css';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--space-2-75);
+  min-height: var(--space-2-75);
+  padding: 0 var(--space-2);
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+.pages .pageLink:focus-visible,
+.pages .current:focus-visible,
+.pages .step:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--shadow-focus-ring);
+}
+
+/* Raised specificity (.pages …): the composed btnOutline rules can land
+   after this file's in the bundle, so equal-specificity overrides lose. */
+.pages .current {
+  background: var(--accent-subtle);
+  border-color: var(--accent);
+  /* The bar nav's gold rule, so "you are here" reads the same everywhere. */
+  box-shadow: inset 0 calc(-1 * var(--rule-w-accent)) 0 var(--accent);
+  color: var(--text);
+  font-weight: var(--fw-semibold);
+}
+
+.pages .current:hover {
+  border-color: var(--accent);
+  color: var(--text);
+  cursor: default;
+}
+
+.step {
+  font-size: var(--fs-lg);
+}
+
+/* Dead ‹/› at the ends: the same box, borderless, so the row doesn't
+   shift. Reads as absent rather than disabled, and is never focusable. */
+.pages .stepDead {
+  font-size: var(--fs-lg);
+  border-color: transparent;
+  color: var(--text-dim);
+  opacity: var(--opacity-disabled);
+}
+
+.pages .stepDead:hover {
+  border-color: transparent;
+  color: var(--text-dim);
+}
+
+.gap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--space-5);
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+
+.gapCollapsedOnly {
+  display: none;
+}
+
+/* Literal mirrors --bp-pager-stack: the label stacks over the buttons. */
+@container pager (max-width: 560px) {
+  .bar {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+}
+
+/* Literal mirrors --bp-pager-collapse (390px phone, 340px admin column):
+   first, current and last plus ‹ ›. display: none also drops the hidden
+   siblings from the accessibility tree. */
+@container pager (max-width: 440px) {
+  .pages .sibling,
+  .pages .gapFullOnly {
+    display: none;
+  }
+
+  .pages .gapCollapsedOnly {
+    display: inline-flex;
+  }
+}

@@ -6,8 +6,6 @@
   composes: adminPageTitle from '../../components/shared/Page.module.css';
 }
 
-.subtitle { composes: queueSubtitle from '../../components/shared/AdminQueue.module.css'; }
-
 .group {
   composes: card from '../../components/shared/Card.module.css';
   margin-bottom: var(--space-4);
@@ -52,7 +50,17 @@
 .badgePublished { color: var(--success); border-color: var(--success-border); }
 .badgeExplicit { color: var(--danger); border-color: var(--danger-border); }
 
-.loadMoreBtn { composes: queueLoadMore from '../../components/shared/AdminQueue.module.css'; }
+/* Placeholder page while the next one loads (keep-previous-data). */
+.groups[aria-busy='true'] {
+  opacity: var(--opacity-disabled);
+  transition: opacity var(--transition);
+}
+
+/* Admin placement: a hairline between the groups and the pager. */
+.pager {
+  padding-top: var(--space-3);
+  border-top: var(--border-w-hair) solid var(--border);
+}
 
 /* Desktop-only screen — see components/shared/DesktopGate.module.css. */
 .desktopGate { composes: gate from '../../components/shared/DesktopGate.module.css'; }

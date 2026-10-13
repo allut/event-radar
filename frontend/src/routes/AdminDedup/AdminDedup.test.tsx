@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AdminDedup from './AdminDedup';
-import { renderWithProviders } from '../../test/utils';
+import { LocationProbe, renderWithProviders } from '../../test/utils';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -12,11 +12,11 @@ vi.mock('../../api/client', async (importOriginal) => ({
 import { adminApi } from '../../api/client';
 const mockGet = vi.mocked(adminApi.get);
 
-function page(groups: unknown[], offset: number, hasMore: boolean, totalGroups: number) {
+function page(groups: unknown[], offset: number, hasMore: boolean, total: number) {
   return {
     group_count: groups.length,
     event_count: groups.reduce((n: number, g) => n + (g as { events: unknown[] }).events.length, 0),
-    total_groups: totalGroups,
+    total,
     limit: 50,
     offset,
     has_more: hasMore,
@@ -62,17 +62,36 @@ describe('AdminDedup', () => {
     await waitFor(() => expect(screen.getByText('No dedup groups')).toBeInTheDocument());
   });
 
-  it('loads the next page of groups on "Load more"', async () => {
-    mockGet.mockResolvedValueOnce(page([groupA], 0, true, 2));
-    renderWithProviders(<AdminDedup />);
-    await waitFor(() => expect(screen.getByText('Group #482')).toBeInTheDocument());
-
-    mockGet.mockResolvedValueOnce(page([groupB], 1, false, 2));
-    await userEvent.click(screen.getByRole('button', { name: 'Load more' }));
+  it('maps ?page to the request offset at 50 groups per page', async () => {
+    mockGet.mockResolvedValueOnce(page([groupB], 100, false, 101));
+    renderWithProviders(<AdminDedup />, { route: '/admin/dedup?page=3' });
 
     await waitFor(() => expect(screen.getByText('Group #490')).toBeInTheDocument());
-    expect(mockGet).toHaveBeenLastCalledWith('/admin/dedup/groups?limit=50&offset=1');
+    expect(mockGet).toHaveBeenCalledWith('/admin/dedup/groups?limit=50&offset=100');
+    expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '101–101 of 101')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Page 3' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('pages with the numbered pager, resetting scroll and focusing the first group', async () => {
+    mockGet.mockResolvedValueOnce(page([groupA], 0, true, 51));
+    renderWithProviders(
+      <>
+        <AdminDedup />
+        <LocationProbe />
+      </>,
+      { route: '/admin/dedup' },
+    );
+    await waitFor(() => expect(screen.getByText('Group #482')).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+
+    mockGet.mockResolvedValueOnce(page([groupB], 50, false, 51));
+    await userEvent.click(screen.getByRole('link', { name: 'Page 2' }));
+
+    await waitFor(() => expect(screen.getByTestId('dedup-group-490')).toHaveFocus());
+    expect(screen.getByTestId('location-probe')).toHaveTextContent('/admin/dedup?page=2');
+    expect(mockGet).toHaveBeenLastCalledWith('/admin/dedup/groups?limit=50&offset=50');
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'auto' });
+    expect(screen.getByRole('status')).toHaveTextContent('Page 2 of 2. Items 51 to 51 of 51.');
   });
 
   it('renders the desktop-only gate message alongside the real content', async () => {

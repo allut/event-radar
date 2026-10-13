@@ -17,6 +17,8 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 
 - **`localizedPath()` and `stripLocalePrefix()` live in `frontend/src/lib/urlLocale.ts`, re-exported through `utils.ts`.** They're the one deliberate exception to "shared helpers live in `utils.ts`". The module's own comment says why.
 - **`StaticPage/`'s component has no importer, but its stylesheet is live.** `Contact.module.css` composes `.page`, `.main`, `.title` and `.body` from it. It stays as the scaffold for future static pages.
+- **Paged lists compose `hooks/usePageParam.ts`, `hooks/usePagedQuery.ts` and `components/Pager/`.** `usePageParam` owns `?page` and `setListParams`, the one writer for filter, sort, search and tab params. `usePagedQuery` owns the fetch, the past-end clamp and `onPageSettled`. Change paging behaviour there, never per route.
+- **Only a pager-link push or a back/forward POP counts as a page change.** `usePagedQuery` reads `useNavigationType()`, and `setListParams` tags its push with router state so a filter change stays silent. Every `replace` (normalizing, clamping, server-placed offset) skips `onPageSettled` and the announcement.
 - **`components/shared/` is the shared CSS layer.** See [design-system.md](design-system.md) §7 for the composing rules.
 - **`GoogleSignInButton/` is a plain `<a href>` to the backend's OAuth `start` endpoint, with no client-side OAuth.** Its plate colors are Google-mandated, held as `--google-btn-*` tokens in `index.css`. The mark itself is covered by design-system.md's Google Sign-In Mark section.
 - **The `VITE_GOOGLE_SIGNIN_*` build flags are a frontend convenience gate only.** The backend `start` endpoint 404s on its own when its flag is off. [backend-ops.md](backend-ops.md)'s Cloudflare Pages Frontend section says where the flags are set.
@@ -39,6 +41,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **`routes/AdminApp/` dispatches admin screens on `pathname`, outside `ROUTE_DEFS` and the locale-prefix loop.** It's reached by typed URL or bookmark only.
 - **It loads behind one `React.lazy` chunk,** so a signed-out visit to a public route never downloads it.
 - **The admin console is English-only and skips the shared/i18n workflow.** Its strings are literals, such as `utils.ts::relativeTimeFromNow()`.
+- **`<Pager>` is the exception: admin renders it from shared/i18n with `LOCALE_EN`.** One component serves every list, so its strings live in the catalogue rather than in a second English copy.
 - **`AdminShell/` is the nav-rail chrome every signed-in admin screen renders inside.** `AdminLogin` renders outside it. The console replaces curl calls to `/admin/*`; see [backend-ops.md](backend-ops.md)'s Admin Endpoints section.
 
 ## Locale-Prefixed Routing

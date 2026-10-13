@@ -60,6 +60,24 @@ export const PAGE_PARAM = {
   cursor: 'cursor',
 } as const;
 
+// The frontend URL's 1-based page number (spec #551), read by usePageParam and
+// written by <Pager>'s links. Page 1 omits it. Never sent to the backend,
+// which only ever sees PAGE_PARAM.limit/offset.
+export const PAGE_QUERY_PARAM = 'page';
+
+// Router location-state key usePageParam's setListParams writes, so
+// usePagedQuery can tell a filter/sort/search/tab push (which resets to
+// page 1 silently) from a pager-link push (a real page change).
+export const LIST_PARAMS_NAV_STATE = 'listParamsChange';
+
+// i18n keys for <Pager>'s live-region announcement, one per item noun: the
+// Explore-style lists announce "Events", lists of anything else "Items".
+export const PAGER_LIVE_KEY = {
+  events: 'pager_live_events',
+  items: 'pager_live_items',
+} as const;
+export type PagerLiveNoun = keyof typeof PAGER_LIVE_KEY;
+
 // Prefix every backend request is proxied under (see
 // functions/api/[[path]].ts's catch-all proxy, keyed on this same string) —
 // api/client.ts's fetch wrapper and NDJSON stream path both prepend it.
