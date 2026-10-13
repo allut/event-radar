@@ -99,7 +99,7 @@ PAGINATION_MIN_OFFSET: int = 0
 # discard that many rows on every request at the endpoint's full rate limit.
 # The numbered pager (spec #551) caps its last reachable page at the same
 # value, so a deep list shows "… of N+" instead of linking to a 422.
-# Opaque keyset cursor (`GET /explore` date sort, `GET /feedback/events`) —
+# Opaque keyset cursor (`GET /explore` date sort) —
 # base64url of `[iso_timestamp, row_id]`, so ~60 chars in practice; the cap
 # only bounds what an attacker can make the decoder chew on.
 PAGINATION_CURSOR_MAX_LEN: int = 200

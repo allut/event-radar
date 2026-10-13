@@ -18,14 +18,26 @@
   composes: cardGrid from '../../components/shared/Page.module.css';
 }
 
-.loadMoreBtn {
-  composes: btnOutline from '../../components/shared/Button.module.css';
-  align-self: center;
-  padding: var(--space-0-6) var(--space-4);
-  font-size: var(--fs-sm);
+/* Holds the results so aria-busy and the hidden heading sit on the list
+   itself; the heading's static position is the top of the grid. */
+.results {
+  position: relative;
 }
 
-.loadMoreBtn:disabled {
+/* The page-settled focus target (hooks/usePageSettledFocus.ts). */
+.resultsHeading {
+  composes: srOnly from '../../components/shared/Visually.module.css';
+  composes: settleTarget from '../../components/shared/PageSettle.module.css';
+}
+
+/* The previous page while the next one loads (keep-previous-data). */
+.dimmed {
   opacity: var(--opacity-disabled);
-  cursor: not-allowed;
+  transition: opacity var(--transition);
+}
+
+/* The pager sits under the grid behind a rule, as on Explore. */
+.pager {
+  padding-top: var(--space-4);
+  border-top: var(--rule);
 }

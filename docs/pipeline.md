@@ -268,7 +268,8 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 
 - **`GET /feedback/events` (`app/routers/feedback.py`) lists the user's events carrying one preference signal**, most recent first. It is rate-limited by `RATE_LIMIT_FEEDBACK`.
 - **The signal must be in `PREFERENCE_SIGNALS`** (like, dislike, bookmark), not the full `VALID_SIGNALS`. Passive `view`/`click_external` rows repeat per event, up to one per UTC day.
-- **It pages by keyset cursor on `(feedback.created_at, feedback.id)`.** `offset` is still accepted for the first page.
+- **It pages by offset and returns the exact `total` on every request.** It orders by `(feedback.created_at, feedback.id)` descending, so signals given in the same instant keep one order across pages.
+- **The `/saved` route keeps the signal tab in `?signal` beside `?page`.** The default `bookmark` tab is omitted, and a tab switch starts again at page 1.
 
 ### Landing Showcase
 

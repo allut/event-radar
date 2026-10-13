@@ -1,21 +1,26 @@
-import { useMemo, useState } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useCallback, useId, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
-import { FIRST_KEYSET_PAGE, nextKeysetParam, withLocaleQuery } from '../../utils';
+import { cx, withLocaleQuery } from '../../utils';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
+import { usePageParam } from '../../hooks/usePageParam';
+import { usePagedQuery } from '../../hooks/usePagedQuery';
+import { usePageSettledFocus } from '../../hooks/usePageSettledFocus';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import { useEventCardNav } from '../../hooks/useEventCardNav';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
+import Pager from '../../components/Pager';
 import TopBar from '../../components/TopBar';
 import SeoTags from '../../components/SeoTags';
 import SegmentedControl from '../../components/SegmentedControl';
 import { API, QUERY_KEYS, PAGE_PARAM } from '../../constants/api';
 import { UI_STATE } from '../../constants/core';
 import {
+  SAVED_DEFAULT_SIGNAL,
   SAVED_TABS,
   SIGNAL_CONFIG,
   SAVED_EVENTS_PAGE_SIZE,
@@ -30,7 +35,16 @@ interface SavedEventsResponse {
   limit: number;
   offset: number;
   has_more: boolean;
-  next_cursor?: string | null;
+}
+
+const SAVED_TAB_BY_SIGNAL: Map<string, (typeof SAVED_TABS)[number]> = new Map(
+  SAVED_TABS.map((tab) => [tab.value, tab]),
+);
+const SAVED_LIST_DEFAULTS = { [SIGNAL_PARAM]: SAVED_DEFAULT_SIGNAL };
+
+/** The tab in `?signal`; a missing or unknown value is the default tab. */
+function parseSignal(raw: string | null): Signal {
+  return (raw !== null && SAVED_TAB_BY_SIGNAL.get(raw)?.value) || SAVED_DEFAULT_SIGNAL;
 }
 
 export default function SavedEvents() {
@@ -38,32 +52,51 @@ export default function SavedEvents() {
   const handleLogout = useLogout();
   const { locale, handleLocaleChange, isPending: localePending } = useLocaleMutation();
   const seoMeta = useStaticSeoMeta('seo_title_saved', locale);
-  const [signal, setSignal] = useState<Signal>('bookmark');
 
+  // The tab and the page both live in the URL (spec #551), so a refresh or a
+  // shared link keeps them. A tab switch is one setListParams push: it drops
+  // ?page (back to page 1) and omits the default tab.
+  const [searchParams] = useSearchParams();
+  const signal = parseSignal(searchParams.get(SIGNAL_PARAM));
+  const { setListParams } = usePageParam({ defaults: SAVED_LIST_DEFAULTS });
+  const handleTabChange = useCallback(
+    (value: string) =>
+      setListParams((params) => {
+        params.set(SIGNAL_PARAM, value);
+        return params;
+      }),
+    [setListParams],
+  );
+
+  // The tab buttons sit between the h1 and the grid, so a page change lands
+  // on a visually hidden h2 naming the active tab, directly above the grid.
+  const resultsHeadingId = useId();
+  const { resultsHeadingRef, onPageSettled } = usePageSettledFocus();
+  // An unsave invalidates [saved] (useFeedback), so the active page refetches:
+  // the next page's first event moves up into the gap, and an emptied last
+  // page clamps to the new last page.
   const {
-    data,
+    items: events,
+    offset,
+    total,
     isLoading,
     isError,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
+    isPlaceholderData,
+    pagerProps,
+  } = usePagedQuery({
     queryKey: [QUERY_KEYS.saved, locale, signal],
-    queryFn: ({ pageParam }) =>
+    pageSize: SAVED_EVENTS_PAGE_SIZE,
+    fetchPage: ({ limit, offset: pageOffset }) =>
       api.get<SavedEventsResponse>(
         withLocaleQuery(
-          `${API.feedbackEvents}?${SIGNAL_PARAM}=${signal}&${PAGE_PARAM.limit}=${SAVED_EVENTS_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam.offset}${pageParam.cursor ? `&${PAGE_PARAM.cursor}=${pageParam.cursor}` : ''}`,
+          `${API.feedbackEvents}?${SIGNAL_PARAM}=${signal}&${PAGE_PARAM.limit}=${limit}&${PAGE_PARAM.offset}=${pageOffset}`,
           locale,
         ),
       ),
-    initialPageParam: FIRST_KEYSET_PAGE,
-    getNextPageParam: (lastPage) => nextKeysetParam(lastPage, lastPage.events.length),
-    // A focus-triggered refetch of an infinite query re-requests every loaded
-    // page sequentially (each re-scored server-side) — never worth it here.
-    refetchOnWindowFocus: false,
+    select: (data) => ({ items: data.events, total: data.total, offset: data.offset }),
+    onPageSettled,
   });
 
-  const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
   const tabOptions = useMemo(
     () =>
       SAVED_TABS.map((tab) => ({
@@ -72,6 +105,7 @@ export default function SavedEvents() {
       })),
     [locale],
   );
+  const activeTab = SAVED_TAB_BY_SIGNAL.get(signal) ?? SAVED_TABS[0];
 
   return (
     <div className={styles.page}>
@@ -86,45 +120,44 @@ export default function SavedEvents() {
         <SegmentedControl
           options={tabOptions}
           value={signal}
-          onChange={(v) => setSignal(v as Signal)}
+          onChange={handleTabChange}
           ariaLabel={t('nav_saved', locale)}
         />
 
-        {isLoading ? (
-          <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
-        ) : isError ? (
-          <PageState kind={UI_STATE.error} message={t('saved_error', locale)} inline />
-        ) : events.length === 0 ? (
-          <EmptyState
-            eyebrow={t('nav_saved', locale)}
-            title={t('saved_empty_title', locale)}
-            message={t('saved_empty_msg', locale)}
-          />
-        ) : (
-          <div className={styles.grid}>
-            {events.map((event, i) => (
-              <EventCard
-                key={event.id}
-                event={event}
-                index={i}
-                locale={locale}
-                nav={nav}
-                variant="standard"
-              />
-            ))}
-          </div>
-        )}
+        <section className={styles.results} aria-labelledby={resultsHeadingId} aria-busy={isPlaceholderData}>
+          <h2 id={resultsHeadingId} ref={resultsHeadingRef} tabIndex={-1} className={styles.resultsHeading}>
+            {t(activeTab.labelKey, locale)}
+          </h2>
+          {isLoading ? (
+            <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
+          ) : isError ? (
+            <PageState kind={UI_STATE.error} message={t('saved_error', locale)} inline />
+          ) : events.length === 0 && total > 0 ? (
+            // A past-end page about to clamp to the real last page.
+            <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
+          ) : events.length === 0 ? (
+            <EmptyState
+              eyebrow={t('nav_saved', locale)}
+              title={t('saved_empty_title', locale)}
+              message={t('saved_empty_msg', locale)}
+            />
+          ) : (
+            <div className={cx(styles.grid, isPlaceholderData && styles.dimmed)}>
+              {events.map((event, i) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  index={offset + i}
+                  locale={locale}
+                  nav={nav}
+                  variant="standard"
+                />
+              ))}
+            </div>
+          )}
+        </section>
 
-        {hasNextPage && (
-          <button
-            type="button"
-            className={styles.loadMoreBtn}
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
-          >
-            {t('load_more', locale)}
-          </button>
-        )}
+        <Pager {...pagerProps} locale={locale} className={total > 0 ? styles.pager : undefined} />
       </main>
     </div>
   );

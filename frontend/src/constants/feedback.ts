@@ -46,6 +46,8 @@ export const SIGNAL_TO_CLASS: Record<Signal, string> = {
 
 // ─── Saved Events ────────────────────────────────────────────────────────────
 export const SAVED_EVENTS_PAGE_SIZE = 24;
+// The tab /saved opens on, left out of the URL; `?signal=` names any other tab.
+export const SAVED_DEFAULT_SIGNAL: Signal = 'bookmark';
 
 // ─── Saved Events (route-local tab config, mirrors SORT_OPTIONS/DATE_PRESETS) ─
 export const SAVED_TABS: { value: Signal; labelKey: string }[] = [
