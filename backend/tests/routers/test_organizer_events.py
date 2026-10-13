@@ -1383,6 +1383,7 @@ class TestListOwnEvents:
             important_info_localized=None,
         )
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        mock_db.scalar = AsyncMock(return_value=1)
 
         result = await list_own_events(
             make_request(path="/organizer/events"),
@@ -1409,6 +1410,7 @@ class TestListOwnEvents:
         organizer = make_organizer(organizer_id=5)
         event = _fake_event(submitted_by_organizer_id=5, venue_id=7)
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        mock_db.scalar = AsyncMock(return_value=1)
 
         result = await list_own_events(
             make_request(path="/organizer/events"),
@@ -1436,6 +1438,7 @@ class TestListOwnEvents:
             title_localized={"ru": "Ночь Джазкаар", "en": "Jazzkaar Festival Night"},
         )
         mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=[event]))
+        mock_db.scalar = AsyncMock(return_value=1)
 
         result = await list_own_events(
             make_request(path="/organizer/events"),
@@ -1447,6 +1450,138 @@ class TestListOwnEvents:
         )
 
         assert result["events"][0]["title"] == "Ночь Джазкаар"
+
+    @staticmethod
+    async def _list_page(mock_db, make_request, organizer, offset, rows, total):
+        """One own-events page: `rows` from the page query, `total` from the COUNT."""
+        from app.routers.organizer_events import list_own_events
+
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=rows))
+        mock_db.scalar = AsyncMock(return_value=total)
+        return await list_own_events(
+            make_request(path="/organizer/events"),
+            limit=2,
+            offset=offset,
+            locale=None,
+            current_organizer=organizer,
+            db=mock_db,
+        )
+
+    @pytest.mark.asyncio
+    async def test_returns_paging_envelope_on_every_page(
+        self, mock_db, make_request, make_organizer
+    ):
+        """Spec #551: the numbered pager needs total/limit/offset/has_more on
+        every request, not only the first page."""
+        organizer = make_organizer(organizer_id=5)
+        rows = [_fake_event(submitted_by_organizer_id=5) for _ in range(2)]
+
+        first = await self._list_page(mock_db, make_request, organizer, 0, rows, 5)
+        middle = await self._list_page(mock_db, make_request, organizer, 2, rows, 5)
+        last = await self._list_page(mock_db, make_request, organizer, 4, rows[:1], 5)
+
+        assert {k: first[k] for k in ("total", "limit", "offset", "has_more")} == {
+            "total": 5, "limit": 2, "offset": 0, "has_more": True,
+        }
+        assert {k: middle[k] for k in ("total", "limit", "offset", "has_more")} == {
+            "total": 5, "limit": 2, "offset": 2, "has_more": True,
+        }
+        assert {k: last[k] for k in ("total", "limit", "offset", "has_more")} == {
+            "total": 5, "limit": 2, "offset": 4, "has_more": False,
+        }
+
+    @pytest.mark.asyncio
+    async def test_empty_list_has_zero_total(self, mock_db, make_request, make_organizer):
+        organizer = make_organizer(organizer_id=5)
+        result = await self._list_page(mock_db, make_request, organizer, 0, [], None)
+        assert (result["total"], result["has_more"], result["events"]) == (0, False, [])
+
+    @pytest.mark.asyncio
+    async def test_pages_share_a_created_at_then_id_order(
+        self, mock_db, make_request, make_organizer
+    ):
+        """Tie-breaker stability across pages: two events created in the same
+        instant must never swap between page 1 and page 2, so every page
+        query orders by created_at desc then id desc, and only LIMIT/OFFSET
+        differ between pages."""
+        organizer = make_organizer(organizer_id=5)
+        sqls = []
+        for offset in (0, 2):
+            await self._list_page(mock_db, make_request, organizer, offset, [], 3)
+            stmt = mock_db.scalars.call_args.args[0]
+            sqls.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
+
+        for sql in sqls:
+            assert "ORDER BY events.created_at DESC, events.id DESC" in sql
+            assert "events.submitted_by_organizer_id = 5" in sql
+        assert "LIMIT 2 OFFSET 0" in sqls[0]
+        assert "LIMIT 2 OFFSET 2" in sqls[1]
+        assert sqls[0].replace("OFFSET 0", "OFFSET 2") == sqls[1]
+
+    @pytest.mark.asyncio
+    async def test_counts_only_the_organizers_own_events(
+        self, mock_db, make_request, make_organizer
+    ):
+        organizer = make_organizer(organizer_id=5)
+        await self._list_page(mock_db, make_request, organizer, 0, [], 0)
+        count_stmt = mock_db.scalar.call_args.args[0]
+        sql = str(count_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "count(" in sql.lower()
+        assert "events.submitted_by_organizer_id = 5" in sql
+
+
+class TestListOwnEventsRateLimit:
+    @pytest.mark.asyncio
+    async def test_list_uses_the_browse_rate_not_the_submit_rate(
+        self, mock_db, make_organizer
+    ):
+        """Spec #551: quick paging and editing must not hit "too many
+        requests", so the list GET runs at RATE_LIMIT_BROWSE. A full
+        RATE_LIMIT_SUBMIT burst plus one must all succeed, while a full
+        RATE_LIMIT_BROWSE burst plus one is cut off."""
+        from fastapi import FastAPI
+        from httpx import ASGITransport, AsyncClient
+        from slowapi.errors import RateLimitExceeded
+        from slowapi.middleware import SlowAPIMiddleware
+
+        from app.auth.dependencies import get_current_organizer
+        from app.constants.rate_limits import RATE_LIMIT_BROWSE, RATE_LIMIT_SUBMIT
+        from app.db import get_db
+        from app.rate_limit import limiter, rate_limit_exceeded_handler
+        from app.routers.organizer_events import router
+
+        submit_burst = int(RATE_LIMIT_SUBMIT.split("/")[0])
+        browse_burst = int(RATE_LIMIT_BROWSE.split("/")[0])
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+        app.add_middleware(SlowAPIMiddleware)
+        app.include_router(router)
+
+        async def override_db():
+            yield mock_db
+
+        app.dependency_overrides[get_db] = override_db
+        app.dependency_overrides[get_current_organizer] = lambda: make_organizer(
+            organizer_id=5
+        )
+        mock_db.scalar = AsyncMock(return_value=0)
+
+        limiter.reset()
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                statuses = [
+                    (await client.get("/organizer/events")).status_code
+                    for _ in range(browse_burst + 1)
+                ]
+        finally:
+            limiter.reset()
+
+        assert statuses[: submit_burst + 1] == [http.HTTPStatus.OK] * (submit_burst + 1)
+        assert statuses[:browse_burst] == [http.HTTPStatus.OK] * browse_burst
+        assert statuses[browse_burst] == http.HTTPStatus.TOO_MANY_REQUESTS
 
 
 class TestDeleteOwnEvent:

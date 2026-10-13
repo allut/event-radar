@@ -16,7 +16,11 @@ from sqlalchemy.orm import selectinload
 
 from app.auth.dependencies import get_current_admin
 from app.cleanup import cleanup_stale_data
-from app._generated.shared_constants import DEFAULT_USER_LOCALE, VALID_LOCALES
+from app._generated.shared_constants import (
+    DEFAULT_USER_LOCALE,
+    PAGINATION_MAX_OFFSET,
+    VALID_LOCALES,
+)
 from app.constants.admin import (
     ADMIN_ACTION_APPROVE_SUBMISSION,
     ADMIN_ACTION_BUILD_FEEDS,
@@ -71,7 +75,6 @@ from app.constants.jobs import PIPELINE_RUN_OVERLAPPING_LOCK_KEYS
 from app.constants.log_events import LOG_EVENT_EMAIL_SEND_FAILED
 from app.constants.organizer import ERROR_SUBMISSION_NOT_FOUND
 from app.constants.ranking import (
-    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
 )

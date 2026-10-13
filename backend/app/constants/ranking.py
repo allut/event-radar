@@ -93,14 +93,12 @@ BROWSE_QUERY_MAX_LEN: int = 200
 # it can't drift per-endpoint.
 PAGINATION_MIN_LIMIT: int = 1
 PAGINATION_MIN_OFFSET: int = 0
-# Ceiling on `offset` across every paginated list endpoint (browse.py, feedback.py,
-# admin.py, organizer_events.py) — `ge=` alone leaves offset unbounded, so an
-# offset like 5_000_000 makes Postgres walk and discard that many rows on every
-# request at the endpoint's full rate limit. Every consumer is infinite scroll
-# from offset=0 at BROWSE_PAGE_SIZE-ish increments, so 5_000 already covers far
-# more depth than any legitimate session reaches while still bounding the
-# LIMIT/OFFSET seq-scan-and-discard cost an authenticated caller can force.
-PAGINATION_MAX_OFFSET: int = 5_000
+# The matching offset ceiling, PAGINATION_MAX_OFFSET, is cross-stack
+# (shared/app-config.json → app._generated.shared_constants): `ge=` alone
+# leaves offset unbounded, so an offset like 5_000_000 makes Postgres walk and
+# discard that many rows on every request at the endpoint's full rate limit.
+# The numbered pager (spec #551) caps its last reachable page at the same
+# value, so a deep list shows "… of N+" instead of linking to a 422.
 # Opaque keyset cursor (`GET /explore` date sort, `GET /feedback/events`) —
 # base64url of `[iso_timestamp, row_id]`, so ~60 chars in practice; the cap
 # only bounds what an attacker can make the decoder chew on.

@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app._generated.shared_constants import PAGINATION_MAX_OFFSET
 from app.constants.core import TALLINN_TZ
 from app.constants.organizer import (
     ERROR_DAILY_VENUE_CREATION_LIMIT,
@@ -22,7 +23,6 @@ from app.constants.organizer import (
 )
 from app.constants.ranking import (
     BROWSE_MAX_PAGE_SIZE,
-    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
 )

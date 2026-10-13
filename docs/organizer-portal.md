@@ -18,7 +18,8 @@ An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter
 `app/routers/organizer_events.py` (prefix `/organizer/events`) lets an organizer create, edit, cancel and list their own events.
 
 - **A submission is inserted on the adapter-less `user_submission` source** through `app/ingestion/adapter.py::insert_normalized_event()`. It is then classified and published inside the request, not on the next scheduled pass.
-- **`DELETE` is a soft delete:** it cancels the event.
+- **`DELETE` is a soft delete:** it cancels the event. Cancelled events stay listed in Your events, so a delete never shrinks the list.
+- **`GET /organizer/events` pages Your events at `ORGANIZER_EVENTS_PAGE_SIZE` (24) with the numbered pager.** It returns `total`, `limit`, `offset` and `has_more` on every page, sorted `created_at desc, id desc`. It runs at `RATE_LIMIT_BROWSE`, so quick paging and edit round-trips don't 429.
 - **`GET /organizer/events/{id}` returns one of the caller's own events, with the list's row shape.** A foreign event is a 404. It feeds the edit form's prefill, so events past the list's first page stay editable.
 
 ### Image Upload

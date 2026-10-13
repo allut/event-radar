@@ -38,7 +38,7 @@ from app.claims.lifecycle import (
 )
 from app.claims.pinning import bulk_resolve_series_events
 from app.ingestion.http_client import host_matches_domain
-from app._generated.shared_constants import VALID_LOCALES
+from app._generated.shared_constants import PAGINATION_MAX_OFFSET, VALID_LOCALES
 from app.constants.admin import ADMIN_ACTION_REVOKE_CLAIM
 from app.constants.auth import (
     AUTH_TOKEN_MAX_LEN,
@@ -78,7 +78,6 @@ from app.constants.log_events import LOG_EVENT_AUTH_FAILED
 from app.constants.organizer import ERROR_ORGANIZER_NOT_FOUND
 from app.constants.ranking import (
     BROWSE_QUERY_MAX_LEN,
-    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
 )

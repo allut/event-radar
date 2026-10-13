@@ -20,6 +20,7 @@ from sqlalchemy.orm import load_only, selectinload
 
 from app._generated.shared_constants import (
     BROWSE_PAGE_SIZE,
+    PAGINATION_MAX_OFFSET,
     DEFAULT_USER_LOCALE,
     VALID_CATEGORIES,
     VALID_VIBES,
@@ -42,7 +43,6 @@ from app.constants.ranking import (
     ERROR_INVALID_SORT,
     FEEDBACK_HISTORY_LOOKBACK_DAYS,
     PAGINATION_CURSOR_MAX_LEN,
-    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
     SIGNAL_DISLIKE,

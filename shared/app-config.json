@@ -28,6 +28,7 @@
   ],
   "themes": ["light", "dark"],
   "browse_page_size": 24,
+  "pagination_max_offset": 5000,
   "organizer_max_categories": 3,
   "claim_expiry_days": 7,
   "claim_admin_review_expiry_days": 30,

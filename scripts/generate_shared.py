@@ -268,6 +268,10 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         f"HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = {allowed_tags}",
         f"HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {allowed_attrs}",
         f"BROWSE_PAGE_SIZE: int = {cfg['browse_page_size']}",
+        # Ceiling on `offset` across every paginated list endpoint (422 above
+        # via Query(le=)): bounds the LIMIT/OFFSET seq-scan-and-discard cost.
+        # The frontend's usePagedQuery caps its last reachable page at it.
+        f"PAGINATION_MAX_OFFSET: int = {cfg['pagination_max_offset']}",
         f"IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = {image_upload_mime}",
         f"ORGANIZER_MAX_CATEGORIES: int = {cfg['organizer_max_categories']}",
         f"CLAIM_EXPIRY_DAYS: int = {cfg['claim_expiry_days']}",
@@ -337,6 +341,9 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         f"export const THEME_PREFERENCES = {_ts_str_list(cfg['themes'])} as const;",
         "",
         f"export const BROWSE_PAGE_SIZE = {cfg['browse_page_size']};",
+        # Mirrors backend PAGINATION_MAX_OFFSET: usePagedQuery caps a list's
+        # last reachable page at the deepest offset the backend accepts.
+        f"export const PAGINATION_MAX_OFFSET = {cfg['pagination_max_offset']};",
         "",
         # Mirrors backend IMAGE_UPLOAD_ALLOWED_MIME — see shared/app-config.json.
         f"export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = {_ts_str_list(cfg['image_upload_allowed_mime'])};",

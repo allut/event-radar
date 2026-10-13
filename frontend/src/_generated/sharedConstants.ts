@@ -30,6 +30,7 @@ export const VIBES = ['trendy', 'casual', 'intimate', 'high_energy', 'educationa
 export const THEME_PREFERENCES = ['light', 'dark'] as const;
 
 export const BROWSE_PAGE_SIZE = 24;
+export const PAGINATION_MAX_OFFSET = 5000;
 
 export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
 

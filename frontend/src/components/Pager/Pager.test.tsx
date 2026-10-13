@@ -344,6 +344,62 @@ describe('usePagedQuery', () => {
     expect(liveRegion()).toHaveTextContent('');
   });
 
+  describe('the backend offset ceiling (PAGINATION_MAX_OFFSET = 5,000)', () => {
+    // At 10 per page the deepest page whose offset the backend accepts is
+    // page 501 (offset 5,000), so 5,010 rows are reachable.
+
+    it('caps the last page at the deepest reachable one and labels the total as a lower bound', async () => {
+      serve(6000);
+      renderHarness('/list');
+      await waitFor(() => expect(screen.getByText('Row 1')).toBeInTheDocument());
+
+      expect(document.querySelector('p')?.textContent).toBe('1–10 of 5,010+');
+      const nav = screen.getByRole('navigation', { name: 'Pages' });
+      expect(within(nav).getByRole('link', { name: 'Page 501' })).toHaveAttribute('href', '/list?page=501');
+      expect(within(nav).queryByRole('link', { name: 'Page 600' })).not.toBeInTheDocument();
+    });
+
+    it('announces the capped total as "more than" the reachable count', async () => {
+      serve(6000);
+      renderHarness('/list');
+      await waitFor(() => expect(screen.getByText('Row 1')).toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('link', { name: 'Next page' }));
+
+      await waitFor(() =>
+        expect(liveRegion()).toHaveTextContent('Page 2 of 501. Events 11 to 20 of more than 5,010.'),
+      );
+    });
+
+    it('has no next link on the capped last page', async () => {
+      serve(6000);
+      renderHarness('/list?page=501');
+      await waitFor(() => expect(screen.getByText('Row 5001')).toBeInTheDocument());
+
+      expect(document.querySelector('p')?.textContent).toBe('5,001–5,010 of 5,010+');
+      expect(screen.queryByRole('link', { name: 'Next page' })).not.toBeInTheDocument();
+    });
+
+    it('silently clamps a stale deeper link to the capped last page without requesting past the ceiling', async () => {
+      serve(6000);
+      const onPageSettled = vi.fn();
+      renderHarness('/list?page=600', { onPageSettled });
+
+      await waitFor(() => expect(location()).toBe('/list?page=501'));
+      expect(navType()).toBe('REPLACE');
+      await waitFor(() => expect(screen.getByText('Row 5001')).toBeInTheDocument());
+      expect(mockGet.mock.calls.map(([url]) => requestedOffset(url))).toEqual([5000]);
+      expect(onPageSettled).not.toHaveBeenCalled();
+    });
+
+    it('keeps the exact total when every row is reachable', async () => {
+      serve(5005);
+      renderHarness('/list?page=501');
+      await waitFor(() => expect(screen.getByText('Row 5001')).toBeInTheDocument());
+      expect(document.querySelector('p')?.textContent).toBe('5,001–5,005 of 5,005');
+    });
+  });
+
   it('does not prefetch the next page', async () => {
     serve(25);
     renderHarness('/list');

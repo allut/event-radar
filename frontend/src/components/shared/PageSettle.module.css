@@ -1,0 +1,13 @@
+/* The results heading a paged consumer/organizer list focuses after a page
+   change (hooks/usePageSettledFocus.ts). Its scroll-margin-top clears the
+   sticky top bar at its full, unscrolled height, so the heading is never
+   tucked under the bar whether the bar is condensed or not. */
+.settleTarget {
+  scroll-margin-top: calc(var(--bar-h) + var(--space-4));
+}
+
+@media (max-width: 640px) {
+  .settleTarget {
+    scroll-margin-top: calc(var(--bar-h-phone) + var(--space-4));
+  }
+}

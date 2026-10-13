@@ -23,6 +23,7 @@ SAFE_URL_SCHEMES: frozenset[str] = frozenset({"http", "https"})
 HTML_SANITIZE_ALLOWED_TAGS: frozenset[str] = frozenset({"a", "b", "blockquote", "br", "em", "h3", "h4", "i", "li", "ol", "p", "span", "strong", "u", "ul"})
 HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {"a": {"href", "title"}}
 BROWSE_PAGE_SIZE: int = 24
+PAGINATION_MAX_OFFSET: int = 5000
 IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = frozenset({"image/jpeg", "image/png", "image/webp"})
 ORGANIZER_MAX_CATEGORIES: int = 3
 CLAIM_EXPIRY_DAYS: int = 7

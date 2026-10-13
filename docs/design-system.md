@@ -127,6 +127,7 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 - **Add a new shared pattern here rather than growing a second copy.** Variants follow base class plus modifier, like `.card` and `.cardAccentTop`. Restyling a base class in place for one consumer changes every other consumer.
 - **`composes:` can't be scoped inside `@media`.** It resolves to a class-name string at build time. A shared rule needed only on one side of a breakpoint is restated locally, as `Feed.module.css`'s media-scoped `.srOnly` does. Keep a restatement in sync with its source.
 - **`Pager/` composes `Button.module.css`'s `.btnOutline` for every page link**, with `--space-2-75` (44px) targets. Callers place it and add spacing or a rule through `className`; it has no audience variant.
+- **`PageSettle.module.css`'s `.settleTarget` gives a paged list's results heading its `scroll-margin-top`.** It clears the top bar at its full, unscrolled height (`--bar-h`, `--bar-h-phone`), so the heading clears the bar whether or not it has condensed.
 - **Every bar and drawer link sets its own `:hover` color.** `index.css`'s global gold `a:hover` otherwise outranks a single-class link color.
 - **`Prose.module.css` is the one typography for sanitized-HTML bodies.** `EventDetail` and `AdminEventDetail` compose it. `RichTextEditor`'s editing surface keeps its own margin model.
 - **`Landing.module.css` re-rolls its hero, ticker, plate and footer chrome locally, on purpose.** That treatment has no second consumer. Hoisting it into `shared/` adds indirection for nothing.

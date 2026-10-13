@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { keepPreviousData, useQuery, type QueryKey } from '@tanstack/react-query';
 import { useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
+import { PAGINATION_MAX_OFFSET } from '../_generated/sharedConstants';
 import { PAGE_QUERY_PARAM } from '../constants/api';
 import type { PagerAnnouncement, PagerProps } from '../components/Pager';
 import { isListParamsNavigation, usePageParam } from './usePageParam';
@@ -48,19 +49,30 @@ export function usePagedQuery<TData, TItem>({
   const navigationType = useNavigationType();
   const location = useLocation();
 
+  // The backend rejects an offset past PAGINATION_MAX_OFFSET (422), so the
+  // deepest reachable page is the last one whose offset is within it. A
+  // deeper (stale) link never fetches; it replaces to that page below.
+  const maxPage = Math.floor(PAGINATION_MAX_OFFSET / pageSize) + 1;
+  const beyondCeiling = page > maxPage;
+
   const query = useQuery({
     queryKey: [...queryKey, page],
     queryFn: () => fetchPage({ limit: pageSize, offset: (page - 1) * pageSize, page }),
     placeholderData: keepPreviousData,
-    enabled: enabled && !malformed,
+    enabled: enabled && !malformed && !beyondCeiling,
   });
   const { data, isSuccess, isPlaceholderData } = query;
 
   const slice = data === undefined ? null : select(data);
   const items = slice?.items ?? [];
-  const total = slice?.total ?? 0;
+  // Past the ceiling only maxPage pages are reachable: the label and the
+  // announcement then use the lower-bound form over the reachable count.
+  const reachableCount = maxPage * pageSize;
+  const serverTotal = slice?.total ?? 0;
+  const cappedAtCeiling = serverTotal > reachableCount;
+  const total = cappedAtCeiling ? reachableCount : serverTotal;
   const offset = slice?.offset ?? 0;
-  const totalIsLowerBound = slice?.totalIsLowerBound ?? false;
+  const totalIsLowerBound = (slice?.totalIsLowerBound ?? false) || cappedAtCeiling;
   const itemCount = items.length;
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
@@ -98,6 +110,13 @@ export function usePagedQuery<TData, TItem>({
     pendingSettleRef.current = counts ? page : null;
     setAnnouncement(null);
   }, [page, navigationType, location.state]);
+
+  // A stale link past the offset ceiling: land on the deepest reachable page.
+  useEffect(() => {
+    if (!beyondCeiling) return;
+    pendingSettleRef.current = null;
+    replacePage(maxPage);
+  }, [beyondCeiling, maxPage, replacePage]);
 
   useEffect(() => {
     if (!isSuccess || isPlaceholderData || data === undefined) return;

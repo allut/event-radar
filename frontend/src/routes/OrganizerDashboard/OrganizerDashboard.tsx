@@ -1,9 +1,12 @@
+import { useId } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
 import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { usePagedQuery } from '../../hooks/usePagedQuery';
+import { usePageSettledFocus } from '../../hooks/usePageSettledFocus';
 import { t } from '../../i18n';
 import { apiErrorMessage, formatEventTime, withLocaleQuery, withQueryParam } from '../../utils';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
@@ -11,6 +14,7 @@ import OrganizerProfileNudge from '../../components/OrganizerProfileNudge';
 import ClaimEventPicker from '../../components/ClaimEventPicker';
 import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';
+import Pager from '../../components/Pager';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
@@ -38,8 +42,10 @@ interface OrganizerEvent {
 
 interface OrganizerEventsResponse {
   events: OrganizerEvent[];
+  total: number;
   limit: number;
   offset: number;
+  has_more: boolean;
 }
 
 interface OwnClaim {
@@ -67,15 +73,33 @@ export default function OrganizerDashboard() {
   const { toast, showToast } = useToast();
   const seoMeta = useStaticSeoMeta('organizer_dashboard_title', locale);
 
-  const { data, isLoading, isError } = useQuery({
+  // Your events, paged with the shared numbered pager (spec #551): the page
+  // lives in ?page, and a page change lands on the "Your events" heading.
+  const eventsHeadingId = useId();
+  const { resultsHeadingRef, onPageSettled } = usePageSettledFocus();
+  const {
+    items: events,
+    total,
+    isLoading,
+    isError,
+    isPlaceholderData,
+    pagerProps,
+  } = usePagedQuery({
     queryKey: [QUERY_KEYS.organizerEvents, locale],
-    queryFn: () =>
+    pageSize: ORGANIZER_EVENTS_PAGE_SIZE,
+    fetchPage: ({ limit, offset }) =>
       organizerApi.get<OrganizerEventsResponse>(
         withLocaleQuery(
-          withQueryParam(API.organizerEvents, PAGE_PARAM.limit, String(ORGANIZER_EVENTS_PAGE_SIZE)),
+          withQueryParam(
+            withQueryParam(API.organizerEvents, PAGE_PARAM.limit, String(limit)),
+            PAGE_PARAM.offset,
+            String(offset),
+          ),
           locale,
         ),
       ),
+    select: (data) => ({ items: data.events, total: data.total, offset: data.offset }),
+    onPageSettled,
   });
 
   const deleteMutation = useMutation({
@@ -93,8 +117,6 @@ export default function OrganizerDashboard() {
     if (!window.confirm(t('organizer_delete_confirm', locale))) return;
     deleteMutation.mutate(eventId);
   }
-
-  const events = data?.events ?? [];
 
   const { data: claimsData } = useQuery({
     queryKey: [QUERY_KEYS.organizerClaims, locale],
@@ -158,7 +180,9 @@ export default function OrganizerDashboard() {
         )}
 
         <header className={styles.masthead}>
-          <h1 className={styles.heading}>{t('organizer_dashboard_title', locale)}</h1>
+          <h1 id={eventsHeadingId} ref={resultsHeadingRef} tabIndex={-1} className={styles.heading}>
+            {t('organizer_dashboard_title', locale)}
+          </h1>
           <Link to={localePath(ROUTES.organizerSubmit)} className={styles.newBtn}>{t('organizer_new_event', locale)}</Link>
         </header>
 
@@ -166,13 +190,16 @@ export default function OrganizerDashboard() {
           <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
         ) : isError ? (
           <PageState kind={UI_STATE.error} message={t('generic_error', locale)} inline />
+        ) : events.length === 0 && total > 0 ? (
+          // A past-end page about to clamp to the real last page.
+          <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
         ) : events.length === 0 ? (
           <EmptyState
             title={t('organizer_empty_title', locale)}
             message={t('organizer_empty_msg', locale)}
           />
         ) : (
-          <ul className={styles.list}>
+          <ul className={styles.list} aria-labelledby={eventsHeadingId} aria-busy={isPlaceholderData}>
             {events.map((event) => (
               <li key={event.id} className={styles.row}>
                 <div className={styles.rowMain}>
@@ -204,6 +231,7 @@ export default function OrganizerDashboard() {
             ))}
           </ul>
         )}
+        <Pager {...pagerProps} locale={locale} className={styles.pager} />
       </main>
 
       {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}

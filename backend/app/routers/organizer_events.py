@@ -23,7 +23,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app._generated.shared_constants import BROWSE_PAGE_SIZE, IMAGE_UPLOAD_ALLOWED_MIME
+from app._generated.shared_constants import (
+    BROWSE_PAGE_SIZE,
+    IMAGE_UPLOAD_ALLOWED_MIME,
+    PAGINATION_MAX_OFFSET,
+)
 from app.constants.core import TALLINN_TZ
 from app.constants.events import (
     ERROR_EVENT_CANCELLED,
@@ -66,11 +70,10 @@ from app.constants.organizer import (
 )
 from app.constants.ranking import (
     BROWSE_MAX_PAGE_SIZE,
-    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
 )
-from app.constants.rate_limits import RATE_LIMIT_SUBMIT
+from app.constants.rate_limits import RATE_LIMIT_BROWSE, RATE_LIMIT_SUBMIT
 from app.constants.reports import REPORT_AUTO_RESOLVE_NOTE
 from app.constants.security import URL_MAX_LEN
 from app.db import get_db
@@ -550,7 +553,9 @@ async def delete_own_event(
 
 
 @router.get("")
-@limiter.limit(RATE_LIMIT_SUBMIT)
+# Browse rate, not the submit rate (spec #551): the dashboard's numbered
+# pager plus edit round-trips are reads, and 10/minute 429'd quick paging.
+@limiter.limit(RATE_LIMIT_BROWSE)
 async def list_own_events(
     request: Request,
     limit: int = BROWSE_PAGE_SIZE,
@@ -559,23 +564,31 @@ async def list_own_events(
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """List the organizer's own submitted events, most recent first."""
+    """List the organizer's own submitted events, most recent first, with
+    the paging envelope (total/limit/offset/has_more) on every page.
+    Cancelled (soft-deleted) events stay listed."""
     limit = max(PAGINATION_MIN_LIMIT, min(limit, BROWSE_MAX_PAGE_SIZE))
     offset = max(PAGINATION_MIN_OFFSET, min(offset, PAGINATION_MAX_OFFSET))
     effective_locale = resolve_locale_param(locale, current_organizer.locale)
+    own = Event.submitted_by_organizer_id == current_organizer.id
 
+    total = (await db.scalar(select(func.count(Event.id)).where(own))) or 0
     stmt = (
         select_events_with_classification()
-        .where(Event.submitted_by_organizer_id == current_organizer.id)
-        .order_by(Event.created_at.desc())
+        .where(own)
+        # id breaks created_at ties so a row never repeats or vanishes
+        # between pages.
+        .order_by(Event.created_at.desc(), Event.id.desc())
         .limit(limit)
         .offset(offset)
     )
     events = (await db.scalars(stmt)).all()
     return {
         "events": [_serialize_own_event(e, effective_locale) for e in events],
+        "total": total,
         "limit": limit,
         "offset": offset,
+        "has_more": offset + len(events) < total,
     }
 
 
