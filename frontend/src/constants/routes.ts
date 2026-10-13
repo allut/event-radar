@@ -25,6 +25,7 @@ export const ROUTES = {
   organizerLogin: '/organizer/login',
   organizerVerify: '/organizer/verify',
   organizerClaimVerify: '/organizer/claims/verify',
+  organizerClaims: '/organizer/claims',
   organizerDashboard: '/organizer/dashboard',
   organizerClaimPending: (id: number | string) => `/organizer/claims/${id}/pending`,
   organizerClaimPendingPattern: '/organizer/claims/:id/pending',
@@ -110,6 +111,7 @@ export const SIGNED_OUT_NAV_ITEMS: readonly NavItem[] = [
 // Settings/Contact live in ORGANIZER_ACCOUNT_MENU_ITEMS.
 export const ORGANIZER_NAV_ITEMS: readonly NavItem[] = [
   { route: ROUTES.organizerDashboard, labelKey: 'organizer_dashboard_title' },
+  { route: ROUTES.organizerClaims, labelKey: 'dashboard_claims_title' },
 ];
 
 export const ORGANIZER_ACCOUNT_MENU_ITEMS: readonly NavItem[] = [

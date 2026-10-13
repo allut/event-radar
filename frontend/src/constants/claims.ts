@@ -124,6 +124,16 @@ export const CLAIM_EDIT_LOCALES = [LOCALE_ET, LOCALE_EN, LOCALE_RU] as const;
 export const CLAIM_SEARCH_MIN_CHARS = 2;
 export const CLAIM_SEARCH_DEBOUNCE_MS = EXPLORE_SEARCH_DEBOUNCE_MS;
 
+// ─── Organizer: Your claims (/organizer/claims, spec #551) ─────────────────
+// Mirrors backend ORGANIZER_OWN_CLAIMS_PAGE_SIZE. Changing it moves every page
+// boundary and breaks shared ?page=N links.
+export const ORGANIZER_OWN_CLAIMS_PAGE_SIZE = 20;
+// The dashboard summary line only reads `total` and `pending_count`, so it
+// asks GET /organizer/claims for the smallest page it allows.
+export const ORGANIZER_CLAIMS_SUMMARY_LIMIT = 1;
+/** Segment nested under QUERY_KEYS.organizerClaims for the dashboard summary query. */
+export const ORGANIZER_CLAIMS_SUMMARY_KEY = 'summary';
+
 // ─── Organizer: Publisher-claim event list (mirrors backend's
 // CLAIM_EVENTS_PAGE_SIZE, issue #436) ──────────────────────────────────────
 export const CLAIM_EVENTS_PAGE_SIZE = 20;

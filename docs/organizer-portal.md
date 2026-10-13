@@ -166,6 +166,8 @@ An organizer can claim an event Event Radar ingested from Fienta, KUMU, Estonia 
 ### Claim Surfaces
 
 - **The organizer dashboard's `ClaimEventPicker`** searches events and suggests ones whose domain matches the organizer's email.
+- **`/organizer/claims` (`OrganizerClaims/`) is Your claims, paged at `ORGANIZER_OWN_CLAIMS_PAGE_SIZE` (20) with the numbered pager.** `GET /organizer/claims` returns `total`, `limit`, `offset` and `has_more` on every page, sorted `created_at desc, id desc`. It has its own top-bar nav item.
+- **The dashboard keeps only a summary line, "You have N claims (M pending) → View".** It reads `total` and `pending_count` from a one-row `GET /organizer/claims` request, and hides when the organizer has no claims. A new pending claim still shows where the organizer lands after signing in.
 - **`/organizer/claims/:id/pending` (`ClaimPending/`)** shows the proof instructions and the recheck button.
 - **`/organizer/claims/:id/edit` and `/organizer/claims/:id/events`** (`ClaimEventEdit/`, `ClaimEvents/`) are the claim-editing surface over `organizer_claim_edits.py`. Edits write `Event.pinned_fields` and count against `claim_edit_attempts`.
 - **`/organizer/claims/verify` (`OrganizerClaimVerify/`) lands `POST /organizer/claims/request-link`'s sign-in link.** The token carries the `event_id`, so the claim intent survives a device switch.

@@ -30,6 +30,12 @@ const sampleEvents = {
   has_more: false,
 };
 
+/** GET /organizer/claims?limit=1 as the dashboard's summary line reads it:
+ * only `total` and `pending_count` matter. */
+function claimsSummary(total: number, pending: number) {
+  return { claims: [], total, pending_count: pending, limit: 1, offset: 0, has_more: total > 1 };
+}
+
 // OrganizerDashboard renders OrganizerProfileNudge, which fires its own
 // organizerApi.get('/organizer/profile') call — route by path instead of
 // queueing positional mockResolvedValueOnce values, since the two calls can
@@ -44,7 +50,7 @@ function mockOrganizerGet(
   eventsResponse: unknown,
   profileResponse: unknown = { name: 'Test Organizer' },
   claimSuggestionsResponse: unknown = { events: [] },
-  ownClaimsResponse: unknown = { claims: [] },
+  ownClaimsResponse: unknown = claimsSummary(0, 0),
 ) {
   mockGet.mockImplementation((path: string) => {
     if (path.includes('/organizer/profile')) return Promise.resolve(profileResponse);
@@ -80,7 +86,7 @@ function mockPagedEvents(total: number, hold?: (offset: number) => Promise<void>
   mockGet.mockImplementation(async (path: string) => {
     if (path.includes('/organizer/profile')) return { name: 'Test Organizer' };
     if (path.includes('/organizer/claims/suggestions')) return { events: [] };
-    if (path.startsWith('/organizer/claims?')) return { claims: [] };
+    if (path.startsWith('/organizer/claims?')) return claimsSummary(0, 0);
     const offset = Number(new URL(path, 'http://x').searchParams.get('offset'));
     await hold?.(offset);
     return ownEventsPage(path, total);
@@ -104,13 +110,12 @@ describe('OrganizerDashboard', () => {
     expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('/organizer/events?limit='));
   });
 
-  it('sends locale= on the events and own-claims requests (#454)', async () => {
-    mockOrganizerGet(sampleEvents, undefined, undefined, { claims: [] });
+  it('sends locale= on the events request (#454)', async () => {
+    mockOrganizerGet(sampleEvents);
     renderWithProviders(<OrganizerDashboard />);
     await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
 
     expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/\/organizer\/events\?.*[?&]locale=en/));
-    expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/^\/organizer\/claims\?locale=en/));
   });
 
   it('shows an empty state when there are no events', async () => {
@@ -148,56 +153,33 @@ describe('OrganizerDashboard', () => {
     confirmSpy.mockRestore();
   });
 
-  it('shows a "Your claims" section with status and shortcuts, hidden when there are none', async () => {
-    mockOrganizerGet(sampleEvents, undefined, undefined, {
-      claims: [
-        {
-          id: 1,
-          kind: 'publisher',
-          status: 'approved',
-          verification_mechanism: 'fienta_token',
-          dormant: false,
-          publisher_name: 'Jazzkaar',
-          event_id: 42,
-          event_title: 'Jazzkaar Festival Night',
-          created_at: '2026-08-01T00:00:00Z',
-          resolved_at: '2026-08-02T00:00:00Z',
-        },
-        {
-          id: 2,
-          kind: 'series',
-          status: 'declined',
-          verification_mechanism: null,
-          dormant: false,
-          publisher_name: null,
-          event_id: null,
-          event_title: null,
-          created_at: '2026-08-01T00:00:00Z',
-          resolved_at: '2026-08-03T00:00:00Z',
-        },
-      ],
-    });
+  it('summarises the organizer\'s claims with a link to Your claims', async () => {
+    mockOrganizerGet(sampleEvents, undefined, undefined, claimsSummary(37, 3));
     renderWithProviders(<OrganizerDashboard />);
 
-    await waitFor(() => expect(screen.getByText('Your claims')).toBeInTheDocument());
-    expect(screen.getByText('Jazzkaar Festival Night')).toBeInTheDocument();
-    expect(screen.getByText('Granted')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Edit event' })).toHaveAttribute(
-      'href',
-      expect.stringContaining('/organizer/claims/1/edit'),
-    );
-    expect(screen.getByText('Declined')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'View status' })[0]).toHaveAttribute(
-      'href',
-      expect.stringContaining('/organizer/claims/2/pending'),
-    );
+    const summary = await screen.findByRole('region', { name: 'Your claims' });
+    expect(summary).toHaveTextContent('You have 37 claims (3 pending)');
+    expect(within(summary).getByRole('link', { name: /View/ })).toHaveAttribute('href', '/organizer/claims');
+    // Only the counts are needed: one row, and no claim rows on the dashboard.
+    expect(mockGet).toHaveBeenCalledWith('/organizer/claims?limit=1');
+    expect(screen.queryByRole('list', { name: 'Your claims' })).not.toBeInTheDocument();
   });
 
-  it('hides the "Your claims" section when the organizer has no claims', async () => {
-    mockOrganizerGet(sampleEvents);
+  it('leaves the pending part out when no claim is pending, and uses the singular for one', async () => {
+    mockOrganizerGet(sampleEvents, undefined, undefined, claimsSummary(1, 0));
+    renderWithProviders(<OrganizerDashboard />);
+
+    const summary = await screen.findByRole('region', { name: 'Your claims' });
+    expect(summary).toHaveTextContent('You have 1 claim');
+    expect(summary).not.toHaveTextContent('pending');
+  });
+
+  it('hides the claims summary when the organizer has no claims', async () => {
+    mockOrganizerGet(sampleEvents, undefined, undefined, claimsSummary(0, 0));
     renderWithProviders(<OrganizerDashboard />);
     await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
-    expect(screen.queryByText('Your claims')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Your claims' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/You have/)).not.toBeInTheDocument();
   });
 
   describe('Your events paging', () => {

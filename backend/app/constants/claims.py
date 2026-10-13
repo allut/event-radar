@@ -192,7 +192,12 @@ CLAIM_EVENTS_MAX_PAGE_SIZE: int = 100
 # (generate_organizer_claim_link_token) but carry different claims.
 ORGANIZER_CLAIM_VERIFY_PATH = "/organizer/claims/verify"
 
-ORGANIZER_OWN_CLAIMS_LIST_LIMIT = 200
+# The organizer's own-claims list (routers/organizer_claims.py GET
+# /organizer/claims, the Your claims page) pages at this size (spec #551).
+# Changing it moves every page boundary and breaks shared ?page=N links.
+ORGANIZER_OWN_CLAIMS_PAGE_SIZE: int = 20
+ORGANIZER_OWN_CLAIMS_MAX_PAGE_SIZE: int = 100
+
 # Claim-edit `unpin` list bounds (pin_key() shapes are short; OWASP audit L-6).
 CLAIM_UNPIN_MAX_ITEMS = 32
 CLAIM_UNPIN_KEY_MAX_LEN = 64

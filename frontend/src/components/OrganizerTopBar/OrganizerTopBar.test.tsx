@@ -20,13 +20,14 @@ beforeEach(() => {
 });
 
 describe('OrganizerTopBar', () => {
-  it('links the brand mark home and shows only "Your events" in the nav', () => {
+  it('links the brand mark home and shows "Your events" and "Your claims" in the nav', () => {
     renderWithProviders(<OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
 
     expect(screen.getByRole('link', { name: 'Event Radar' })).toHaveAttribute('href', '/');
     const links = within(screen.getByRole('navigation')).getAllByRole('link');
-    expect(links.map((a) => a.textContent)).toEqual(['Your events']);
+    expect(links.map((a) => a.textContent)).toEqual(['Your events', 'Your claims']);
     expect(links[0]).toHaveAttribute('href', '/organizer/dashboard');
+    expect(links[1]).toHaveAttribute('href', '/organizer/claims');
   });
 
   it('has the gold New event CTA, no search and no pulse chip, and never fetches counts', async () => {
@@ -70,6 +71,7 @@ describe('OrganizerTopBar', () => {
 
     const hrefsFor = (name: string) => screen.getAllByRole('link', { name }).map((el) => el.getAttribute('href'));
     expect(hrefsFor('Your events')).toContain('/organizer/dashboard');
+    expect(hrefsFor('Your claims')).toContain('/organizer/claims');
     expect(hrefsFor('Settings')).toContain('/organizer/settings');
     expect(hrefsFor('Contact')).toContain('/organizer/contact');
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();

@@ -91,6 +91,8 @@ export default function ClaimEventPicker({ locale }: ClaimEventPickerProps) {
     onSuccess: (claim) => {
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerClaimSuggestions] });
       queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerEvents] });
+      // Your claims and the dashboard's claims summary count the new claim.
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerClaims] });
       // Not invalidating organizerClaimSearch: navigating away unmounts this
       // popover on the same tick, so a refetch here would be wasted.
       navigate(ROUTES.organizerClaimPending(claim.id));

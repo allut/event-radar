@@ -20,6 +20,7 @@ from app.constants.claims import (
     ERROR_CLAIM_NOT_FOUND,
     ERROR_CLAIM_OWN_SUBMISSION,
     ERROR_DAILY_CLAIM_LIMIT,
+    ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
 )
 from app.constants.events import ERROR_EVENT_NOT_FOUND
 
@@ -486,8 +487,124 @@ class TestGetClaim:
         assert exc_info.value.status_code == http.HTTPStatus.NOT_FOUND
 
 
+def _mock_own_claims_page(
+    mock_db, claims: list, total: int | None = None, pending: int | None = 0
+) -> None:
+    """One own-claims page: `claims` from the page query, and `(total,
+    pending)` from the counts query (`total` defaults to the page's length)."""
+    mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=claims))
+    counts = MagicMock()
+    counts.one.return_value = (len(claims) if total is None else total, pending)
+    mock_db.execute.return_value = counts
+
+
 class TestListOwnClaims:
-    """GET /organizer/claims (#446) — the caller's own claims, newest first."""
+    """GET /organizer/claims (#446) — the caller's own claims, newest first,
+    paged for the Your claims page (spec #551)."""
+
+    @staticmethod
+    async def _list_page(mock_db, make_request, organizer, offset, claims, total, pending=0):
+        from app.routers.organizer_claims import list_own_claims
+
+        _mock_own_claims_page(mock_db, claims, total, pending)
+        with patch(
+            "app.routers.organizer_claims.bulk_resolve_publisher_events",
+            new_callable=AsyncMock,
+            return_value={},
+        ), patch(
+            "app.routers.organizer_claims.bulk_resolve_series_events",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            return await list_own_claims(
+                make_request(method="GET", path="/organizer/claims"),
+                locale=None,
+                limit=2,
+                offset=offset,
+                current_organizer=organizer,
+                db=mock_db,
+            )
+
+    @pytest.mark.asyncio
+    async def test_returns_paging_envelope_on_every_page(
+        self, mock_db, make_request, make_organizer
+    ):
+        """The numbered pager needs total/limit/offset/has_more on every
+        request, not only the first page."""
+        organizer = make_organizer(organizer_id=5)
+        rows = [_fake_claim(id=n, publisher=None) for n in (1, 2)]
+
+        first = await self._list_page(mock_db, make_request, organizer, 0, rows, 5)
+        middle = await self._list_page(mock_db, make_request, organizer, 2, rows, 5)
+        last = await self._list_page(mock_db, make_request, organizer, 4, rows[:1], 5)
+
+        keys = ("total", "limit", "offset", "has_more")
+        assert {k: first[k] for k in keys} == {
+            "total": 5, "limit": 2, "offset": 0, "has_more": True,
+        }
+        assert {k: middle[k] for k in keys} == {
+            "total": 5, "limit": 2, "offset": 2, "has_more": True,
+        }
+        assert {k: last[k] for k in keys} == {
+            "total": 5, "limit": 2, "offset": 4, "has_more": False,
+        }
+        assert [c["id"] for c in first["claims"]] == [1, 2]
+
+    @pytest.mark.asyncio
+    async def test_reports_the_pending_count_on_every_page(
+        self, mock_db, make_request, make_organizer
+    ):
+        """The dashboard's "You have N claims (M pending)" summary reads
+        `total` and `pending_count` — counted over every claim, not the page."""
+        organizer = make_organizer(organizer_id=5)
+        rows = [_fake_claim(id=1, status=CLAIM_STATUS_APPROVED, publisher=None)]
+
+        result = await self._list_page(mock_db, make_request, organizer, 2, rows, 37, pending=3)
+
+        assert (result["total"], result["pending_count"]) == (37, 3)
+        counts_stmt = mock_db.execute.call_args.args[0]
+        sql = str(counts_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "claims.organizer_id = 5" in sql
+        assert f"claims.status = '{CLAIM_STATUS_PENDING}'" in sql
+
+    @pytest.mark.asyncio
+    async def test_no_claims_has_zero_counts(self, mock_db, make_request, make_organizer):
+        organizer = make_organizer(organizer_id=5)
+        result = await self._list_page(mock_db, make_request, organizer, 0, [], None, None)
+        assert (result["total"], result["pending_count"], result["has_more"], result["claims"]) == (
+            0, 0, False, [],
+        )
+
+    @pytest.mark.asyncio
+    async def test_pages_share_a_created_at_then_id_order(
+        self, mock_db, make_request, make_organizer
+    ):
+        """Tie-breaker stability: two claims made in the same instant never
+        swap between pages, so every page orders by created_at desc then id
+        desc, and only LIMIT/OFFSET differ between pages."""
+        organizer = make_organizer(organizer_id=5)
+        sqls = []
+        for offset in (0, 2):
+            await self._list_page(mock_db, make_request, organizer, offset, [], 3)
+            stmt = mock_db.scalars.call_args.args[0]
+            sqls.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
+
+        for sql in sqls:
+            assert "ORDER BY claims.created_at DESC, claims.id DESC" in sql
+            assert "claims.organizer_id = 5" in sql
+        assert "LIMIT 2 OFFSET 0" in sqls[0]
+        assert "LIMIT 2 OFFSET 2" in sqls[1]
+        assert sqls[0].replace("OFFSET 0", "OFFSET 2") == sqls[1]
+
+    def test_page_size_defaults_to_the_own_claims_constant(self):
+        """Your claims pages at 20 (spec #551), replacing the old 200-row cap."""
+        from app.routers.organizer_claims import router
+
+        route = next(r for r in router.routes if getattr(r, "name", "") == "list_own_claims")
+        params = {p.name: p for p in route.dependant.query_params}
+        assert ORGANIZER_OWN_CLAIMS_PAGE_SIZE == 20
+        assert params["limit"].field_info.default == ORGANIZER_OWN_CLAIMS_PAGE_SIZE
+        assert params["offset"].field_info.default == 0
 
     @pytest.mark.asyncio
     async def test_bulk_resolves_publisher_event_and_name(
@@ -500,9 +617,7 @@ class TestListOwnClaims:
         claim.publisher = MagicMock(name="Jazzkaar")
         claim.publisher.name = "Jazzkaar"
 
-        scalars_result = MagicMock()
-        scalars_result.all.return_value = [claim]
-        mock_db.execute.return_value.scalars.return_value = scalars_result
+        _mock_own_claims_page(mock_db, [claim])
 
         event = MagicMock()
         event.id = 42
@@ -519,6 +634,8 @@ class TestListOwnClaims:
                 current_organizer=organizer,
                 db=mock_db,
                 locale=None,
+                limit=ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
+                offset=0,
             )
 
         assert result["claims"] == [
@@ -550,9 +667,7 @@ class TestListOwnClaims:
         claim = _fake_claim(status=CLAIM_STATUS_REVOKED)
         claim.publisher = None
 
-        scalars_result = MagicMock()
-        scalars_result.all.return_value = [claim]
-        mock_db.execute.return_value.scalars.return_value = scalars_result
+        _mock_own_claims_page(mock_db, [claim])
 
         with patch(
             "app.routers.organizer_claims.bulk_resolve_publisher_events",
@@ -564,6 +679,8 @@ class TestListOwnClaims:
                 current_organizer=organizer,
                 db=mock_db,
                 locale=None,
+                limit=ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
+                offset=0,
             )
 
         assert result["claims"][0]["status"] == CLAIM_STATUS_DECLINED
@@ -578,9 +695,7 @@ class TestListOwnClaims:
         claim = _fake_claim(kind=CLAIM_KIND_SERIES, publisher_id=None, event_series_key="k")
         claim.publisher = None
 
-        scalars_result = MagicMock()
-        scalars_result.all.return_value = [claim]
-        mock_db.execute.return_value.scalars.return_value = scalars_result
+        _mock_own_claims_page(mock_db, [claim])
 
         event = MagicMock()
         event.id = 7
@@ -601,6 +716,8 @@ class TestListOwnClaims:
                 current_organizer=organizer,
                 db=mock_db,
                 locale=None,
+                limit=ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
+                offset=0,
             )
 
         bulk_series.assert_awaited_once_with(mock_db, {"k"})
@@ -621,9 +738,7 @@ class TestListOwnClaims:
         claim = _fake_claim(status=CLAIM_STATUS_APPROVED)
         claim.publisher = None
 
-        scalars_result = MagicMock()
-        scalars_result.all.return_value = [claim]
-        mock_db.execute.return_value.scalars.return_value = scalars_result
+        _mock_own_claims_page(mock_db, [claim])
 
         event = MagicMock()
         event.id = 42
@@ -638,6 +753,8 @@ class TestListOwnClaims:
             result = await list_own_claims(
                 make_request(method="GET", path="/organizer/claims"),
                 locale="ru",
+                limit=ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
+                offset=0,
                 current_organizer=organizer,
                 db=mock_db,
             )

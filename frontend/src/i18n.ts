@@ -42,3 +42,14 @@ export function ti(key: string, locale: string, vars: Record<string, string>): s
   }
   return str;
 }
+
+/** Plural-aware ti(): picks `{key}_{category}` by the locale's plural rule
+ * for `count` (Intl.PluralRules). Each locale's catalogue holds every
+ * category its rule can return: `one`/`other` for en and et, plus
+ * `few`/`many` for ru. `vars` fills the placeholders, so pass the
+ * locale-formatted count in it. */
+export function tn(key: string, locale: string, count: number, vars: Record<string, string>): string {
+  const loc = locale in TRANSLATIONS ? locale : LOCALE_EN;
+  const category = new Intl.PluralRules(loc).select(count);
+  return ti(`${key}_${category}`, loc, vars);
+}

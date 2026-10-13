@@ -51,7 +51,6 @@ from app.constants.auth import (
     ORGANIZER_SESSION_TTL_DAYS,
 )
 from app.constants.claims import (
-    ORGANIZER_OWN_CLAIMS_LIST_LIMIT,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
     CLAIM_EVENTS_MAX_PAGE_SIZE,
     CLAIM_EVENTS_PAGE_SIZE,
@@ -70,6 +69,8 @@ from app.constants.claims import (
     ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
     FREE_EMAIL_PROVIDER_DOMAINS,
     ORGANIZER_CLAIM_VERIFY_PATH,
+    ORGANIZER_OWN_CLAIMS_MAX_PAGE_SIZE,
+    ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
 )
 from app.constants.core import SECONDS_PER_DAY, TALLINN_TZ
 from app.constants.events import EVENT_SEARCH_TEXT_SQL, ERROR_EVENT_NOT_FOUND
@@ -674,29 +675,47 @@ def _serialize_own_claim_summary(
 async def list_own_claims(
     request: Request,
     locale: str | None = Query(None),
+    limit: int = Query(
+        ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
+        ge=PAGINATION_MIN_LIMIT,
+        le=ORGANIZER_OWN_CLAIMS_MAX_PAGE_SIZE,
+    ),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """#446's "Your claims" dashboard section: every claim this organizer has
-    ever made (any status), newest first — the daily-cap-bounded per-organizer
-    row count (ORGANIZER_DAILY_CLAIM_CAP) keeps this small enough that a
-    bulk-then-scan mix (Publisher claims bulk-resolved in two fixed queries;
-    Series claims resolved by one shared bounded scan,
-    bulk_resolve_series_events) doesn't need admin_list_claims'
-    series-skips-to-null tradeoff."""
-    claims = (
-        (
-            await db.execute(
-                select(Claim)
-                .options(selectinload(Claim.publisher))
-                .where(Claim.organizer_id == current_organizer.id)
-                .order_by(Claim.created_at.desc())
-                .limit(ORGANIZER_OWN_CLAIMS_LIST_LIMIT)
-            )
+    """The Your claims page (#446, paged by spec #551): every claim this
+    organizer has ever made (any status), newest first, with the paging
+    envelope (total/limit/offset/has_more) on every page. `pending_count`
+    backs the dashboard's "You have N claims (M pending)" summary.
+
+    Per page, Publisher claims bulk-resolve in two fixed queries and Series
+    claims share one bounded scan (bulk_resolve_series_events), so the
+    query count stays fixed whatever the page holds."""
+    own = Claim.organizer_id == current_organizer.id
+    total, pending_count = (
+        await db.execute(
+            select(
+                func.count(Claim.id),
+                func.count(Claim.id).filter(Claim.status == CLAIM_STATUS_PENDING),
+            ).where(own)
         )
-        .scalars()
-        .all()
-    )
+    ).one()
+    total = total or 0
+    claims = (
+        await db.scalars(
+            select(Claim)
+            .options(selectinload(Claim.publisher))
+            .where(own)
+            # id breaks created_at ties so a row never repeats or vanishes
+            # between pages.
+            .order_by(Claim.created_at.desc(), Claim.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
 
     effective_locale = resolve_locale_param(locale, current_organizer.locale)
     publisher_ids = {c.publisher_id for c in claims if c.publisher_id is not None}
@@ -723,7 +742,14 @@ async def list_own_claims(
                 else None
             )
         results.append(_serialize_own_claim_summary(claim, event, effective_locale))
-    return {"claims": results}
+    return {
+        "claims": results,
+        "total": total,
+        "pending_count": pending_count or 0,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(claims) < total,
+    }
 
 
 @router.get("/for-event/{event_id}")
