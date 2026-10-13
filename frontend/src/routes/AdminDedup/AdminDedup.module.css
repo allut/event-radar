@@ -57,10 +57,7 @@
 }
 
 /* Admin placement: a hairline between the groups and the pager. */
-.pager {
-  padding-top: var(--space-3);
-  border-top: var(--border-w-hair) solid var(--border);
-}
+.pager { composes: queuePager from '../../components/shared/AdminQueue.module.css'; }
 
 /* Desktop-only screen — see components/shared/DesktopGate.module.css. */
 .desktopGate { composes: gate from '../../components/shared/DesktopGate.module.css'; }

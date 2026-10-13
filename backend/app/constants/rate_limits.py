@@ -33,10 +33,10 @@ RATE_LIMIT_EVENTS_DETAIL = "120/minute"
 # (a per-route @limiter.limit would let an attacker cycling all admin routes
 # attempt far more than this per minute). Pair with a strong ADMIN_PASSWORD.
 RATE_LIMIT_ADMIN = "10/minute"
-# Shared-limit scope for the admin queue list GETs (spec #551), which run at
-# RATE_LIMIT_BROWSE instead: a numbered pager plus refetch-after-action costs
-# several reads per admin action, more than the 10/minute action bucket
-# allows. Still ONE bucket per client across every admin read, for the same
+# Shared-limit scope for the admin queue list GETs and GET /admin/counts
+# (spec #551), which run at RATE_LIMIT_BROWSE instead: a numbered pager plus
+# refetch-after-action costs several reads per admin action, more than the
+# 10/minute action bucket allows. Still ONE bucket per client across every admin read, for the same
 # route-cycling reason as RATE_LIMIT_ADMIN's scope.
 RATE_LIMIT_SCOPE_ADMIN_READ = "admin_read"
 

@@ -65,6 +65,13 @@
   margin-bottom: var(--space-4);
 }
 
+/* The queue's <Pager> in AdminQueueSplitView's listFooter: a hairline
+   between the list's scroll box and the pager (spec #551). */
+.queuePager {
+  padding-top: var(--space-3);
+  border-top: var(--border-w-hair) solid var(--border);
+}
+
 .queueLoadMore {
   composes: btnOutline from './Button.module.css';
   display: block;

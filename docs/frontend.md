@@ -44,6 +44,8 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **It loads behind one `React.lazy` chunk,** so a signed-out visit to a public route never downloads it.
 - **The admin console is English-only and skips the shared/i18n workflow.** Its strings are literals, such as `utils.ts::relativeTimeFromNow()`.
 - **`<Pager>` is the exception: admin renders it from shared/i18n with `LOCALE_EN`.** One component serves every list, so its strings live in the catalogue rather than in a second English copy.
+- **Resolving queues page through `hooks/useAdminQueuePage.ts` and `AdminQueueSplitView`.** Each row-removing action tags its row in place and refetches the current page once, so rows pulled up from the next page append at the bottom and paging on never skips a row.
+- **A queue page holds while it has tagged rows**, so clearing a last page leaves the no-items label, not a clamp. A page change selects and focuses the first row, marks it `aria-current="true"`, resets the list scroll and clears the tags. The pager sits in the split view's `listFooter`, outside the scroll area.
 - **`AdminShell/` is the nav-rail chrome every signed-in admin screen renders inside.** `AdminLogin` renders outside it. The console replaces curl calls to `/admin/*`; see [backend-ops.md](backend-ops.md)'s Admin Endpoints section.
 
 ## Locale-Prefixed Routing

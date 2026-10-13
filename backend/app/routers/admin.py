@@ -349,7 +349,7 @@ def _validated_resolution_note(body: _ResolutionBody) -> str:
 
 
 @router.get("/submissions", dependencies=[Depends(get_current_admin)])
-@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
 async def admin_list_submissions(
     request: Request,
     limit: int = Query(
@@ -371,17 +371,18 @@ async def admin_list_submissions(
     """
     async with AsyncSessionLocal() as db:
         queue_filter = (Event.needs_review == true(), Event.status != EVENT_STATUS_CANCELLED)
-        # total only on the first page — see browse.py's _browse_sql_path.
-        total: int | None = None
-        if offset == 0:
-            total = (
-                await db.scalar(select(func.count(Event.id)).where(*queue_filter))
-            ) or 0
+        # Exact total on every page (spec #551): the numbered pager derives
+        # its last page and past-end clamp from it.
+        total = (
+            await db.scalar(select(func.count(Event.id)).where(*queue_filter))
+        ) or 0
 
+        # id breaks created_at ties, so offset paging never repeats or skips
+        # rows that share a timestamp.
         stmt = (
             select_events_with_classification()
             .where(*queue_filter)
-            .order_by(Event.created_at.desc())
+            .order_by(Event.created_at.desc(), Event.id.desc())
             .limit(limit + 1)
             .offset(offset)
         )
@@ -1473,7 +1474,7 @@ async def admin_pipeline_run(
 
 
 @router.get("/counts", dependencies=[Depends(get_current_admin)])
-@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
 async def admin_counts(request: Request) -> dict:
     """Open-reports + pending-submissions + pending-claims counts for the
     admin console landing screen (issue #154, extended #420). Mirrors the
