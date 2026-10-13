@@ -1187,70 +1187,95 @@ class TestListClaimEvents:
 
         assert result["events"][0]["title"] == "Джазовая ночь"
 
-    @pytest.mark.asyncio
-    async def test_has_more_true_across_page_boundary(
-        self, mock_db, make_event, make_request, make_organizer
-    ):
+    @staticmethod
+    async def _list_page(mock_db, make_request, organizer, offset, rows, total):
+        """One Claim events page of 2: `rows` from the page query, `total`
+        from the COUNT, for an approved Publisher claim on publisher 99."""
         from app.routers.organizer_claims import list_claim_events
 
-        organizer = make_organizer(organizer_id=5)
         claim = _fake_claim(status=CLAIM_STATUS_APPROVED, publisher_id=99)
-        # limit+1 sentinel row past the requested page of 2.
-        events = [make_event(event_id=1), make_event(event_id=2), make_event(event_id=3)]
-
-        scalars_result = MagicMock()
-        scalars_result.all.return_value = events
-        mock_db.scalars.return_value = scalars_result
-        mock_db.scalar.return_value = 5
-
+        mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=rows))
+        mock_db.scalar = AsyncMock(return_value=total)
         with patch(
             "app.routers.organizer_claims.own_claim_or_404",
             new_callable=AsyncMock,
             return_value=claim,
         ):
-            result = await list_claim_events(
+            return await list_claim_events(
                 1,
                 make_request(method="GET", path="/organizer/claims/1/events"),
                 limit=2,
-                offset=0,
+                offset=offset,
                 current_organizer=organizer,
                 db=mock_db,
                 locale=None,
             )
+
+    @pytest.mark.asyncio
+    async def test_has_more_true_across_page_boundary(
+        self, mock_db, make_event, make_request, make_organizer
+    ):
+        organizer = make_organizer(organizer_id=5)
+        rows = [make_event(event_id=1), make_event(event_id=2)]
+
+        result = await self._list_page(mock_db, make_request, organizer, 0, rows, 5)
 
         assert result["has_more"] is True
         assert [e["id"] for e in result["events"]] == [1, 2]
 
     @pytest.mark.asyncio
-    async def test_total_omitted_past_first_page(
+    async def test_returns_paging_envelope_on_every_page(
         self, mock_db, make_event, make_request, make_organizer
     ):
-        from app.routers.organizer_claims import list_claim_events
-
+        """Spec #551: the numbered pager needs total/limit/offset/has_more on
+        every request, not only the first page."""
         organizer = make_organizer(organizer_id=5)
-        claim = _fake_claim(status=CLAIM_STATUS_APPROVED, publisher_id=99)
+        rows = [make_event(event_id=1), make_event(event_id=2)]
 
-        scalars_result = MagicMock()
-        scalars_result.all.return_value = [make_event(event_id=3)]
-        mock_db.scalars.return_value = scalars_result
+        first = await self._list_page(mock_db, make_request, organizer, 0, rows, 5)
+        middle = await self._list_page(mock_db, make_request, organizer, 2, rows, 5)
+        last = await self._list_page(mock_db, make_request, organizer, 4, rows[:1], 5)
 
-        with patch(
-            "app.routers.organizer_claims.own_claim_or_404",
-            new_callable=AsyncMock,
-            return_value=claim,
-        ):
-            result = await list_claim_events(
-                1,
-                make_request(method="GET", path="/organizer/claims/1/events"),
-                limit=2,
-                offset=2,
-                current_organizer=organizer,
-                db=mock_db,
-                locale=None,
-            )
+        keys = ("total", "limit", "offset", "has_more")
+        assert {k: first[k] for k in keys} == {
+            "total": 5, "limit": 2, "offset": 0, "has_more": True,
+        }
+        assert {k: middle[k] for k in keys} == {
+            "total": 5, "limit": 2, "offset": 2, "has_more": True,
+        }
+        assert {k: last[k] for k in keys} == {
+            "total": 5, "limit": 2, "offset": 4, "has_more": False,
+        }
 
-        assert result["total"] is None
-        mock_db.scalar.assert_not_called()
+    @pytest.mark.asyncio
+    async def test_empty_claim_has_zero_total(
+        self, mock_db, make_request, make_organizer
+    ):
+        organizer = make_organizer(organizer_id=5)
+        result = await self._list_page(mock_db, make_request, organizer, 0, [], None)
+        assert (result["total"], result["has_more"], result["events"]) == (0, False, [])
+
+    @pytest.mark.asyncio
+    async def test_pages_share_a_starts_at_then_id_order(
+        self, mock_db, make_request, make_organizer
+    ):
+        """Tie-breaker stability across pages: two events starting at the
+        same instant must never swap between page 1 and page 2, so every
+        page query orders by starts_at desc then id desc, and only
+        LIMIT/OFFSET differ between pages."""
+        organizer = make_organizer(organizer_id=5)
+        sqls = []
+        for offset in (0, 2):
+            await self._list_page(mock_db, make_request, organizer, offset, [], 3)
+            stmt = mock_db.scalars.call_args.args[0]
+            sqls.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
+
+        for sql in sqls:
+            assert "ORDER BY events.starts_at DESC, events.id DESC" in sql
+            assert "event_sources.publisher_id = 99" in sql
+        assert "LIMIT 2 OFFSET 0" in sqls[0]
+        assert "LIMIT 2 OFFSET 2" in sqls[1]
+        assert sqls[0].replace("OFFSET 0", "OFFSET 2") == sqls[1]
 
     @pytest.mark.asyncio
     async def test_series_claim_rejected_404(

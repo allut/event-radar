@@ -134,7 +134,6 @@
     "claim_events_eyebrow": "Publisher claim",
     "claim_events_title": "Events this claim covers",
     "claim_events_intro": "Every event Event Radar currently links to this publisher. Open one to edit its pinned fields.",
-    "claim_events_summary": "{shown} of {total} events shown",
     "claim_events_empty_title": "No events yet",
     "claim_events_empty_msg": "This publisher has no matching events on Event Radar right now.",
     "claim_events_load_error": "Couldn't load this claim's events.",

@@ -837,39 +837,31 @@ async def list_claim_events(
     """Every event this approved Publisher claim currently covers (#436) —
     not just the one representative_event_for_claim() picks for the
     single-event editor. Bulk-loaded off one EventSource.publisher_id match
-    (fixed query count regardless of row count), paginated with the same
-    limit/offset/has_more/total shape as the admin queues (routers/admin.py),
-    sized down for organizer-portal use via CLAIM_EVENTS_PAGE_SIZE."""
+    (fixed query count regardless of row count), with the paging envelope
+    (total/limit/offset/has_more) on every page for the numbered pager
+    (spec #551), sized for organizer-portal use via CLAIM_EVENTS_PAGE_SIZE."""
     claim = await _own_publisher_claim_or_404(db, claim_id, current_organizer.id)
     effective_locale = resolve_locale_param(locale, current_organizer.locale)
 
-    matching_event_ids = publisher_claim_event_ids(claim.publisher_id)
+    covered = Event.id.in_(publisher_claim_event_ids(claim.publisher_id))
 
-    # total only on the first page — see admin.py's admin_list_submissions.
-    total: int | None = None
-    if offset == 0:
-        total = (
-            await db.scalar(
-                select(func.count(Event.id)).where(Event.id.in_(matching_event_ids))
-            )
-        ) or 0
-
+    total = (await db.scalar(select(func.count(Event.id)).where(covered))) or 0
     stmt = (
         select_events_with_classification()
-        .where(Event.id.in_(matching_event_ids))
-        .order_by(Event.starts_at.desc())
-        .limit(limit + 1)
+        .where(covered)
+        # id breaks starts_at ties so a row never repeats or vanishes
+        # between pages.
+        .order_by(Event.starts_at.desc(), Event.id.desc())
+        .limit(limit)
         .offset(offset)
     )
-    events = list((await db.scalars(stmt)).all())
-    has_more = len(events) > limit
-    events = events[:limit]
+    events = (await db.scalars(stmt)).all()
 
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
-        "has_more": has_more,
+        "has_more": offset + len(events) < total,
         "events": [
             {**serialize_event(e, locale=effective_locale), "status": e.status}
             for e in events

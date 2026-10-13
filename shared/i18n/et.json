@@ -134,7 +134,6 @@
     "claim_events_eyebrow": "Väljaandja nõue",
     "claim_events_title": "Selle nõudega seotud üritused",
     "claim_events_intro": "Kõik üritused, mida Event Radar praegu selle väljaandjaga seob. Ava üks, et muuta selle kinnitatud välju.",
-    "claim_events_summary": "Näidatud {shown} / {total} üritust",
     "claim_events_empty_title": "Üritusi veel pole",
     "claim_events_empty_msg": "Sellel väljaandjal pole hetkel Event Radaris ühtegi vastavat üritust.",
     "claim_events_load_error": "Selle nõude üritusi ei õnnestunud laadida.",

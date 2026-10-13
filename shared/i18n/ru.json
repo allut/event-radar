@@ -134,7 +134,6 @@
     "claim_events_eyebrow": "Заявка на издателя",
     "claim_events_title": "События по этой заявке",
     "claim_events_intro": "Все события, которые Event Radar сейчас связывает с этим издателем. Откройте любое, чтобы изменить его закреплённые поля.",
-    "claim_events_summary": "Показано {shown} из {total} событий",
     "claim_events_empty_title": "Событий пока нет",
     "claim_events_empty_msg": "У этого издателя сейчас нет подходящих событий на Event Radar.",
     "claim_events_load_error": "Не удалось загрузить события этой заявки.",
