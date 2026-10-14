@@ -109,8 +109,8 @@ PAGINATION_MIN_OFFSET: int = 0
 # many rows when the cap is hit; see browse.py docstring).
 BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
 # _browse_scored_path scores+sorts the full (capped) candidate pool on every
-# call, then slices a page — so /explore's "Load more" infinite scroll pays
-# O(candidates) again per page even though the ranked order didn't change.
+# call, then slices a page — so every page of /explore pays
+# O(candidates) again even though the ranked order didn't change.
 # Memoizing the scored-and-sorted id list keyed by (user, filters, sort) turns
 # an N-page read into one scoring pass. Short TTL bounds staleness (a like/
 # dislike made mid-scroll takes up to this long to affect ranking); small

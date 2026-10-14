@@ -57,7 +57,6 @@ export const QUERY_KEYS = {
 export const PAGE_PARAM = {
   limit: 'limit',
   offset: 'offset',
-  cursor: 'cursor',
 } as const;
 
 // The frontend URL's 1-based page number (spec #551), read by usePageParam and

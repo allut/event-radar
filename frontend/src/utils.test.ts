@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventTime, tallinnToday, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, nextKeysetParam, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, cardAnimationDelayMs, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset, toggleCapped, numericRouteId } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventTime, tallinnToday, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, cardAnimationDelayMs, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset, toggleCapped, numericRouteId } from './utils';
 import { t } from './i18n';
 import { CATEGORIES } from './_generated/sharedConstants';
 import { GOOGLE_MAPS_SEARCH_URL } from './constants/core';
@@ -804,21 +804,6 @@ describe('cardAnimationDelayMs', () => {
   it('restarts on every page so later cards are not held invisible', () => {
     expect(cardAnimationDelayMs(24)).toBe(0);
     expect(cardAnimationDelayMs(24 * 5 + 2)).toBe(160);
-  });
-});
-
-describe('nextKeysetParam', () => {
-  it('stops when there is no more', () => {
-    expect(nextKeysetParam({ has_more: false, offset: 0, next_cursor: 'x' }, 24)).toBeUndefined();
-  });
-
-  it('carries the server cursor when present', () => {
-    expect(nextKeysetParam({ has_more: true, offset: 0, next_cursor: 'x' }, 24)).toEqual({ offset: 24, cursor: 'x' });
-  });
-
-  it('falls back to offset arithmetic without a cursor', () => {
-    expect(nextKeysetParam({ has_more: true, offset: 24 }, 24)).toEqual({ offset: 48, cursor: undefined });
-    expect(nextKeysetParam({ has_more: true, offset: 24, next_cursor: null }, 24)).toEqual({ offset: 48, cursor: undefined });
   });
 });
 

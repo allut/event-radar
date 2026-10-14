@@ -1,6 +1,6 @@
 # Frontend
 
-What's in here: folder conventions, routing and locale prefixes, the admin console, the FAQ page, the API client and auth hints, tests, the i18n pipeline, brand assets and email.
+What's in here: folder conventions, routing and locale prefixes, the admin console, paged lists, the FAQ page, the API client, auth hints, tests, i18n, brand assets and email.
 
 ## Frontend Structure
 
@@ -17,11 +17,6 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 
 - **`localizedPath()` and `stripLocalePrefix()` live in `frontend/src/lib/urlLocale.ts`, re-exported through `utils.ts`.** They're the one deliberate exception to "shared helpers live in `utils.ts`". The module's own comment says why.
 - **`StaticPage/`'s component has no importer, but its stylesheet is live.** `Contact.module.css` composes `.page`, `.main`, `.title` and `.body` from it. It stays as the scaffold for future static pages.
-- **Paged lists compose `hooks/usePageParam.ts`, `hooks/usePagedQuery.ts` and `components/Pager/`.** `usePageParam` owns `?page` and `setListParams`, the one writer for filter, sort, search and tab params. `usePagedQuery` owns the fetch, the past-end clamp and `onPageSettled`. Change paging behaviour there, never per route.
-- **`usePagedQuery` caps the last page at the backend's `PAGINATION_MAX_OFFSET`** (shared/app-config.json). Past it the label reads "… of N+" over the reachable count, and a deeper link replaces to the deepest reachable page without fetching.
-- **Consumer and organizer lists settle a page change with `hooks/usePageSettledFocus.ts`.** Pass its `onPageSettled` to `usePagedQuery`: it instant-scrolls to the results heading and focuses it with `preventScroll`. The heading composes `PageSettle.module.css`'s `.settleTarget`, and the results container sets `aria-busy={isPlaceholderData}`.
-- **A list whose `h1` sits above its filters gets a visually hidden results `h2`.** Explore puts a focusable "Events" `h2` (`srOnly` plus `.settleTarget`) directly above the grid, so focus after a page change lands below the filters and the next Tab reaches the first new card.
-- **Only a pager-link push or a back/forward POP counts as a page change.** `usePagedQuery` reads `useNavigationType()`, and `setListParams` tags its push with router state so a filter change stays silent. Every `replace` (normalizing, clamping, server-placed offset) skips `onPageSettled` and the announcement.
 - **`components/shared/` is the shared CSS layer.** See [design-system.md](design-system.md) §7 for the composing rules.
 - **`GoogleSignInButton/` is a plain `<a href>` to the backend's OAuth `start` endpoint, with no client-side OAuth.** Its plate colors are Google-mandated, held as `--google-btn-*` tokens in `index.css`. The mark itself is covered by design-system.md's Google Sign-In Mark section.
 - **The `VITE_GOOGLE_SIGNIN_*` build flags are a frontend convenience gate only.** The backend `start` endpoint 404s on its own when its flag is off. [backend-ops.md](backend-ops.md)'s Cloudflare Pages Frontend section says where the flags are set.
@@ -50,6 +45,27 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **Admin Reports sends `report=<id>` to the server only while the URL has no `page`.** The server-placed offset syncs through `usePagedQuery`'s silent replace (no announcement, no focus move), the page links drop `report` (`dropOnPageChange`),XX `?report=<id>`. When the row is gone, page 1 shows a gold "already resolved" callout linking to the event, except right after this screen resolved it.
 - **Admin Claims keeps its tab in the URL as `?status=approved`** (pending omitted), written through `setListParams` so a switch is one push to page 1. The queue is keyed by tab, so the selection, note draft and tags never leak across tabs.
 - **`AdminShell/` is the nav-rail chrome every signed-in admin screen renders inside.** `AdminLogin` renders outside it. The console replaces curl calls to `/admin/*`; see [backend-ops.md](backend-ops.md)'s Admin Endpoints section.
+
+## Paged Lists
+
+Every list pages with a numbered pager and a `?page` URL param. There is no Load more button and no `useInfiniteQuery`. Backend rules are in [backend-ops.md](backend-ops.md)'s Pagination section.
+
+### Composing a List
+
+- **A list composes three pieces: `hooks/usePageParam.ts`, `hooks/usePagedQuery.ts` and `components/Pager/`.** Change paging behaviour there, never per route.
+- **`usePageParam` owns `?page` and `setListParams`.** It reads and normalizes `?page` (page 1 omits it, a malformed value replaces to page 1). `setListParams` is the one writer for filter, sort, search and tab params: it drops `page` and default-valued params in a single push.
+- **`usePagedQuery` owns the fetch.** Give it `queryKey`, `pageSize`, `fetchPage` and a `select` that maps the response to `{ items, total, offset }`. It keeps the previous page while the next loads, clamps a past-end page, syncs a server-placed offset and calls `onPageSettled`.
+- **`<Pager {...pagerProps} />` renders the links and the live-region announcement**, with `pagerProps` returned by `usePagedQuery`. The caller adds `locale`, `liveNoun` (`events` or `items`), a `className` for placement and, if needed, `dropOnPageChange`. Its strings come from shared/i18n.
+- **The request carries `limit` and `offset` only.** `PAGE_PARAM` in `constants/api.ts` names them, and `?page` is never sent to the backend. Each list's page size is a constant in `frontend/src/constants/`.
+- **Pass `enabled` to hold the fetch** until a prerequisite such as a claim id or tab is known.
+
+### Behaviour
+
+- **`usePagedQuery` caps the last page at the backend's `PAGINATION_MAX_OFFSET`** (shared/app-config.json). Past it the label reads "... of N+" over the reachable count, and a deeper link replaces to the deepest reachable page without fetching.
+- **Only a pager-link push or a back/forward POP counts as a page change.** `usePagedQuery` reads `useNavigationType()`, and `setListParams` tags its push with router state so a filter change stays silent. Every `replace` (normalizing, clamping, server-placed offset) skips `onPageSettled` and the announcement.
+- **Consumer and organizer lists settle a page change with `hooks/usePageSettledFocus.ts`.** Pass its `onPageSettled` to `usePagedQuery`: it instant-scrolls to the results heading and focuses it with `preventScroll`. The heading composes `PageSettle.module.css`'s `.settleTarget`, and the results container sets `aria-busy={isPlaceholderData}`.
+- **A list whose `h1` sits above its filters gets a visually hidden results `h2`.** Explore puts a focusable "Events" `h2` (`srOnly` plus `.settleTarget`) directly above the grid, so focus after a page change lands below the filters and the next Tab reaches the first new card.
+- **Admin queues wrap `usePagedQuery` in `hooks/useAdminQueuePage.ts`.** See the Admin Console section below.
 
 ## Locale-Prefixed Routing
 

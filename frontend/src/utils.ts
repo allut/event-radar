@@ -162,36 +162,6 @@ export function vibeOptions(locale: string): { value: string; label: string }[] 
   return VIBES.map((slug) => ({ value: slug, label: t(`vibe_${slug}`, locale) }));
 }
 
-/** useInfiniteQuery's getNextPageParam cursor for every offset-paginated
- * list (admin queues, claim events; Saved uses nextKeysetParam): the next offset when the page
- * says there's more, else undefined to stop paging. `itemCount` is the
- * caller's page-array length (`events.length`/`groups.length` — the key
- * differs per response shape, so it's passed rather than read off `page`). */
-export function nextOffsetParam(
-  page: { has_more: boolean; offset: number },
-  itemCount: number,
-): number | undefined {
-  return page.has_more ? page.offset + itemCount : undefined;
-}
-
-/** A useInfiniteQuery page param for lists the backend keyset-paginates
- * (Saved Events): `cursor` is the server's opaque `next_cursor` and wins
- * when present; `offset` is the fallback for the first page. */
-export interface KeysetPageParam {
-  offset: number;
-  cursor?: string;
-}
-
-export const FIRST_KEYSET_PAGE: KeysetPageParam = { offset: 0 };
-
-export function nextKeysetParam(
-  page: { has_more: boolean; offset: number; next_cursor?: string | null },
-  itemCount: number,
-): KeysetPageParam | undefined {
-  if (!page.has_more) return undefined;
-  return { offset: page.offset + itemCount, cursor: page.next_cursor ?? undefined };
-}
-
 /** True for any organizer-portal route, with or without a `/:locale` prefix
  * (e.g. `/organizer/dashboard`, `/ru/organizer/settings`) — used to pick the
  * right chrome/links (e.g. Footer's Contact link) by current portal rather
