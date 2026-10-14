@@ -289,7 +289,8 @@ def _sort_key_and_reverse(
 
 # (user_id, for_you, sort, categories, vibes, free, q, date_from, date_to) ->
 # (cached_at monotonic, ranked ids, total_is_lower_bound). The ids are an
-# array("I") at 4 bytes each. See BROWSE_SCORE_CACHE_TTL_SECONDS.
+# array("q") at 8 bytes each (Event.id is a BigInteger). See
+# BROWSE_SCORE_CACHE_TTL_SECONDS.
 _RankedIds = tuple[array, bool]
 _score_cache: OrderedDict[tuple, tuple[float, array, bool]] = OrderedDict()
 

@@ -446,6 +446,16 @@ class TestRelevanceCeiling:
         assert result["has_more"] is False
 
     @pytest.mark.asyncio
+    async def test_ranks_event_ids_past_32_bits(self, mock_db, make_event):
+        # Event.id is a BigInteger: the ranked-id cache must hold any of them.
+        big_id = 2**32 + 7
+        events = [make_event(1), make_event(big_id)]
+        result = await self._run(mock_db, events, events)
+
+        assert result["total"] == 2
+        assert sorted(e["id"] for e in result["events"]) == [1, big_id]
+
+    @pytest.mark.asyncio
     async def test_candidate_query_fetches_ceiling_plus_one_ordered_by_id(
         self, mock_db, make_event, monkeypatch
     ):
@@ -552,17 +562,16 @@ class TestScoreCache:
         key = (1, True, "relevance", (), (), False, None, None, None)
 
         assert browse._score_cache_get(key) is None
-        browse._score_cache_set(key, array("I", [3, 1, 2]), False)
+        browse._score_cache_set(key, array("q", [3, 1, 2]), False)
         ids, lower_bound = browse._score_cache_get(key)
         assert list(ids) == [3, 1, 2]
-        assert ids.itemsize == 4
         assert lower_bound is False
 
     def test_hit_carries_lower_bound_flag(self):
         from app.routers import browse
 
         key = (1, True, "relevance", (), (), False, None, None, None)
-        browse._score_cache_set(key, array("I", [1]), True)
+        browse._score_cache_set(key, array("q", [1]), True)
         assert browse._score_cache_get(key)[1] is True
 
     def test_expires_after_ttl(self, monkeypatch):
@@ -570,7 +579,7 @@ class TestScoreCache:
 
         key = (1, True, "relevance", (), (), False, None, None, None)
         monkeypatch.setattr(browse.time, "monotonic", lambda: 0.0)
-        browse._score_cache_set(key, array("I", [1]), False)
+        browse._score_cache_set(key, array("q", [1]), False)
 
         monkeypatch.setattr(
             browse.time, "monotonic", lambda: browse.BROWSE_SCORE_CACHE_TTL_SECONDS + 1.0
@@ -584,9 +593,9 @@ class TestScoreCache:
         monkeypatch.setattr(browse, "BROWSE_SCORE_CACHE_MAX_ENTRIES", 2)
         monkeypatch.setattr(browse.time, "monotonic", lambda: 0.0)
 
-        browse._score_cache_set(("k1",), array("I", [1]), False)
-        browse._score_cache_set(("k2",), array("I", [2]), False)
-        browse._score_cache_set(("k3",), array("I", [3]), False)
+        browse._score_cache_set(("k1",), array("q", [1]), False)
+        browse._score_cache_set(("k2",), array("q", [2]), False)
+        browse._score_cache_set(("k3",), array("q", [3]), False)
 
         assert len(browse._score_cache) == 2
         assert ("k1",) not in browse._score_cache
@@ -905,7 +914,7 @@ class TestAnonymousExplore:
         async def slow_scan(*args, **kwargs):
             call_count["n"] += 1
             await asyncio.sleep(0.01)
-            return array("I", [1]), False
+            return array("q", [1]), False
 
         with pytest.MonkeyPatch.context() as mp:
             from app.routers import browse

@@ -120,11 +120,12 @@ BROWSE_SCORE_CACHE_TTL_SECONDS: float = 30.0
 # facets within one 30s TTL window, 512 distinct (user, filter) keys thrashed
 # the LRU toward a near-zero hit rate. Each entry is a scored id list bounded
 # by BROWSE_RELEVANCE_CEILING and stored at BROWSE_SCORE_CACHE_ID_BYTES per id, so a
-# full cache stays around 16 MB — small, single-process, bounded, not a per-row cost.
+# full cache stays around 32 MB — small, single-process, bounded, not a per-row cost.
 BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 2048
-# Ranked ids are cached as array("I") (unsigned 32-bit), not a list of int objects.
-BROWSE_SCORE_CACHE_ID_TYPECODE: str = "I"
-BROWSE_SCORE_CACHE_ID_BYTES: int = 4
+# Ranked ids are cached as array("q") (signed 64-bit), not a list of int objects.
+# Event.id is a BigInteger, so a 32-bit typecode would overflow past 2**32.
+BROWSE_SCORE_CACHE_ID_TYPECODE: str = "q"
+BROWSE_SCORE_CACHE_ID_BYTES: int = 8
 # Fixed sentinel in place of a real user id for the anonymous-caller cache key
 # (#234) — anonymous /explore traffic shares one cache entry per filter/sort
 # combination rather than one per caller. Never collides with a real User.id
