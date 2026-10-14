@@ -94,6 +94,7 @@ export default function AdminSubmissions() {
     isLoading,
     isError,
     isPlaceholderData,
+    offset: shownOffset,
     pagerProps,
   } = useAdminQueuePage<AdminSubmissionsResponse, AdminSubmission, ResolutionKind>({
     queryKey: [QUERY_KEYS.adminSubmissions],
@@ -117,16 +118,16 @@ export default function AdminSubmissions() {
   const currentId = selectedId ?? items[0]?.id ?? null;
 
   const actionMutation = useMutation({
-    mutationFn: ({ item, kind, note }: { item: AdminSubmission; kind: ResolutionKind; note: string }) => {
+    mutationFn: ({ item, kind, note }: { item: AdminSubmission; kind: ResolutionKind; note: string; offset: number }) => {
       const path = kind === 'approved' ? API.adminSubmissionApprove(item.id) : API.adminSubmissionRetract(item.id);
       return adminApi.post<AdminSubmissionActionResult>(path, { resolution_note: note });
     },
-    onSuccess: (result, { item, kind }) => {
+    onSuccess: (result, { item, kind, offset: actedOffset }) => {
       const resolvedItem = kind === 'retracted' && result.status ? { ...item, status: result.status } : item;
       // Tags the row in place and refetches this page once, so the next
-      // row up fills the gap (spec #551).
-      tagRow(resolvedItem, kind);
-      setNote('');
+      // row up fills the gap (spec #551). The note draft only resets when
+      // the admin is still on the page they acted on.
+      if (tagRow(resolvedItem, kind, actedOffset)) setNote('');
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
@@ -136,7 +137,7 @@ export default function AdminSubmissions() {
 
   function act(item: AdminSubmission, kind: ResolutionKind) {
     if (!note.trim()) return;
-    actionMutation.mutate({ item, kind, note: note.trim() });
+    actionMutation.mutate({ item, kind, note: note.trim(), offset: shownOffset });
   }
 
   // Stable across note keystrokes (only resolvedById changes them) — see

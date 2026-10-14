@@ -188,6 +188,7 @@ function ClaimsQueue({ activeTab }: { activeTab: ClaimTab }) {
     isLoading,
     isError,
     isPlaceholderData,
+    offset: shownOffset,
     pagerProps,
   } = useAdminQueuePage<AdminClaimsResponse, AdminClaim, AdminClaimActionKind>({
     queryKey: [QUERY_KEYS.adminClaims, activeTab],
@@ -209,7 +210,7 @@ function ClaimsQueue({ activeTab }: { activeTab: ClaimTab }) {
   const currentId = selectedId ?? items[0]?.id ?? null;
 
   const actionMutation = useMutation({
-    mutationFn: ({ item, kind, note }: { item: AdminClaim; kind: AdminClaimActionKind; note: string }) => {
+    mutationFn: ({ item, kind, note }: { item: AdminClaim; kind: AdminClaimActionKind; note: string; offset: number }) => {
       const path =
         kind === 'granted'
           ? API.adminClaimGrant(item.id)
@@ -218,11 +219,14 @@ function ClaimsQueue({ activeTab }: { activeTab: ClaimTab }) {
             : API.adminClaimRevoke(item.id);
       return adminApi.post<AdminClaimActionResult>(path, { resolution_note: note });
     },
-    onSuccess: (_result, { item, kind }) => {
+    onSuccess: (_result, { item, kind, offset: actedOffset }) => {
+      // The claim changed tabs, so the other tab's cached pages are out of
+      // date too, not just this one.
+      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminClaims], refetchType: 'none' });
       // Tags the row in place and refetches this page once, so the next
-      // row up fills the gap (spec #551).
-      tagRow(item, kind);
-      setNote('');
+      // row up fills the gap (spec #551). The note draft only resets when
+      // the admin is still on the page they acted on.
+      if (tagRow(item, kind, actedOffset)) setNote('');
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
@@ -232,7 +236,7 @@ function ClaimsQueue({ activeTab }: { activeTab: ClaimTab }) {
 
   function act(item: AdminClaim, kind: AdminClaimActionKind) {
     if (!note.trim()) return;
-    actionMutation.mutate({ item, kind, note: note.trim() });
+    actionMutation.mutate({ item, kind, note: note.trim(), offset: shownOffset });
   }
 
   const isResolved = useCallback((item: AdminClaim) => resolvedById.has(item.id), [resolvedById]);

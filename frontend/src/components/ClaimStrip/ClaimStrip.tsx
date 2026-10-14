@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
-import { API } from '../../constants/api';
+import { API, QUERY_KEYS } from '../../constants/api';
 import { EVENT_CLAIM_STATUS_CLAIMED, EVENT_CLAIM_STATUS_PENDING } from '../../constants/claims';
 import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
@@ -53,6 +54,7 @@ interface ClaimPanelProps {
 export function ClaimPanel({ eventId, locale }: ClaimPanelProps) {
   const organizerAuthed = useOrganizerAuth();
   const navigate = useLocaleNavigate();
+  const queryClient = useQueryClient();
   const [state, setState] = useState<'idle' | 'loading' | 'email-form' | 'error' | 'needs-justification'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [justification, setJustification] = useState('');
@@ -65,6 +67,8 @@ export function ClaimPanel({ eventId, locale }: ClaimPanelProps) {
         event_id: eventId,
         justification: withJustification,
       });
+      // Your claims and the dashboard's claims summary count the new claim.
+      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerClaims] });
       navigate(ROUTES.organizerClaimPending(claim.id));
     } catch (err) {
       if (isClaimJustificationRequiredError(err)) {

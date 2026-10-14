@@ -197,6 +197,23 @@ describe('Explore', () => {
     expect(screen.getByRole('button', { name: /clear/i })).toBeInTheDocument();
   });
 
+  it('deselecting the last category chip after results loaded swaps them for the empty state', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.startsWith('/users/me')) return Promise.resolve(currentUser);
+      return Promise.resolve(exploreResponse([makeEvent({ id: 1, title: 'Old result' })]));
+    });
+    renderExplore('/en/explore?category=music');
+    await waitFor(() => expect(screen.getByText('Old result')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /Categories/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Music' }));
+
+    await waitFor(() => expect(screen.getByText(/no events/i)).toBeInTheDocument());
+    expect(screen.queryByText('Old result')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /clear/i })).toBeInTheDocument();
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
   it('switching to For you presets chips to the persona taste and personalizes', async () => {
     mockGet.mockImplementation((path: string) => {
       if (path.startsWith('/users/me')) return Promise.resolve(currentUser); // taste: music/trendy only
@@ -416,6 +433,21 @@ describe('Explore', () => {
       await waitFor(() => expect(screen.getByTestId('location-probe')).toHaveTextContent('/en/explore?page=3'));
       await waitFor(() => expect(screen.getByText('Event 49')).toBeInTheDocument());
       expect(screen.queryByText(/no events match/i)).not.toBeInTheDocument();
+    });
+
+    it('an empty last page with total > 0 shows the empty state instead of loading forever', async () => {
+      // Relevance/For you totals come from the cached ranked list, so every
+      // event on the last page can drop out (went non-public) after ranking.
+      mockGet.mockImplementation(async (path: string) => {
+        if (path.startsWith('/users/me')) return currentUser;
+        const offset = Number(new URL(path, 'http://x').searchParams.get('offset'));
+        return exploreResponse([], { total: 30, offset });
+      });
+      renderExplore('/en/explore?page=2');
+
+      await waitFor(() => expect(screen.getByText(/no events match/i)).toBeInTheDocument());
+      expect(screen.getByTestId('location-probe')).toHaveTextContent('/en/explore?page=2');
+      expect(screen.queryByText('Loading…')).not.toBeInTheDocument();
     });
 
     it('a malformed ?page normalizes to page 1 before fetching', async () => {

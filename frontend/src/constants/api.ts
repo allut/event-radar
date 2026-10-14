@@ -64,10 +64,11 @@ export const PAGE_PARAM = {
 // which only ever sees PAGE_PARAM.limit/offset.
 export const PAGE_QUERY_PARAM = 'page';
 
-// Router location-state key usePageParam's setListParams writes, so
-// usePagedQuery can tell a filter/sort/search/tab push (which resets to
-// page 1 silently) from a pager-link push (a real page change).
-export const LIST_PARAMS_NAV_STATE = 'listParamsChange';
+// Router location-state key every <Pager> link carries. usePagedQuery only
+// treats a push with it (or a POP) as a page change that scrolls, focuses and
+// announces; anything else that lands on another page (a setListParams
+// filter/sort/search/tab push, a nav link, a preset chip) is silent.
+export const PAGER_NAV_STATE = 'pagerPageChange';
 
 // i18n keys for <Pager>'s live-region announcement, one per item noun: the
 // Explore-style lists announce "Events", lists of anything else "Items".

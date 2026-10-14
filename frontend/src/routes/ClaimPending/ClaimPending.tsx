@@ -79,6 +79,8 @@ export default function ClaimPending() {
     onSuccess: (updated) => {
       setActionError('');
       queryClient.setQueryData(queryKey, updated);
+      // Your claims and the dashboard's claims summary show this status.
+      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerClaims] });
     },
     onError: (err) => setActionError(apiErrorMessage(err, t('generic_error', locale))),
   });
@@ -88,6 +90,8 @@ export default function ClaimPending() {
     onSuccess: (updated) => {
       setActionError('');
       queryClient.setQueryData(queryKey, updated);
+      // Your claims and the dashboard's claims summary show this status.
+      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerClaims] });
     },
     onError: (err) => setActionError(apiErrorMessage(err, t('generic_error', locale))),
   });

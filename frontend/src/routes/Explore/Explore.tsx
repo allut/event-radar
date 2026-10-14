@@ -202,6 +202,7 @@ export default function Explore() {
     isSuccess,
     isPlaceholderData,
     page,
+    lastPage,
     pagerProps,
   } = usePagedQuery({
     queryKey: [QUERY_KEYS.explore, locale, filters],
@@ -468,8 +469,10 @@ export default function Explore() {
             <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
           ) : isError ? (
             <PageState kind={UI_STATE.error} message={t('explore_error', locale)} inline />
-          ) : events.length === 0 && total > 0 ? (
-            // A past-end page about to clamp to the real last page.
+          ) : events.length === 0 && total > 0 && page !== lastPage ? (
+            // A past-end page about to clamp to the real last page. On the
+            // last page itself nothing clamps (a ranked total can outlive
+            // events that went non-public), so it falls through to empty.
             <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
           ) : events.length === 0 ? (
             <EmptyState

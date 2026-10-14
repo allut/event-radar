@@ -4,7 +4,7 @@ import { useLocation, useNavigationType, useSearchParams } from 'react-router-do
 import { PAGINATION_MAX_OFFSET } from '../_generated/sharedConstants';
 import { PAGE_QUERY_PARAM } from '../constants/api';
 import type { PagerAnnouncement, PagerProps } from '../components/Pager';
-import { isListParamsNavigation, usePageParam } from './usePageParam';
+import { isPagerNavigation, usePageParam } from './usePageParam';
 
 /** The paging fields a list's response maps onto (`select`). */
 export interface PagedSlice<TItem> {
@@ -20,9 +20,10 @@ export interface UsePagedQueryOptions<TData, TItem> {
   pageSize: number;
   fetchPage: (request: { limit: number; offset: number; page: number }) => Promise<TData>;
   select: (data: TData) => PagedSlice<TItem>;
-  /** Runs once the real data for a new page has rendered, only after a push
-   * (a pager link) or POP (back/forward) — never on first mount, a silent
-   * `replace`, or a setListParams filter change. */
+  /** Runs once the real data for a new page has rendered, only after a
+   * <Pager> link push or a POP (back/forward) — never on first mount, a
+   * silent `replace`, a setListParams filter change or any other app link
+   * (nav, preset chips) that lands on a different page. */
   onPageSettled?: () => void;
   /** While true, an emptied page is held instead of clamped to the last page
    * (admin queues pass "there are tagged rows"). */
@@ -58,7 +59,11 @@ export function usePagedQuery<TData, TItem>({
   const query = useQuery({
     queryKey: [...queryKey, page],
     queryFn: () => fetchPage({ limit: pageSize, offset: (page - 1) * pageSize, page }),
-    placeholderData: keepPreviousData,
+    // A caller-disabled query (Explore's emptied facet) matches nothing, so it
+    // must not keep showing the previous key's rows: TanStack applies the
+    // placeholder to a disabled query too. The malformed/past-ceiling cases
+    // keep it, since they replace to a real page straight away.
+    placeholderData: enabled ? keepPreviousData : undefined,
     enabled: enabled && !malformed && !beyondCeiling,
   });
   const { data, isSuccess, isPlaceholderData } = query;
@@ -111,8 +116,7 @@ export function usePagedQuery<TData, TItem>({
     if (previousPageRef.current === page) return;
     previousPageRef.current = page;
     const counts =
-      navigationType === 'POP' ||
-      (navigationType === 'PUSH' && !isListParamsNavigation(location.state));
+      navigationType === 'POP' || (navigationType === 'PUSH' && isPagerNavigation(location.state));
     pendingSettleRef.current = counts ? page : null;
   }, [page, navigationType, location.state]);
 

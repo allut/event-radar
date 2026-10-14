@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../../api/client';
 import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
-import { API } from '../../constants/api';
+import { API, QUERY_KEYS } from '../../constants/api';
 import {
   AUTH_REDIRECT_DELAY_MS,
   AUTH_TOKEN_PARAM,
@@ -38,6 +39,7 @@ export default function OrganizerClaimVerify() {
   const seoMeta = useStaticSeoMeta('organizer_claim_pending_title', locale);
   const [searchParams] = useSearchParams();
   const navigate = useLocaleNavigate();
+  const queryClient = useQueryClient();
   const localePath = useLocalePath();
   const token = searchParams.get(AUTH_TOKEN_PARAM);
   const [state, setState] = useState<VerifyState>(token ? UI_STATE.verifying : UI_STATE.error);
@@ -67,6 +69,8 @@ export default function OrganizerClaimVerify() {
           { token: tok },
         );
         const { claim } = result;
+        // Your claims and the dashboard's claims summary count the new claim.
+        if (claim) void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerClaims] });
         setOrganizerSignedInHint();
         setState(UI_STATE.success);
         if (result.needs_justification || !claim) {
@@ -90,7 +94,7 @@ export default function OrganizerClaimVerify() {
       }
     }
     void verify(token);
-  }, [navigate, token, locale, localePath, scheduleRedirect]);
+  }, [navigate, queryClient, token, locale, localePath, scheduleRedirect]);
 
   const message =
     state === UI_STATE.verifying ? t('verifying', locale)

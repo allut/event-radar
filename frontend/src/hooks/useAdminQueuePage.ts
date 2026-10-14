@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { PAGE_QUERY_PARAM } from '../constants/api';
@@ -40,7 +40,9 @@ export interface UseAdminQueuePageOptions<TData, TItem>
   getId: (item: TItem) => number;
   /** Route-specific resets once a new page has settled (e.g. the note draft),
    * after the shared ones: first row selected and focused, tags cleared,
-   * list scroll reset. */
+   * list scroll reset. A silent replace onto another page (a refetch that
+   * emptied this one clamps) runs it too, after selecting the first row but
+   * without moving focus or scroll. */
   onPageSettled?: () => void;
 }
 
@@ -50,6 +52,9 @@ export interface UseAdminQueuePageOptions<TData, TItem>
  * - `tagRow` records a successful row-removing action and triggers one
  *   background refetch of the current page (no debounce), so the next page
  *   never skips rows. Tagged rows stay in place; pulled-up rows append.
+ *   Pass it the `offset` captured when the action was triggered (in the
+ *   mutation variables): onSuccess runs with the latest render, so an action
+ *   that resolves after the admin changed page must not tag onto the new one.
  * - The page is held (`holdEmptyPage`) while it has tagged rows, so clearing
  *   a last page leaves the admin on it with the no-items label.
  * - A page change selects and focuses the first row, resets the list's
@@ -72,6 +77,10 @@ export function useAdminQueuePage<TData, TItem, TKind extends string>({
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [tags, setTags] = useState<TagState<TItem, TKind> | null>(null);
 
+  // The offset of the last page whose real data rendered, so a silent move to
+  // another page (a clamp replace) can run the resets a push/POP settle runs.
+  const settledOffsetRef = useRef<number | null>(null);
+
   const paged = usePagedQuery({
     queryKey,
     pageSize,
@@ -79,6 +88,7 @@ export function useAdminQueuePage<TData, TItem, TKind extends string>({
     select,
     holdEmptyPage: tags !== null && tags.byId.size > 0 && tags.offset === requestedOffset,
     onPageSettled: () => {
+      settledOffsetRef.current = paged.offset;
       const first = paged.items[0];
       setSelectedId(first === undefined ? null : getId(first));
       setTags(null);
@@ -94,7 +104,25 @@ export function useAdminQueuePage<TData, TItem, TKind extends string>({
       onPageSettled?.();
     },
   });
-  const { items: serverItems, offset } = paged;
+  const { items: serverItems, offset, isSuccess, isPlaceholderData } = paged;
+
+  // Declared after usePagedQuery so a push/POP settle in the same commit has
+  // already recorded its offset and this does nothing.
+  const settled = isSuccess && !isPlaceholderData;
+  const firstId = serverItems[0] === undefined ? null : getId(serverItems[0]);
+  const onPageSettledRef = useRef(onPageSettled);
+  useEffect(() => {
+    onPageSettledRef.current = onPageSettled;
+  });
+  useEffect(() => {
+    if (!settled) return;
+    const previous = settledOffsetRef.current;
+    settledOffsetRef.current = offset;
+    if (previous === null || previous === offset) return;
+    setSelectedId(firstId);
+    setTags(null);
+    onPageSettledRef.current?.();
+  }, [settled, offset, firstId]);
 
   // Tags only count on the page they were made on (a page change, even a
   // silent replace, leaves them behind).
@@ -105,18 +133,25 @@ export function useAdminQueuePage<TData, TItem, TKind extends string>({
 
   const rows = useMemo(() => mergeQueueRows(serverItems, pageTags, getId), [serverItems, pageTags, getId]);
 
-  /** Record a successful row-removing action and refetch the page once. */
-  const tagRow = (item: TItem, kind: TKind) => {
+  /** Record a successful row-removing action and refetch the page once.
+   * `actedOffset` is the page offset when the action was triggered; when the
+   * admin has since left that page (or the row is no longer on screen), the
+   * row is not tagged and only the refetch runs. Returns whether it tagged,
+   * so the route only resets its note draft for an action on this page. */
+  const tagRow = (item: TItem, kind: TKind, actedOffset: number): boolean => {
     const id = getId(item);
-    const slot = Math.max(0, rows.findIndex((row) => getId(row) === id));
+    const slot = rows.findIndex((row) => getId(row) === id);
+    const samePage = actedOffset === offset && actedOffset === requestedOffset && slot !== -1;
+    // One background refetch of the active page per action; the list's other
+    // cached pages are only marked stale.
+    void queryClient.invalidateQueries({ queryKey });
+    if (!samePage) return false;
     setTags((prev) => {
       const byId = new Map(prev !== null && prev.offset === offset ? prev.byId : []);
       byId.set(id, { item, kind, slot: byId.get(id)?.slot ?? slot });
       return { offset, byId };
     });
-    // One background refetch of the active page per action; the list's other
-    // cached pages are only marked stale.
-    void queryClient.invalidateQueries({ queryKey });
+    return true;
   };
 
   return {

@@ -7,6 +7,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { PAGE_QUERY_PARAM, PAGER_LIVE_KEY, type PagerLiveNoun } from '../../constants/api';
 import { t, ti } from '../../i18n';
+import { PAGER_LINK_STATE } from '../../hooks/usePageParam';
 import { cx, formatCount } from '../../utils';
 import visually from '../shared/Visually.module.css';
 import styles from './Pager.module.css';
@@ -168,7 +169,7 @@ export default function Pager({
               <ol className={styles.pages}>
                 <li>
                   {page > 1 ? (
-                    <Link to={linkTo(page - 1)} className={styles.step}>
+                    <Link to={linkTo(page - 1)} state={PAGER_LINK_STATE} className={styles.step}>
                       <span aria-hidden="true">‹</span>
                       <span className={visually.srOnly}>{t('pager_prev', locale)}</span>
                     </Link>
@@ -193,6 +194,7 @@ export default function Pager({
                     <li key={slot.n} className={cx(slot.sibling && styles.sibling)}>
                       <Link
                         to={linkTo(slot.n)}
+                        state={PAGER_LINK_STATE}
                         className={slot.n === page ? styles.current : styles.pageLink}
                         aria-current={slot.n === page ? 'page' : undefined}
                       >
@@ -207,7 +209,7 @@ export default function Pager({
                 )}
                 <li>
                   {page < lastPage ? (
-                    <Link to={linkTo(page + 1)} className={styles.step}>
+                    <Link to={linkTo(page + 1)} state={PAGER_LINK_STATE} className={styles.step}>
                       <span aria-hidden="true">›</span>
                       <span className={visually.srOnly}>{t('pager_next', locale)}</span>
                     </Link>

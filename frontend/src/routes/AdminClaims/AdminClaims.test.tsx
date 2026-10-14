@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
-import { focusManager } from '@tanstack/react-query';
+import { focusManager, QueryClient } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import AdminClaims from './AdminClaims';
 import { LocationProbe, renderWithProviders } from '../../test/utils';
+import { QUERY_STALE_TIME } from '../../constants/api';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -426,6 +427,32 @@ describe('AdminClaims', () => {
       expect(rowButton(52)).toHaveAttribute('aria-current', 'true');
       expect(screen.queryByText(/Granted\./)).not.toBeInTheDocument();
       expect(screen.getAllByRole('button').some((b) => /Claimant 1\b.*Granted/.test(b.textContent ?? ''))).toBe(false);
+    });
+
+    it('a grant marks the other tab stale, so switching to it refetches within the stale time', async () => {
+      const lists = serveClaims(range(1, 3), [10]);
+      // Granting moves the claim to the Granted list on the server.
+      const post = mockPost.getMockImplementation()!;
+      mockPost.mockImplementation(async (path: string, body?: unknown) => {
+        const result = await post(path, body);
+        const id = Number(/claims\/(\d+)\//.exec(path)?.[1]);
+        if (path.includes('grant')) lists.approved.unshift(id);
+        return result;
+      });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, staleTime: QUERY_STALE_TIME }, mutations: { retry: false } },
+      });
+      renderWithProviders(<AdminClaims />, { route: '/admin/claims?status=approved', queryClient });
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 10' })).toBeInTheDocument());
+      await userEvent.click(screen.getByRole('tab', { name: 'Pending review' }));
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+      await grantWithNote();
+      await waitFor(() => expect(rowButton(1)).toHaveTextContent('Granted'));
+
+      await userEvent.click(screen.getByRole('tab', { name: 'Granted' }));
+
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+      expect(rowButton(10)).toBeInTheDocument();
     });
 
     it('does not carry a tagged row over to the other tab', async () => {

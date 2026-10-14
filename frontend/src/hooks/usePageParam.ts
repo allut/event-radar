@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { LIST_PARAMS_NAV_STATE, PAGE_QUERY_PARAM } from '../constants/api';
+import { PAGE_QUERY_PARAM, PAGER_NAV_STATE } from '../constants/api';
 
 /** Parses the raw `?page` value. Only a plain integer ≥ 2 is a real page:
  * `0`, negatives, non-integers and an explicit `1` are all malformed and
@@ -14,10 +14,12 @@ export function parsePageParam(raw: string | null): { page: number; malformed: b
   return { page: 1, malformed: true };
 }
 
-/** True when a router location's `state` marks it as written by
- * setListParams — a filter/sort/search/tab change, not a page change. */
-export function isListParamsNavigation(state: unknown): boolean {
-  return typeof state === 'object' && state !== null && LIST_PARAMS_NAV_STATE in state;
+/** The router `state` every <Pager> link pushes with. */
+export const PAGER_LINK_STATE = { [PAGER_NAV_STATE]: true } as const;
+
+/** True when a router location's `state` marks it as a <Pager> link push. */
+export function isPagerNavigation(state: unknown): boolean {
+  return typeof state === 'object' && state !== null && PAGER_NAV_STATE in state;
 }
 
 export interface UsePageParamOptions {
@@ -71,7 +73,6 @@ export function usePageParam({ defaults }: UsePageParamOptions = {}): {
           }
           return next;
         },
-        { state: { [LIST_PARAMS_NAV_STATE]: true } },
       );
     },
     [setSearchParams],

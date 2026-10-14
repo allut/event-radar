@@ -125,6 +125,7 @@ export default function AdminReports() {
     isLoading,
     isError,
     isPlaceholderData,
+    offset: shownOffset,
     pagerProps,
   } = useAdminQueuePage<AdminReportsResponse, AdminReportedEvent, ResolutionKind>({
     // A located response holds a page the plain page-1 key must not cache.
@@ -163,18 +164,18 @@ export default function AdminReports() {
     locateId !== null && data?.report_not_found === true && !resolvedById.has(locateId) ? locateId : null;
 
   const actionMutation = useMutation({
-    mutationFn: ({ item, kind, note }: { item: AdminReportedEvent; kind: ResolutionKind; note: string }) => {
+    mutationFn: ({ item, kind, note }: { item: AdminReportedEvent; kind: ResolutionKind; note: string; offset: number }) => {
       const path = kind === 'resolved' ? API.adminReportResolve(item.event_id) : API.adminReportTakedown(item.event_id);
       return adminApi.post<AdminReportActionResult>(path, { resolution_note: note });
     },
-    onSuccess: (result, { item, kind }) => {
+    onSuccess: (result, { item, kind, offset: actedOffset }) => {
       const resolvedItem = kind === 'taken_down' && result.status ? { ...item, status: result.status } : item;
       // Every cached page of the queue is now out of date, not just this one.
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminReports], refetchType: 'none' });
       // Tags the row in place and refetches this page once, so the next
-      // report up fills the gap (spec #551).
-      tagRow(resolvedItem, kind);
-      setNote('');
+      // report up fills the gap (spec #551). The note draft only resets when
+      // the admin is still on the page they acted on.
+      if (tagRow(resolvedItem, kind, actedOffset)) setNote('');
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
@@ -184,7 +185,7 @@ export default function AdminReports() {
 
   function act(item: AdminReportedEvent, kind: ResolutionKind) {
     if (!note.trim()) return;
-    actionMutation.mutate({ item, kind, note: note.trim() });
+    actionMutation.mutate({ item, kind, note: note.trim(), offset: shownOffset });
   }
 
   // Stable across note keystrokes (only resolvedById changes them) — see

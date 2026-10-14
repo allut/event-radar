@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
 import { LocationProbe, renderWithProviders } from '../../test/utils';
 import { usePageParam } from '../../hooks/usePageParam';
 import { usePagedQuery } from '../../hooks/usePagedQuery';
@@ -67,11 +67,14 @@ interface HarnessProps {
 }
 
 function Harness({ onPageSettled, holdEmptyPage, dropOnPageChange }: HarnessProps) {
+  // `?off=1` disables the query, as Explore does for an emptied facet.
+  const [enabledParams] = useSearchParams();
+  const enabled = enabledParams.get('off') !== '1';
   const { setListParams } = usePageParam({ defaults: { sort: 'relevance' } });
   const [searchParams] = useSearchParams();
   const q = searchParams.get('q') ?? '';
   const paged = usePagedQuery({
-    queryKey: ['harness', q],
+    queryKey: ['harness', q, enabled],
     pageSize: PAGE_SIZE,
     fetchPage: ({ limit, offset }) =>
       api.get<ListResponse>(`/list?limit=${limit}&offset=${offset}&q=${q}`),
@@ -83,9 +86,13 @@ function Harness({ onPageSettled, holdEmptyPage, dropOnPageChange }: HarnessProp
     }),
     onPageSettled,
     holdEmptyPage,
+    enabled,
   });
   return (
     <>
+      <div data-testid="paged-state">
+        {paged.isPlaceholderData ? 'placeholder' : 'settled'} total={paged.total}
+      </div>
       <ul>
         {paged.items.map((row) => (
           <li key={row.id}>Row {row.id}</li>
@@ -113,10 +120,23 @@ function Harness({ onPageSettled, holdEmptyPage, dropOnPageChange }: HarnessProp
       >
         Default sort
       </button>
+      <button
+        type="button"
+        onClick={() =>
+          setListParams((params) => {
+            params.set('off', '1');
+            return params;
+          })
+        }
+      >
+        Disable
+      </button>
       <button type="button" onClick={() => void paged.refetch()}>
         Refetch
       </button>
       <BackButton />
+      {/* An app link to the list (a nav or preset chip), not a pager link. */}
+      <Link to="/list">List home</Link>
       <Pager {...paged.pagerProps} locale="en" dropOnPageChange={dropOnPageChange} />
       <LocationProbe />
       <NavTypeProbe />
@@ -296,6 +316,23 @@ describe('usePagedQuery', () => {
     expect(liveRegion()).toHaveTextContent('');
   });
 
+  it('treats an ordinary app link to page 1 as silent, not a page change', async () => {
+    serve(25);
+    const onPageSettled = vi.fn();
+    renderHarness('/list', { onPageSettled });
+    await waitFor(() => expect(screen.getByText('Row 1')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('link', { name: 'Page 3' }));
+    await waitFor(() => expect(onPageSettled).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(screen.getByRole('link', { name: 'List home' }));
+
+    await waitFor(() => expect(screen.getByText('Row 1')).toBeInTheDocument());
+    await act(async () => {});
+    expect(location()).toBe('/list');
+    expect(onPageSettled).toHaveBeenCalledTimes(1);
+    expect(liveRegion()).toHaveTextContent('');
+  });
+
   it('replaces a stale page past an empty list with page 1, silently', async () => {
     serve(0);
     renderHarness('/list?page=5');
@@ -430,6 +467,18 @@ describe('usePagedQuery', () => {
       await waitFor(() => expect(screen.getByText('Row 5001')).toBeInTheDocument());
       expect(document.querySelector('p')?.textContent).toBe('5,001–5,005 of 5,005');
     });
+  });
+
+  it('shows no previous rows once the query is disabled after loading', async () => {
+    serve(25);
+    renderHarness('/list');
+    await waitFor(() => expect(screen.getByText('Row 1')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Disable' }));
+
+    await waitFor(() => expect(location()).toBe('/list?off=1'));
+    expect(screen.queryByText('Row 1')).not.toBeInTheDocument();
+    expect(screen.getByTestId('paged-state')).toHaveTextContent('settled total=0');
   });
 
   it('does not prefetch the next page', async () => {
