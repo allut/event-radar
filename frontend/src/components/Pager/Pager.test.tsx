@@ -392,6 +392,55 @@ describe('usePagedQuery', () => {
     expect(liveRegion()).toHaveTextContent('');
   });
 
+  it('does not revive a superseded page change on a Back that comes before the filter data', async () => {
+    serve(25);
+    const onPageSettled = vi.fn();
+    renderHarness('/list?page=2', { onPageSettled });
+    await waitFor(() => expect(screen.getByText('Row 11')).toBeInTheDocument());
+    const held: Array<() => void> = [];
+    const served = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation((url: string) => new Promise((resolve) => held.push(() => resolve(served(url)))));
+    await userEvent.click(screen.getByRole('link', { name: 'Page 1' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Search jazz' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(location()).toBe('/list');
+    mockGet.mockImplementation(served);
+    await act(async () => {
+      for (const release of held) release();
+    });
+    await waitFor(() => expect(screen.getByText('Row 1')).toBeInTheDocument());
+    await act(async () => {});
+    expect(onPageSettled).not.toHaveBeenCalled();
+    expect(liveRegion()).toHaveTextContent('');
+  });
+
+  it('does not revive a superseded page change whose own data landed while on the filter entry', async () => {
+    serve(25);
+    const onPageSettled = vi.fn();
+    renderHarness('/list?page=2', { onPageSettled });
+    await waitFor(() => expect(screen.getByText('Row 11')).toBeInTheDocument());
+    const held: Array<[string, () => void]> = [];
+    const served = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation((url: string) => new Promise((resolve) => held.push([url, () => resolve(served(url))])));
+    await userEvent.click(screen.getByRole('link', { name: 'Page 1' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Search jazz' }));
+    // Only the unfiltered page-1 response lands.
+    await act(async () => {
+      for (const [url, release] of held) if (!url.includes('q=jazz')) release();
+    });
+    mockGet.mockImplementation(served);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(location()).toBe('/list');
+    await waitFor(() => expect(screen.getByText('Row 1')).toBeInTheDocument());
+    await act(async () => {});
+    expect(onPageSettled).not.toHaveBeenCalled();
+    expect(liveRegion()).toHaveTextContent('');
+  });
+
   it('settles a clamp target only on fresh data, not a stale cached copy of it', async () => {
     serve(35);
     const onPageSettled = vi.fn();

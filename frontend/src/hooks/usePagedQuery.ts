@@ -116,8 +116,9 @@ export function usePagedQuery<TData, TItem>({
 
   // Page-change detection. Declared before the settle effect so a page that
   // is already cached (back to a fresh page) settles in the same commit. A
-  // pending settle belongs to the history entry that made it, so a filter
-  // push before its data lands (same page, new entry) stays silent.
+  // pending settle belongs to the history entry that made it: any move to
+  // another entry retires it at once, so a filter push before its data lands
+  // (same page, new entry) stays silent, and so does a later Back to it.
   const previousPageRef = useRef(page);
   // `minUpdatedAt`: only data fetched at or after it may settle (0 = any).
   const pendingSettleRef = useRef<{ page: number; key: string; minUpdatedAt: number } | null>(null);
@@ -125,6 +126,9 @@ export function usePagedQuery<TData, TItem>({
   // user asked for emptied): the replace's target settles in its place.
   const carrySettleRef = useRef<{ minUpdatedAt: number } | null>(null);
   useEffect(() => {
+    if (pendingSettleRef.current !== null && pendingSettleRef.current.key !== location.key) {
+      pendingSettleRef.current = null;
+    }
     if (previousPageRef.current === page) return;
     previousPageRef.current = page;
     const carried = carrySettleRef.current;
@@ -146,10 +150,6 @@ export function usePagedQuery<TData, TItem>({
   useEffect(() => {
     if (!isSuccess || isPlaceholderData || data === undefined) return;
     const pending = pendingSettleRef.current;
-    // This entry's data has rendered, so a page change pending for another
-    // entry (superseded by a filter push before it loaded) is retired: a
-    // later Back to that entry must not settle.
-    if (pending !== null && pending.key !== location.key) pendingSettleRef.current = null;
     const pendingHere = pending !== null && pending.page === page && pending.key === location.key;
     // A silent replace; when it redirects the user's own page change, the
     // target page settles (focus, announcement) instead of focus dropping.

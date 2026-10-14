@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
@@ -115,6 +115,10 @@ export default function AdminReports() {
   const linkedId = Number.isInteger(parsedLinkedId) && parsedLinkedId > 0 ? parsedLinkedId : null;
   // Only ask the server to locate the row while the URL has no page.
   const locateId = linkedId !== null && !searchParams.has(PAGE_QUERY_PARAM) ? linkedId : null;
+  // Ids this mount has located, with their not-found flag. Paired with the
+  // cache check below: the cache covers a remount, this ref covers a long
+  // mount whose inactive locate entry was garbage-collected.
+  const locatedRef = useRef(new Map<number, boolean>());
 
   const {
     rows,
@@ -136,19 +140,22 @@ export default function AdminReports() {
     queryKey: locateId === null ? [QUERY_KEYS.adminReports] : [QUERY_KEYS.adminReports, 'locate', locateId],
     pageSize: ADMIN_REPORTS_QUEUE_PAGE_SIZE,
     fetchPage: async ({ limit, offset, page }) => {
-      // Already located when this query holds a response: the first locate's.
-      // Read from the cache, not component state, so it holds across a
-      // remount (detail page and Back) for as long as the located data does.
-      const located =
+      // Already located when this mount located it, or when this query
+      // still holds the first locate's response (a remount: detail page and
+      // Back). Either way, carry over that first not-found flag.
+      const notFound =
         locateId === null
           ? undefined
-          : queryClient.getQueryData<AdminReportsResponse>([QUERY_KEYS.adminReports, 'locate', locateId, page]);
-      const locate = locateId === null || located !== undefined ? '' : `&${ADMIN_REPORTS_PARAM.report}=${locateId}`;
+          : (locatedRef.current.get(locateId) ??
+            queryClient.getQueryData<AdminReportsResponse>([QUERY_KEYS.adminReports, 'locate', locateId, page])
+              ?.report_not_found);
+      const locate = locateId === null || notFound !== undefined ? '' : `&${ADMIN_REPORTS_PARAM.report}=${locateId}`;
       const response = await adminApi.get<AdminReportsResponse>(
         `${API.adminReports}?${PAGE_PARAM.limit}=${limit}&${PAGE_PARAM.offset}=${offset}${locate}`,
       );
-      if (located !== undefined) return { ...response, report_not_found: located.report_not_found };
+      if (notFound !== undefined) return { ...response, report_not_found: notFound };
       if (locateId !== null) {
+        locatedRef.current.set(locateId, response.report_not_found);
         if (!response.report_not_found && response.offset !== offset) {
           // The silent replace to the located page then finds it cached.
           queryClient.setQueryData([QUERY_KEYS.adminReports, response.offset / limit + 1], response);

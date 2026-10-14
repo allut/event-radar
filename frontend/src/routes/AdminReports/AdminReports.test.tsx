@@ -378,6 +378,36 @@ describe('AdminReports', () => {
       expect(screen.getByTestId('location-probe')).not.toHaveTextContent('page=2');
     });
 
+    it('does not re-locate a page-1 deep link on Back after its locate cache was collected while mounted', async () => {
+      const open = serveQueue(range(1, 120));
+      function BackButton() {
+        const navigate = useNavigate();
+        return <button type="button" onClick={() => navigate(-1)}>Go back</button>;
+      }
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, staleTime: 30_000, gcTime: 50 }, mutations: { retry: false } },
+      });
+      renderWithProviders(null, {
+        route: '/admin/reports?report=7',
+        queryClient,
+        routes: [{ path: '/admin/reports', element: <><AdminReports /><LocationProbe /><BackButton /></> }],
+      });
+      await waitFor(() => expect(rowButton('R#7#')).toHaveAttribute('aria-current', 'true'));
+      await userEvent.click(screen.getByRole('link', { name: 'Page 2' }));
+      await waitFor(() => expect(rowButton('R#51#')).toBeInTheDocument());
+      await waitFor(() =>
+        expect(queryClient.getQueryData([QUERY_KEYS.adminReports, 'locate', 7, 1])).toBeUndefined(),
+      );
+      // 50 newer, higher-ranked reports push #7 onto page 2 server-side.
+      open.unshift(...range(1001, 1050));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Go back' }));
+
+      await waitFor(() => expect(rowButton('R#1001#')).toBeInTheDocument());
+      expect(mockGet.mock.calls.slice(1).map(([url]) => url)).not.toContainEqual(expect.stringContaining('report='));
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/admin\/reports\?report=7$/);
+    });
+
     it('opens the mobile detail panel for the located row', async () => {
       serveQueue(range(1, 120));
       renderWithProviders(<AdminReports />, { route: '/admin/reports?report=110' });
