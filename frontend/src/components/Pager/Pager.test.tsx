@@ -296,6 +296,38 @@ describe('usePagedQuery', () => {
     expect(liveRegion()).toHaveTextContent('');
   });
 
+  it('replaces a stale page past an empty list with page 1, silently', async () => {
+    serve(0);
+    renderHarness('/list?page=5');
+
+    await waitFor(() => expect(location()).toBe('/list'));
+    expect(navType()).toBe('REPLACE');
+    expect(liveRegion()).toHaveTextContent('');
+  });
+
+  it('holdEmptyPage keeps a stale page on an empty list', async () => {
+    serve(0);
+    renderHarness('/list?page=5', { holdEmptyPage: true });
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(location()).toBe('/list?page=5');
+  });
+
+  it('clears the announcement on a filter push that stays on the same page', async () => {
+    serve(25);
+    renderHarness('/list');
+    await waitFor(() => expect(screen.getByText('Row 1')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('link', { name: 'Page 2' }));
+    await waitFor(() => expect(liveRegion()).toHaveTextContent('Page 2 of 3.'));
+    await userEvent.click(screen.getByRole('link', { name: 'Page 1' }));
+    await waitFor(() => expect(liveRegion()).toHaveTextContent('Page 1 of 3.'));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search jazz' }));
+    await waitFor(() => expect(location()).toBe('/list?q=jazz'));
+    await act(async () => {});
+    expect(liveRegion()).toHaveTextContent('');
+  });
+
   it('clears the announcement on a later silent page change', async () => {
     serve(25);
     renderHarness('/list');

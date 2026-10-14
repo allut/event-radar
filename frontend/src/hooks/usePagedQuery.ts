@@ -76,7 +76,13 @@ export function usePagedQuery<TData, TItem>({
   const itemCount = items.length;
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
-  const [announcement, setAnnouncement] = useState<PagerAnnouncement | null>(null);
+  // An announcement belongs to the history entry it was made on: any later
+  // navigation (page change, filter push, silent replace) retires it.
+  const [announced, setAnnounced] = useState<{
+    key: string;
+    announcement: PagerAnnouncement | null;
+  } | null>(null);
+  const announcement = announced?.key === location.key ? announced.announcement : null;
   const onPageSettledRef = useRef(onPageSettled);
   useEffect(() => {
     onPageSettledRef.current = onPageSettled;
@@ -108,7 +114,6 @@ export function usePagedQuery<TData, TItem>({
       navigationType === 'POP' ||
       (navigationType === 'PUSH' && !isListParamsNavigation(location.state));
     pendingSettleRef.current = counts ? page : null;
-    setAnnouncement(null);
   }, [page, navigationType, location.state]);
 
   // A stale link past the offset ceiling: land on the deepest reachable page.
@@ -127,19 +132,22 @@ export function usePagedQuery<TData, TItem>({
       replacePage(Math.floor(offset / pageSize) + 1);
       return;
     }
-    if (itemCount === 0 && total > 0 && !holdEmptyPage && page !== lastPage) {
-      // Past the end, or a refetch emptied this page: land on the real last page.
+    if (itemCount === 0 && !holdEmptyPage && page !== lastPage) {
+      // Past the end, or a refetch emptied this page: land on the real last
+      // page (total 0 has lastPage 1, so a stale ?page=5 returns to page 1).
       pendingSettleRef.current = null;
       replacePage(lastPage);
       return;
     }
     if (pendingSettleRef.current !== page) return;
     pendingSettleRef.current = null;
-    setAnnouncement(
-      itemCount > 0
-        ? { page, lastPage, from: offset + 1, to: offset + itemCount, total, totalIsLowerBound }
-        : null,
-    );
+    setAnnounced({
+      key: location.key,
+      announcement:
+        itemCount > 0
+          ? { page, lastPage, from: offset + 1, to: offset + itemCount, total, totalIsLowerBound }
+          : null,
+    });
     onPageSettledRef.current?.();
   }, [
     data,
@@ -153,6 +161,7 @@ export function usePagedQuery<TData, TItem>({
     totalIsLowerBound,
     lastPage,
     holdEmptyPage,
+    location.key,
     replacePage,
   ]);
 

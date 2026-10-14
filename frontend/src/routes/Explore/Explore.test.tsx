@@ -470,6 +470,15 @@ describe('Explore', () => {
       expect(canonicalHref()).not.toContain('page=9');
     });
 
+    it('a stale page on an empty result canonicalises to the unpaged URL', async () => {
+      mockPagedExplore(0);
+      renderExplore('/en/explore?page=5');
+
+      await waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe('/en/explore'));
+      await waitFor(() => expect(screen.getByText(/no events match/i)).toBeInTheDocument());
+      await waitFor(() => expect(canonicalHref()).toBe('https://eventradar.ee/en/explore'));
+    });
+
     it('the ItemList covers only the current page at positions 1..n', async () => {
       mockPagedExplore(130);
       renderExplore('/en/explore?page=3');
