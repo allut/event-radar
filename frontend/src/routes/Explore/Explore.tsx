@@ -70,6 +70,8 @@ interface ExploreResponse {
   limit: number;
   offset: number;
   has_more: boolean;
+  // Set when the relevance pool was cut at the backend ceiling; absent means false.
+  total_is_lower_bound?: boolean;
 }
 
 interface CurrentUser {
@@ -209,7 +211,12 @@ export default function Explore() {
       api.get<ExploreResponse>(
         withLocaleQuery(`${API.explore}?${buildExploreApiQuery(filters, pageOffset)}`, locale),
       ),
-    select: (data) => ({ items: data.events, total: data.total, offset: data.offset }),
+    select: (data) => ({
+      items: data.events,
+      total: data.total,
+      offset: data.offset,
+      totalIsLowerBound: data.total_is_lower_bound ?? false,
+    }),
     onPageSettled,
     // A facet emptied down to zero chips means "match nothing" — skip the
     // request entirely rather than round-tripping to the backend, which

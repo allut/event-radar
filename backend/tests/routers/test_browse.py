@@ -1,5 +1,7 @@
 """Tests for GET /explore (app/routers/browse.py)."""
 import asyncio
+import logging
+from array import array
 from datetime import date, datetime, timezone
 from unittest.mock import MagicMock
 
@@ -410,6 +412,127 @@ class TestBrowseScoredPath:
         assert [e["id"] for e in result["events"]] == [3, 4]
 
 
+class TestRelevanceCeiling:
+    """Path B scores up to BROWSE_RELEVANCE_CEILING and flags an overflow (#561)."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        from app.routers.browse import _score_cache
+
+        _score_cache.clear()
+        yield
+        _score_cache.clear()
+
+    @staticmethod
+    async def _run(mock_db, candidates, hydrated, limit=24, offset=0):
+        from app.routers.browse import _browse_scored_path
+
+        mock_db.scalars.side_effect = [
+            _scalars_result(candidates),
+            _scalars_result(hydrated),
+        ]
+        return await _browse_scored_path(
+            mock_db, [], for_you=False, sort="date", limit=limit, offset=offset,
+            current_user=None, now=datetime(2026, 4, 1, tzinfo=timezone.utc), locale="en",
+        )
+
+    @pytest.mark.asyncio
+    async def test_events_beyond_old_cap_are_reachable(self, mock_db, make_event):
+        events = [make_event(i, starts_at=datetime(2026, 5, 1, tzinfo=timezone.utc)) for i in range(1, 401)]
+        result = await self._run(mock_db, events, events[390:400], limit=10, offset=390)
+
+        assert result["total"] == 400
+        assert "total_is_lower_bound" not in result
+        assert result["has_more"] is False
+
+    @pytest.mark.asyncio
+    async def test_candidate_query_fetches_ceiling_plus_one_ordered_by_id(
+        self, mock_db, make_event, monkeypatch
+    ):
+        from app.routers import browse
+
+        monkeypatch.setattr(browse, "BROWSE_RELEVANCE_CEILING", 5)
+        await self._run(mock_db, [make_event(1)], [make_event(1)])
+
+        sql = str(mock_db.scalars.call_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True}))
+        assert "LIMIT 6" in sql
+        assert "ORDER BY events.starts_at ASC, events.id ASC" in sql
+
+    @pytest.mark.asyncio
+    async def test_overflow_scores_soonest_pool_and_sets_flag(
+        self, mock_db, make_event, monkeypatch
+    ):
+        from app.routers import browse
+
+        monkeypatch.setattr(browse, "BROWSE_RELEVANCE_CEILING", 3)
+        events = [make_event(i, starts_at=datetime(2026, 5, i, tzinfo=timezone.utc)) for i in range(1, 5)]
+        result = await self._run(mock_db, events, events[:3])
+
+        assert result["total"] == 3
+        assert result["total_is_lower_bound"] is True
+        assert result["has_more"] is False
+        hydration_sql = str(mock_db.scalars.call_args_list[-1].args[0].compile(compile_kwargs={"literal_binds": True}))
+        assert "4" not in hydration_sql.split("IN (")[1].split(")")[0]
+
+    @pytest.mark.asyncio
+    async def test_exactly_ceiling_rows_is_not_an_overflow(
+        self, mock_db, make_event, monkeypatch, caplog
+    ):
+        from app.routers import browse
+
+        monkeypatch.setattr(browse, "BROWSE_RELEVANCE_CEILING", 3)
+        events = [make_event(i, starts_at=datetime(2026, 5, i, tzinfo=timezone.utc)) for i in range(1, 4)]
+        with caplog.at_level(logging.WARNING, logger="app.routers.browse"):
+            result = await self._run(mock_db, events, events)
+
+        assert "total_is_lower_bound" not in result
+        assert not caplog.records
+
+    @pytest.mark.asyncio
+    async def test_overflow_logs_structured_warning(self, mock_db, make_event, monkeypatch, caplog):
+        from app.constants.log_events import LOG_EVENT_EXPLORE_CEILING_OVERFLOW
+        from app.routers import browse
+
+        monkeypatch.setattr(browse, "BROWSE_RELEVANCE_CEILING", 2)
+        events = [make_event(i) for i in range(1, 4)]
+        with caplog.at_level(logging.WARNING, logger="app.routers.browse"):
+            await self._run(mock_db, events, events[:2])
+
+        records = [r for r in caplog.records if getattr(r, "event", None) == LOG_EVENT_EXPLORE_CEILING_OVERFLOW]
+        assert len(records) == 1
+        assert records[0].levelno == logging.WARNING
+        assert records[0].ceiling == 2
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_still_returns_flag_and_logs_nothing(
+        self, mock_db, make_event, monkeypatch, caplog
+    ):
+        from app.routers import browse
+        from app.routers.browse import _browse_scored_path
+
+        monkeypatch.setattr(browse, "BROWSE_RELEVANCE_CEILING", 2)
+        events = [make_event(i) for i in range(1, 4)]
+        mock_db.scalars.side_effect = [
+            _scalars_result(events),  # candidates
+            _scalars_result(events[:2]),  # hydration
+            _scalars_result(events[:2]),  # hydration on the cache hit
+        ]
+        key = (browse.BROWSE_ANON_CACHE_SENTINEL, False, "date", (), (), False, None, None, None)
+        now = datetime(2026, 4, 1, tzinfo=timezone.utc)
+        kwargs = dict(
+            for_you=False, sort="date", limit=24, offset=0, current_user=None,
+            now=now, locale="en", cache_key=key,
+        )
+        first = await _browse_scored_path(mock_db, [], **kwargs)
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger="app.routers.browse"):
+            second = await _browse_scored_path(mock_db, [], **kwargs)
+
+        assert first["total_is_lower_bound"] is True
+        assert second["total_is_lower_bound"] is True
+        assert not caplog.records
+
+
 class TestScoreCache:
     """_score_cache_get/_score_cache_set (TTL + LRU eviction), and that
     _browse_scored_path actually consults them when given a cache_key."""
@@ -429,15 +552,25 @@ class TestScoreCache:
         key = (1, True, "relevance", (), (), False, None, None, None)
 
         assert browse._score_cache_get(key) is None
-        browse._score_cache_set(key, [3, 1, 2])
-        assert browse._score_cache_get(key) == [3, 1, 2]
+        browse._score_cache_set(key, array("I", [3, 1, 2]), False)
+        ids, lower_bound = browse._score_cache_get(key)
+        assert list(ids) == [3, 1, 2]
+        assert ids.itemsize == 4
+        assert lower_bound is False
+
+    def test_hit_carries_lower_bound_flag(self):
+        from app.routers import browse
+
+        key = (1, True, "relevance", (), (), False, None, None, None)
+        browse._score_cache_set(key, array("I", [1]), True)
+        assert browse._score_cache_get(key)[1] is True
 
     def test_expires_after_ttl(self, monkeypatch):
         from app.routers import browse
 
         key = (1, True, "relevance", (), (), False, None, None, None)
         monkeypatch.setattr(browse.time, "monotonic", lambda: 0.0)
-        browse._score_cache_set(key, [1])
+        browse._score_cache_set(key, array("I", [1]), False)
 
         monkeypatch.setattr(
             browse.time, "monotonic", lambda: browse.BROWSE_SCORE_CACHE_TTL_SECONDS + 1.0
@@ -451,13 +584,13 @@ class TestScoreCache:
         monkeypatch.setattr(browse, "BROWSE_SCORE_CACHE_MAX_ENTRIES", 2)
         monkeypatch.setattr(browse.time, "monotonic", lambda: 0.0)
 
-        browse._score_cache_set(("k1",), [1])
-        browse._score_cache_set(("k2",), [2])
-        browse._score_cache_set(("k3",), [3])
+        browse._score_cache_set(("k1",), array("I", [1]), False)
+        browse._score_cache_set(("k2",), array("I", [2]), False)
+        browse._score_cache_set(("k3",), array("I", [3]), False)
 
         assert len(browse._score_cache) == 2
         assert ("k1",) not in browse._score_cache
-        assert browse._score_cache_get(("k3",)) == [3]
+        assert list(browse._score_cache_get(("k3",))[0]) == [3]
 
     @pytest.mark.asyncio
     async def test_browse_scored_path_hit_skips_rescoring(self, mock_db, make_event):
@@ -647,11 +780,11 @@ class TestAnonymousExplore:
         mock_db.scalars.side_effect = [_scalars_result(events)]
         now = datetime(2026, 5, 10, tzinfo=timezone.utc)
 
-        ids = await _score_and_rank_candidates(
+        ranked, _ = await _score_and_rank_candidates(
             mock_db, [], for_you=False, sort="relevance", current_user=None, now=now
         )
 
-        assert set(ids) == {1, 2}
+        assert set(ranked) == {1, 2}
         assert mock_db.scalars.call_count == 1
 
     @pytest.mark.asyncio
@@ -666,10 +799,10 @@ class TestAnonymousExplore:
         # for_you=True still keeps the event — no feedback context exists to
         # hard-exclude it, and persona_affinity([], ...) == NEUTRAL_SCORE
         # passes BROWSE_FORYOU_MIN_AFFINITY.
-        ids = await _score_and_rank_candidates(
+        ranked, _ = await _score_and_rank_candidates(
             mock_db, [], for_you=True, sort="relevance", current_user=None, now=now
         )
-        assert ids == [1]
+        assert list(ranked) == [1]
 
     @pytest.mark.asyncio
     async def test_browse_scored_path_anonymous_returns_no_signals(
@@ -772,7 +905,7 @@ class TestAnonymousExplore:
         async def slow_scan(*args, **kwargs):
             call_count["n"] += 1
             await asyncio.sleep(0.01)
-            return [1]
+            return array("I", [1]), False
 
         with pytest.MonkeyPatch.context() as mp:
             from app.routers import browse

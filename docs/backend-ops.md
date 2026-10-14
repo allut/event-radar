@@ -146,6 +146,7 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 - **A paged list returns `total`, `limit` and `offset` on every request**, beside its own item key such as `groups`. The numbered pager derives its last page and past-end clamp from `total`, so it can't be skipped past offset 0. `has_more` stays on the wire, but the client never reads it.
 - **Every paged sort ends on a unique tie-breaker**, such as `GET /admin/submissions`' `created_at desc, id desc`. Without one, rows that share a sort value can repeat or vanish between offset pages.
 - **`GET /admin/reports?report=<event_id>` locates a row** (the admin email deep link). It ignores `offset`, finds the row's position with one `ROW_NUMBER()` over the same four-key sort (`has_illegal desc, report_count desc, oldest asc, event_id`), and returns that page with its real `offset`. A row no longer in the queue gets page 1 and `report_not_found: true`.
+- **Explore's relevance path caps its ranked pool at a ceiling and flags it with `total_is_lower_bound`.** The envelope rule, keyset removal and that ceiling are described in [pipeline.md](pipeline.md)'s Pagination section.
 - **`PAGINATION_MAX_OFFSET` (5,000) is cross-stack**, in `shared/app-config.json`. A deeper offset gets a 422, or a clamp on `GET /organizer/events`. The frontend pager caps its last page at the same value, so it never links past it.
 
 ## Scheduled Jobs

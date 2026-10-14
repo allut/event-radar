@@ -263,6 +263,13 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 - **`q` is capped at `BROWSE_QUERY_MAX_LEN`.** `_keyword_filter` matches `%...%` against two trigram GIN indexes, so an unbounded string is cheap to send and expensive to scan.
 - **Both paths page on `limit`/`offset` and return an exact `total` on every request.** There is no cursor. Each SQL sort ends in an `id` tie-breaker, so tied rows keep one order across pages. The frontend shows a numbered pager at `BROWSE_PAGE_SIZE`.
 
+### Pagination
+
+- **Every paged list returns `total`, `limit` and `offset` on every request.** There are no cursors, and `total` is counted every time. The envelope rule for admin lists is in [backend-ops.md](backend-ops.md)'s Pagination section.
+- **Explore's scored path ranks at most `BROWSE_RELEVANCE_CEILING` (2,000) events.** The candidate query fetches the ceiling plus one row, ordered `starts_at, id`. Below the ceiling every match is ranked; one extra row means only the soonest 2,000 are scored.
+- **An overflow sets `total_is_lower_bound: true` on the response and logs `explore_ceiling_overflow`.** The flag is set even when the filters then leave fewer rows, and is absent otherwise. `total` is the reachable count, so it drives the last page; the pager reads "… of 2,000+" and announces "of more than 2,000".
+- **The score cache keeps each ranked id list as an `array("I")`, 4 bytes per id, beside the flag.** A full cache stays near 16 MB, and the entry cap and 30 s TTL are unchanged. An overflow logs once per scoring pass, not per cache hit.
+
 ### Saved Events
 
 - **`GET /feedback/events` (`app/routers/feedback.py`) lists the user's events carrying one preference signal**, most recent first. It is rate-limited by `RATE_LIMIT_FEEDBACK`.

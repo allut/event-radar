@@ -29,6 +29,10 @@ LOG_EVENT_IDENTITY_LINKED = "identity_linked"  # provider identity row created
 LOG_EVENT_IDENTITY_UNLINKED = "identity_unlinked"
 LOG_EVENT_SCHEMA_DRIFT = "schema_drift"  # boot-time alembic-head mismatch (see ERROR_SCHEMA_DRIFT)
 
+# GET /explore scored path: the candidate query overflowed BROWSE_RELEVANCE_CEILING
+# (carries `ceiling`), so only the soonest events were ranked.
+LOG_EVENT_EXPLORE_CEILING_OVERFLOW = "explore_ceiling_overflow"
+
 # `status` field values for LOG_EVENT_JOB_RUN.
 LOG_STATUS_OK = "ok"
 LOG_STATUS_ERROR = "error"

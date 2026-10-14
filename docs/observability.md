@@ -40,6 +40,7 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `contact_honeypot_block` | contact-form honeypot field tripped (bot signal) | `app/routers/contact.py` |
 | `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/main.py` |
 | `unverified_account_budget_exceeded` | global daily new-unverified-account budget crossed (mail-bomb early warning, OWASP audit F10) | `app/routers/utils.py::record_unverified_account_creation` |
+| `explore_ceiling_overflow` | `GET /explore` candidate query returned more than `BROWSE_RELEVANCE_CEILING` rows, so only the soonest were ranked (carries `ceiling`) | `app/routers/browse.py` |
 | `google_signin` | Google sign-in completed on either track (carries `track` — `user`/`organizer` — and `outcome`, e.g. `existing_login`/`new_account`/`auto_linked`/`confirmation_sent`) | `app/routers/auth.py`, `app/routers/organizer_auth.py` (the two Google callbacks) |
 | `google_signin_degraded` | network/5xx failure talking to Google (token exchange or JWKS fetch) — upstream degradation, distinct from a rejected caller | `app/routers/auth.py`, `app/routers/organizer_auth.py`, `app/auth/google_oauth.py` |
 | `identity_linked` | a provider identity row was created (new account, auto-link, or confirmation-link absorption) | `app/routers/auth.py`, `app/routers/organizer_auth.py` |

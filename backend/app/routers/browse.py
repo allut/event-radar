@@ -7,7 +7,9 @@ affinity and the feedback-based soft-filter aren't expressible as SQL ORDER BY.
 """
 
 import asyncio
+import logging
 import time
+from array import array
 from collections import OrderedDict
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
@@ -32,7 +34,8 @@ from app.constants.ranking import (
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_NEG_INF,
     BROWSE_QUERY_MAX_LEN,
-    BROWSE_RELEVANCE_MAX_CANDIDATES,
+    BROWSE_RELEVANCE_CEILING,
+    BROWSE_SCORE_CACHE_ID_TYPECODE,
     BROWSE_SCORE_CACHE_MAX_ENTRIES,
     BROWSE_SCORE_CACHE_TTL_SECONDS,
     BROWSE_SORT_DATE,
@@ -48,6 +51,7 @@ from app.constants.ranking import (
     SIGNAL_LIKE,
     VALID_BROWSE_SORTS,
 )
+from app.constants.log_events import LOG_EVENT_EXPLORE_CEILING_OVERFLOW
 from app.constants.rate_limits import RATE_LIMIT_BROWSE
 from app.db import get_db
 from app.models.models import Event, EventClassification, User, UserEventFeedback, UserPersona
@@ -75,6 +79,8 @@ from app.events.queries import (
     public_event_filter,
     select_events_with_classification,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["browse"])
 
@@ -282,20 +288,22 @@ def _sort_key_and_reverse(
 
 
 # (user_id, for_you, sort, categories, vibes, free, q, date_from, date_to) ->
-# (cached_at monotonic, ranked id list). See BROWSE_SCORE_CACHE_TTL_SECONDS.
-_score_cache: OrderedDict[tuple, tuple[float, list[int]]] = OrderedDict()
+# (cached_at monotonic, ranked ids, total_is_lower_bound). The ids are an
+# array("I") at 4 bytes each. See BROWSE_SCORE_CACHE_TTL_SECONDS.
+_RankedIds = tuple[array, bool]
+_score_cache: OrderedDict[tuple, tuple[float, array, bool]] = OrderedDict()
 
 
-def _score_cache_get(key: tuple) -> list[int] | None:
+def _score_cache_get(key: tuple) -> _RankedIds | None:
     entry = _score_cache.get(key)
     if entry is None:
         return None
-    cached_at, ids = entry
+    cached_at, ids, lower_bound = entry
     if time.monotonic() - cached_at > BROWSE_SCORE_CACHE_TTL_SECONDS:
         del _score_cache[key]
         return None
     _score_cache.move_to_end(key)
-    return ids
+    return ids, lower_bound
 
 
 def _evict_lru(od: OrderedDict, max_entries: int) -> None:
@@ -303,8 +311,8 @@ def _evict_lru(od: OrderedDict, max_entries: int) -> None:
         od.popitem(last=False)
 
 
-def _score_cache_set(key: tuple, ids: list[int]) -> None:
-    _score_cache[key] = (time.monotonic(), ids)
+def _score_cache_set(key: tuple, ids: array, lower_bound: bool) -> None:
+    _score_cache[key] = (time.monotonic(), ids, lower_bound)
     _score_cache.move_to_end(key)
     _evict_lru(_score_cache, BROWSE_SCORE_CACHE_MAX_ENTRIES)
 
@@ -337,7 +345,13 @@ async def _score_and_rank_candidates(
     sort: str,
     current_user: User | None,
     now: datetime,
-) -> list[int]:
+) -> _RankedIds:
+    """Score and sort the candidate pool; return its ids and the lower-bound flag.
+
+    The query fetches BROWSE_RELEVANCE_CEILING + 1 rows soonest-first. One extra
+    row means the pool overflowed: only the soonest ceiling are scored and the
+    flag is set, even when the filters below then leave fewer.
+    """
     candidate_stmt = (
         select(Event)
         .join(Event.classification)
@@ -356,10 +370,21 @@ async def _score_and_rank_candidates(
             selectinload(Event.venue),
         )
         .where(*conds)
-        .order_by(Event.starts_at.asc())
-        .limit(BROWSE_RELEVANCE_MAX_CANDIDATES)
+        .order_by(Event.starts_at.asc(), Event.id.asc())
+        .limit(BROWSE_RELEVANCE_CEILING + 1)
     )
     candidates = list((await db.scalars(candidate_stmt)).all())
+    lower_bound = len(candidates) > BROWSE_RELEVANCE_CEILING
+    if lower_bound:
+        candidates = candidates[:BROWSE_RELEVANCE_CEILING]
+        logger.warning(
+            "explore candidate pool exceeded the ceiling; ranking the soonest %d",
+            BROWSE_RELEVANCE_CEILING,
+            extra={
+                "event": LOG_EVENT_EXPLORE_CEILING_OVERFLOW,
+                "ceiling": BROWSE_RELEVANCE_CEILING,
+            },
+        )
 
     # Anonymous caller (#234): no persona/feedback rows to load, and the
     # locked anonymous formula drops feedback_signal entirely rather than
@@ -420,7 +445,8 @@ async def _score_and_rank_candidates(
 
     key_func, reverse = _sort_key_and_reverse(sort)
     survivors.sort(key=key_func, reverse=reverse)
-    return [event.id for _, event in survivors]
+    ids = array(BROWSE_SCORE_CACHE_ID_TYPECODE, (event.id for _, event in survivors))
+    return ids, lower_bound
 
 
 async def _browse_scored_path(
@@ -439,7 +465,7 @@ async def _browse_scored_path(
     ``current_user`` is None for an anonymous caller (#234).
 
     The scored-and-sorted id list is cached (see BROWSE_SCORE_CACHE_TTL_SECONDS)
-    so paging through /explore's infinite scroll re-scores the candidate pool
+    so paging through /explore's numbered pager re-scores the candidate pool
     once instead of once per page. ``cache_key=None`` (the default) skips the
     cache entirely — always re-scores. When a cache miss occurs, a per-key
     asyncio.Lock coalesces concurrent misses on the same key so only one
@@ -447,27 +473,28 @@ async def _browse_scored_path(
     cache — load-bearing for anonymous traffic, which shares one cache key
     (BROWSE_ANON_CACHE_SENTINEL) across all callers.
     """
-    ranked_ids = _score_cache_get(cache_key) if cache_key is not None else None
-    if ranked_ids is None:
+    ranked = _score_cache_get(cache_key) if cache_key is not None else None
+    if ranked is None:
         if cache_key is not None:
             async with _score_cache_lock(cache_key):
                 # Re-check: another caller may have populated the cache while
                 # this one was waiting on the lock.
-                ranked_ids = _score_cache_get(cache_key)
-                if ranked_ids is None:
-                    ranked_ids = await _score_and_rank_candidates(
+                ranked = _score_cache_get(cache_key)
+                if ranked is None:
+                    ranked = await _score_and_rank_candidates(
                         db, conds, for_you, sort, current_user, now
                     )
-                    _score_cache_set(cache_key, ranked_ids)
+                    _score_cache_set(cache_key, *ranked)
         else:
-            ranked_ids = await _score_and_rank_candidates(
+            ranked = await _score_and_rank_candidates(
                 db, conds, for_you, sort, current_user, now
             )
+    ranked_ids, lower_bound = ranked
 
-    # `total` is capped at BROWSE_RELEVANCE_MAX_CANDIDATES when the candidate
-    # pool hit the cap — an accepted Path-B approximation.
+    # `total` is the reachable count: the whole matching set below
+    # BROWSE_RELEVANCE_CEILING, the ranked soonest pool when `lower_bound` is set.
     total = len(ranked_ids)
-    page_ids = ranked_ids[offset : offset + limit]
+    page_ids = list(ranked_ids[offset : offset + limit])
 
     events_by_id: dict[int, Event] = {}
     if page_ids:
@@ -490,7 +517,7 @@ async def _browse_scored_path(
     user_id = current_user.id if current_user is not None else None
     sigs, reported = await _load_signals_and_reported(db, user_id, page_ids)
 
-    return {
+    response: dict = {
         "events": [
             serialize_event(
                 e, locale=locale, feedback_by_event=sigs, reported_event_ids=reported
@@ -502,6 +529,9 @@ async def _browse_scored_path(
         "offset": offset,
         "has_more": offset + len(page_ids) < total,
     }
+    if lower_bound:
+        response["total_is_lower_bound"] = True
+    return response
 
 
 @router.get("/explore")

@@ -324,6 +324,26 @@ describe('Explore', () => {
       expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument();
     });
 
+    it('reads "of 2,000+" when the backend flags the total as a lower bound', async () => {
+      mockGet.mockImplementation(async (path: string) => {
+        if (path.startsWith('/users/me')) return currentUser;
+        const events = Array.from({ length: 24 }, (_, i) => makeEvent({ id: i + 1, title: `Event ${i + 1}` }));
+        return { events, total: 2000, limit: 24, offset: 0, has_more: true, total_is_lower_bound: true };
+      });
+      const { container } = renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+
+      expect(container.textContent).toContain('1–24 of 2,000+');
+    });
+
+    it('treats a missing total_is_lower_bound as false', async () => {
+      mockPagedExplore(130);
+      const { container } = renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+
+      expect(container.textContent).not.toContain('130+');
+    });
+
     it('after a page change focuses the hidden Events heading and instant-scrolls to it', async () => {
       mockPagedExplore(130);
       renderExplore('/en/explore');

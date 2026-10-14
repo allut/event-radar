@@ -99,15 +99,14 @@ PAGINATION_MIN_OFFSET: int = 0
 # discard that many rows on every request at the endpoint's full rate limit.
 # The numbered pager (spec #551) caps its last reachable page at the same
 # value, so a deep list shows "… of N+" instead of linking to a 422.
-# Candidate cap for the Python-scored path (Path B: for_you=True OR sort=relevance —
-# so also date/price/quality sort *under* for_you=True, not just relevance). Sorted
-# soonest-first before capping, so the cap policy is a deliberate soonest-bias, not
-# an arbitrary truncation: a date sort still yields globally-correct soonest-first
-# results, but price/quality sort under for_you=True is only a true sort within the
-# soonest BROWSE_RELEVANCE_MAX_CANDIDATES matches, not a global one — an accepted
-# Path-B approximation at MVP scale (`total` in the response reflects at most this
-# many rows when the cap is hit; see browse.py docstring).
-BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
+# Candidate ceiling for the Python-scored path (Path B: for_you=True OR sort=relevance —
+# so also date/price/quality sort *under* for_you=True, not just relevance). The
+# candidate query fetches ceiling + 1 rows ordered soonest-first (`starts_at`, `id`):
+# when it overflows, only the soonest BROWSE_RELEVANCE_CEILING are scored and the
+# response sets `total_is_lower_bound`, so the cap is a deliberate soonest-bias, not an
+# arbitrary truncation. Below the ceiling every matching event is ranked. Each overflow
+# logs LOG_EVENT_EXPLORE_CEILING_OVERFLOW so Axiom shows when volume outgrows it.
+BROWSE_RELEVANCE_CEILING: int = 2000
 # _browse_scored_path scores+sorts the full (capped) candidate pool on every
 # call, then slices a page — so every page of /explore pays
 # O(candidates) again even though the ranked order didn't change.
@@ -120,9 +119,12 @@ BROWSE_SCORE_CACHE_TTL_SECONDS: float = 30.0
 # Raised from 512 (Big-O audit M10): at "hundreds of active users" toggling
 # facets within one 30s TTL window, 512 distinct (user, filter) keys thrashed
 # the LRU toward a near-zero hit rate. Each entry is a scored id list bounded
-# by BROWSE_RELEVANCE_MAX_CANDIDATES (300), so this is still a small,
-# single-process, bounded cache — not a per-row cost.
+# by BROWSE_RELEVANCE_CEILING and stored at BROWSE_SCORE_CACHE_ID_BYTES per id, so a
+# full cache stays around 16 MB — small, single-process, bounded, not a per-row cost.
 BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 2048
+# Ranked ids are cached as array("I") (unsigned 32-bit), not a list of int objects.
+BROWSE_SCORE_CACHE_ID_TYPECODE: str = "I"
+BROWSE_SCORE_CACHE_ID_BYTES: int = 4
 # Fixed sentinel in place of a real user id for the anonymous-caller cache key
 # (#234) — anonymous /explore traffic shares one cache entry per filter/sort
 # combination rather than one per caller. Never collides with a real User.id
