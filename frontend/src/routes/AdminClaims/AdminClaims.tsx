@@ -28,8 +28,8 @@ import { ROUTES } from '../../constants/routes';
 import { apiErrorMessage, relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
-import { useToast } from '../../hooks/useToast';
-import { useAdminQueuePage } from '../../hooks/useAdminQueuePage';
+import { useToast, type UseToastResult } from '../../hooks/useToast';
+import { useAdminQueuePage, type ActionSpot } from '../../hooks/useAdminQueuePage';
 import { usePageParam } from '../../hooks/usePageParam';
 import Pager from '../../components/Pager';
 import AdminQueueSplitView from '../../components/AdminQueueSplitView';
@@ -126,6 +126,7 @@ function renderClaimRow(item: AdminClaim & { relativeCreated: string }) {
 export default function AdminClaims() {
   const [searchParams] = useSearchParams();
   const { setListParams } = usePageParam({ defaults: { [ADMIN_CLAIMS_TAB_PARAM]: CLAIM_STATUS_PENDING } });
+  const { toast, showToast } = useToast();
   const activeTab: ClaimTab =
     searchParams.get(ADMIN_CLAIMS_TAB_PARAM) === CLAIM_STATUS_APPROVED ? CLAIM_STATUS_APPROVED : CLAIM_STATUS_PENDING;
 
@@ -168,27 +169,36 @@ export default function AdminClaims() {
       {/* Keyed by tab: the selection, note draft and acted-on tags are
           per-tab (a claim declined on one tab flips out of both server
           filters and must not leak into the other). */}
-      <ClaimsQueue key={activeTab} activeTab={activeTab} />
+      {/* The toast lives here, not in the keyed queue: an action that fails
+          after a tab switch still reports its error. */}
+      <ClaimsQueue key={activeTab} activeTab={activeTab} showToast={showToast} />
+      {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
     </div>
   );
 }
 
-function ClaimsQueue({ activeTab }: { activeTab: ClaimTab }) {
+function ClaimsQueue({
+  activeTab,
+  showToast,
+}: {
+  activeTab: ClaimTab;
+  showToast: UseToastResult['showToast'];
+}) {
   const queryClient = useQueryClient();
-  const { toast, showToast } = useToast();
   const [note, setNote] = useState('');
   const {
     rows,
     total,
     tags: resolvedById,
     tagRow,
+    resyncAfterFailedAction,
     selectedId,
     setSelectedId,
     listRef,
     isLoading,
     isError,
     isPlaceholderData,
-    offset: shownOffset,
+    actionSpot,
     pagerProps,
   } = useAdminQueuePage<AdminClaimsResponse, AdminClaim, AdminClaimActionKind>({
     queryKey: [QUERY_KEYS.adminClaims, activeTab],
@@ -199,6 +209,10 @@ function ClaimsQueue({ activeTab }: { activeTab: ClaimTab }) {
       ),
     select: (data) => ({ items: data.claims, total: data.total, offset: data.offset }),
     getId: getClaimId,
+    // The claim changes tabs, so the other tab's cached pages are out of date
+    // too: the action invalidates the whole prefix, refetching whichever tab
+    // is mounted by then (the admin may have switched tab mid-action).
+    invalidateKey: [QUERY_KEYS.adminClaims],
     onPageSettled: () => setNote(''),
   });
 
@@ -210,7 +224,7 @@ function ClaimsQueue({ activeTab }: { activeTab: ClaimTab }) {
   const currentId = selectedId ?? items[0]?.id ?? null;
 
   const actionMutation = useMutation({
-    mutationFn: ({ item, kind, note }: { item: AdminClaim; kind: AdminClaimActionKind; note: string; offset: number }) => {
+    mutationFn: ({ item, kind, note }: { item: AdminClaim; kind: AdminClaimActionKind; note: string; spot: ActionSpot }) => {
       const path =
         kind === 'granted'
           ? API.adminClaimGrant(item.id)
@@ -219,24 +233,22 @@ function ClaimsQueue({ activeTab }: { activeTab: ClaimTab }) {
             : API.adminClaimRevoke(item.id);
       return adminApi.post<AdminClaimActionResult>(path, { resolution_note: note });
     },
-    onSuccess: (_result, { item, kind, offset: actedOffset }) => {
-      // The claim changed tabs, so the other tab's cached pages are out of
-      // date too, not just this one.
-      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminClaims], refetchType: 'none' });
+    onSuccess: (_result, { item, kind, spot }) => {
       // Tags the row in place and refetches this page once, so the next
       // row up fills the gap (spec #551). The note draft only resets when
       // the admin is still on the page they acted on.
-      if (tagRow(item, kind, actedOffset)) setNote('');
+      if (tagRow(item, kind, spot)) setNote('');
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
       showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
+      resyncAfterFailedAction(err);
     },
   });
 
   function act(item: AdminClaim, kind: AdminClaimActionKind) {
     if (!note.trim()) return;
-    actionMutation.mutate({ item, kind, note: note.trim(), offset: shownOffset });
+    actionMutation.mutate({ item, kind, note: note.trim(), spot: actionSpot(item) });
   }
 
   const isResolved = useCallback((item: AdminClaim) => resolvedById.has(item.id), [resolvedById]);
@@ -390,7 +402,6 @@ function ClaimsQueue({ activeTab }: { activeTab: ClaimTab }) {
           />
         </div>
       )}
-      {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
@@ -20,7 +20,7 @@ import { apiErrorMessage, relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
-import { useAdminQueuePage } from '../../hooks/useAdminQueuePage';
+import { useAdminQueuePage, type ActionSpot } from '../../hooks/useAdminQueuePage';
 import Pager from '../../components/Pager';
 import AdminQueueSplitView from '../../components/AdminQueueSplitView';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
@@ -100,7 +100,10 @@ function reasonLabel(reason: string): string {
 // The admin email deep link is `?report=<event_id>`. With no `page` the
 // server finds that row's page and returns its real offset (usePagedQuery
 // syncs the URL to it silently); once the URL carries a `page`, `report` is
-// only used to pick the selected row and is never sent.
+// only used to pick the selected row and is never sent. A row located on
+// page 1 leaves the URL without a `page`, so the locate runs once per link:
+// later refetches ask for the plain page and keep its not-found flag, rather
+// than re-locating and jumping pages if the row has since moved.
 export default function AdminReports() {
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
@@ -112,6 +115,7 @@ export default function AdminReports() {
   const linkedId = Number.isInteger(parsedLinkedId) && parsedLinkedId > 0 ? parsedLinkedId : null;
   // Only ask the server to locate the row while the URL has no page.
   const locateId = linkedId !== null && !searchParams.has(PAGE_QUERY_PARAM) ? linkedId : null;
+  const locatedRef = useRef<{ id: number; notFound: boolean } | null>(null);
 
   const {
     rows,
@@ -119,26 +123,32 @@ export default function AdminReports() {
     total,
     tags: resolvedById,
     tagRow,
+    resyncAfterFailedAction,
     selectedId,
     setSelectedId,
     listRef,
     isLoading,
     isError,
     isPlaceholderData,
-    offset: shownOffset,
+    actionSpot,
     pagerProps,
   } = useAdminQueuePage<AdminReportsResponse, AdminReportedEvent, ResolutionKind>({
     // A located response holds a page the plain page-1 key must not cache.
     queryKey: locateId === null ? [QUERY_KEYS.adminReports] : [QUERY_KEYS.adminReports, 'locate', locateId],
     pageSize: ADMIN_REPORTS_QUEUE_PAGE_SIZE,
     fetchPage: async ({ limit, offset }) => {
-      const locate = locateId === null ? '' : `&${ADMIN_REPORTS_PARAM.report}=${locateId}`;
+      const located = locateId !== null && locatedRef.current?.id === locateId ? locatedRef.current : null;
+      const locate = locateId === null || located !== null ? '' : `&${ADMIN_REPORTS_PARAM.report}=${locateId}`;
       const response = await adminApi.get<AdminReportsResponse>(
         `${API.adminReports}?${PAGE_PARAM.limit}=${limit}&${PAGE_PARAM.offset}=${offset}${locate}`,
       );
-      if (locateId !== null && !response.report_not_found && response.offset !== offset) {
-        // The silent replace to the located page then finds it cached.
-        queryClient.setQueryData([QUERY_KEYS.adminReports, response.offset / limit + 1], response);
+      if (located !== null) return { ...response, report_not_found: located.notFound };
+      if (locateId !== null) {
+        locatedRef.current = { id: locateId, notFound: response.report_not_found };
+        if (!response.report_not_found && response.offset !== offset) {
+          // The silent replace to the located page then finds it cached.
+          queryClient.setQueryData([QUERY_KEYS.adminReports, response.offset / limit + 1], response);
+        }
       }
       return response;
     },
@@ -164,28 +174,29 @@ export default function AdminReports() {
     locateId !== null && data?.report_not_found === true && !resolvedById.has(locateId) ? locateId : null;
 
   const actionMutation = useMutation({
-    mutationFn: ({ item, kind, note }: { item: AdminReportedEvent; kind: ResolutionKind; note: string; offset: number }) => {
+    mutationFn: ({ item, kind, note }: { item: AdminReportedEvent; kind: ResolutionKind; note: string; spot: ActionSpot }) => {
       const path = kind === 'resolved' ? API.adminReportResolve(item.event_id) : API.adminReportTakedown(item.event_id);
       return adminApi.post<AdminReportActionResult>(path, { resolution_note: note });
     },
-    onSuccess: (result, { item, kind, offset: actedOffset }) => {
+    onSuccess: (result, { item, kind, spot }) => {
       const resolvedItem = kind === 'taken_down' && result.status ? { ...item, status: result.status } : item;
       // Every cached page of the queue is now out of date, not just this one.
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminReports], refetchType: 'none' });
       // Tags the row in place and refetches this page once, so the next
       // report up fills the gap (spec #551). The note draft only resets when
       // the admin is still on the page they acted on.
-      if (tagRow(resolvedItem, kind, actedOffset)) setNote('');
+      if (tagRow(resolvedItem, kind, spot)) setNote('');
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
       showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
+      resyncAfterFailedAction(err);
     },
   });
 
   function act(item: AdminReportedEvent, kind: ResolutionKind) {
     if (!note.trim()) return;
-    actionMutation.mutate({ item, kind, note: note.trim(), offset: shownOffset });
+    actionMutation.mutate({ item, kind, note: note.trim(), spot: actionSpot(item) });
   }
 
   // Stable across note keystrokes (only resolvedById changes them) — see

@@ -341,6 +341,28 @@ async def test_list_reports_already_resolved_report_returns_page_one(
 
 
 @pytest.mark.asyncio
+async def test_list_reports_rejects_a_report_id_past_bigint(
+    admin_app, make_db_ctx, mock_db
+):
+    """A hand-edited deep link past Postgres BIGINT gets a 422, not a 500 from
+    the overflowing bind; the largest BIGINT is still a valid id."""
+    db = mock_db
+    # total + locate per request that reaches the query.
+    db.scalar = AsyncMock(side_effect=[0, None, 0, None])
+    db.execute = AsyncMock(return_value=execute_rows([]))
+
+    too_big = await _get_reports(
+        admin_app, db, make_db_ctx, "/admin/reports?report=9223372036854775808"
+    )
+    largest = await _get_reports(
+        admin_app, db, make_db_ctx, "/admin/reports?report=9223372036854775807"
+    )
+
+    assert too_big.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
+    assert largest.status_code == http.HTTPStatus.OK
+
+
+@pytest.mark.asyncio
 async def test_reports_list_uses_the_admin_read_bucket(admin_app, make_db_ctx, mock_db):
     """Refetch-after-action costs a list GET per action: it runs on the
     browse rate in the shared admin-read bucket, not the 10/minute one."""

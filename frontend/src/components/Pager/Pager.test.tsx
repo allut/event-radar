@@ -191,6 +191,19 @@ describe('usePageParam', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Default sort' }));
     expect(location()).toBe('/list');
   });
+
+  it('setListParams is a no-op when nothing but the page would change', async () => {
+    serve(25);
+    renderHarness('/list?q=jazz&page=3');
+    await waitFor(() => expect(screen.getByText('Row 21')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search jazz' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Default sort' }));
+
+    expect(location()).toBe('/list?q=jazz&page=3');
+    expect(navType()).toBe('POP');
+    expect(screen.getByText('Row 21')).toBeInTheDocument();
+  });
 });
 
 describe('usePagedQuery', () => {
@@ -314,6 +327,42 @@ describe('usePagedQuery', () => {
 
     expect(onPageSettled).not.toHaveBeenCalled();
     expect(liveRegion()).toHaveTextContent('');
+  });
+
+  it('keeps a filter change silent when it lands before a pending page change loaded', async () => {
+    serve(25);
+    const onPageSettled = vi.fn();
+    renderHarness('/list?page=2', { onPageSettled });
+    await waitFor(() => expect(screen.getByText('Row 11')).toBeInTheDocument());
+    const held: Array<() => void> = [];
+    const served = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation((url: string) => new Promise((resolve) => held.push(() => resolve(served(url)))));
+
+    await userEvent.click(screen.getByRole('link', { name: 'Page 1' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Search jazz' }));
+    expect(location()).toBe('/list?q=jazz');
+    await act(async () => {
+      for (const release of held) release();
+    });
+
+    await waitFor(() => expect(screen.getByText('Row 1')).toBeInTheDocument());
+    await act(async () => {});
+    expect(onPageSettled).not.toHaveBeenCalled();
+    expect(liveRegion()).toHaveTextContent('');
+  });
+
+  it('settles on the clamp target when a pager click lands on a page that has since emptied', async () => {
+    serve(35);
+    const onPageSettled = vi.fn();
+    renderHarness('/list?page=3', { onPageSettled });
+    await waitFor(() => expect(screen.getByText('Row 21')).toBeInTheDocument());
+    serve(25);
+
+    await userEvent.click(screen.getByRole('link', { name: 'Page 4' }));
+
+    await waitFor(() => expect(location()).toBe('/list?page=3'));
+    await waitFor(() => expect(onPageSettled).toHaveBeenCalledTimes(1));
+    expect(liveRegion()).toHaveTextContent(/^Page 3 of \d\./);
   });
 
   it('treats an ordinary app link to page 1 as silent, not a page change', async () => {

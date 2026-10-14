@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { PAGE_QUERY_PARAM } from '../constants/api';
+import { StatusCodes } from 'http-status-codes';
+import { ApiError } from '../api/client';
+import { PAGE_QUERY_PARAM, QUERY_KEYS } from '../constants/api';
 import { MOBILE_BREAKPOINT_PX } from '../constants/core';
 import { usePagedQuery, type UsePagedQueryOptions } from './usePagedQuery';
 import { parsePageParam } from './usePageParam';
@@ -29,6 +31,14 @@ export function mergeQueueRows<TItem>(
   return rows;
 }
 
+/** Where a row sat when the admin acted on it: the page offset and its slot
+ * in the rendered rows. Capture it with `actionSpot` when the action is
+ * triggered (in the mutation variables) and hand it back to `tagRow`. */
+export interface ActionSpot {
+  offset: number;
+  slot: number;
+}
+
 interface TagState<TItem, TKind extends string> {
   /** The offset of the page the tags were made on. */
   offset: number;
@@ -38,6 +48,10 @@ interface TagState<TItem, TKind extends string> {
 export interface UseAdminQueuePageOptions<TData, TItem>
   extends Pick<UsePagedQueryOptions<TData, TItem>, 'queryKey' | 'pageSize' | 'fetchPage' | 'select'> {
   getId: (item: TItem) => number;
+  /** The key prefix one action invalidates, refetching whichever of its
+   * queries is mounted. Defaults to `queryKey`; Claims pass the whole
+   * claims prefix, since an action moves a claim between tabs. */
+  invalidateKey?: QueryKey;
   /** Route-specific resets once a new page has settled (e.g. the note draft),
    * after the shared ones: first row selected and focused, tags cleared,
    * list scroll reset. A silent replace onto another page (a refetch that
@@ -52,9 +66,10 @@ export interface UseAdminQueuePageOptions<TData, TItem>
  * - `tagRow` records a successful row-removing action and triggers one
  *   background refetch of the current page (no debounce), so the next page
  *   never skips rows. Tagged rows stay in place; pulled-up rows append.
- *   Pass it the `offset` captured when the action was triggered (in the
- *   mutation variables): onSuccess runs with the latest render, so an action
- *   that resolves after the admin changed page must not tag onto the new one.
+ *   Pass it the `actionSpot(item)` captured when the action was triggered
+ *   (in the mutation variables): onSuccess runs with the latest render, so an
+ *   action that resolves after the admin changed page must not tag onto the
+ *   new one, and one whose row a refetch already dropped still tags in place.
  * - The page is held (`holdEmptyPage`) while it has tagged rows, so clearing
  *   a last page leaves the admin on it with the no-items label.
  * - A page change selects and focuses the first row, resets the list's
@@ -68,6 +83,7 @@ export function useAdminQueuePage<TData, TItem, TKind extends string>({
   fetchPage,
   select,
   getId,
+  invalidateKey = queryKey,
   onPageSettled,
 }: UseAdminQueuePageOptions<TData, TItem>) {
   const queryClient = useQueryClient();
@@ -133,19 +149,27 @@ export function useAdminQueuePage<TData, TItem, TKind extends string>({
 
   const rows = useMemo(() => mergeQueueRows(serverItems, pageTags, getId), [serverItems, pageTags, getId]);
 
-  /** Record a successful row-removing action and refetch the page once.
-   * `actedOffset` is the page offset when the action was triggered; when the
-   * admin has since left that page (or the row is no longer on screen), the
-   * row is not tagged and only the refetch runs. Returns whether it tagged,
-   * so the route only resets its note draft for an action on this page. */
-  const tagRow = (item: TItem, kind: TKind, actedOffset: number): boolean => {
+  /** The spot to capture when an action on `item` is triggered. */
+  const actionSpot = (item: TItem): ActionSpot => {
     const id = getId(item);
-    const slot = rows.findIndex((row) => getId(row) === id);
-    const samePage = actedOffset === offset && actedOffset === requestedOffset && slot !== -1;
+    return { offset, slot: Math.max(0, rows.findIndex((row) => getId(row) === id)) };
+  };
+
+  /** Record a successful row-removing action and refetch the page once.
+   * `spot` is the `actionSpot` captured when the action was triggered; when
+   * the admin has since left that page, the row is not tagged and only the
+   * refetch runs. On the same page it always tags, at the row's current slot
+   * or (if a refetch already dropped it) the captured one. Returns whether
+   * it tagged, so the route only resets its note draft for this page. */
+  const tagRow = (item: TItem, kind: TKind, spot: ActionSpot): boolean => {
+    const id = getId(item);
+    const samePage = spot.offset === offset && spot.offset === requestedOffset;
     // One background refetch of the active page per action; the list's other
     // cached pages are only marked stale.
-    void queryClient.invalidateQueries({ queryKey });
+    void queryClient.invalidateQueries({ queryKey: invalidateKey });
     if (!samePage) return false;
+    const shownSlot = rows.findIndex((row) => getId(row) === id);
+    const slot = shownSlot === -1 ? spot.slot : shownSlot;
     setTags((prev) => {
       const byId = new Map(prev !== null && prev.offset === offset ? prev.byId : []);
       byId.set(id, { item, kind, slot: byId.get(id)?.slot ?? slot });
@@ -154,12 +178,24 @@ export function useAdminQueuePage<TData, TItem, TKind extends string>({
     return true;
   };
 
+  /** For a failed action's onError: a 409/404 means another admin already
+   * resolved (or removed) the row, so refetch the page and the queue counts
+   * to drop it and realign the offsets. Other errors leave the list as is. */
+  const resyncAfterFailedAction = (err: unknown): void => {
+    if (!(err instanceof ApiError)) return;
+    if (err.status !== StatusCodes.CONFLICT && err.status !== StatusCodes.NOT_FOUND) return;
+    void queryClient.invalidateQueries({ queryKey: invalidateKey });
+    void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
+  };
+
   return {
     ...paged,
     rows,
     /** This page's acted-on rows, by id. */
     tags: pageTags,
     tagRow,
+    actionSpot,
+    resyncAfterFailedAction,
     selectedId,
     setSelectedId,
     listRef,

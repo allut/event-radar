@@ -35,7 +35,7 @@ export type ListParamsUpdater = (params: URLSearchParams) => URLSearchParams;
  * (a malformed value `replace`s to page 1 with the param dropped), and
  * returns `setListParams`, the single writer for every filter, sort, search
  * or tab param: it drops `page` and default-valued params, and lands as one
- * push. */
+ * push (or nothing, when the list params would not change). */
 export function usePageParam({ defaults }: UsePageParamOptions = {}): {
   page: number;
   /** True while a malformed `?page` is being replaced; nothing should fetch. */
@@ -64,18 +64,25 @@ export function usePageParam({ defaults }: UsePageParamOptions = {}): {
 
   const setListParams = useCallback(
     (updater: ListParamsUpdater) => {
-      setSearchParams(
-        (prev) => {
-          const next = updater(new URLSearchParams(prev));
-          next.delete(PAGE_QUERY_PARAM);
-          for (const [name, value] of Object.entries(defaultsRef.current ?? {})) {
-            if (next.get(name) === value) next.delete(name);
-          }
-          return next;
-        },
-      );
+      const listParams = (params: URLSearchParams) => {
+        params.delete(PAGE_QUERY_PARAM);
+        for (const [name, value] of Object.entries(defaultsRef.current ?? {})) {
+          if (params.get(name) === value) params.delete(name);
+        }
+        return params;
+      };
+      const next = listParams(updater(new URLSearchParams(searchParams)));
+      // Re-picking the option already active (a tab, sort or preset) changes
+      // nothing: stay on this page and push no duplicate history entry.
+      const sorted = (params: URLSearchParams) => {
+        const copy = new URLSearchParams(params);
+        copy.sort();
+        return copy.toString();
+      };
+      if (sorted(next) === sorted(listParams(new URLSearchParams(searchParams)))) return;
+      setSearchParams(next);
     },
-    [setSearchParams],
+    [searchParams, setSearchParams],
   );
 
   return { page, malformed, setListParams };

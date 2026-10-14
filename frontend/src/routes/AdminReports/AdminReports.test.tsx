@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
-import { focusManager } from '@tanstack/react-query';
+import { focusManager, QueryClient } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import AdminReports from './AdminReports';
 import { LocationProbe, renderWithProviders } from '../../test/utils';
+import { QUERY_KEYS } from '../../constants/api';
 import splitViewStyles from '../../components/AdminQueueSplitView/AdminQueueSplitView.module.css';
 
 vi.mock('../../api/client', async (importOriginal) => ({
@@ -318,6 +319,28 @@ describe('AdminReports', () => {
       expect(screen.getByRole('link', { name: 'Page 2' })).toHaveAttribute('href', '/admin/reports?page=2');
     });
 
+    it('locates a page-1 deep link once: a later refetch stays on page 1 even if the report moved down', async () => {
+      const open = serveQueue(range(1, 120));
+      renderWithProviders(
+        <>
+          <AdminReports />
+          <LocationProbe />
+        </>,
+        { route: '/admin/reports?report=7' },
+      );
+      await waitFor(() => expect(rowButton('R#7#')).toHaveAttribute('aria-current', 'true'));
+      // 50 newer, higher-ranked reports push #7 onto page 2 server-side.
+      open.unshift(...range(1001, 1050));
+
+      await userEvent.click(rowButton('R#1#'));
+      await resolve();
+
+      await waitFor(() => expect(listGets()).toBe(2));
+      expect(mockGet).toHaveBeenLastCalledWith('/admin/reports?limit=50&offset=0');
+      await waitFor(() => expect(rowButton('R#1#')).toHaveTextContent('Resolved'));
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/admin\/reports\?report=7$/);
+    });
+
     it('opens the mobile detail panel for the located row', async () => {
       serveQueue(range(1, 120));
       renderWithProviders(<AdminReports />, { route: '/admin/reports?report=110' });
@@ -355,6 +378,24 @@ describe('AdminReports', () => {
       await waitFor(() => expect(listGets()).toBe(2));
       expect(rowButton('R#5#')).toHaveTextContent('Resolved');
       expect(screen.queryByText(/was already resolved/)).not.toBeInTheDocument();
+    });
+
+    it('refetches the page and the counts when another admin already resolved the report', async () => {
+      const open = serveQueue([1, 2, 3]);
+      mockPost.mockImplementation(async () => {
+        open.splice(open.indexOf(1), 1);
+        throw new ApiError(409, 'These reports were already resolved.');
+      });
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      queryClient.setQueryData([QUERY_KEYS.adminCounts], { reports: 3 });
+      renderWithProviders(<AdminReports />, { queryClient });
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'R#1#' })).toBeInTheDocument());
+
+      await resolve();
+
+      expect(await screen.findByText('These reports were already resolved.')).toBeInTheDocument();
+      await waitFor(() => expect(listRowTitles()).toEqual(['R#2#', 'R#3#']));
+      expect(queryClient.getQueryState([QUERY_KEYS.adminCounts])?.isInvalidated).toBe(true);
     });
 
     it('refetches the page once per action: tagged rows stay in place, pulled-up rows go at the bottom', async () => {

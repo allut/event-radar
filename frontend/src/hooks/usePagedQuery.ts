@@ -23,7 +23,8 @@ export interface UsePagedQueryOptions<TData, TItem> {
   /** Runs once the real data for a new page has rendered, only after a
    * <Pager> link push or a POP (back/forward) — never on first mount, a
    * silent `replace`, a setListParams filter change or any other app link
-   * (nav, preset chips) that lands on a different page. */
+   * (nav, preset chips) that lands on a different page. A clamp that
+   * redirects a pager push or POP settles on the page it lands on. */
   onPageSettled?: () => void;
   /** While true, an emptied page is held instead of clamped to the last page
    * (admin queues pass "there are tagged rows"). */
@@ -109,16 +110,24 @@ export function usePagedQuery<TData, TItem>({
   );
 
   // Page-change detection. Declared before the settle effect so a page that
-  // is already cached (back to a fresh page) settles in the same commit.
+  // is already cached (back to a fresh page) settles in the same commit. A
+  // pending settle belongs to the history entry that made it, so a filter
+  // push before its data lands (same page, new entry) stays silent.
   const previousPageRef = useRef(page);
-  const pendingSettleRef = useRef<number | null>(null);
+  const pendingSettleRef = useRef<{ page: number; key: string } | null>(null);
+  // Set when a silent replace redirects a counted page change (the page the
+  // user asked for emptied): the replace's target settles in its place.
+  const carrySettleRef = useRef(false);
   useEffect(() => {
     if (previousPageRef.current === page) return;
     previousPageRef.current = page;
     const counts =
-      navigationType === 'POP' || (navigationType === 'PUSH' && isPagerNavigation(location.state));
-    pendingSettleRef.current = counts ? page : null;
-  }, [page, navigationType, location.state]);
+      carrySettleRef.current ||
+      navigationType === 'POP' ||
+      (navigationType === 'PUSH' && isPagerNavigation(location.state));
+    carrySettleRef.current = false;
+    pendingSettleRef.current = counts ? { page, key: location.key } : null;
+  }, [page, navigationType, location.state, location.key]);
 
   // A stale link past the offset ceiling: land on the deepest reachable page.
   useEffect(() => {
@@ -129,21 +138,28 @@ export function usePagedQuery<TData, TItem>({
 
   useEffect(() => {
     if (!isSuccess || isPlaceholderData || data === undefined) return;
+    const pending = pendingSettleRef.current;
+    const pendingHere = pending !== null && pending.page === page && pending.key === location.key;
+    // A silent replace; when it redirects the user's own page change, the
+    // target page settles (focus, announcement) instead of focus dropping.
+    const redirect = (target: number) => {
+      carrySettleRef.current = pendingHere;
+      pendingSettleRef.current = null;
+      replacePage(target);
+    };
     const requestedOffset = (page - 1) * pageSize;
     if (offset !== requestedOffset) {
       // Server-placed offset (e.g. the Admin Reports locate): sync silently.
-      pendingSettleRef.current = null;
-      replacePage(Math.floor(offset / pageSize) + 1);
+      redirect(Math.floor(offset / pageSize) + 1);
       return;
     }
     if (itemCount === 0 && !holdEmptyPage && page !== lastPage) {
       // Past the end, or a refetch emptied this page: land on the real last
       // page (total 0 has lastPage 1, so a stale ?page=5 returns to page 1).
-      pendingSettleRef.current = null;
-      replacePage(lastPage);
+      redirect(lastPage);
       return;
     }
-    if (pendingSettleRef.current !== page) return;
+    if (!pendingHere) return;
     pendingSettleRef.current = null;
     setAnnounced({
       key: location.key,

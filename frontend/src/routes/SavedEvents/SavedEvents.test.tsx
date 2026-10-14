@@ -273,4 +273,15 @@ describe('SavedEvents', () => {
       expect(screen.getByText('Saved 24')).toBeInTheDocument();
     });
   });
+
+  it('keeps the page when the already-active tab is clicked again', async () => {
+    mockSavedServer({ bookmark: range(1, 60) });
+    renderSaved('/saved?page=3');
+    await waitFor(() => expect(screen.getByText('Saved 49')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /Bookmarked/ }));
+
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/saved\?page=3$/);
+    expect(screen.getByText('Saved 49')).toBeInTheDocument();
+  });
 });

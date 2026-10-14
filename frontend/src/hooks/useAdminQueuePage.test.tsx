@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { LocationProbe, renderWithProviders } from '../test/utils';
 import Pager from '../components/Pager';
-import { mergeQueueRows, useAdminQueuePage } from './useAdminQueuePage';
+import { mergeQueueRows, useAdminQueuePage, type ActionSpot } from './useAdminQueuePage';
 
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
@@ -108,11 +108,11 @@ function QueueHarness() {
     getId,
     onPageSettled: () => setNote(''),
   });
-  const { rows, tags, tagRow, selectedId, setSelectedId, listRef, offset, pagerProps } = queuePage;
+  const { rows, tags, tagRow, actionSpot, selectedId, setSelectedId, listRef, pagerProps } = queuePage;
   const approve = useMutation({
-    mutationFn: ({ item }: { item: Row; offset: number }) => api.post(`/queue/${item.id}/approve`, {}),
-    onSuccess: (_result, { item, offset: actedOffset }) => {
-      if (tagRow(item, 'approved', actedOffset)) setNote('');
+    mutationFn: ({ item }: { item: Row; spot: ActionSpot }) => api.post(`/queue/${item.id}/approve`, {}),
+    onSuccess: (_result, { item, spot }) => {
+      if (tagRow(item, 'approved', spot)) setNote('');
     },
   });
   const currentId = selectedId ?? rows[0]?.id ?? null;
@@ -135,7 +135,7 @@ function QueueHarness() {
         type="button"
         onClick={() => {
           const item = rows.find((row) => row.id === currentId);
-          if (item) approve.mutate({ item, offset });
+          if (item) approve.mutate({ item, spot: actionSpot(item) });
         }}
       >
         Approve
@@ -168,6 +168,25 @@ describe('useAdminQueuePage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Row 2' }));
     await userEvent.type(screen.getByLabelText('Note'), 'ok');
     await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    await releaseActions();
+
+    await waitFor(() => expect(rowLabels()).toEqual(['Row 1', 'Row 2 approved', 'Row 3', 'Row 4']));
+    expect(screen.getByLabelText('Note')).toHaveValue('');
+  });
+
+  it('still tags the row in its slot and clears the note when a refetch dropped it before the action returned', async () => {
+    serveQueue([1, 2, 3, 4, 5]);
+    renderWithProviders(<QueueHarness />, { route: '/queue' });
+    await waitFor(() => expect(rowLabels()).toEqual(['Row 1', 'Row 2', 'Row 3']));
+    await userEvent.click(screen.getByRole('button', { name: 'Row 2' }));
+    await userEvent.type(screen.getByLabelText('Note'), 'ok');
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    // The server commits the approve and a focus refetch lands before the
+    // POST response does.
+    queue = queue.filter((id) => id !== 2);
+    await userEvent.click(screen.getByRole('button', { name: 'Refetch' }));
+    await waitFor(() => expect(rowLabels()).toEqual(['Row 1', 'Row 3', 'Row 4']));
+
     await releaseActions();
 
     await waitFor(() => expect(rowLabels()).toEqual(['Row 1', 'Row 2 approved', 'Row 3', 'Row 4']));

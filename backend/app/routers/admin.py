@@ -62,7 +62,7 @@ from app.constants.claims import (
     ERROR_CLAIM_QUEUE_INVALID_STATUS,
     ERROR_CLAIM_TARGET_ALREADY_APPROVED,
 )
-from app.constants.core import TALLINN_TZ
+from app.constants.core import SQL_BIGINT_MAX, TALLINN_TZ
 from app.constants.events import (
     ERROR_EVENT_NOT_FOUND,
     EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
@@ -815,7 +815,7 @@ async def admin_list_reports(
     offset: int = Query(
         PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
     ),
-    report: int | None = Query(None, ge=1),
+    report: int | None = Query(None, ge=1, le=SQL_BIGINT_MAX),
 ) -> dict:
     """Content-moderation review queue: one row per event aggregating its
     REPORT_STATUS_OPEN reports (distinct from GET /admin/submissions, which

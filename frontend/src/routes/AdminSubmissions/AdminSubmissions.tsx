@@ -15,7 +15,7 @@ import { apiErrorMessage, relativeTimeFromNow, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
-import { useAdminQueuePage } from '../../hooks/useAdminQueuePage';
+import { useAdminQueuePage, type ActionSpot } from '../../hooks/useAdminQueuePage';
 import Pager from '../../components/Pager';
 import AdminQueueSplitView from '../../components/AdminQueueSplitView';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
@@ -88,13 +88,14 @@ export default function AdminSubmissions() {
     total,
     tags: resolvedById,
     tagRow,
+    resyncAfterFailedAction,
     selectedId,
     setSelectedId,
     listRef,
     isLoading,
     isError,
     isPlaceholderData,
-    offset: shownOffset,
+    actionSpot,
     pagerProps,
   } = useAdminQueuePage<AdminSubmissionsResponse, AdminSubmission, ResolutionKind>({
     queryKey: [QUERY_KEYS.adminSubmissions],
@@ -118,26 +119,27 @@ export default function AdminSubmissions() {
   const currentId = selectedId ?? items[0]?.id ?? null;
 
   const actionMutation = useMutation({
-    mutationFn: ({ item, kind, note }: { item: AdminSubmission; kind: ResolutionKind; note: string; offset: number }) => {
+    mutationFn: ({ item, kind, note }: { item: AdminSubmission; kind: ResolutionKind; note: string; spot: ActionSpot }) => {
       const path = kind === 'approved' ? API.adminSubmissionApprove(item.id) : API.adminSubmissionRetract(item.id);
       return adminApi.post<AdminSubmissionActionResult>(path, { resolution_note: note });
     },
-    onSuccess: (result, { item, kind, offset: actedOffset }) => {
+    onSuccess: (result, { item, kind, spot }) => {
       const resolvedItem = kind === 'retracted' && result.status ? { ...item, status: result.status } : item;
       // Tags the row in place and refetches this page once, so the next
       // row up fills the gap (spec #551). The note draft only resets when
       // the admin is still on the page they acted on.
-      if (tagRow(resolvedItem, kind, actedOffset)) setNote('');
+      if (tagRow(resolvedItem, kind, spot)) setNote('');
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
       showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
+      resyncAfterFailedAction(err);
     },
   });
 
   function act(item: AdminSubmission, kind: ResolutionKind) {
     if (!note.trim()) return;
-    actionMutation.mutate({ item, kind, note: note.trim(), offset: shownOffset });
+    actionMutation.mutate({ item, kind, note: note.trim(), spot: actionSpot(item) });
   }
 
   // Stable across note keystrokes (only resolvedById changes them) — see

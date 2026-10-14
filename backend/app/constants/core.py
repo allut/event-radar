@@ -58,6 +58,10 @@ LOCALE_URL_PREFIX_CODES: frozenset[str] = frozenset(VALID_LOCALES) - {LOCALE_ET}
 # and Postgres caps a statement at ~32k params.
 SQL_IN_CHUNK_SIZE = 1000
 
+# Largest Postgres BIGINT (signed 64-bit). Upper bound for an id query param,
+# so an out-of-range id is a 422 instead of an overflowing bind (a 500).
+SQL_BIGINT_MAX = 2**63 - 1
+
 # app/ingestion/adapter.py::_make_slug — collapses any non a-z0-9 run to "-".
 SLUG_SANITIZE_RE = r"[^a-z0-9]+"
 

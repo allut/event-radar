@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
-import { focusManager } from '@tanstack/react-query';
+import { focusManager, QueryClient } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import AdminSubmissions from './AdminSubmissions';
 import { LocationProbe, renderWithProviders } from '../../test/utils';
+import { QUERY_KEYS } from '../../constants/api';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -221,6 +222,24 @@ describe('AdminSubmissions', () => {
     expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '51–100 of 120')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Page 2' })).toHaveAttribute('aria-current', 'page');
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+  });
+
+  it('refetches the page and the counts when another admin already removed the submission', async () => {
+    const live = serveQueue([1, 2, 3]);
+    mockPost.mockImplementation(async () => {
+      live.splice(live.indexOf(1), 1);
+      throw new ApiError(404, 'Submission not found.');
+    });
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    queryClient.setQueryData([QUERY_KEYS.adminCounts], { submissions: 3 });
+    renderWithProviders(<AdminSubmissions />, { queryClient });
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Submission 1' })).toBeInTheDocument());
+
+    await approve();
+
+    expect(await screen.findByText('Submission not found.')).toBeInTheDocument();
+    await waitFor(() => expect(listRowTitles()).toEqual(['Submission 2', 'Submission 3']));
+    expect(queryClient.getQueryState([QUERY_KEYS.adminCounts])?.isInvalidated).toBe(true);
   });
 
   it('marks the selected row aria-current="true"', async () => {

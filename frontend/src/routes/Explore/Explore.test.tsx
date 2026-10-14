@@ -710,4 +710,15 @@ describe('Explore', () => {
       expect(screen.queryByText('Like what you see?')).not.toBeInTheDocument();
     });
   });
+
+  it('keeps the page when the already-active "All events" option is picked again', async () => {
+    mockPagedExplore(100);
+    renderExplore('/en/explore?page=3');
+    await waitFor(() => expect(screen.getByText('Event 49')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: /All events/ }));
+
+    expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/en\/explore\?page=3$/);
+    expect(screen.getByText('Event 49')).toBeInTheDocument();
+  });
 });

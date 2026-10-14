@@ -4,7 +4,7 @@ import { focusManager, QueryClient } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import AdminClaims from './AdminClaims';
 import { LocationProbe, renderWithProviders } from '../../test/utils';
-import { QUERY_STALE_TIME } from '../../constants/api';
+import { QUERY_KEYS, QUERY_STALE_TIME } from '../../constants/api';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -453,6 +453,64 @@ describe('AdminClaims', () => {
 
       await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
       expect(rowButton(10)).toBeInTheDocument();
+    });
+
+    it('still shows the error toast when the admin switched tab before the action failed', async () => {
+      serveClaims(range(1, 3), [10]);
+      let reject!: (e: unknown) => void;
+      mockPost.mockImplementation(() => new Promise((_res, rej) => { reject = rej; }) as never);
+      renderQueue('/admin/claims');
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+      await grantWithNote();
+      await userEvent.click(screen.getByRole('tab', { name: 'Granted' }));
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 10' })).toBeInTheDocument());
+
+      await act(async () => { reject(new ApiError(409, 'This claim was already resolved.')); });
+
+      expect(await screen.findByText('This claim was already resolved.')).toBeInTheDocument();
+    });
+
+    it('refetches the newly shown tab once when an action started on the other tab succeeds', async () => {
+      const lists = serveClaims(range(1, 3), [10]);
+      let resolve!: () => void;
+      mockPost.mockImplementation((path: string) => new Promise((res) => {
+        resolve = () => {
+          const id = Number(/claims\/(\d+)\//.exec(path)?.[1]);
+          lists.pending.splice(lists.pending.indexOf(id), 1);
+          lists.approved.unshift(id);
+          res({ id, note: 'ok' });
+        };
+      }) as never);
+      renderQueue('/admin/claims');
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+      await grantWithNote();
+      await userEvent.click(screen.getByRole('tab', { name: 'Granted' }));
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 10' })).toBeInTheDocument());
+      const before = claimsGets();
+
+      await act(async () => { resolve(); });
+
+      await waitFor(() => expect(rowButton(1)).toBeInTheDocument());
+      await new Promise((r) => setTimeout(r, 50));
+      expect(claimsGets() - before).toBe(1);
+    });
+
+    it('refetches the page and the counts when another admin already resolved the claim', async () => {
+      const lists = serveClaims(range(1, 3));
+      mockPost.mockImplementation(async () => {
+        lists.pending.splice(lists.pending.indexOf(1), 1);
+        throw new ApiError(409, 'This claim was already resolved.');
+      });
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      queryClient.setQueryData([QUERY_KEYS.adminCounts], { claims: 3 });
+      renderWithProviders(<AdminClaims />, { route: '/admin/claims', queryClient });
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+
+      await grantWithNote();
+
+      expect(await screen.findByText('This claim was already resolved.')).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^Claimant 1\b/ })).not.toBeInTheDocument());
+      expect(queryClient.getQueryState([QUERY_KEYS.adminCounts])?.isInvalidated).toBe(true);
     });
 
     it('does not carry a tagged row over to the other tab', async () => {
