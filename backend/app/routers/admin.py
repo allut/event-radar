@@ -802,7 +802,7 @@ async def admin_revoke_claim(claim_id: int, body: _ResolutionBody, request: Requ
 
 
 @router.get("/reports", dependencies=[Depends(get_current_admin)])
-@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
 async def admin_list_reports(
     request: Request,
     reason: str | None = Query(None),
@@ -815,6 +815,7 @@ async def admin_list_reports(
     offset: int = Query(
         PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
     ),
+    report: int | None = Query(None, ge=1),
 ) -> dict:
     """Content-moderation review queue: one row per event aggregating its
     REPORT_STATUS_OPEN reports (distinct from GET /admin/submissions, which
@@ -823,7 +824,13 @@ async def admin_list_reports(
     events qualify for the queue (an event with at least one matching open
     report); each qualifying event's row still aggregates *all* of its open
     reports, not just the matching ones. Ordered illegal-first, then by
-    report count, then oldest-waiting first.
+    report count, then oldest-waiting first, then event id (so offset paging
+    never repeats or skips rows that tie on the first three keys).
+
+    ``report=<event_id>`` (the admin email deep link) locates that event's row
+    in the queue and returns the page holding it, with the real ``offset``;
+    the ``offset`` param is ignored. If the event is no longer in the queue
+    (already resolved), page 1 is returned with ``report_not_found`` true.
     """
     if reason is not None:
         validate_report_reason(reason)
@@ -866,23 +873,39 @@ async def admin_list_reports(
         .group_by(EventReport.event_id)
     )
 
+    order_keys = (
+        has_illegal_col.desc(),
+        report_count_col.desc(),
+        oldest_col.asc(),
+        EventReport.event_id.asc(),
+    )
+
     async with AsyncSessionLocal() as db:
-        # total only on the first page — see browse.py's _browse_sql_path.
-        # This one aggregates a GROUP BY subquery, so it's the priciest of
-        # the four COUNT sites this rule touches.
-        total: int | None = None
-        if offset == 0:
-            total = (
-                await db.scalar(select(func.count()).select_from(agg.subquery()))
-            ) or 0
+        # Exact total on every page (spec #551): the numbered pager derives
+        # its last page and past-end clamp from it.
+        total = (
+            await db.scalar(select(func.count()).select_from(agg.subquery()))
+        ) or 0
+
+        report_not_found = False
+        if report is not None:
+            # One ROW_NUMBER() over the same four sort keys gives the row's
+            # position; its page starts at the multiple of limit at or below.
+            ranked = agg.add_columns(
+                func.row_number().over(order_by=order_keys).label("position")
+            ).subquery()
+            position = await db.scalar(
+                select(ranked.c.position).where(ranked.c.event_id == report)
+            )
+            if position is None:
+                report_not_found = True
+                offset = PAGINATION_MIN_OFFSET
+            else:
+                offset = (position - 1) // limit * limit
 
         page = (
             await db.execute(
-                agg.order_by(
-                    has_illegal_col.desc(), report_count_col.desc(), oldest_col.asc()
-                )
-                .limit(limit + 1)
-                .offset(offset)
+                agg.order_by(*order_keys).limit(limit + 1).offset(offset)
             )
         ).all()
         has_more = len(page) > limit
@@ -949,6 +972,7 @@ async def admin_list_reports(
         "offset": offset,
         "has_more": has_more,
         "events": rows,
+        "report_not_found": report_not_found,
     }
 
 

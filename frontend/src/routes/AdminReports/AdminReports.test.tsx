@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
+import { focusManager } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import AdminReports from './AdminReports';
-import { renderWithProviders } from '../../test/utils';
+import { LocationProbe, renderWithProviders } from '../../test/utils';
 import splitViewStyles from '../../components/AdminQueueSplitView/AdminQueueSplitView.module.css';
 
 vi.mock('../../api/client', async (importOriginal) => ({
@@ -16,6 +17,10 @@ const mockPost = vi.mocked(adminApi.post);
 
 const sampleReports = {
   total: 2,
+  limit: 50,
+  offset: 0,
+  has_more: false,
+  report_not_found: false,
   events: [
     {
       event_id: 1,
@@ -54,6 +59,8 @@ const sampleReports = {
   ],
 };
 
+const afterResolvingFirst = { ...sampleReports, total: 1, events: [sampleReports.events[1]] };
+
 beforeEach(() => {
   mockGet.mockReset();
   mockPost.mockReset();
@@ -79,7 +86,7 @@ describe('AdminReports', () => {
   });
 
   it('shows an empty state when there are no open reports', async () => {
-    mockGet.mockResolvedValueOnce({ total: 0, events: [] });
+    mockGet.mockResolvedValueOnce({ ...sampleReports, total: 0, events: [] });
     renderWithProviders(<AdminReports />);
     await waitFor(() => expect(screen.getByText('No open reports.')).toBeInTheDocument());
   });
@@ -114,6 +121,7 @@ describe('AdminReports', () => {
 
   it('does not mis-treat a missing ?report= param as event id 0', async () => {
     mockGet.mockResolvedValueOnce({
+      ...sampleReports,
       total: 1,
       events: [{ ...sampleReports.events[0], event_id: 0 }],
     });
@@ -136,6 +144,7 @@ describe('AdminReports', () => {
 
   it('resolves a report with the typed note, then keeps it in the list greyed out and tagged', async () => {
     mockGet.mockResolvedValueOnce(sampleReports);
+    mockGet.mockResolvedValueOnce(afterResolvingFirst);
     mockPost.mockResolvedValueOnce({ event_id: 1, resolved_count: 1 });
     renderWithProviders(<AdminReports />);
 
@@ -155,6 +164,7 @@ describe('AdminReports', () => {
 
   it('takes an event down with the typed note', async () => {
     mockGet.mockResolvedValueOnce(sampleReports);
+    mockGet.mockResolvedValueOnce(afterResolvingFirst);
     mockPost.mockResolvedValueOnce({ event_id: 1, status: 'cancelled', resolved_count: 1 });
     renderWithProviders(<AdminReports />);
 
@@ -171,6 +181,7 @@ describe('AdminReports', () => {
 
   it('replaces the stale pre-takedown status once the event is actually taken down', async () => {
     mockGet.mockResolvedValueOnce(sampleReports);
+    mockGet.mockResolvedValueOnce(afterResolvingFirst);
     mockPost.mockResolvedValueOnce({ event_id: 1, status: 'cancelled', resolved_count: 1 });
     renderWithProviders(<AdminReports />);
 
@@ -197,5 +208,233 @@ describe('AdminReports', () => {
     expect(await screen.findByText('Too many requests.')).toBeInTheDocument();
     expect(screen.queryByText(/Resolved\. Reporters notified\./)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Resolve' })).toBeEnabled();
+  });
+
+  describe('numbered pager', () => {
+    function report(id: number) {
+      return { ...sampleReports.events[1], event_id: id, title: `R#${id}#` };
+    }
+
+    /** A fake server: GETs slice the open reports by offset; `report=<id>`
+     * with the row open returns the page holding it, without it page 1 and
+     * report_not_found. Resolving a row takes it out. */
+    function serveQueue(ids: number[]) {
+      const open = [...ids];
+      mockGet.mockImplementation(async (url: string) => {
+        const params = new URL(url, 'http://x').searchParams;
+        const limit = Number(params.get('limit'));
+        let offset = Number(params.get('offset'));
+        let notFound = false;
+        if (params.has('report')) {
+          const at = open.indexOf(Number(params.get('report')));
+          notFound = at === -1;
+          offset = notFound ? 0 : Math.floor(at / limit) * limit;
+        }
+        return {
+          total: open.length,
+          limit,
+          offset,
+          has_more: offset + limit < open.length,
+          report_not_found: notFound,
+          events: open.slice(offset, offset + limit).map(report),
+        } as never;
+      });
+      mockPost.mockImplementation(async (path: string) => {
+        const id = Number(/reports\/(\d+)\//.exec(path)?.[1]);
+        open.splice(open.indexOf(id), 1);
+        return { event_id: id, resolved_count: 1 } as never;
+      });
+      return open;
+    }
+
+    const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, k) => from + k);
+    const rowButton = (title: string) => screen.getByRole('button', { name: new RegExp(`^${title}`) });
+    const listRowTitles = () =>
+      screen
+        .getAllByRole('button')
+        .map((b) => /^R#\d+#/.exec(b.textContent ?? '')?.[0])
+        .filter((t): t is string => t !== undefined);
+    const listGets = () => mockGet.mock.calls.filter(([url]) => String(url).startsWith('/admin/reports?')).length;
+
+    async function resolve(note = 'All clear.') {
+      await userEvent.type(screen.getByLabelText(/resolution note/i), note);
+      await userEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+    }
+
+    it('requests 50 per page from ?page and shows the range label in place of Load more', async () => {
+      serveQueue(range(1, 120));
+      renderWithProviders(<AdminReports />, { route: '/admin/reports?page=2' });
+
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'R#51#' })).toBeInTheDocument());
+      expect(mockGet).toHaveBeenCalledWith('/admin/reports?limit=50&offset=50');
+      expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '51–100 of 120')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Page 2' })).toHaveAttribute('aria-current', 'page');
+      expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    });
+
+    it('sends report to the server only when the URL has report and no page', async () => {
+      serveQueue(range(1, 120));
+      renderWithProviders(<AdminReports />, { route: '/admin/reports?page=2&report=60' });
+
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'R#60#' })).toBeInTheDocument());
+      expect(mockGet).toHaveBeenCalledTimes(1);
+      expect(mockGet).toHaveBeenCalledWith('/admin/reports?limit=50&offset=50');
+    });
+
+    it('lands a deep link on the page holding the report, selected, with a silent URL sync', async () => {
+      serveQueue(range(1, 120));
+      renderWithProviders(
+        <>
+          <AdminReports />
+          <LocationProbe />
+        </>,
+        { route: '/admin/reports?report=110' },
+      );
+
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'R#110#' })).toBeInTheDocument());
+      expect(mockGet).toHaveBeenCalledWith('/admin/reports?limit=50&offset=0&report=110');
+      await waitFor(() =>
+        expect(screen.getByTestId('location-probe')).toHaveTextContent('/admin/reports?report=110&page=3'),
+      );
+      expect(rowButton('R#110#')).toHaveAttribute('aria-current', 'true');
+      expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '101–120 of 120')).toBeInTheDocument();
+      // The sync is a silent replace: no live-region announcement, no focus move.
+      expect(screen.getByRole('status')).toBeEmptyDOMElement();
+      expect(rowButton('R#110#')).not.toHaveFocus();
+    });
+
+    it('keeps ?report=<id> on page 1 for a row located there, and the page links drop it', async () => {
+      serveQueue(range(1, 120));
+      renderWithProviders(
+        <>
+          <AdminReports />
+          <LocationProbe />
+        </>,
+        { route: '/admin/reports?report=7' },
+      );
+
+      await waitFor(() => expect(rowButton('R#7#')).toHaveAttribute('aria-current', 'true'));
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/admin\/reports\?report=7$/);
+      expect(screen.getByRole('link', { name: 'Page 2' })).toHaveAttribute('href', '/admin/reports?page=2');
+    });
+
+    it('opens the mobile detail panel for the located row', async () => {
+      serveQueue(range(1, 120));
+      renderWithProviders(<AdminReports />, { route: '/admin/reports?report=110' });
+
+      const title = await screen.findByRole('heading', { name: 'R#110#' });
+      expect(title.closest(`.${splitViewStyles.detail}`)).toHaveClass(splitViewStyles.detailShownMobile);
+    });
+
+    it('shows the already-resolved notice on page 1 when the report is no longer open', async () => {
+      serveQueue(range(1, 120));
+      renderWithProviders(<AdminReports />, { route: '/admin/reports?report=999' });
+
+      const notice = (await screen.findByText(/was already resolved/)).closest('p') as HTMLElement;
+      expect(notice).toHaveTextContent('Report #999 was already resolved. Showing the start of the queue.');
+      expect(within(notice).getByRole('link', { name: 'Open event #999' })).toHaveAttribute('href', '/admin/events/999');
+      expect(screen.getByRole('heading', { name: 'R#1#' })).toBeInTheDocument();
+      expect(rowButton('R#1#')).toHaveAttribute('aria-current', 'true');
+    });
+
+    it('does not show the notice when the report is open', async () => {
+      serveQueue(range(1, 20));
+      renderWithProviders(<AdminReports />, { route: '/admin/reports?report=5' });
+
+      await waitFor(() => expect(rowButton('R#5#')).toHaveAttribute('aria-current', 'true'));
+      expect(screen.queryByText(/was already resolved/)).not.toBeInTheDocument();
+    });
+
+    it('does not claim the report was already resolved after this screen resolved it', async () => {
+      serveQueue(range(1, 20));
+      renderWithProviders(<AdminReports />, { route: '/admin/reports?report=5' });
+      await waitFor(() => expect(rowButton('R#5#')).toHaveAttribute('aria-current', 'true'));
+
+      await resolve();
+
+      await waitFor(() => expect(listGets()).toBe(2));
+      expect(rowButton('R#5#')).toHaveTextContent('Resolved');
+      expect(screen.queryByText(/was already resolved/)).not.toBeInTheDocument();
+    });
+
+    it('refetches the page once per action: tagged rows stay in place, pulled-up rows go at the bottom', async () => {
+      serveQueue(range(1, 60));
+      renderWithProviders(<AdminReports />);
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'R#1#' })).toBeInTheDocument());
+      expect(listGets()).toBe(1);
+
+      await userEvent.click(rowButton('R#3#'));
+      await resolve();
+
+      await waitFor(() => expect(listRowTitles()).toHaveLength(51));
+      expect(listGets()).toBe(2);
+      const titles = listRowTitles();
+      expect(titles.slice(0, 4)).toEqual(['R#1#', 'R#2#', 'R#3#', 'R#4#']);
+      expect(titles[50]).toBe('R#51#');
+      expect(rowButton('R#3#')).toHaveTextContent('Resolved');
+      expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '1–50 of 59')).toBeInTheDocument();
+    });
+
+    it('holds an emptied last page while its rows are tagged', async () => {
+      serveQueue(range(1, 51));
+      renderWithProviders(
+        <>
+          <AdminReports />
+          <LocationProbe />
+        </>,
+        { route: '/admin/reports?page=2' },
+      );
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'R#51#' })).toBeInTheDocument());
+
+      await resolve();
+
+      expect(await screen.findByText('No items on this page · 50 total')).toBeInTheDocument();
+      expect(screen.getByTestId('location-probe')).toHaveTextContent('/admin/reports?page=2');
+      expect(rowButton('R#51#')).toHaveTextContent('Resolved');
+    });
+
+    it('clamps to the new last page when the page empties for any other reason', async () => {
+      const open = serveQueue(range(1, 51));
+      renderWithProviders(
+        <>
+          <AdminReports />
+          <LocationProbe />
+        </>,
+        { route: '/admin/reports?page=2' },
+      );
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'R#51#' })).toBeInTheDocument());
+
+      open.splice(open.indexOf(51), 1);
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+
+      await waitFor(() => expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/admin\/reports$/));
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'R#1#' })).toBeInTheDocument());
+      act(() => focusManager.setFocused(undefined));
+    });
+
+    it('on a page change selects and focuses the first row, drops report from the URL and clears the tags', async () => {
+      serveQueue(range(1, 120));
+      renderWithProviders(
+        <>
+          <AdminReports />
+          <LocationProbe />
+        </>,
+        { route: '/admin/reports?report=7' },
+      );
+      await waitFor(() => expect(rowButton('R#7#')).toHaveAttribute('aria-current', 'true'));
+      await resolve();
+      await waitFor(() => expect(listGets()).toBe(2));
+
+      await userEvent.click(screen.getByRole('link', { name: 'Page 2' }));
+
+      // 119 open after the resolve: page 2 starts at Report 52.
+      await waitFor(() => expect(rowButton('R#52#')).toHaveFocus());
+      expect(rowButton('R#52#')).toHaveAttribute('aria-current', 'true');
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/admin\/reports\?page=2$/);
+      expect(screen.queryByText('Resolved')).not.toBeInTheDocument();
+    });
   });
 });

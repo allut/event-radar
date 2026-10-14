@@ -46,6 +46,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **`<Pager>` is the exception: admin renders it from shared/i18n with `LOCALE_EN`.** One component serves every list, so its strings live in the catalogue rather than in a second English copy.
 - **Resolving queues page through `hooks/useAdminQueuePage.ts` and `AdminQueueSplitView`.** Each row-removing action tags its row in place and refetches the current page once, so rows pulled up from the next page append at the bottom and paging on never skips a row.
 - **A queue page holds while it has tagged rows**, so clearing a last page leaves the no-items label, not a clamp. A page change selects and focuses the first row, marks it `aria-current="true"`, resets the list scroll and clears the tags. The pager sits in the split view's `listFooter`, outside the scroll area.
+- **Admin Reports sends `report=<id>` to the server only while the URL has no `page`.** The server-placed offset syncs through `usePagedQuery`'s silent replace (no announcement, no focus move), the page links drop `report` (`dropOnPageChange`),XX `?report=<id>`. When the row is gone, page 1 shows a gold "already resolved" callout linking to the event, except right after this screen resolved it.
 - **`AdminShell/` is the nav-rail chrome every signed-in admin screen renders inside.** `AdminLogin` renders outside it. The console replaces curl calls to `/admin/*`; see [backend-ops.md](backend-ops.md)'s Admin Endpoints section.
 
 ## Locale-Prefixed Routing

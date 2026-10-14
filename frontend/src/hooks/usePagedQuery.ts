@@ -167,6 +167,8 @@ export function usePagedQuery<TData, TItem>({
   };
 
   return {
+    /** The raw response of the page on screen, for fields beyond the slice. */
+    data,
     items,
     total,
     totalIsLowerBound,

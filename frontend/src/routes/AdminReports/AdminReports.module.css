@@ -75,6 +75,28 @@
   composes: queueResolvedPanel from '../../components/shared/AdminQueue.module.css';
 }
 
-.subtitle { composes: queueSubtitle from '../../components/shared/AdminQueue.module.css'; }
+/* Placeholder page while the next one loads (keep-previous-data). */
+.queue[aria-busy='true'] {
+  opacity: var(--opacity-disabled);
+  transition: opacity var(--transition);
+}
 
-.loadMoreBtn { composes: queueLoadMore from '../../components/shared/AdminQueue.module.css'; }
+/* "Report already resolved": an accent callout, not an error. Nothing failed. */
+.notice {
+  composes: alertAccent from '../../components/shared/Alert.module.css';
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+.noticeLink {
+  composes: accentLink from '../../components/shared/Link.module.css';
+  white-space: nowrap;
+}
+
+.notice .noticeLink {
+  display: inline;
+  margin-top: 0;
+  font-size: inherit;
+}
