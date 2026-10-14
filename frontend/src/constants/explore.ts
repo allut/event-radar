@@ -102,7 +102,6 @@ export const EXPLORE_PARAM = {
   dateTo: 'date_to',
   limit: 'limit',
   offset: 'offset',
-  cursor: 'cursor',
 } as const;
 
 // Query string of the top bar pulse chip's link — the Explore preset whose

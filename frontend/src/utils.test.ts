@@ -807,14 +807,6 @@ describe('cardAnimationDelayMs', () => {
   });
 });
 
-describe('buildExploreApiQuery cursor', () => {
-  it('sends cursor only when given', () => {
-    expect(new URLSearchParams(buildExploreApiQuery(DEFAULT_EXPLORE_FILTERS, 0)).has('cursor')).toBe(false);
-    const params = new URLSearchParams(buildExploreApiQuery(DEFAULT_EXPLORE_FILTERS, 24, 'abc'));
-    expect(params.get('cursor')).toBe('abc');
-  });
-});
-
 describe('nextKeysetParam', () => {
   it('stops when there is no more', () => {
     expect(nextKeysetParam({ has_more: false, offset: 0, next_cursor: 'x' }, 24)).toBeUndefined();

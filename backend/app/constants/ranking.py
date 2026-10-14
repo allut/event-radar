@@ -99,10 +99,6 @@ PAGINATION_MIN_OFFSET: int = 0
 # discard that many rows on every request at the endpoint's full rate limit.
 # The numbered pager (spec #551) caps its last reachable page at the same
 # value, so a deep list shows "… of N+" instead of linking to a 422.
-# Opaque keyset cursor (`GET /explore` date sort) —
-# base64url of `[iso_timestamp, row_id]`, so ~60 chars in practice; the cap
-# only bounds what an attacker can make the decoder chew on.
-PAGINATION_CURSOR_MAX_LEN: int = 200
 # Candidate cap for the Python-scored path (Path B: for_you=True OR sort=relevance —
 # so also date/price/quality sort *under* for_you=True, not just relevance). Sorted
 # soonest-first before capping, so the cap policy is a deliberate soonest-bias, not
@@ -227,7 +223,6 @@ TIME_MORNING_START = 6
 
 # routers/browse.py, routers/feedback.py
 ERROR_INVALID_SORT = "sort must be one of {sorts}"
-ERROR_INVALID_CURSOR = "cursor is malformed"
 ERROR_INVALID_SIGNAL = "Invalid signal. Must be one of: {signals}"
 ERROR_INVALID_PREFERENCE_SIGNAL = "signal must be one of: {signals}"
 

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Explore from './Explore';
-import { renderWithProviders, makeEvent } from '../../test/utils';
+import { useNavigate } from 'react-router-dom';
+import { LocationProbe, renderWithProviders, makeEvent } from '../../test/utils';
 import type { EventData } from '../../components/EventCard';
 
 vi.mock('../../lib/auth', () => ({
@@ -73,6 +74,47 @@ function exploreResponse(
 }
 
 const currentUser = { preferred_categories: ['music'], preferred_vibes: ['trendy'] };
+
+/** Serves `total` matching events (ids 1..total) as GET /explore pages them,
+ * sliced by the request's limit/offset. `hold(offset)` may return a promise
+ * that delays that page's response. */
+function mockPagedExplore(total: number, hold?: (offset: number) => Promise<void> | undefined) {
+  mockGet.mockImplementation(async (path: string) => {
+    if (path.startsWith('/users/me')) return currentUser;
+    const params = new URL(path, 'http://x').searchParams;
+    const limit = Number(params.get('limit'));
+    const offset = Number(params.get('offset'));
+    await hold?.(offset);
+    const events: EventData[] = [];
+    for (let id = offset + 1; id <= Math.min(offset + limit, total); id++) {
+      events.push(makeEvent({ id, title: `Event ${id}` }));
+    }
+    return { events, total, limit, offset, has_more: offset + events.length < total };
+  });
+}
+
+const exploreRequests = () =>
+  mockGet.mock.calls.map(([url]) => url as string).filter((url) => url.startsWith('/explore?'));
+
+function BackButton() {
+  const navigate = useNavigate();
+  return (
+    <button type="button" onClick={() => navigate(-1)}>
+      Back
+    </button>
+  );
+}
+
+function renderExplore(route: string) {
+  return renderWithProviders(
+    <>
+      <Explore />
+      <LocationProbe />
+      <BackButton />
+    </>,
+    { route, pathPattern: '/:locale/explore' },
+  );
+}
 
 beforeEach(() => {
   mockGet.mockReset();
@@ -153,26 +195,6 @@ describe('Explore', () => {
     const calls = mockGet.mock.calls.map((c) => c[0] as string);
     expect(calls.some((c) => c.startsWith('/explore'))).toBe(false);
     expect(screen.getByRole('button', { name: /clear/i })).toBeInTheDocument();
-  });
-
-  it('load more fetches the next page and appends results', async () => {
-    mockGet.mockImplementation((path: string) => {
-      if (path.startsWith('/users/me')) return Promise.resolve(currentUser);
-      if (path.includes('offset=1')) {
-        return Promise.resolve(exploreResponse([makeEvent({ id: 2, title: 'Second Event' })], { total: 2, offset: 1 }));
-      }
-      return Promise.resolve(
-        exploreResponse([makeEvent({ id: 1, title: 'First Event' })], { total: 2, offset: 0, has_more: true }),
-      );
-    });
-
-    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
-    await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
-
-    await userEvent.click(screen.getByRole('button', { name: /load more/i }));
-
-    await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
-    expect(screen.getByText('Second Event')).toBeInTheDocument();
   });
 
   it('switching to For you presets chips to the persona taste and personalizes', async () => {
@@ -267,6 +289,130 @@ describe('Explore', () => {
     renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
 
     await waitFor(() => expect(screen.getByText(/Failed to load events/i)).toBeInTheDocument());
+  });
+
+  describe('numbered pager (spec #551)', () => {
+    it('pages at 24, mapping ?page to the request offset', async () => {
+      mockPagedExplore(130);
+      renderExplore('/en/explore?page=3');
+
+      await waitFor(() => expect(screen.getByText('Event 49')).toBeInTheDocument());
+      expect(screen.getAllByTestId('event-card')).toHaveLength(24);
+      expect(screen.getByText('Event 72')).toBeInTheDocument();
+      const requests = exploreRequests();
+      expect(requests).toHaveLength(1);
+      const params = new URL(requests[0], 'http://x').searchParams;
+      expect(params.get('limit')).toBe('24');
+      expect(params.get('offset')).toBe('48');
+      expect(params.has('cursor')).toBe(false);
+    });
+
+    it('shows the pager under the grid with the range label instead of Load more', async () => {
+      mockPagedExplore(130);
+      const { container } = renderExplore('/en/explore?sort=date');
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+
+      const nav = screen.getByRole('navigation', { name: 'Pages' });
+      const cards = screen.getAllByTestId('event-card');
+      const lastCard = cards[cards.length - 1];
+      expect(lastCard.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(within(nav).getByRole('link', { name: 'Page 6' })).toHaveAttribute(
+        'href',
+        '/en/explore?sort=date&page=6',
+      );
+      expect(container.textContent).toContain('1–24 of 130');
+      expect(screen.queryByRole('button', { name: /load more/i })).not.toBeInTheDocument();
+    });
+
+    it('after a page change focuses the hidden Events heading and instant-scrolls to it', async () => {
+      mockPagedExplore(130);
+      renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+      const heading = screen.getByRole('heading', { level: 2, name: 'Events' });
+      expect(heading).toHaveAttribute('tabindex', '-1');
+
+      await userEvent.click(screen.getByRole('link', { name: 'Page 2' }));
+
+      await waitFor(() => expect(screen.getByText('Event 25')).toBeInTheDocument());
+      await waitFor(() => expect(document.activeElement).toBe(heading));
+      expect(window.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'instant' }));
+      expect(screen.getByTestId('location-probe')).toHaveTextContent('/en/explore?page=2');
+    });
+
+    it('marks the results aria-busy while the previous page shows as placeholder data', async () => {
+      let release: () => void = () => {};
+      const page2 = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mockPagedExplore(130, (offset) => (offset === 24 ? page2 : undefined));
+      renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+      const results = screen.getByRole('heading', { level: 2, name: 'Events' }).parentElement!;
+      expect(results).toHaveAttribute('aria-busy', 'false');
+
+      await userEvent.click(screen.getByRole('link', { name: 'Page 2' }));
+
+      await waitFor(() => expect(results).toHaveAttribute('aria-busy', 'true'));
+      expect(screen.getByText('Event 1')).toBeInTheDocument();
+      release();
+      await waitFor(() => expect(screen.getByText('Event 25')).toBeInTheDocument());
+      expect(results).toHaveAttribute('aria-busy', 'false');
+    });
+
+    it('a filter change resets to page 1 in one push, and back restores the previous page', async () => {
+      mockPagedExplore(130);
+      renderExplore('/en/explore?page=3');
+      await waitFor(() => expect(screen.getByText('Event 49')).toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('button', { name: 'Free only' }));
+
+      await waitFor(() => expect(screen.getByTestId('location-probe')).toHaveTextContent('/en/explore?free=1'));
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+      await waitFor(() => expect(screen.getByTestId('location-probe')).toHaveTextContent('/en/explore?page=3'));
+      await waitFor(() => expect(screen.getByText('Event 49')).toBeInTheDocument());
+    });
+
+    it('a committed search makes one history entry that resets to page 1', async () => {
+      mockPagedExplore(130);
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+      renderExplore('/en/explore?page=2');
+      await waitFor(() => expect(screen.getByText('Event 25')).toBeInTheDocument());
+
+      await user.type(screen.getByPlaceholderText(/search events/i), 'jazz');
+
+      await waitFor(() => expect(screen.getByTestId('location-probe')).toHaveTextContent('/en/explore?q=jazz'));
+      await user.click(screen.getByRole('button', { name: 'Back' }));
+      await waitFor(() => expect(screen.getByTestId('location-probe')).toHaveTextContent('/en/explore?page=2'));
+    });
+
+    it('an old deep link past the end clamps to the last page', async () => {
+      mockPagedExplore(50);
+      renderExplore('/en/explore?page=9');
+
+      await waitFor(() => expect(screen.getByTestId('location-probe')).toHaveTextContent('/en/explore?page=3'));
+      await waitFor(() => expect(screen.getByText('Event 49')).toBeInTheDocument());
+      expect(screen.queryByText(/no events match/i)).not.toBeInTheDocument();
+    });
+
+    it('a malformed ?page normalizes to page 1 before fetching', async () => {
+      mockPagedExplore(50);
+      renderExplore('/en/explore?page=abc');
+
+      await waitFor(() => expect(screen.getByTestId('location-probe').textContent).toBe('/en/explore'));
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+      expect(exploreRequests().every((url) => url.includes('offset=0'))).toBe(true);
+    });
+
+    it('shows no pager on an empty result set', async () => {
+      mockPagedExplore(0);
+      renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText(/no events match/i)).toBeInTheDocument());
+      expect(screen.queryByRole('navigation', { name: 'Pages' })).not.toBeInTheDocument();
+    });
   });
 
   describe('prerender readiness marker (issue #236)', () => {

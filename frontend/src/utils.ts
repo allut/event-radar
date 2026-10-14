@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import { type InfiniteData, type QueryClient } from '@tanstack/react-query';
+import { type QueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api/client';
 import {
   DEFAULT_CURRENCY,
@@ -163,7 +163,7 @@ export function vibeOptions(locale: string): { value: string; label: string }[] 
 }
 
 /** useInfiniteQuery's getNextPageParam cursor for every offset-paginated
- * list (admin queues, claim events; Explore/Saved use nextKeysetParam): the next offset when the page
+ * list (admin queues, claim events; Saved uses nextKeysetParam): the next offset when the page
  * says there's more, else undefined to stop paging. `itemCount` is the
  * caller's page-array length (`events.length`/`groups.length` — the key
  * differs per response shape, so it's passed rather than read off `page`). */
@@ -175,9 +175,8 @@ export function nextOffsetParam(
 }
 
 /** A useInfiniteQuery page param for lists the backend keyset-paginates
- * (Explore's date sort, Saved Events): `cursor` is the server's opaque
- * `next_cursor` and wins when present; `offset` is the fallback for the
- * sorts that stay on OFFSET (relevance/price/quality). */
+ * (Saved Events): `cursor` is the server's opaque `next_cursor` and wins
+ * when present; `offset` is the fallback for the first page. */
 export interface KeysetPageParam {
   offset: number;
   cursor?: string;
@@ -917,11 +916,7 @@ export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearch
 }
 
 /** Build the GET /explore query string for a given filter set + page offset. */
-export function buildExploreApiQuery(
-  filters: ExploreFilters,
-  offset: number,
-  cursor?: string,
-): string {
+export function buildExploreApiQuery(filters: ExploreFilters, offset: number): string {
   const params = new URLSearchParams();
   if (filters.q) params.set(EXPLORE_PARAM.q, filters.q);
   if (filters.category.length && !isFullSet(filters.category, CATEGORIES)) {
@@ -943,7 +938,6 @@ export function buildExploreApiQuery(
   params.set(EXPLORE_PARAM.sort, filters.sort);
   params.set(EXPLORE_PARAM.limit, String(BROWSE_PAGE_SIZE));
   params.set(EXPLORE_PARAM.offset, String(offset));
-  if (cursor) params.set(EXPLORE_PARAM.cursor, cursor);
   return params.toString();
 }
 
@@ -982,18 +976,16 @@ function patchEventInPage<T extends CachedEventsPage>(page: T, eventId: number, 
 }
 
 /** Writes `patch` (e.g. `{ my_signal }`, `{ reported }`) onto one event's row in
- * every cached Feed / Explore / event-detail payload, so a save/like/report is
- * reflected everywhere without refetching every loaded page of every list
- * (an infinite Explore query refetches all its pages sequentially). Saved-tab
- * payloads are deliberately left alone: membership there changes with the
- * signal, so callers invalidate them instead. */
+ * every cached Feed / Explore page / event-detail payload, so a save/like/report
+ * is reflected everywhere without refetching (an Explore refetch re-scores
+ * server-side). Saved-tab payloads are deliberately left alone: membership
+ * there changes with the signal, so callers invalidate them instead. */
 export function patchCachedEvent(queryClient: QueryClient, eventId: number, patch: object): void {
-  queryClient.setQueriesData<CachedEventsPage>({ queryKey: [QUERY_KEYS.feed] }, (old) =>
-    old ? patchEventInPage(old, eventId, patch) : old,
-  );
-  queryClient.setQueriesData<InfiniteData<CachedEventsPage>>({ queryKey: [QUERY_KEYS.explore] }, (old) =>
-    Array.isArray(old?.pages) ? { ...old, pages: old.pages.map((page) => patchEventInPage(page, eventId, patch)) } : old,
-  );
+  for (const key of [QUERY_KEYS.feed, QUERY_KEYS.explore]) {
+    queryClient.setQueriesData<CachedEventsPage>({ queryKey: [key] }, (old) =>
+      old ? patchEventInPage(old, eventId, patch) : old,
+    );
+  }
   queryClient.setQueriesData<CachedEventLike>({ queryKey: [QUERY_KEYS.event] }, (old) =>
     old && old.id === eventId ? { ...old, ...patch } : old,
   );

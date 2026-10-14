@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
 import { withLocaleQuery } from '../../utils';
@@ -8,12 +8,16 @@ import { useAuth } from '../../hooks/useAuth';
 import { useEventCardNav } from '../../hooks/useEventCardNav';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLogout } from '../../hooks/useLogout';
+import { usePageParam } from '../../hooks/usePageParam';
+import { usePagedQuery } from '../../hooks/usePagedQuery';
+import { usePageSettledFocus } from '../../hooks/usePageSettledFocus';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import { buildExploreItemListJsonLd } from '../../lib/structuredData';
 import { trackEvent } from '../../lib/gtag';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
+import Pager from '../../components/Pager';
 import TopBar from '../../components/TopBar';
 import SeoTags from '../../components/SeoTags';
 import FacetMenu from '../../components/FacetMenu';
@@ -22,7 +26,7 @@ import SelectMenu from '../../components/SelectMenu';
 import DateRangeMenu from '../../components/DateRangeMenu';
 import SignInModal from '../../components/SignInModal';
 import UpsellCard from './UpsellCard';
-import { CATEGORIES, VIBES } from '../../_generated/sharedConstants';
+import { BROWSE_PAGE_SIZE, CATEGORIES, VIBES } from '../../_generated/sharedConstants';
 import { ANALYTICS_EVENTS } from '../../constants/analytics';
 import { API, QUERY_KEYS } from '../../constants/api';
 import { UI_STATE } from '../../constants/core';
@@ -53,8 +57,6 @@ import {
   cx,
   DEFAULT_EXPLORE_FILTERS,
   exploreFiltersToSearchParams,
-  FIRST_KEYSET_PAGE,
-  nextKeysetParam,
   parseExploreFilters,
   titleWithBrand,
   vibeOptions,
@@ -68,7 +70,6 @@ interface ExploreResponse {
   limit: number;
   offset: number;
   has_more: boolean;
-  next_cursor?: string | null;
 }
 
 interface CurrentUser {
@@ -80,8 +81,12 @@ export default function Explore() {
   const authed = useAuth();
   const nav = useEventCardNav();
   const handleLogout = useLogout();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const filters = useMemo(() => parseExploreFilters(searchParams), [searchParams]);
+  // Every filter/sort/search write goes through setListParams (spec #551):
+  // one push that also drops ?page, so a change lands on page 1 and one
+  // back press undoes it.
+  const { setListParams } = usePageParam();
   // publicRoute: true — /explore joins Home/EventDetail's noRedirect SEO
   // route class (App.tsx, issue #236): its bare path always renders
   // Estonian, so the initial locale must resolve purely from the URL
@@ -146,8 +151,8 @@ export default function Explore() {
   // future memoization (Big-O audit #5, item 3.6) — mirrors requestSignIn's
   // rationale above for EventCard.
   const commitFilters = useCallback(
-    (next: ExploreFilters) => setSearchParams(exploreFiltersToSearchParams(next)),
-    [setSearchParams],
+    (next: ExploreFilters) => setListParams(() => exploreFiltersToSearchParams(next)),
+    [setListParams],
   );
   // filter_type is a fixed vocabulary (EXPLORE_FILTER_TYPES) — see
   // ANALYTICS_EVENTS.exploreFilterChange in constants/analytics.ts and the Code Quality Rule
@@ -180,35 +185,35 @@ export default function Explore() {
     enabled: authed,
   });
 
-  // Each page is a fresh /explore request — the backend's Path B (For-you /
-  // relevance sort) re-derives and re-scores its candidate pool per request
-  // with no stable server-side cursor, so an event reclassified/published
-  // between page fetches can shift rank enough to appear twice or be skipped.
-  // Accepted at MVP ingestion cadence (hourly/6-hourly jobs) — same tradeoff
-  // as the backend's own documented Path-B approximation (browse.py).
+  // One page per request, numbered by ?page (spec #551). Neither path holds
+  // server-side state between pages: Path A orders on stable keys, but Path B
+  // (For you / relevance) re-scores per request once its 30 s score cache
+  // expires, and both filter on the current time, so an event can shift
+  // between two page loads when the clock or its classification moves on.
+  // Accepted at MVP ingestion cadence (hourly/6-hourly jobs).
+  const { resultsHeadingRef, onPageSettled } = usePageSettledFocus();
   const {
-    data,
+    items: events,
+    total,
+    offset,
     isLoading,
     isError,
     isSuccess,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
+    isPlaceholderData,
+    pagerProps,
+  } = usePagedQuery({
     queryKey: [QUERY_KEYS.explore, locale, filters],
-    queryFn: ({ pageParam }) =>
+    pageSize: BROWSE_PAGE_SIZE,
+    fetchPage: ({ offset: pageOffset }) =>
       api.get<ExploreResponse>(
-        withLocaleQuery(`${API.explore}?${buildExploreApiQuery(filters, pageParam.offset, pageParam.cursor)}`, locale),
+        withLocaleQuery(`${API.explore}?${buildExploreApiQuery(filters, pageOffset)}`, locale),
       ),
-    initialPageParam: FIRST_KEYSET_PAGE,
-    getNextPageParam: (lastPage) => nextKeysetParam(lastPage, lastPage.events.length),
+    select: (data) => ({ items: data.events, total: data.total, offset: data.offset }),
+    onPageSettled,
     // A facet emptied down to zero chips means "match nothing" — skip the
     // request entirely rather than round-tripping to the backend, which
     // would treat an absent/full param as "all" and return unfiltered results.
     enabled: filters.category.length > 0 && filters.vibe.length > 0,
-    // A focus-triggered refetch of an infinite query re-requests every loaded
-    // page sequentially (each re-scored server-side) — never worth it here.
-    refetchOnWindowFocus: false,
   });
 
   const toggleFacet = useCallback(
@@ -296,7 +301,6 @@ export default function Explore() {
   const handleCategoryToggle = useCallback((v: string) => toggleFacet('category', v), [toggleFacet]);
   const handleVibeToggle = useCallback((v: string) => toggleFacet('vibe', v), [toggleFacet]);
 
-  const events = useMemo(() => data?.pages.flatMap((page) => page.events) ?? [], [data]);
   // Grid render list: for anonymous visitors, the persistent upsell card is
   // spliced in as an EventCard sibling after EXPLORE_UPSELL_CARD_POSITION
   // cards (or at the end, for a shorter result set). The last event is
@@ -309,12 +313,13 @@ export default function Explore() {
     [events, authed],
   );
   const gridItems = useMemo<GridItem[]>(() => {
-    const items: GridItem[] = visibleEvents.map((event, index) => ({ kind: 'event', event, index }));
+    // `index` is the event's position in the whole result set, not the page.
+    const items: GridItem[] = visibleEvents.map((event, index) => ({ kind: 'event', event, index: offset + index }));
     if (!authed) {
       items.splice(Math.min(EXPLORE_UPSELL_CARD_POSITION, items.length), 0, { kind: 'upsell' });
     }
     return items;
-  }, [visibleEvents, authed]);
+  }, [visibleEvents, authed, offset]);
   const activeCount = activeFacetCount(filters);
   const hasActiveFilters =
     activeCount > 0 || filters.q.length > 0 || filters.forYou || filters.sort !== SORT_DEFAULT;
@@ -344,17 +349,12 @@ export default function Explore() {
     path: ROUTES.explore,
     indexable: isSuccess,
   });
-  // Crawlers only ever see the first page, so the ItemList is built from it
-  // alone — not rebuilt/stringified over every page on each load-more. The
-  // anonymous grid drops the last card for the upsell (see visibleEvents), which
-  // only touches page 1 while it is the sole loaded page.
-  const firstPage = data?.pages[0];
-  const multiplePages = (data?.pages.length ?? 0) > 1;
+  // The ItemList covers the events the grid shows on this page (the anonymous
+  // grid drops its last card for the upsell, see visibleEvents).
   const jsonLd = useMemo(() => {
-    if (!isSuccess || !firstPage) return undefined;
-    const pageEvents = authed || multiplePages ? firstPage.events : firstPage.events.slice(0, Math.max(firstPage.events.length - 1, 0));
-    return buildExploreItemListJsonLd(pageEvents, locale);
-  }, [isSuccess, firstPage, authed, multiplePages, locale]);
+    if (!isSuccess) return undefined;
+    return buildExploreItemListJsonLd(visibleEvents, locale);
+  }, [isSuccess, visibleEvents, locale]);
 
   return (
     <div className={styles.page}>
@@ -466,53 +466,56 @@ export default function Explore() {
           </div>
         </div>
 
-        {isLoading ? (
-          <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
-        ) : isError ? (
-          <PageState kind={UI_STATE.error} message={t('explore_error', locale)} inline />
-        ) : events.length === 0 ? (
-          <EmptyState
-            eyebrow={t('nav_explore', locale)}
-            title={t('explore_empty_title', locale)}
-            message={t('explore_empty_msg', locale)}
-          />
-        ) : (
-          <div className={styles.grid}>
-            {gridItems.map((item) =>
-              item.kind === 'upsell' ? (
-                <UpsellCard key="upsell" locale={locale} onCtaClick={handleUpsellCtaClick} />
-              ) : (
-                <EventCard
-                  key={item.event.id}
-                  event={item.event}
-                  index={item.index}
-                  locale={locale}
-                  nav={nav}
-                  variant="standard"
-                  onFeedbackBlocked={authed ? undefined : handleFeedbackBlocked}
-                  onCardClick={handleCardClick}
-                />
-              ),
-            )}
-          </div>
-        )}
+        <section className={styles.results} aria-busy={isPlaceholderData}>
+          {/* The focus target after a page change (usePageSettledFocus): the
+              h1 sits above the filters, so the grid gets its own heading. */}
+          <h2 ref={resultsHeadingRef} tabIndex={-1} className={styles.resultsHeading}>
+            {t('explore_results_heading', locale)}
+          </h2>
+          {isLoading ? (
+            <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
+          ) : isError ? (
+            <PageState kind={UI_STATE.error} message={t('explore_error', locale)} inline />
+          ) : events.length === 0 && total > 0 ? (
+            // A past-end page about to clamp to the real last page.
+            <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
+          ) : events.length === 0 ? (
+            <EmptyState
+              eyebrow={t('nav_explore', locale)}
+              title={t('explore_empty_title', locale)}
+              message={t('explore_empty_msg', locale)}
+            />
+          ) : (
+            <div className={cx(styles.grid, isPlaceholderData && styles.gridDimmed)}>
+              {gridItems.map((item) =>
+                item.kind === 'upsell' ? (
+                  <UpsellCard key="upsell" locale={locale} onCtaClick={handleUpsellCtaClick} />
+                ) : (
+                  <EventCard
+                    key={item.event.id}
+                    event={item.event}
+                    index={item.index}
+                    locale={locale}
+                    nav={nav}
+                    variant="standard"
+                    onFeedbackBlocked={authed ? undefined : handleFeedbackBlocked}
+                    onCardClick={handleCardClick}
+                  />
+                ),
+              )}
+            </div>
+          )}
+        </section>
 
-        {!isLoading && !isError && events.length === 0 && hasActiveFilters && (
+        {!isLoading && !isError && events.length === 0 && total === 0 && hasActiveFilters && (
           <button type="button" className={styles.clearFiltersBtn} onClick={clearFilters}>
             {t('explore_empty_clear', locale)}
           </button>
         )}
 
-        {hasNextPage && (
-          <button
-            type="button"
-            className={styles.loadMoreBtn}
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
-          >
-            {t('load_more', locale)}
-          </button>
-        )}
+        {/* Always mounted for its live region; the rule above it only shows
+            once there is a range label to separate from the grid. */}
+        <Pager {...pagerProps} locale={locale} className={total > 0 ? styles.pager : undefined} />
       </main>
 
       <SignInModal

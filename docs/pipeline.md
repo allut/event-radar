@@ -261,8 +261,7 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 - **`GET /explore` (`app/routers/browse.py`) is optional-auth** (`get_optional_user`). Signed-out callers get the signed-out weights; signed-in callers get personalization. It is rate-limited by `RATE_LIMIT_BROWSE`.
 - **It has two execution paths.** `_browse_sql_path` serves the non-personalized `date`/`price`/`quality` sorts in SQL. `_browse_scored_path` reuses `ranking/score.py` for `for_you` or `relevance`, since persona affinity and the feedback soft-filter can't be a SQL `ORDER BY`.
 - **`q` is capped at `BROWSE_QUERY_MAX_LEN`.** `_keyword_filter` matches `%...%` against two trigram GIN indexes, so an unbounded string is cheap to send and expensive to scan.
-- **Only the SQL `date` sort uses a keyset cursor**, on `(starts_at, id)`. A cursor request returns `next_cursor` and skips `offset` and `total`. Other paths stay on OFFSET and ignore the cursor.
-- **Paginate any new list output the same way:** `limit`/`offset` with a cap (`BROWSE_PAGE_SIZE`, `BROWSE_MAX_PAGE_SIZE`).
+- **Both paths page on `limit`/`offset` and return an exact `total` on every request.** There is no cursor. Each SQL sort ends in an `id` tie-breaker, so tied rows keep one order across pages. The frontend shows a numbered pager at `BROWSE_PAGE_SIZE`.
 
 ### Saved Events
 

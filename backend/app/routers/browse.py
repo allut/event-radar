@@ -14,7 +14,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import ColumnElement, func, literal, or_, select, true, tuple_
+from sqlalchemy import ColumnElement, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -42,7 +42,6 @@ from app.constants.ranking import (
     BROWSE_SQL_SORTS,
     ERROR_INVALID_SORT,
     FEEDBACK_HISTORY_LOOKBACK_DAYS,
-    PAGINATION_CURSOR_MAX_LEN,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
     SIGNAL_DISLIKE,
@@ -63,8 +62,6 @@ from app.ranking.score import (
 from app.rate_limit import limiter
 from app.auth.dependencies import get_optional_user
 from app.routers.utils import (
-    decode_page_cursor,
-    encode_page_cursor,
     escape_ilike_pattern,
     load_user_reported_events,
     load_user_signals,
@@ -156,22 +153,19 @@ async def _browse_sql_path(
     offset: int,
     locale: str,
     user_id: int | None,
-    cursor: tuple[datetime, int] | None = None,
 ) -> dict:
     """Path A — pure SQL. Only reachable for for_you=False with sort in
     {date, price, quality}; relevance sort always needs Python scoring.
     ``user_id`` is None for an anonymous caller (#234) — no per-user signals
     or reported-event state to hydrate.
 
-    The ``date`` sort is keyset-paginated on ``(starts_at, id)``: ``cursor``
-    (decoded from the opaque ``next_cursor`` of the previous page) replaces
-    ``offset`` so page N costs the same as page 1. ``price``/``quality`` sort
-    on a nullable column, so they stay on OFFSET (``cursor`` is ignored) —
-    with ``id`` as a tie-breaker so the order is at least total and stable.
+    Every sort pages on OFFSET with an exact ``total`` on every page, which
+    the numbered pager needs for its range label and last page (spec #551).
+    Each order ends in ``id`` as a tie-breaker, so rows sharing a sort value
+    keep one stable order across pages.
     """
-    keyset = sort == BROWSE_SORT_DATE
     order_cols: list[ColumnElement]
-    if keyset:
+    if sort == BROWSE_SORT_DATE:
         order_cols = [Event.starts_at.asc(), Event.id.asc()]
     elif sort == BROWSE_SORT_PRICE:
         order_cols = [Event.price_min.asc().nulls_last(), Event.id.asc()]
@@ -180,35 +174,21 @@ async def _browse_sql_path(
             EventClassification.quality_score.desc().nulls_last(),
             Event.id.asc(),
         ]
-    page_conds = list(conds)
-    by_cursor = keyset and cursor is not None
-    if keyset and cursor is not None:
-        cursor_ts, cursor_id = cursor
-        page_conds.append(
-            tuple_(Event.starts_at, Event.id) > tuple_(literal(cursor_ts), literal(cursor_id))
+
+    total = (
+        await db.scalar(
+            select(func.count(Event.id))
+            .select_from(Event)
+            .join(Event.classification)
+            .where(*conds)
         )
-        offset = 0
+    ) or 0
 
-    # `total` is a full-set aggregate over every matching row — expensive to
-    # re-run identically for page 2, 3, 4... of the same infinite scroll, so
-    # it's computed only for the first page; the frontend holds it across
-    # subsequent pages via React Query. `has_more` no longer needs `total` at
-    # all: fetch one extra row past `limit` and check whether it showed up.
-    total: int | None = None
-    if offset == 0 and not by_cursor:
-        total = (
-            await db.scalar(
-                select(func.count(Event.id))
-                .select_from(Event)
-                .join(Event.classification)
-                .where(*conds)
-            )
-        ) or 0
-
+    # `has_more` comes from one extra row past `limit`, not from `total`.
     page_stmt = (
         select_events_with_classification()
         .join(Event.classification)
-        .where(*page_conds)
+        .where(*conds)
         .order_by(*order_cols)
         .limit(limit + 1)
         .offset(offset)
@@ -230,11 +210,6 @@ async def _browse_sql_path(
         "limit": limit,
         "offset": offset,
         "has_more": has_more,
-        "next_cursor": (
-            encode_page_cursor(events[-1].starts_at, events[-1].id)
-            if keyset and has_more
-            else None
-        ),
     }
 
 
@@ -545,7 +520,6 @@ async def explore_events(
     offset: int = Query(
         PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
     ),
-    cursor: str | None = Query(None, max_length=PAGINATION_CURSOR_MAX_LEN),
     locale: str | None = Query(None),
     current_user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
@@ -579,7 +553,6 @@ async def explore_events(
             offset,
             effective_locale,
             user_id,
-            decode_page_cursor(cursor) if cursor else None,
         )
 
     cache_key = (

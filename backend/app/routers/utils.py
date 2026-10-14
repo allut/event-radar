@@ -1,7 +1,6 @@
 """Shared serialization helpers for event routers."""
 
 import asyncio
-import base64
 import json
 import logging
 from urllib.parse import unquote, urlsplit
@@ -57,7 +56,6 @@ from app.constants.organizer import (
     ERROR_VENUE_NOT_FOUND,
 )
 from app.constants.ranking import (
-    ERROR_INVALID_CURSOR,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
 )
@@ -398,28 +396,6 @@ def log_admin_action(
 
 
 
-
-
-def encode_page_cursor(ts: datetime, row_id: int) -> str:
-    """Opaque keyset cursor for a `(timestamp, id)` sort key."""
-    raw = json.dumps([ts.isoformat(), row_id]).encode()
-    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
-
-
-def decode_page_cursor(cursor: str) -> tuple[datetime, int]:
-    """Inverse of `encode_page_cursor`; any malformed value is a 422."""
-    try:
-        padded = cursor + "=" * (-len(cursor) % 4)
-        ts_raw, row_id = json.loads(base64.urlsafe_b64decode(padded))
-        ts = datetime.fromisoformat(ts_raw)
-        if ts.tzinfo is None or isinstance(row_id, bool) or not isinstance(row_id, int):
-            raise ValueError(cursor)
-    except (ValueError, TypeError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=ERROR_INVALID_CURSOR,
-        ) from exc
-    return ts, row_id
 
 
 def escape_ilike_pattern(q: str) -> str:

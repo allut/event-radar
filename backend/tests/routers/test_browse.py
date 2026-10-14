@@ -159,8 +159,9 @@ class TestBrowseSqlPath:
         assert result["has_more"] is False
 
 
-class TestBrowseSqlPathKeyset:
-    """Date sort pages on (starts_at, id); other sorts stay on OFFSET."""
+class TestBrowseSqlPathOffsetPaging:
+    """Every Path A sort pages on OFFSET with an exact total on every page
+    (spec #551): no keyset cursor, and a deterministic id tie-breaker."""
 
     @staticmethod
     def _stmt_sql(mock_db):
@@ -168,82 +169,56 @@ class TestBrowseSqlPathKeyset:
         return str(stmt.compile(compile_kwargs={"literal_binds": True}))
 
     @pytest.mark.asyncio
-    async def test_date_sort_emits_next_cursor_when_more(self, mock_db, make_event):
-        from app.routers.browse import _browse_sql_path
-        from app.routers.utils import decode_page_cursor
-
-        events = [make_event(1), make_event(2), make_event(3)]
-        mock_db.scalar.return_value = 3
-        mock_db.scalars.return_value = _scalars_result(events)
-
-        result = await _browse_sql_path(
-            mock_db, [], "date", limit=2, offset=0, locale="en", user_id=None
-        )
-
-        assert decode_page_cursor(result["next_cursor"]) == (
-            events[1].starts_at,
-            events[1].id,
-        )
-
-    @pytest.mark.asyncio
-    async def test_last_page_has_no_next_cursor(self, mock_db, make_event):
+    async def test_date_sort_deep_page_offsets_and_counts_total(self, mock_db, make_event):
         from app.routers.browse import _browse_sql_path
 
-        mock_db.scalar.return_value = 1
-        mock_db.scalars.return_value = _scalars_result([make_event(1)])
+        mock_db.scalar.return_value = 130
+        mock_db.scalars.return_value = _scalars_result([make_event(49), make_event(50)])
 
         result = await _browse_sql_path(
-            mock_db, [], "date", limit=2, offset=0, locale="en", user_id=None
-        )
-        assert result["next_cursor"] is None
-
-    @pytest.mark.asyncio
-    async def test_cursor_page_filters_keyset_skips_offset_and_total(
-        self, mock_db, make_event
-    ):
-        from app.routers.browse import _browse_sql_path
-
-        mock_db.scalars.return_value = _scalars_result([make_event(1)])
-        ts = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
-
-        result = await _browse_sql_path(
-            mock_db,
-            [],
-            "date",
-            limit=2,
-            offset=40,
-            locale="en",
-            user_id=None,
-            cursor=(ts, 7),
+            mock_db, [], "date", limit=24, offset=48, locale="en", user_id=None
         )
 
         sql = self._stmt_sql(mock_db)
-        assert "(events.starts_at, events.id) >" in sql
-        assert "OFFSET" not in sql.upper().replace("OFFSET 0", "")
-        assert "ORDER BY events.starts_at ASC, events.id ASC" in sql
-        mock_db.scalar.assert_not_called()
-        assert result["total"] is None
-        assert result["offset"] == 0
+        assert "OFFSET 48" in sql
+        assert "(events.starts_at, events.id) >" not in sql
+        mock_db.scalar.assert_called_once()
+        assert result["total"] == 130
+        assert result["limit"] == 24
+        assert result["offset"] == 48
+        assert "next_cursor" not in result
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("sort", ["price", "quality"])
-    async def test_non_date_sort_stays_offset_and_ignores_cursor(
-        self, mock_db, make_event, sort
+    @pytest.mark.parametrize(
+        ("sort", "order_by"),
+        [
+            ("date", "ORDER BY events.starts_at ASC, events.id ASC"),
+            ("price", "ORDER BY events.price_min ASC NULLS LAST, events.id ASC"),
+            (
+                "quality",
+                "ORDER BY event_classifications.quality_score DESC NULLS LAST, events.id ASC",
+            ),
+        ],
+    )
+    async def test_tie_breaker_is_stable_across_pages(
+        self, mock_db, make_event, sort, order_by
     ):
+        """Page 1 and page 2 order on the same keys, ending in events.id, so
+        rows sharing a sort value neither repeat nor vanish across pages."""
         from app.routers.browse import _browse_sql_path
 
-        mock_db.scalar.return_value = 1
-        mock_db.scalars.return_value = _scalars_result([make_event(1), make_event(2)])
-        ts = datetime(2026, 5, 1, tzinfo=timezone.utc)
+        mock_db.scalar.return_value = 4
+        sqls = []
+        for offset in (0, 2):
+            mock_db.scalars.return_value = _scalars_result([make_event(offset + 1)])
+            await _browse_sql_path(
+                mock_db, [], sort, limit=2, offset=offset, locale="en", user_id=None
+            )
+            sqls.append(self._stmt_sql(mock_db))
 
-        result = await _browse_sql_path(
-            mock_db, [], sort, limit=1, offset=0, locale="en", user_id=None, cursor=(ts, 7)
-        )
-
-        assert "(events.starts_at, events.id) >" not in self._stmt_sql(mock_db)
-        assert "events.id ASC" in self._stmt_sql(mock_db)
-        assert result["total"] == 1
-        assert result["next_cursor"] is None
+        for sql in sqls:
+            assert order_by in sql
+        assert "OFFSET 2" in sqls[1]
 
 
 class TestBrowseScoredPath:
@@ -532,7 +507,7 @@ class TestExploreEventsRouting:
 
         called = {}
 
-        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id, cursor=None):
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -549,7 +524,6 @@ class TestExploreEventsRouting:
             q=None,
             sort="date",
             for_you=False,
-            cursor=None,
             current_user=user,
             db=mock_db,
         )
@@ -563,7 +537,7 @@ class TestExploreEventsRouting:
 
         called = {}
 
-        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id, cursor=None):
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -593,7 +567,7 @@ class TestExploreEventsRouting:
 
         called = {}
 
-        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id, cursor=None):
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -739,7 +713,7 @@ class TestAnonymousExplore:
 
         called = {}
 
-        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id, cursor=None):
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
             called["user_id"] = user_id
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -750,7 +724,6 @@ class TestAnonymousExplore:
             q=None,
             sort="date",
             for_you=False,
-            cursor=None,
             current_user=None,
             db=mock_db,
         )
