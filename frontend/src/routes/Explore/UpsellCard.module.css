@@ -1,36 +1,56 @@
-.card {
+/* Full-width strip above the first card: the card chrome with its gold top
+   rule, laid out horizontally; stacked on phones (--bp-narrow). */
+.strip {
   composes: card from '../../components/shared/Card.module.css';
   composes: cardAccentTop from '../../components/shared/Card.module.css';
-  display: flex;
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  min-height: 100%;
+  gap: var(--space-3) var(--space-6);
+  padding: var(--space-4) var(--space-5);
   background: var(--bg-overlay-soft);
 }
 
-.body {
-  padding: var(--space-4);
+.text {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-1);
+  min-width: 0;
 }
 
 .headline {
   font-family: var(--font-display);
-  font-size: var(--fs-lg);
+  font-size: var(--heading-md);
   font-weight: var(--fw-semibold);
+  line-height: var(--leading-display);
+  letter-spacing: var(--tracking-tighter);
   color: var(--text);
 }
 
 .copy {
+  max-width: var(--measure-lede);
   font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
 .cta {
   composes: btnPrimary from '../../components/shared/Button.module.css';
-  align-self: flex-start;
-  margin-top: var(--space-1);
-  padding: var(--space-0-625) var(--space-4);
+  min-height: var(--space-2-75);
+  padding: 0 var(--space-5);
   font-size: var(--fs-sm);
+  white-space: nowrap;
   cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .strip {
+    grid-template-columns: 1fr;
+    justify-items: start;
+    padding: var(--space-4);
+  }
+
+  .cta {
+    white-space: normal;
+  }
 }

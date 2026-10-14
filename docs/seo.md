@@ -23,7 +23,7 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **`priceCurrency` falls back to `DEFAULT_CURRENCY`.** A free event can lose its currency at ingest, and the validator requires `priceCurrency` once `lowPrice` is present. Dropping it would silently cost the offer its rich-result eligibility.
 - **`image` falls back to the same asset as `og:image`.** The two must never pick different fallbacks.
 - **`buildWebsiteJsonLd` (Landing) carries only `name`, `url` and `inLanguage`.**
-- **`buildExploreItemListJsonLd` emits one `ListItem` per event on the current `/explore` page**, with `position` 1 to n in render order. Each `item` is the full `buildEventJsonLd` payload, so there is one field-mapping policy.
+- **`buildExploreItemListJsonLd` emits one `ListItem` per event on the current `/explore` page**, with `position` 1 to n in render order, the same signed in or out (the sign-up strip is not an item). Each `item` is the full `buildEventJsonLd` payload, so there is one field-mapping policy.
 - **Each list `item` adds a top-level `url` to the locale-matched detail page.** It is distinct from `offers.url`, which is the external ticket link.
 - **The `ItemList` omits `numberOfItems` and `itemListOrder`.** schema.org defines `numberOfItems` as the count for the entire list, which would be wrong on a one-page snapshot, and Google doesn't ask for either.
 - **`/faq` emits no JSON-LD.**
@@ -177,7 +177,7 @@ An optimization layer over the `RoundMarker` chain. It gives resumed rounds per-
 - **The JSON-LD check depends on `kind`: `'event'`, `'website'`, `'list'` or `'page'`.** `'page'` (`/faq`) requires zero JSON-LD scripts instead of one.
 - **`assertEventJsonLd` checks Google's required Event fields** (`name`, `startDate`, `location`) and its "image or offers" recommendation. It never checks `eventStatus`, `organizer` or `offers.availability`, matching the builder. Price fields are checked only once `lowPrice` is present.
 - **`assertListJsonLd` checks the `ItemList` shape, `position` running exactly `1..n`, and each `item` through `assertEventJsonLd`.** Each `item.url` must be unique, on `PRODUCTION_ORIGIN` and fragment-free, and each `item.image` present.
-- **The `≥3 items` check is skipped when the live catalog itself is thinner.** `fetchLiveExploreCount` re-queries `GET /explore` and subtracts one for the anonymous upsell card (`Explore.tsx`'s `gridItems`). Prerender is always anonymous, so the raw total would fail every 3-event catalog.
+- **The `≥3 items` check is skipped when the live catalog itself is thinner.** `fetchLiveExploreCount` re-queries `GET /explore` and returns `min(total, BROWSE_PAGE_SIZE)`. The anonymous sign-up strip sits above the grid and takes no event's slot, so the snapshot lists every fetched event.
 - **A literal `<` in a JSON-LD body fails the snapshot** (`ParsedSnapshot.jsonLdRaw`). A full `</script` breakout truncates the body and fails the JSON parse instead.
 
 ### Staleness Checks

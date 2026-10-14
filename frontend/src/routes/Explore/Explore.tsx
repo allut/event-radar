@@ -35,7 +35,6 @@ import {
   EXPLORE_AUDIENCE_FOR_YOU,
   EXPLORE_FILTER_TYPES,
   EXPLORE_SEARCH_DEBOUNCE_MS,
-  EXPLORE_UPSELL_CARD_POSITION,
   SORT_DEFAULT,
   SORT_OPTIONS,
   SIGNAL_TO_SIGNIN_TRIGGER,
@@ -309,25 +308,6 @@ export default function Explore() {
   const handleCategoryToggle = useCallback((v: string) => toggleFacet('category', v), [toggleFacet]);
   const handleVibeToggle = useCallback((v: string) => toggleFacet('vibe', v), [toggleFacet]);
 
-  // Grid render list: for anonymous visitors, the persistent upsell card is
-  // spliced in as an EventCard sibling after EXPLORE_UPSELL_CARD_POSITION
-  // cards (or at the end, for a shorter result set). The last event is
-  // dropped to make room for it — keeping the total card count the same as
-  // a signed-in grid — rather than added on top, which otherwise left one
-  // orphaned card wrapping onto its own row at common viewport widths.
-  type GridItem = { kind: 'event'; event: EventData; index: number } | { kind: 'upsell' };
-  const visibleEvents = useMemo(
-    () => (authed ? events : events.slice(0, Math.max(events.length - 1, 0))),
-    [events, authed],
-  );
-  const gridItems = useMemo<GridItem[]>(() => {
-    // `index` is the event's position in the whole result set, not the page.
-    const items: GridItem[] = visibleEvents.map((event, index) => ({ kind: 'event', event, index: offset + index }));
-    if (!authed) {
-      items.splice(Math.min(EXPLORE_UPSELL_CARD_POSITION, items.length), 0, { kind: 'upsell' });
-    }
-    return items;
-  }, [visibleEvents, authed, offset]);
   const activeCount = activeFacetCount(filters);
   const hasActiveFilters =
     activeCount > 0 || filters.q.length > 0 || filters.forYou || filters.sort !== SORT_DEFAULT;
@@ -499,22 +479,20 @@ export default function Explore() {
             />
           ) : (
             <div className={cx(styles.grid, isPlaceholderData && styles.gridDimmed)}>
-              {gridItems.map((item) =>
-                item.kind === 'upsell' ? (
-                  <UpsellCard key="upsell" locale={locale} onCtaClick={handleUpsellCtaClick} />
-                ) : (
-                  <EventCard
-                    key={item.event.id}
-                    event={item.event}
-                    index={item.index}
-                    locale={locale}
-                    nav={nav}
-                    variant="standard"
-                    onFeedbackBlocked={authed ? undefined : handleFeedbackBlocked}
-                    onCardClick={handleCardClick}
-                  />
-                ),
-              )}
+              {!authed && <UpsellCard locale={locale} onCtaClick={handleUpsellCtaClick} />}
+              {events.map((event, i) => (
+                <EventCard
+                  key={event.id}
+                  event={event}
+                  // The event's position in the whole result set, not the page.
+                  index={offset + i}
+                  locale={locale}
+                  nav={nav}
+                  variant="standard"
+                  onFeedbackBlocked={authed ? undefined : handleFeedbackBlocked}
+                  onCardClick={handleCardClick}
+                />
+              ))}
             </div>
           )}
         </section>

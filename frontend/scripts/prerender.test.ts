@@ -519,19 +519,19 @@ describe('fetchLiveExploreCount (issue #236)', () => {
     } as Response);
   }
 
-  it('subtracts one, matching the anonymous view\'s upsell-card truncation — a 3-event catalog resolves to 2', async () => {
+  it('does not subtract for the sign-up strip — a 3-event catalog resolves to 3', async () => {
     mockExploreTotal(3);
-    await expect(fetchLiveExploreCount('en')).resolves.toBe(2);
+    await expect(fetchLiveExploreCount('en')).resolves.toBe(3);
   });
 
-  it('floors at 0 rather than going negative for an empty catalog', async () => {
+  it('resolves 0 for an empty catalog', async () => {
     mockExploreTotal(0);
     await expect(fetchLiveExploreCount('en')).resolves.toBe(0);
   });
 
-  it('caps at BROWSE_PAGE_SIZE before subtracting, mirroring events.length only ever reflecting the first page', async () => {
+  it('caps at BROWSE_PAGE_SIZE, mirroring events.length only ever reflecting the first page', async () => {
     mockExploreTotal(BROWSE_PAGE_SIZE + 50);
-    await expect(fetchLiveExploreCount('en')).resolves.toBe(BROWSE_PAGE_SIZE - 1);
+    await expect(fetchLiveExploreCount('en')).resolves.toBe(BROWSE_PAGE_SIZE);
   });
 
   it('returns undefined on a non-ok response rather than throwing', async () => {

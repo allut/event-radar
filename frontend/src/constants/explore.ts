@@ -57,11 +57,6 @@ export const SIGNAL_TO_SIGNIN_TRIGGER: Record<Signal, SignInTrigger> = {
   dislike: 'thumbs',
 };
 export const UPSELL_ACTION_FOR_YOU = 'for_you';
-// Index in the (0-based) results array after which the persistent upsell
-// card is inserted for anonymous visitors — tuned by eye against the
-// responsive auto-fill grid (Page.module.css's .cardGrid), which has no
-// fixed column count to compute an exact row boundary from.
-export const EXPLORE_UPSELL_CARD_POSITION = 5;
 
 // explore_filter_change's `filter_type` param (issue #235) is a fixed
 // vocabulary — the facet name, or which other control changed — centralized

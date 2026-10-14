@@ -559,9 +559,7 @@ describe('Explore', () => {
     it('never calls /users/me when signed out', async () => {
       mockGet.mockImplementation(() => Promise.resolve(exploreResponse([makeEvent({ id: 1 }), makeEvent({ id: 2 })])));
       renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
-      // Anonymous grid drops the last event to make room for the upsell
-      // card without an orphaned card wrapping to a new row.
-      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
+      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
 
       const calls = mockGet.mock.calls.map((c) => c[0] as string);
       expect(calls.some((c) => c.startsWith('/users/me'))).toBe(false);
@@ -595,9 +593,7 @@ describe('Explore', () => {
         ])),
       );
       renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
-      // Anonymous grid drops the last event to make room for the upsell
-      // card without an orphaned card wrapping to a new row.
-      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
+      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(3));
 
       await userEvent.click(screen.getByText('block-bookmark-1'));
       expect(screen.getByText('Sign in to save this')).toBeInTheDocument();
@@ -615,9 +611,7 @@ describe('Explore', () => {
     it('fires explore_card_click with signed_in and position when a card is opened', async () => {
       mockGet.mockImplementation(() => Promise.resolve(exploreResponse([makeEvent({ id: 1 }), makeEvent({ id: 2 })])));
       renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
-      // Anonymous grid drops the last event to make room for the upsell
-      // card without an orphaned card wrapping to a new row.
-      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
+      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
 
       await userEvent.click(screen.getByText('card-click-1'));
 
@@ -635,14 +629,44 @@ describe('Explore', () => {
       expect(screen.getByRole('button', { name: 'For you' })).toHaveAttribute('aria-pressed', 'false');
     });
 
-    it('drops the last event to keep the total card count unchanged when the upsell card is added', async () => {
-      const anonEvents = Array.from({ length: 6 }, (_, i) => makeEvent({ id: i + 1, title: `Event ${i + 1}` }));
-      mockGet.mockImplementation(() => Promise.resolve(exploreResponse(anonEvents)));
-      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
+    it('shows the sign-up strip above all 24 events on page 1', async () => {
+      mockPagedExplore(60);
+      renderExplore('/en/explore');
 
-      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(5));
-      expect(screen.queryByText('Event 6')).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getAllByTestId('event-card')).toHaveLength(24));
+      const strip = screen.getByText('Like what you see?').closest('aside');
+      expect(strip).not.toBeNull();
+      const firstCard = screen.getAllByTestId('event-card')[0];
+      expect(strip!.compareDocumentPosition(firstCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(strip!.parentElement).toBe(firstCard.parentElement);
+    });
+
+    it('shows the strip and all 24 events on a deep page', async () => {
+      mockPagedExplore(60);
+      renderExplore('/en/explore?page=2');
+
+      await waitFor(() => expect(screen.getAllByTestId('event-card')).toHaveLength(24));
+      expect(screen.getByText('Event 25')).toBeInTheDocument();
+      expect(screen.getByText('Event 48')).toBeInTheDocument();
       expect(screen.getByText('Like what you see?')).toBeInTheDocument();
+    });
+
+    it('shows neither grid nor strip when nothing matches', async () => {
+      mockGet.mockImplementation(() => Promise.resolve(exploreResponse([])));
+      renderExplore('/en/explore');
+
+      await waitFor(() => expect(screen.getByText('No events match')).toBeInTheDocument());
+      expect(screen.queryByText('Like what you see?')).not.toBeInTheDocument();
+      expect(screen.queryAllByTestId('event-card')).toHaveLength(0);
+    });
+
+    it('shows no strip when signed in', async () => {
+      mockIsAuthenticated.mockReturnValue(true);
+      mockPagedExplore(30);
+      renderExplore('/en/explore');
+
+      await waitFor(() => expect(screen.getAllByTestId('event-card')).toHaveLength(24));
+      expect(screen.queryByText('Like what you see?')).not.toBeInTheDocument();
     });
   });
 });

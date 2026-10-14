@@ -943,19 +943,11 @@ function formatSeconds(ms: number): string {
  * — same unfiltered, first-page query Explore.tsx's default request builds
  * (DEFAULT_EXPLORE_FILTERS + offset 0), but limit=1: only the response's
  * `total` is read, not the events themselves. Prerendering is always
- * anonymous (Playwright never signs in), and Explore.tsx's `gridItems`
- * always drops exactly one fetched event to make room for the persistent
- * upsell card (`visibleEvents = events.slice(0, events.length - 1)`) — so
- * the snapshot's `itemListElement` (built from that same `visibleEvents`,
- * per buildExploreItemListJsonLd's caller) is always one shorter than the
- * raw catalog count. Adjusting for that here (not in assertListJsonLd,
- * which stays a generic, business-rule-free structural check) is what lets
- * a catalog of exactly 3 events correctly render a 2-item list without
- * tripping the >=3 check — comparing against the unadjusted `total` would
- * make every such catalog fail the build on a UI layout decision, not an
- * actual builder regression. `min(total, BROWSE_PAGE_SIZE)` mirrors
- * `events.length` itself only ever reflecting the first fetched page.
- * `undefined` on any fetch problem (best-effort — see assertListJsonLd's
+ * anonymous (Playwright never signs in), and the anonymous grid shows every
+ * fetched event — the sign-up strip sits above the grid and takes no event's
+ * slot — so the snapshot's `itemListElement` has `min(total, BROWSE_PAGE_SIZE)`
+ * entries, mirroring `events.length` only ever reflecting the first fetched
+ * page. `undefined` on any fetch problem (best-effort — see assertListJsonLd's
  * doc comment on what omitting this does to the check). */
 export async function fetchLiveExploreCount(locale: string): Promise<number | undefined> {
   const params = new URLSearchParams();
@@ -968,7 +960,7 @@ export async function fetchLiveExploreCount(locale: string): Promise<number | un
     const res = await fetch(`${API_ORIGIN}/explore?${params.toString()}`);
     if (!res.ok) return undefined;
     const body = (await res.json()) as { total: number };
-    return Math.max(Math.min(body.total, BROWSE_PAGE_SIZE) - 1, 0);
+    return Math.min(body.total, BROWSE_PAGE_SIZE);
   } catch {
     return undefined;
   }
