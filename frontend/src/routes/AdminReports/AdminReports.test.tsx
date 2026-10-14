@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import { focusManager, QueryClient } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
+import { useNavigate } from 'react-router-dom';
 import AdminReports from './AdminReports';
 import { LocationProbe, renderWithProviders } from '../../test/utils';
 import { QUERY_KEYS } from '../../constants/api';
@@ -341,6 +342,42 @@ describe('AdminReports', () => {
       expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/admin\/reports\?report=7$/);
     });
 
+    it.each([
+      ['fresh', 30_000],
+      ['stale', 0],
+    ])('does not re-locate a page-1 deep link after a remount with a %s cache', async (_label, staleTime) => {
+      const open = serveQueue(range(1, 120));
+      function Detail() {
+        const navigate = useNavigate();
+        return <button type="button" onClick={() => navigate(-1)}>Go back</button>;
+      }
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, staleTime }, mutations: { retry: false } },
+      });
+      renderWithProviders(null, {
+        route: '/admin/reports?report=7',
+        queryClient,
+        routes: [
+          { path: '/admin/reports', element: <><AdminReports /><LocationProbe /></> },
+          { path: '/admin/events/:id', element: <><Detail /><LocationProbe /></> },
+        ],
+      });
+      await waitFor(() => expect(rowButton('R#7#')).toHaveAttribute('aria-current', 'true'));
+      await userEvent.click(screen.getByRole('link', { name: /Open full details/ }));
+      await waitFor(() => expect(screen.getByTestId('location-probe')).toHaveTextContent('/admin/events/7'));
+      await userEvent.click(screen.getByRole('button', { name: 'Go back' }));
+      await waitFor(() => expect(rowButton('R#7#')).toBeInTheDocument());
+      // 50 newer, higher-ranked reports push #7 onto page 2 server-side.
+      open.unshift(...range(1001, 1050));
+
+      await userEvent.click(rowButton('R#1#'));
+      await resolve();
+
+      await waitFor(() => expect(rowButton('R#1#')).toHaveTextContent('Resolved'));
+      expect(mockGet.mock.calls.slice(1).map(([url]) => url)).not.toContainEqual(expect.stringContaining('report='));
+      expect(screen.getByTestId('location-probe')).not.toHaveTextContent('page=2');
+    });
+
     it('opens the mobile detail panel for the located row', async () => {
       serveQueue(range(1, 120));
       renderWithProviders(<AdminReports />, { route: '/admin/reports?report=110' });
@@ -380,22 +417,26 @@ describe('AdminReports', () => {
       expect(screen.queryByText(/was already resolved/)).not.toBeInTheDocument();
     });
 
-    it('refetches the page and the counts when another admin already resolved the report', async () => {
+    it('refetches the page and marks the counts and plain pages stale when the event is gone (404)', async () => {
       const open = serveQueue([1, 2, 3]);
       mockPost.mockImplementation(async () => {
         open.splice(open.indexOf(1), 1);
-        throw new ApiError(409, 'These reports were already resolved.');
+        throw new ApiError(404, 'Event not found.');
       });
       const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
       queryClient.setQueryData([QUERY_KEYS.adminCounts], { reports: 3 });
-      renderWithProviders(<AdminReports />, { queryClient });
-      await waitFor(() => expect(screen.getByRole('heading', { name: 'R#1#' })).toBeInTheDocument());
+      queryClient.setQueryData([QUERY_KEYS.adminReports, 2], { total: 3, offset: 50, events: [] });
+      // A deep link: the page is served from the locate key.
+      renderWithProviders(<AdminReports />, { route: '/admin/reports?report=2', queryClient });
+      await waitFor(() => expect(rowButton('R#2#')).toHaveAttribute('aria-current', 'true'));
 
+      await userEvent.click(rowButton('R#1#'));
       await resolve();
 
-      expect(await screen.findByText('These reports were already resolved.')).toBeInTheDocument();
+      expect(await screen.findByText('Event not found.')).toBeInTheDocument();
       await waitFor(() => expect(listRowTitles()).toEqual(['R#2#', 'R#3#']));
       expect(queryClient.getQueryState([QUERY_KEYS.adminCounts])?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState([QUERY_KEYS.adminReports, 2])?.isInvalidated).toBe(true);
     });
 
     it('refetches the page once per action: tagged rows stay in place, pulled-up rows go at the bottom', async () => {

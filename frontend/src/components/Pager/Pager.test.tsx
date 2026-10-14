@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { QueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
 import { LocationProbe, renderWithProviders } from '../../test/utils';
 import { usePageParam } from '../../hooks/usePageParam';
@@ -363,6 +364,49 @@ describe('usePagedQuery', () => {
     await waitFor(() => expect(location()).toBe('/list?page=3'));
     await waitFor(() => expect(onPageSettled).toHaveBeenCalledTimes(1));
     expect(liveRegion()).toHaveTextContent(/^Page 3 of \d\./);
+  });
+
+  it('does not revive a superseded page change on Back to its entry', async () => {
+    serve(25);
+    const onPageSettled = vi.fn();
+    renderHarness('/list?page=2', { onPageSettled });
+    await waitFor(() => expect(screen.getByText('Row 11')).toBeInTheDocument());
+    const held: Array<() => void> = [];
+    const served = mockGet.getMockImplementation()!;
+    mockGet.mockImplementation((url: string) => new Promise((resolve) => held.push(() => resolve(served(url)))));
+    await userEvent.click(screen.getByRole('link', { name: 'Page 1' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Search jazz' }));
+    mockGet.mockImplementation(served);
+    await act(async () => {
+      for (const release of held) release();
+    });
+    await waitFor(() => expect(screen.getByText('Row 1')).toBeInTheDocument());
+
+    // Back undoes only the filter: the page stays 1.
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(location()).toBe('/list');
+    await waitFor(() => expect(screen.getByTestId('paged-state')).toHaveTextContent('settled'));
+    await act(async () => {});
+    expect(onPageSettled).not.toHaveBeenCalled();
+    expect(liveRegion()).toHaveTextContent('');
+  });
+
+  it('settles a clamp target only on fresh data, not a stale cached copy of it', async () => {
+    serve(35);
+    const onPageSettled = vi.fn();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+    renderWithProviders(<Harness onPageSettled={onPageSettled} />, { route: '/list?page=3', queryClient });
+    await waitFor(() => expect(screen.getByText('Row 21')).toBeInTheDocument());
+    serve(25);
+
+    await userEvent.click(screen.getByRole('link', { name: 'Page 4' }));
+
+    await waitFor(() => expect(location()).toBe('/list?page=3'));
+    await waitFor(() => expect(onPageSettled).toHaveBeenCalledTimes(1));
+    expect(liveRegion()).toHaveTextContent('Page 3 of 3. Events 21 to 25 of 25.');
+    expect(screen.queryByText('Row 30')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Page 4' })).not.toBeInTheDocument();
   });
 
   it('treats an ordinary app link to page 1 as silent, not a page change', async () => {

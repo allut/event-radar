@@ -40,7 +40,8 @@ export function usePageParam({ defaults }: UsePageParamOptions = {}): {
   page: number;
   /** True while a malformed `?page` is being replaced; nothing should fetch. */
   malformed: boolean;
-  setListParams: (updater: ListParamsUpdater) => void;
+  /** Returns whether it pushed (false when the list params would not change). */
+  setListParams: (updater: ListParamsUpdater) => boolean;
 } {
   const [searchParams, setSearchParams] = useSearchParams();
   const { page, malformed } = parsePageParam(searchParams.get(PAGE_QUERY_PARAM));
@@ -79,8 +80,9 @@ export function usePageParam({ defaults }: UsePageParamOptions = {}): {
         copy.sort();
         return copy.toString();
       };
-      if (sorted(next) === sorted(listParams(new URLSearchParams(searchParams)))) return;
+      if (sorted(next) === sorted(listParams(new URLSearchParams(searchParams)))) return false;
       setSearchParams(next);
+      return true;
     },
     [searchParams, setSearchParams],
   );

@@ -711,7 +711,7 @@ describe('Explore', () => {
     });
   });
 
-  it('keeps the page when the already-active "All events" option is picked again', async () => {
+  it('keeps the page and tracks nothing when the already-active "All events" option is picked again', async () => {
     mockPagedExplore(100);
     renderExplore('/en/explore?page=3');
     await waitFor(() => expect(screen.getByText('Event 49')).toBeInTheDocument());
@@ -720,5 +720,10 @@ describe('Explore', () => {
 
     expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/en\/explore\?page=3$/);
     expect(screen.getByText('Event 49')).toBeInTheDocument();
+    expect(mockTrackEvent).not.toHaveBeenCalledWith('explore_filter_change', expect.anything());
+
+    // A real change still tracks.
+    await userEvent.click(screen.getByRole('button', { name: 'Free only' }));
+    expect(mockTrackEvent).toHaveBeenCalledWith('explore_filter_change', { filter_type: 'free', signed_in: true });
   });
 });

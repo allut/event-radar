@@ -151,6 +151,8 @@ export default function Explore() {
   // none of which are memo'd, so a fresh closure per render defeated any
   // future memoization (Big-O audit #5, item 3.6) — mirrors requestSignIn's
   // rationale above for EventCard.
+  // Returns whether the URL changed: a re-pick of the active option pushes
+  // nothing, so the handlers below skip its filter-change analytics too.
   const commitFilters = useCallback(
     (next: ExploreFilters) => setListParams(() => exploreFiltersToSearchParams(next)),
     [setListParams],
@@ -171,8 +173,7 @@ export default function Explore() {
   useEffect(() => {
     if (searchInput === filters.q) return;
     const handle = setTimeout(() => {
-      trackFilterChange(EXPLORE_FILTER_TYPES.q);
-      commitFilters({ ...filters, q: searchInput });
+      if (commitFilters({ ...filters, q: searchInput })) trackFilterChange(EXPLORE_FILTER_TYPES.q);
     }, EXPLORE_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
   }, [searchInput, filters, trackFilterChange, commitFilters]);
@@ -238,37 +239,34 @@ export default function Explore() {
         const preferred = kind === 'category' ? currentUser?.preferred_categories : currentUser?.preferred_vibes;
         if (preferred && !preferred.includes(value)) forYou = false;
       }
-      trackFilterChange(EXPLORE_FILTER_TYPES[kind]);
-      commitFilters({ ...filters, [kind]: next, forYou });
+      if (commitFilters({ ...filters, [kind]: next, forYou })) trackFilterChange(EXPLORE_FILTER_TYPES[kind]);
     },
     [filters, currentUser, trackFilterChange, commitFilters],
   );
 
   const setDatePreset = useCallback(
     (preset: DatePreset) => {
-      trackFilterChange(EXPLORE_FILTER_TYPES.date);
-      commitFilters({ ...filters, datePreset: preset });
+      if (commitFilters({ ...filters, datePreset: preset })) trackFilterChange(EXPLORE_FILTER_TYPES.date);
     },
     [filters, trackFilterChange, commitFilters],
   );
 
   const setCustomRange = useCallback(
     (from: string, to: string) => {
-      trackFilterChange(EXPLORE_FILTER_TYPES.date);
-      commitFilters({ ...filters, datePreset: 'custom', customFrom: from, customTo: to });
+      if (commitFilters({ ...filters, datePreset: 'custom', customFrom: from, customTo: to })) {
+        trackFilterChange(EXPLORE_FILTER_TYPES.date);
+      }
     },
     [filters, trackFilterChange, commitFilters],
   );
 
   const toggleFree = useCallback(() => {
-    trackFilterChange(EXPLORE_FILTER_TYPES.free);
-    commitFilters({ ...filters, free: !filters.free });
+    if (commitFilters({ ...filters, free: !filters.free })) trackFilterChange(EXPLORE_FILTER_TYPES.free);
   }, [filters, trackFilterChange, commitFilters]);
 
   const setSort = useCallback(
     (sort: SortOption) => {
-      trackFilterChange(EXPLORE_FILTER_TYPES.sort);
-      commitFilters({ ...filters, sort });
+      if (commitFilters({ ...filters, sort })) trackFilterChange(EXPLORE_FILTER_TYPES.sort);
     },
     [filters, trackFilterChange, commitFilters],
   );
@@ -281,17 +279,18 @@ export default function Explore() {
         handleUpsellCtaClick();
         return;
       }
-      trackFilterChange(EXPLORE_FILTER_TYPES.forYou);
+      let changed: boolean;
       if (next) {
         // Fall back to "all" when the persona hasn't loaded yet (or has no
         // preference set) — avoids an accidental empty-selection/no-results
         // flash before /users/me resolves.
         const category = currentUser?.preferred_categories?.length ? currentUser.preferred_categories : [...CATEGORIES];
         const vibe = currentUser?.preferred_vibes?.length ? currentUser.preferred_vibes : [...VIBES];
-        commitFilters({ ...filters, forYou: true, category, vibe });
+        changed = commitFilters({ ...filters, forYou: true, category, vibe });
       } else {
-        commitFilters({ ...filters, forYou: false, category: [...CATEGORIES], vibe: [...VIBES] });
+        changed = commitFilters({ ...filters, forYou: false, category: [...CATEGORIES], vibe: [...VIBES] });
       }
+      if (changed) trackFilterChange(EXPLORE_FILTER_TYPES.forYou);
     },
     [authed, currentUser, filters, trackFilterChange, commitFilters, handleUpsellCtaClick],
   );

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { keepPreviousData, useQuery, type QueryKey } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useLocation, useNavigationType, useSearchParams } from 'react-router-dom';
 import { PAGINATION_MAX_OFFSET } from '../_generated/sharedConstants';
 import { PAGE_QUERY_PARAM } from '../constants/api';
@@ -48,6 +48,7 @@ export function usePagedQuery<TData, TItem>({
 }: UsePagedQueryOptions<TData, TItem>) {
   const { page, malformed } = usePageParam();
   const [, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
   const navigationType = useNavigationType();
   const location = useLocation();
 
@@ -67,7 +68,7 @@ export function usePagedQuery<TData, TItem>({
     placeholderData: enabled ? keepPreviousData : undefined,
     enabled: enabled && !malformed && !beyondCeiling,
   });
-  const { data, isSuccess, isPlaceholderData } = query;
+  const { data, dataUpdatedAt, isSuccess, isPlaceholderData } = query;
 
   const slice = data === undefined ? null : select(data);
   const items = slice?.items ?? [];
@@ -90,8 +91,12 @@ export function usePagedQuery<TData, TItem>({
   } | null>(null);
   const announcement = announced?.key === location.key ? announced.announcement : null;
   const onPageSettledRef = useRef(onPageSettled);
+  // Callers pass an inline key array, so the settle effect reads it from a
+  // ref instead of re-running on every render.
+  const queryKeyRef = useRef(queryKey);
   useEffect(() => {
     onPageSettledRef.current = onPageSettled;
+    queryKeyRef.current = queryKey;
   });
 
   const replacePage = useCallback(
@@ -114,19 +119,21 @@ export function usePagedQuery<TData, TItem>({
   // pending settle belongs to the history entry that made it, so a filter
   // push before its data lands (same page, new entry) stays silent.
   const previousPageRef = useRef(page);
-  const pendingSettleRef = useRef<{ page: number; key: string } | null>(null);
+  // `minUpdatedAt`: only data fetched at or after it may settle (0 = any).
+  const pendingSettleRef = useRef<{ page: number; key: string; minUpdatedAt: number } | null>(null);
   // Set when a silent replace redirects a counted page change (the page the
   // user asked for emptied): the replace's target settles in its place.
-  const carrySettleRef = useRef(false);
+  const carrySettleRef = useRef<{ minUpdatedAt: number } | null>(null);
   useEffect(() => {
     if (previousPageRef.current === page) return;
     previousPageRef.current = page;
+    const carried = carrySettleRef.current;
+    carrySettleRef.current = null;
     const counts =
-      carrySettleRef.current ||
+      carried !== null ||
       navigationType === 'POP' ||
       (navigationType === 'PUSH' && isPagerNavigation(location.state));
-    carrySettleRef.current = false;
-    pendingSettleRef.current = counts ? { page, key: location.key } : null;
+    pendingSettleRef.current = counts ? { page, key: location.key, minUpdatedAt: carried?.minUpdatedAt ?? 0 } : null;
   }, [page, navigationType, location.state, location.key]);
 
   // A stale link past the offset ceiling: land on the deepest reachable page.
@@ -139,11 +146,15 @@ export function usePagedQuery<TData, TItem>({
   useEffect(() => {
     if (!isSuccess || isPlaceholderData || data === undefined) return;
     const pending = pendingSettleRef.current;
+    // This entry's data has rendered, so a page change pending for another
+    // entry (superseded by a filter push before it loaded) is retired: a
+    // later Back to that entry must not settle.
+    if (pending !== null && pending.key !== location.key) pendingSettleRef.current = null;
     const pendingHere = pending !== null && pending.page === page && pending.key === location.key;
     // A silent replace; when it redirects the user's own page change, the
     // target page settles (focus, announcement) instead of focus dropping.
-    const redirect = (target: number) => {
-      carrySettleRef.current = pendingHere;
+    const redirect = (target: number, minUpdatedAt = 0) => {
+      carrySettleRef.current = pendingHere ? { minUpdatedAt } : null;
       pendingSettleRef.current = null;
       replacePage(target);
     };
@@ -156,10 +167,14 @@ export function usePagedQuery<TData, TItem>({
     if (itemCount === 0 && !holdEmptyPage && page !== lastPage) {
       // Past the end, or a refetch emptied this page: land on the real last
       // page (total 0 has lastPage 1, so a stale ?page=5 returns to page 1).
-      redirect(lastPage);
+      // The list just shrank, so the target's cached copy predates this
+      // response: mark it stale so it refetches, and settle only on data at
+      // least as new as this response (never on numbers it contradicts).
+      if (pendingHere) void queryClient.invalidateQueries({ queryKey: queryKeyRef.current, refetchType: 'none' });
+      redirect(lastPage, dataUpdatedAt);
       return;
     }
-    if (!pendingHere) return;
+    if (!pendingHere || dataUpdatedAt < pending.minUpdatedAt) return;
     pendingSettleRef.current = null;
     setAnnounced({
       key: location.key,
@@ -171,6 +186,7 @@ export function usePagedQuery<TData, TItem>({
     onPageSettledRef.current?.();
   }, [
     data,
+    dataUpdatedAt,
     isSuccess,
     isPlaceholderData,
     page,
@@ -183,6 +199,7 @@ export function usePagedQuery<TData, TItem>({
     holdEmptyPage,
     location.key,
     replacePage,
+    queryClient,
   ]);
 
   const pagerProps: PagedPagerProps = {

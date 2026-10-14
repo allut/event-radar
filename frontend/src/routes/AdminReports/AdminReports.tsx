@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
@@ -115,7 +115,6 @@ export default function AdminReports() {
   const linkedId = Number.isInteger(parsedLinkedId) && parsedLinkedId > 0 ? parsedLinkedId : null;
   // Only ask the server to locate the row while the URL has no page.
   const locateId = linkedId !== null && !searchParams.has(PAGE_QUERY_PARAM) ? linkedId : null;
-  const locatedRef = useRef<{ id: number; notFound: boolean } | null>(null);
 
   const {
     rows,
@@ -136,15 +135,20 @@ export default function AdminReports() {
     // A located response holds a page the plain page-1 key must not cache.
     queryKey: locateId === null ? [QUERY_KEYS.adminReports] : [QUERY_KEYS.adminReports, 'locate', locateId],
     pageSize: ADMIN_REPORTS_QUEUE_PAGE_SIZE,
-    fetchPage: async ({ limit, offset }) => {
-      const located = locateId !== null && locatedRef.current?.id === locateId ? locatedRef.current : null;
-      const locate = locateId === null || located !== null ? '' : `&${ADMIN_REPORTS_PARAM.report}=${locateId}`;
+    fetchPage: async ({ limit, offset, page }) => {
+      // Already located when this query holds a response: the first locate's.
+      // Read from the cache, not component state, so it holds across a
+      // remount (detail page and Back) for as long as the located data does.
+      const located =
+        locateId === null
+          ? undefined
+          : queryClient.getQueryData<AdminReportsResponse>([QUERY_KEYS.adminReports, 'locate', locateId, page]);
+      const locate = locateId === null || located !== undefined ? '' : `&${ADMIN_REPORTS_PARAM.report}=${locateId}`;
       const response = await adminApi.get<AdminReportsResponse>(
         `${API.adminReports}?${PAGE_PARAM.limit}=${limit}&${PAGE_PARAM.offset}=${offset}${locate}`,
       );
-      if (located !== null) return { ...response, report_not_found: located.notFound };
+      if (located !== undefined) return { ...response, report_not_found: located.report_not_found };
       if (locateId !== null) {
-        locatedRef.current = { id: locateId, notFound: response.report_not_found };
         if (!response.report_not_found && response.offset !== offset) {
           // The silent replace to the located page then finds it cached.
           queryClient.setQueryData([QUERY_KEYS.adminReports, response.offset / limit + 1], response);
@@ -154,6 +158,9 @@ export default function AdminReports() {
     },
     select: (response) => ({ items: response.events, total: response.total, offset: response.offset }),
     getId: getReportId,
+    // Every cached page of the queue (plain and located) goes out of date on
+    // an action or a 409/404; only the mounted one refetches.
+    invalidateKey: [QUERY_KEYS.adminReports],
     onPageSettled: () => setNote(''),
   });
 
@@ -180,8 +187,6 @@ export default function AdminReports() {
     },
     onSuccess: (result, { item, kind, spot }) => {
       const resolvedItem = kind === 'taken_down' && result.status ? { ...item, status: result.status } : item;
-      // Every cached page of the queue is now out of date, not just this one.
-      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminReports], refetchType: 'none' });
       // Tags the row in place and refetches this page once, so the next
       // report up fills the gap (spec #551). The note draft only resets when
       // the admin is still on the page they acted on.
