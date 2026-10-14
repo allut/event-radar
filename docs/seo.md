@@ -7,6 +7,9 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **`frontend/src/hooks/useSeoMeta.ts::useSeoMeta` sets every route's `<title>`, `<html lang>` and default `noindex`.** Landing, `/explore`, `/events/:id` and `/faq` pass `indexable: true`. That adds OG tags, a self-referential canonical and hreflang alternates (`en`/`et`/`ru` + `x-default`).
 - **`/faq` turns `indexable` on only once its `FaqDoc` has loaded.** Until then it stays `noindex` with no canonical, which the prerender's readiness wait relies on.
 - **Every other route goes through the thin `useStaticSeoMeta` wrapper.**
+- **An unfiltered, default-sort `/explore?page=N` with N of 2 or more is self-canonical.** `useSeoMeta`'s `page` input appends `?page=N` to the canonical, every hreflang href and `og:url`. Page 1 stays the bare URL, so the prerender's canonical checks are unchanged.
+- **A filtered, sorted or searched Explore view passes no `page`.** Its canonical stays `/explore` on every page.
+- **The canonical follows the URL after a past-end clamp.** Explore holds `indexable` off while a page is empty but `total` is positive, and while a previous page shows as placeholder data. There is no JS `noindex` and no empty state for a past-end page.
 - **`buildSeoMeta` is the pure builder behind the hook.** Tests assert on plain tag and link data instead of `react-helmet-async`'s DOM side effects.
 - **`frontend/src/components/SeoTags/` is a thin, untested `react-helmet-async` render shell.** The unit tests for `buildSeoMeta` and the structured-data builders cover the data it renders.
 - **Every JSON-LD body goes through `frontend/src/lib/jsonLd.ts::serializeJsonLd()`**, which escapes each `<` to `<`. `SeoTags` and the prerender's change-marker re-save both use it. A bare `JSON.stringify` would let event text containing `</script` break out of the tag.
@@ -20,7 +23,7 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **`priceCurrency` falls back to `DEFAULT_CURRENCY`.** A free event can lose its currency at ingest, and the validator requires `priceCurrency` once `lowPrice` is present. Dropping it would silently cost the offer its rich-result eligibility.
 - **`image` falls back to the same asset as `og:image`.** The two must never pick different fallbacks.
 - **`buildWebsiteJsonLd` (Landing) carries only `name`, `url` and `inLanguage`.**
-- **`buildExploreItemListJsonLd` emits one `ListItem` per rendered `/explore` card**, with `position` matching render order. Each `item` is the full `buildEventJsonLd` payload, so there is one field-mapping policy.
+- **`buildExploreItemListJsonLd` emits one `ListItem` per event on the current `/explore` page**, with `position` 1 to n in render order. Each `item` is the full `buildEventJsonLd` payload, so there is one field-mapping policy.
 - **Each list `item` adds a top-level `url` to the locale-matched detail page.** It is distinct from `offers.url`, which is the external ticket link.
 - **The `ItemList` omits `numberOfItems` and `itemListOrder`.** schema.org defines `numberOfItems` as the count for the entire list, which would be wrong on a one-page snapshot, and Google doesn't ask for either.
 - **`/faq` emits no JSON-LD.**
@@ -57,6 +60,7 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 
 - **`npm run build` copies `dist/index.html` to `dist/app-shell.html` before the prerender runs.** The Estonian Landing snapshot later overwrites `dist/index.html`, and the copy exists even if the script dies midway.
 - **`frontend/functions/[[path]].ts` serves `app-shell.html` for every route that isn't prerendered.** `/saved`, `/settings` and the rest get the untouched CSR shell, never a mismatched snapshot. Its fetch-first order is in [backend-ops.md](backend-ops.md)'s SPA Fallback section.
+- **`/explore?page=N` with N of 2 or more also gets the shell**, in all three locales. The page-1 snapshot would carry a static page-1 canonical and `ItemList`. Page 1, a malformed `page` and any other query string keep the snapshot. Only page 1 is prerendered, and the sitemap has no page entries by design.
 
 ### Change Detection and Copy-Forward
 

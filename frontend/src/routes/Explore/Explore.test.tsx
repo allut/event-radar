@@ -415,6 +415,51 @@ describe('Explore', () => {
     });
   });
 
+  describe('paged SEO (spec #551)', () => {
+    const canonicalHref = () => document.head.querySelector('link[rel="canonical"]')?.getAttribute('href') ?? null;
+    const itemListPositions = () => {
+      const raw = Array.from(document.head.querySelectorAll('script[type="application/ld+json"]'))
+        .map((el) => JSON.parse(el.textContent ?? '{}'))
+        .find((body) => body['@type'] === 'ItemList');
+      return raw?.itemListElement.map((el: { position: number }) => el.position) ?? [];
+    };
+
+    it('an unfiltered deep page is self-canonical with a matching og:url', async () => {
+      mockPagedExplore(130);
+      renderExplore('/en/explore?page=3');
+
+      await waitFor(() => expect(canonicalHref()).toBe('https://eventradar.ee/en/explore?page=3'));
+      expect(document.head.querySelector('meta[property="og:url"]')?.getAttribute('content')).toBe(
+        'https://eventradar.ee/en/explore?page=3',
+      );
+    });
+
+    it('a filtered deep page keeps the canonical at /explore', async () => {
+      mockPagedExplore(130);
+      renderExplore('/en/explore?page=3&sort=date');
+
+      await waitFor(() => expect(screen.getByText('Event 49')).toBeInTheDocument());
+      await waitFor(() => expect(canonicalHref()).toBe('https://eventradar.ee/en/explore'));
+    });
+
+    it('a past-end page canonicalises to the clamped URL, not the requested one', async () => {
+      mockPagedExplore(50);
+      renderExplore('/en/explore?page=9');
+
+      await waitFor(() => expect(canonicalHref()).toBe('https://eventradar.ee/en/explore?page=3'));
+      expect(canonicalHref()).not.toContain('page=9');
+    });
+
+    it('the ItemList covers only the current page at positions 1..n', async () => {
+      mockPagedExplore(130);
+      renderExplore('/en/explore?page=3');
+
+      await waitFor(() => expect(itemListPositions()).toHaveLength(24));
+      expect(itemListPositions()[0]).toBe(1);
+      expect(itemListPositions()[23]).toBe(24);
+    });
+  });
+
   describe('prerender readiness marker (issue #236)', () => {
     it('is absent while the query is loading', () => {
       mockGet.mockImplementation(() => new Promise(() => {})); // never resolves

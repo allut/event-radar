@@ -47,6 +47,7 @@ Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). B
 - **`frontend/functions/[[path]].ts` tries `env.ASSETS.fetch()` on the real request first.** A prerendered route, a built `/assets/*` file or any other real `dist/` file wins. Only a genuine 404 falls through to `app-shell.html`.
 - **That fetch-first order is load-bearing.** Pages' documented precedence, static asset before any Function, didn't hold in production. The catch-all served the app shell for every request, built JS and CSS included.
 - **It requests the shell at its extensionless path.** `env.ASSETS.fetch()` applies Pages' `.html`-stripping redirect, which would otherwise hand the browser a visible 308.
+- **`/explore?page=N` with N of 2 or more skips the fetch-first step.** It gets the shell straight away, because the prerendered page-1 snapshot would carry the wrong canonical. See [seo.md](seo.md)'s SPA Fallback Shell section.
 
 ### SPA Security Headers
 

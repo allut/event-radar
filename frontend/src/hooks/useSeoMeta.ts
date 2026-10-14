@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { PAGE_QUERY_PARAM } from '../constants/api';
 import { LOCALE_ET } from '../constants/core';
 import {
   CANONICAL_REL,
@@ -36,6 +37,11 @@ export interface SeoMetaInput {
   description?: string;
   /** Absolute og:image URL — only emitted when `indexable` is true. */
   image?: string;
+  /** A paged list's current page. Only a page >= 2 is self-canonical: it
+   * appends `?page=N` to the canonical, every hreflang href and og:url. Page 1
+   * and an omitted value keep the bare URL. A list whose view is filtered,
+   * sorted or searched omits it, so every page canonicalises to page 1. */
+  page?: number;
 }
 
 export interface SeoMetaResult {
@@ -49,8 +55,9 @@ export interface SeoMetaResult {
  * the hook itself) can assert on plain tag/link data rather than
  * react-helmet-async's DOM side-effects — see docs/seo.md "Meta Tags". */
 export function buildSeoMeta(input: SeoMetaInput): SeoMetaResult {
-  const { title, locale, path, indexable = false, description, image } = input;
+  const { title, locale, path, indexable = false, description, image, page } = input;
   const bare = stripLocalePrefix(path);
+  const pageSuffix = page !== undefined && page >= 2 ? `?${PAGE_QUERY_PARAM}=${page}` : '';
 
   const metaTags: SeoMetaTag[] = [
     { name: 'robots', content: indexable ? ROBOTS_INDEX_FOLLOW : ROBOTS_NOINDEX },
@@ -58,14 +65,14 @@ export function buildSeoMeta(input: SeoMetaInput): SeoMetaResult {
   const links: SeoMetaLink[] = [];
 
   if (indexable) {
-    const canonicalUrl = canonicalUrlFor(bare, locale);
+    const canonicalUrl = `${canonicalUrlFor(bare, locale)}${pageSuffix}`;
     links.push({ rel: CANONICAL_REL, href: canonicalUrl });
 
     for (const code of SEO_HREFLANG_CODES) {
       // x-default always points at the bare Estonian URL; every other code
       // (including 'et') resolves through localizedPath, which already
       // returns the bare path for Estonian.
-      const href = code === SEO_XDEFAULT_CODE ? `${PRODUCTION_ORIGIN}${bare}` : `${PRODUCTION_ORIGIN}${localizedPath(bare, code)}`;
+      const href = code === SEO_XDEFAULT_CODE ? `${PRODUCTION_ORIGIN}${bare}${pageSuffix}` : `${PRODUCTION_ORIGIN}${localizedPath(bare, code)}${pageSuffix}`;
       links.push({ rel: 'alternate', href, hrefLang: code });
     }
 
@@ -90,9 +97,9 @@ export function buildSeoMeta(input: SeoMetaInput): SeoMetaResult {
  * OG tags, a self-referential canonical, and the three hreflang alternates +
  * x-default. Render the result via <SeoTags meta={...} /> (components/SeoTags). */
 export function useSeoMeta(input: SeoMetaInput): SeoMetaResult {
-  const { title, locale, path, indexable, description, image } = input;
+  const { title, locale, path, indexable, description, image, page } = input;
   return useMemo(
-    () => buildSeoMeta({ title, locale, path, indexable, description, image }),
-    [title, locale, path, indexable, description, image],
+    () => buildSeoMeta({ title, locale, path, indexable, description, image, page }),
+    [title, locale, path, indexable, description, image, page],
   );
 }

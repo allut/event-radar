@@ -36,18 +36,49 @@
  * would then hand straight to the browser as a visible redirect. Request
  * the extensionless "pretty path" instead, matching what Cloudflare's docs
  * say ASSETS.fetch expects.
+ *
+ * One exception to fetch-first (spec #551): `/explore?page=N` for N >= 2
+ * would otherwise resolve to the prerendered page-1 snapshot, whose static
+ * canonical and ItemList describe page 1. Those requests get the shell
+ * directly; the client then sets the page's own canonical and ItemList.
+ * Page 1, a malformed `page` and any other query keep the snapshot.
  */
 import { StatusCodes } from 'http-status-codes';
+import { PAGE_QUERY_PARAM } from '../src/constants/api.js';
+import { LOCALE_URL_PREFIX_CODES } from '../src/constants/core.js';
 import { APP_SHELL_FILENAME } from '../src/constants/prerender.js';
+import { ROUTES } from '../src/constants/routes.js';
 import type { PagesFunction } from './_shared/cloudflare.js';
 
 interface Env {
   ASSETS: { fetch: (request: Request) => Promise<Response> };
 }
 
+function fetchShell(request: Request, env: Env): Promise<Response> {
+  const shellPath = APP_SHELL_FILENAME.replace(/\.html$/, '');
+  const shellUrl = new URL(`/${shellPath}`, request.url);
+  return env.ASSETS.fetch(new Request(shellUrl, request));
+}
+
+const EXPLORE_PATHS = new Set(
+  ['', ...LOCALE_URL_PREFIX_CODES.map((code) => `/${code}`)].map((prefix) => `${prefix}${ROUTES.explore}`),
+);
+
+/** True for a locale-optional `/explore` (trailing slash allowed) whose
+ * `page` param is a plain integer >= 2, the deep pages with no snapshot. */
+function isDeepExplorePage(url: URL): boolean {
+  if (!EXPLORE_PATHS.has(url.pathname.replace(/\/$/, ''))) return false;
+  const raw = url.searchParams.get(PAGE_QUERY_PARAM);
+  return raw !== null && /^[1-9]\d*$/.test(raw) && Number(raw) >= 2;
+}
+
 export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response(null, { status: StatusCodes.METHOD_NOT_ALLOWED });
+  }
+
+  if (isDeepExplorePage(new URL(request.url))) {
+    return fetchShell(request, env);
   }
 
   // Try the real asset first (issue #354) — a prerendered route, a built
@@ -59,7 +90,5 @@ export const onRequest: PagesFunction<Env> = async ({ request, env }) => {
     return directResponse;
   }
 
-  const shellPath = APP_SHELL_FILENAME.replace(/\.html$/, '');
-  const shellUrl = new URL(`/${shellPath}`, request.url);
-  return env.ASSETS.fetch(new Request(shellUrl, request));
+  return fetchShell(request, env);
 };

@@ -200,6 +200,7 @@ export default function Explore() {
     isError,
     isSuccess,
     isPlaceholderData,
+    page,
     pagerProps,
   } = usePagedQuery({
     queryKey: [QUERY_KEYS.explore, locale, filters],
@@ -347,14 +348,18 @@ export default function Explore() {
     title: titleWithBrand(t('seo_title_explore', locale), locale),
     locale,
     path: ROUTES.explore,
-    indexable: isSuccess,
+    // Past the last page the response is empty while total > 0: the page is
+    // about to clamp, so it isn't indexable at the wrong URL for that render.
+    indexable: isSuccess && !isPlaceholderData && !(events.length === 0 && total > 0),
+    // Only the unfiltered default view is self-canonical per page; a
+    // filtered, sorted or searched view canonicalises to /explore throughout.
+    page: hasActiveFilters ? undefined : page,
   });
-  // The ItemList covers the events the grid shows on this page (the anonymous
-  // grid drops its last card for the upsell, see visibleEvents).
+  // The ItemList covers the current page's events, positions 1..n.
   const jsonLd = useMemo(() => {
     if (!isSuccess) return undefined;
-    return buildExploreItemListJsonLd(visibleEvents, locale);
-  }, [isSuccess, visibleEvents, locale]);
+    return buildExploreItemListJsonLd(events, locale);
+  }, [isSuccess, events, locale]);
 
   return (
     <div className={styles.page}>

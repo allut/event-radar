@@ -73,4 +73,34 @@ describe('SPA-fallback catch-all', () => {
     expect(fetchAssets).toHaveBeenCalledTimes(2);
     expect(response.status).toBe(200);
   });
+
+  describe('deep Explore pages (spec #551)', () => {
+    const shellUrl = `https://eventradar.ee/${APP_SHELL_FILENAME.replace(/\.html$/, '')}`;
+
+    it.each(['/explore?page=2', '/en/explore?page=3', '/ru/explore/?page=12', '/explore?page=2&sort=date'])(
+      'serves the shell without touching the snapshot for %s',
+      async (path) => {
+        const { context, fetchAssets } = makeContext(path, 'GET', [new Response('<html>shell</html>', { status: 200 })]);
+
+        const response = await onRequest(context);
+
+        expect(fetchAssets).toHaveBeenCalledTimes(1);
+        expect((fetchAssets.mock.calls[0][0] as Request).url).toBe(shellUrl);
+        expect(await response.text()).toBe('<html>shell</html>');
+      },
+    );
+
+    it.each(['/explore', '/explore?page=1', '/explore?category=music', '/explore?page=abc', '/explore?page=0', '/en/explore?page=02', '/events/1?page=2'])(
+      'keeps the snapshot for %s',
+      async (path) => {
+        const { context, fetchAssets } = makeContext(path, 'GET', [new Response('snapshot', { status: 200 })]);
+
+        const response = await onRequest(context);
+
+        expect(fetchAssets).toHaveBeenCalledTimes(1);
+        expect((fetchAssets.mock.calls[0][0] as Request).url).toBe(`https://eventradar.ee${path}`);
+        expect(await response.text()).toBe('snapshot');
+      },
+    );
+  });
 });
