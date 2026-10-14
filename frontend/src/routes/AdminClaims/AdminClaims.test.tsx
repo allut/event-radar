@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
+import { focusManager } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import AdminClaims from './AdminClaims';
-import { renderWithProviders } from '../../test/utils';
+import { LocationProbe, renderWithProviders } from '../../test/utils';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -15,6 +16,7 @@ const mockPost = vi.mocked(adminApi.post);
 
 const pendingClaims = {
   total: 3,
+  offset: 0,
   claims: [
     {
       id: 1,
@@ -75,6 +77,7 @@ const pendingClaims = {
 
 const approvedClaims = {
   total: 1,
+  offset: 0,
   claims: [
     {
       id: 3,
@@ -110,7 +113,7 @@ describe('AdminClaims', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Kesklinna Jazz Klubi' })).toBeInTheDocument());
     expect(screen.getByText('DNS-TXT check')).toBeInTheDocument();
     expect(screen.getByText('_eventradar-verify.kesklinnajazz.ee')).toBeInTheDocument();
-    expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('status=pending'));
+    expect(mockGet).toHaveBeenCalledWith('/admin/claims?status=pending&limit=50&offset=0');
   });
 
   it('shows claimant identity plus the justification for a series claim', async () => {
@@ -157,7 +160,7 @@ describe('AdminClaims', () => {
   });
 
   it('grants a claim with the typed note and tags it in the list', async () => {
-    mockGet.mockResolvedValueOnce(pendingClaims);
+    mockGet.mockResolvedValue(pendingClaims);
     mockPost.mockResolvedValueOnce({ id: 1, status: 'approved', note: 'DNS record confirmed manually.' });
     renderWithProviders(<AdminClaims />);
 
@@ -173,7 +176,7 @@ describe('AdminClaims', () => {
   });
 
   it('declines a claim with the typed note', async () => {
-    mockGet.mockResolvedValueOnce(pendingClaims);
+    mockGet.mockResolvedValue(pendingClaims);
     mockPost.mockResolvedValueOnce({ id: 1, status: 'revoked', note: "Domain didn't match." });
     renderWithProviders(<AdminClaims />);
 
@@ -203,14 +206,14 @@ describe('AdminClaims', () => {
   });
 
   it('shows an empty state when there are no pending claims', async () => {
-    mockGet.mockResolvedValueOnce({ total: 0, claims: [] });
+    mockGet.mockResolvedValueOnce({ total: 0, offset: 0, claims: [] });
     renderWithProviders(<AdminClaims />);
     await waitFor(() => expect(screen.getByText('No claims pending review.')).toBeInTheDocument());
   });
 
   it('switches to the Granted tab, warns about trust/pin impact, and revokes with a note', async () => {
     mockGet.mockResolvedValueOnce(pendingClaims);
-    mockGet.mockResolvedValueOnce(approvedClaims);
+    mockGet.mockResolvedValue(approvedClaims);
     mockPost.mockResolvedValueOnce({ id: 3, event_id: 55, note: 'Escalated from a content report.' });
     renderWithProviders(<AdminClaims />);
 
@@ -218,7 +221,7 @@ describe('AdminClaims', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Granted' }));
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Öölaev Events' })).toBeInTheDocument());
-    expect(mockGet).toHaveBeenLastCalledWith(expect.stringContaining('status=approved'));
+    expect(mockGet).toHaveBeenCalledWith('/admin/claims?status=approved&limit=50&offset=0');
     expect(screen.queryByText('Grant claim', { exact: false })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Revoke claim' })).toBeDisabled();
 
@@ -233,7 +236,7 @@ describe('AdminClaims', () => {
   });
 
   it('warns about revoking an approved claim without mentioning Trusted-claimant status', async () => {
-    mockGet.mockResolvedValueOnce({ total: 0, claims: [] });
+    mockGet.mockResolvedValueOnce({ total: 0, offset: 0, claims: [] });
     mockGet.mockResolvedValueOnce(approvedClaims);
     renderWithProviders(<AdminClaims />);
 
@@ -243,5 +246,199 @@ describe('AdminClaims', () => {
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Öölaev Events' })).toBeInTheDocument());
     expect(screen.getByText(/reverts the event's pinned fields to source/)).toBeInTheDocument();
     expect(screen.queryByText(/Trusted-claimant status/)).not.toBeInTheDocument();
+  });
+
+  describe('numbered pager and URL state (spec #551)', () => {
+    function claim(id: number, status = 'pending') {
+      return {
+        ...pendingClaims.claims[1],
+        id,
+        status,
+        organizer: { id, email: `claimant${id}@example.com`, name: `Claimant ${id}` },
+      };
+    }
+
+    /** A fake server: GETs slice the live rows of the requested tab by
+     * offset, and a grant/decline/revoke takes its row out of its list. */
+    function serveClaims(pending: number[], approved: number[] = []) {
+      const lists: Record<string, number[]> = { pending: [...pending], approved: [...approved] };
+      mockGet.mockImplementation(async (url: string) => {
+        const params = new URL(url, 'http://x').searchParams;
+        const tab = params.get('status') ?? 'pending';
+        const live = lists[tab];
+        const limit = Number(params.get('limit'));
+        const offset = Number(params.get('offset'));
+        return {
+          total: live.length,
+          limit,
+          offset,
+          has_more: offset + limit < live.length,
+          claims: live.slice(offset, offset + limit).map((id) => claim(id, tab)),
+        } as never;
+      });
+      mockPost.mockImplementation(async (path: string) => {
+        const id = Number(/claims\/(\d+)\//.exec(path)?.[1]);
+        for (const live of Object.values(lists)) {
+          if (live.includes(id)) live.splice(live.indexOf(id), 1);
+        }
+        return { id, note: 'ok' } as never;
+      });
+      return lists;
+    }
+
+    const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, k) => from + k);
+    const rowButton = (id: number) => screen.getByRole('button', { name: new RegExp(`^Claimant ${id}\\b`) });
+    const listRowCount = () => screen.getAllByRole('button', { name: /^Claimant \d+\b/ }).length;
+    const claimsGets = () => mockGet.mock.calls.filter(([url]) => String(url).startsWith('/admin/claims?')).length;
+    const renderQueue = (route: string) =>
+      renderWithProviders(
+        <>
+          <AdminClaims />
+          <LocationProbe />
+        </>,
+        { route },
+      );
+    const grantWithNote = async () => {
+      await userEvent.type(screen.getByLabelText(/resolution note/i), 'ok');
+      await userEvent.click(screen.getByRole('button', { name: 'Grant claim' }));
+    };
+
+    it('requests 50 per page from ?page and shows the range label in place of Load more', async () => {
+      serveClaims(range(1, 120));
+      renderQueue('/admin/claims?page=2');
+
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 51' })).toBeInTheDocument());
+      expect(mockGet).toHaveBeenCalledWith('/admin/claims?status=pending&limit=50&offset=50');
+      expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '51–100 of 120')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Page 2' })).toHaveAttribute('aria-current', 'page');
+      expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+    });
+
+    it('reads the tab from the URL and keeps it in the pager links', async () => {
+      serveClaims([], range(1, 120));
+      renderQueue('/admin/claims?status=approved&page=2');
+
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 51' })).toBeInTheDocument());
+      expect(mockGet).toHaveBeenCalledWith('/admin/claims?status=approved&limit=50&offset=50');
+      expect(screen.getByRole('tab', { name: 'Granted' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('link', { name: 'Page 3' })).toHaveAttribute('href', '/admin/claims?status=approved&page=3');
+    });
+
+    it('switching tabs is one push to page 1 that omits the default tab', async () => {
+      serveClaims(range(1, 120), [200]);
+      renderQueue('/admin/claims?page=3');
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 101' })).toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('tab', { name: 'Granted' }));
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 200' })).toBeInTheDocument());
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/admin\/claims\?status=approved$/);
+
+      await userEvent.click(screen.getByRole('tab', { name: 'Pending review' }));
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+      expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/admin\/claims$/);
+    });
+
+    it('treats an unknown ?status as the pending tab', async () => {
+      serveClaims([1]);
+      renderQueue('/admin/claims?status=bogus');
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+      expect(mockGet).toHaveBeenCalledWith('/admin/claims?status=pending&limit=50&offset=0');
+    });
+
+    it('marks the selected row aria-current="true"', async () => {
+      serveClaims([1, 2]);
+      renderQueue('/admin/claims');
+      await waitFor(() => expect(rowButton(1)).toHaveAttribute('aria-current', 'true'));
+      await userEvent.click(rowButton(2));
+      expect(rowButton(2)).toHaveAttribute('aria-current', 'true');
+      expect(rowButton(1)).not.toHaveAttribute('aria-current');
+    });
+
+    it('refetches once per grant: the tagged row stays, the pulled-up row goes at the bottom', async () => {
+      serveClaims(range(1, 60));
+      renderQueue('/admin/claims');
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+      expect(claimsGets()).toBe(1);
+
+      await userEvent.click(rowButton(3));
+      await grantWithNote();
+
+      await waitFor(() => expect(listRowCount()).toBe(51));
+      expect(claimsGets()).toBe(2);
+      expect(rowButton(3)).toHaveTextContent('Granted');
+      expect(rowButton(51)).not.toHaveTextContent('Granted');
+      expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === '1–50 of 59')).toBeInTheDocument();
+    });
+
+    it('refetches after a revoke on the Granted tab too', async () => {
+      serveClaims([], range(1, 60));
+      renderQueue('/admin/claims?status=approved');
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+
+      await userEvent.type(screen.getByLabelText(/resolution note/i), 'ok');
+      await userEvent.click(screen.getByRole('button', { name: 'Revoke claim' }));
+
+      await waitFor(() => expect(listRowCount()).toBe(51));
+      expect(mockGet).toHaveBeenLastCalledWith('/admin/claims?status=approved&limit=50&offset=0');
+      expect(rowButton(1)).toHaveTextContent('Revoked');
+    });
+
+    it('holds an emptied last page while its rows are tagged, with the no-items label', async () => {
+      serveClaims(range(1, 51));
+      renderQueue('/admin/claims?page=2');
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 51' })).toBeInTheDocument());
+
+      await userEvent.type(screen.getByLabelText(/resolution note/i), 'ok');
+      await userEvent.click(screen.getByRole('button', { name: 'Decline claim' }));
+
+      expect(await screen.findByText('No items on this page · 50 total')).toBeInTheDocument();
+      expect(screen.getByTestId('location-probe')).toHaveTextContent('/admin/claims?page=2');
+      expect(rowButton(51)).toHaveTextContent('Declined');
+    });
+
+    it('clamps to the new last page when the page empties for any other reason', async () => {
+      const lists = serveClaims(range(1, 51));
+      renderQueue('/admin/claims?page=2');
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 51' })).toBeInTheDocument());
+
+      lists.pending.splice(lists.pending.indexOf(51), 1);
+      act(() => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      });
+
+      await waitFor(() => expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/admin\/claims$/));
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+      act(() => focusManager.setFocused(undefined));
+    });
+
+    it('on a page change selects and focuses the first row and clears the tags', async () => {
+      serveClaims(range(1, 120));
+      renderQueue('/admin/claims');
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+      await grantWithNote();
+      await waitFor(() => expect(claimsGets()).toBe(2));
+
+      await userEvent.click(screen.getByRole('link', { name: 'Page 2' }));
+
+      // 119 live rows after the grant: page 2 starts at Claimant 52.
+      await waitFor(() => expect(rowButton(52)).toHaveFocus());
+      expect(rowButton(52)).toHaveAttribute('aria-current', 'true');
+      expect(screen.queryByText(/Granted\./)).not.toBeInTheDocument();
+      expect(screen.getAllByRole('button').some((b) => /Claimant 1\b.*Granted/.test(b.textContent ?? ''))).toBe(false);
+    });
+
+    it('does not carry a tagged row over to the other tab', async () => {
+      serveClaims(range(1, 3), [10]);
+      renderQueue('/admin/claims');
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());
+      await userEvent.type(screen.getByLabelText(/resolution note/i), 'ok');
+      await userEvent.click(screen.getByRole('button', { name: 'Decline claim' }));
+      await waitFor(() => expect(rowButton(1)).toHaveTextContent('Declined'));
+
+      await userEvent.click(screen.getByRole('tab', { name: 'Granted' }));
+      await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 10' })).toBeInTheDocument());
+      expect(screen.queryByText('Declined')).not.toBeInTheDocument();
+    });
   });
 });

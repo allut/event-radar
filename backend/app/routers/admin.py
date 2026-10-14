@@ -544,7 +544,7 @@ def _serialize_admin_claim(claim: Claim, event: Event | None) -> dict:
 
 
 @router.get("/claims", dependencies=[Depends(get_current_admin)])
-@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
 async def admin_list_claims(
     request: Request,
     status_filter: str = Query(CLAIM_STATUS_PENDING, alias="status"),
@@ -572,18 +572,18 @@ async def admin_list_claims(
 
     async with AsyncSessionLocal() as db:
         queue_filter = (Claim.status == status_filter,)
-        total: int | None = None
-        if offset == 0:
-            total = (
-                await db.scalar(select(func.count(Claim.id)).where(*queue_filter))
-            ) or 0
+        # Exact total on every page (spec #551): the numbered pager derives
+        # its last page and past-end clamp from it.
+        total = (
+            await db.scalar(select(func.count(Claim.id)).where(*queue_filter))
+        ) or 0
 
         order_col = Claim.created_at if status_filter == CLAIM_STATUS_PENDING else Claim.resolved_at
         stmt = (
             select(Claim)
             .options(selectinload(Claim.organizer), selectinload(Claim.publisher))
             .where(*queue_filter)
-            .order_by(order_col.desc())
+            .order_by(order_col.desc(), Claim.id.desc())
             .limit(limit + 1)
             .offset(offset)
         )

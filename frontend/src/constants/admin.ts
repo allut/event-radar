@@ -17,6 +17,8 @@ export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
 export const ADMIN_REPORTS_QUEUE_PAGE_SIZE = 50;
 export const ADMIN_REVIEW_QUEUE_PAGE_SIZE = 50;
 export const ADMIN_CLAIMS_QUEUE_PAGE_SIZE = 50;
+// URL (and API) param carrying the Claims tab: `approved` for Granted, omitted for pending.
+export const ADMIN_CLAIMS_TAB_PARAM = 'status';
 
 // Query-param name for the report-notification email's deep link into
 // AdminReports — carries the reported event's id so the matching row's

@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
 import {
   ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
+  ADMIN_CLAIMS_TAB_PARAM,
   ADMIN_GENERIC_ERROR,
   ADMIN_QUEUE_DETAIL_LINK_LABEL,
 } from '../../constants/admin';
@@ -22,12 +23,15 @@ import {
   type ClaimKind,
   type ClaimVerificationMechanism,
 } from '../../constants/claims';
-import { UI_STATE } from '../../constants/core';
+import { LOCALE_EN, UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
-import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow } from '../../utils';
+import { apiErrorMessage, relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useAdminQueuePage } from '../../hooks/useAdminQueuePage';
+import { usePageParam } from '../../hooks/usePageParam';
+import Pager from '../../components/Pager';
 import AdminQueueSplitView from '../../components/AdminQueueSplitView';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
 import queueStyles from '../../components/shared/AdminQueue.module.css';
@@ -66,7 +70,7 @@ interface AdminClaim {
 }
 
 interface AdminClaimsResponse {
-  total: number | null;
+  total: number;
   limit: number;
   offset: number;
   has_more: boolean;
@@ -117,90 +121,20 @@ function renderClaimRow(item: AdminClaim & { relativeCreated: string }) {
 // decision shape, separate from /admin/reports (resolve/take-down) and
 // /admin/submissions (approve/retract). Reuses AdminReports' split-view
 // inbox pattern with an added Pending review / Granted tab switch, since a
-// claim's evidence and available actions differ by status.
+// claim's evidence and available actions differ by status. The tab lives in
+// the URL (`?status=approved`; pending omitted) next to `?page` (spec #551).
 export default function AdminClaims() {
-  const queryClient = useQueryClient();
-  const { toast, showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<ClaimTab>(CLAIM_STATUS_PENDING);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [note, setNote] = useState('');
-  const [resolvedById, setResolvedById] = useState<
-    Record<number, { item: AdminClaim; kind: AdminClaimActionKind }>
-  >({});
+  const [searchParams] = useSearchParams();
+  const { setListParams } = usePageParam({ defaults: { [ADMIN_CLAIMS_TAB_PARAM]: CLAIM_STATUS_PENDING } });
+  const activeTab: ClaimTab =
+    searchParams.get(ADMIN_CLAIMS_TAB_PARAM) === CLAIM_STATUS_APPROVED ? CLAIM_STATUS_APPROVED : CLAIM_STATUS_PENDING;
 
-  const {
-    data,
-    isLoading,
-    isError,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
-    queryKey: [QUERY_KEYS.adminClaims, activeTab],
-    queryFn: ({ pageParam }) =>
-      adminApi.get<AdminClaimsResponse>(
-        `${API.adminClaims}?status=${activeTab}&${PAGE_PARAM.limit}=${ADMIN_CLAIMS_QUEUE_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
-      ),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.claims.length),
-  });
-
-  const serverItems = useMemo(() => data?.pages.flatMap((page) => page.claims), [data]);
-  const total = data?.pages[0]?.total ?? 0;
-  const items = useMemo(() => {
-    const byId = new Map((serverItems ?? []).map((item) => [item.id, item]));
-    for (const entry of Object.values(resolvedById)) byId.set(entry.item.id, entry.item);
-    return Array.from(byId.values()).map((item) => ({
-      ...item,
-      relativeCreated: relativeTimeFromNow(item.created_at),
-    }));
-  }, [serverItems, resolvedById]);
-
-  const currentId = selectedId ?? items[0]?.id ?? null;
-
-  const actionMutation = useMutation({
-    mutationFn: ({ item, kind, note }: { item: AdminClaim; kind: AdminClaimActionKind; note: string }) => {
-      const path =
-        kind === 'granted'
-          ? API.adminClaimGrant(item.id)
-          : kind === 'declined'
-            ? API.adminClaimDecline(item.id)
-            : API.adminClaimRevoke(item.id);
-      return adminApi.post<AdminClaimActionResult>(path, { resolution_note: note });
-    },
-    onSuccess: (_result, { item, kind }) => {
-      setResolvedById((prev) => ({ ...prev, [item.id]: { item, kind } }));
-      setNote('');
-      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
-    },
-    onError: (err) => {
-      showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
-    },
-  });
-
-  function act(item: AdminClaim, kind: AdminClaimActionKind) {
-    if (!note.trim()) return;
-    actionMutation.mutate({ item, kind, note: note.trim() });
-  }
-
-  const isResolved = useCallback((item: AdminClaim) => item.id in resolvedById, [resolvedById]);
-  const selectRow = useCallback((id: number) => {
-    setSelectedId(id);
-    setNote('');
-  }, []);
-  const resolvedTag = useCallback(
-    (item: AdminClaim) => ADMIN_CLAIM_ACTION_TAGS[resolvedById[item.id]?.kind ?? 'granted'],
-    [resolvedById],
-  );
+  // One push that also drops `page`, so a tab switch starts at page 1.
   function switchTab(tab: ClaimTab) {
-    setActiveTab(tab);
-    setSelectedId(null);
-    setNote('');
-    // A claim resolved on one tab (e.g. declined, which flips it out of
-    // both the pending and approved server filters) must not leak into
-    // whichever tab is viewed next — resolvedById's client-side "just
-    // acted on" tracking only makes sense within the tab it happened on.
-    setResolvedById({});
+    setListParams((params) => {
+      params.set(ADMIN_CLAIMS_TAB_PARAM, tab);
+      return params;
+    });
   }
 
   return (
@@ -231,15 +165,96 @@ export default function AdminClaims() {
         </button>
       </div>
 
+      {/* Keyed by tab: the selection, note draft and acted-on tags are
+          per-tab (a claim declined on one tab flips out of both server
+          filters and must not leak into the other). */}
+      <ClaimsQueue key={activeTab} activeTab={activeTab} />
+    </div>
+  );
+}
+
+function ClaimsQueue({ activeTab }: { activeTab: ClaimTab }) {
+  const queryClient = useQueryClient();
+  const { toast, showToast } = useToast();
+  const [note, setNote] = useState('');
+  const {
+    rows,
+    total,
+    tags: resolvedById,
+    tagRow,
+    selectedId,
+    setSelectedId,
+    listRef,
+    isLoading,
+    isError,
+    isPlaceholderData,
+    pagerProps,
+  } = useAdminQueuePage<AdminClaimsResponse, AdminClaim, AdminClaimActionKind>({
+    queryKey: [QUERY_KEYS.adminClaims, activeTab],
+    pageSize: ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
+    fetchPage: ({ limit, offset }) =>
+      adminApi.get<AdminClaimsResponse>(
+        `${API.adminClaims}?${ADMIN_CLAIMS_TAB_PARAM}=${activeTab}&${PAGE_PARAM.limit}=${limit}&${PAGE_PARAM.offset}=${offset}`,
+      ),
+    select: (data) => ({ items: data.claims, total: data.total, offset: data.offset }),
+    getId: getClaimId,
+    onPageSettled: () => setNote(''),
+  });
+
+  const items = useMemo(
+    () => rows.map((item) => ({ ...item, relativeCreated: relativeTimeFromNow(item.created_at) })),
+    [rows],
+  );
+
+  const currentId = selectedId ?? items[0]?.id ?? null;
+
+  const actionMutation = useMutation({
+    mutationFn: ({ item, kind, note }: { item: AdminClaim; kind: AdminClaimActionKind; note: string }) => {
+      const path =
+        kind === 'granted'
+          ? API.adminClaimGrant(item.id)
+          : kind === 'declined'
+            ? API.adminClaimDecline(item.id)
+            : API.adminClaimRevoke(item.id);
+      return adminApi.post<AdminClaimActionResult>(path, { resolution_note: note });
+    },
+    onSuccess: (_result, { item, kind }) => {
+      // Tags the row in place and refetches this page once, so the next
+      // row up fills the gap (spec #551).
+      tagRow(item, kind);
+      setNote('');
+      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
+    },
+    onError: (err) => {
+      showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
+    },
+  });
+
+  function act(item: AdminClaim, kind: AdminClaimActionKind) {
+    if (!note.trim()) return;
+    actionMutation.mutate({ item, kind, note: note.trim() });
+  }
+
+  const isResolved = useCallback((item: AdminClaim) => resolvedById.has(item.id), [resolvedById]);
+  const selectRow = useCallback((id: number) => {
+    setSelectedId(id);
+    setNote('');
+  }, [setSelectedId]);
+  const resolvedTag = useCallback(
+    (item: AdminClaim) => ADMIN_CLAIM_ACTION_TAGS[resolvedById.get(item.id)?.kind ?? 'granted'],
+    [resolvedById],
+  );
+  return (
+    <>
       {isLoading ? (
         <PageState kind={UI_STATE.loading} message="Loading…" inline />
       ) : isError ? (
         <PageState kind={UI_STATE.error} message="Couldn't load the claims queue." inline />
+      ) : items.length === 0 && total > 0 ? (
+        // A past-end page about to clamp to the real last page.
+        <PageState kind={UI_STATE.loading} message="Loading…" inline />
       ) : (
-        <>
-          <p className={styles.subtitle}>
-            {items.length} of {total} {activeTab === CLAIM_STATUS_PENDING ? 'pending' : 'granted'} claims shown
-          </p>
+        <div aria-busy={isPlaceholderData}>
           <AdminQueueSplitView
             items={items}
             getId={getClaimId}
@@ -249,8 +264,13 @@ export default function AdminClaims() {
             onSelect={selectRow}
             emptyLabel={activeTab === CLAIM_STATUS_PENDING ? 'No claims pending review.' : 'No granted claims.'}
             renderRow={renderClaimRow}
+            listRef={listRef}
+            listFooter={
+              // The pager's strings come from shared/i18n even here: docs/frontend.md "Admin Console"
+              <Pager {...pagerProps} locale={LOCALE_EN} liveNoun="items" className={queueStyles.queuePager} />
+            }
             renderDetail={(item) => {
-              const resolution = resolvedById[item.id];
+              const resolution = resolvedById.get(item.id);
               return (
                 <div>
                   <h2 className={styles.detailTitle}>{organizerLabel(item.organizer)}</h2>
@@ -364,14 +384,9 @@ export default function AdminClaims() {
               );
             }}
           />
-          {hasNextPage && (
-            <button type="button" className={queueStyles.queueLoadMore} onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
-              Load more
-            </button>
-          )}
-        </>
+        </div>
       )}
       {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
-    </div>
+    </>
   );
 }

@@ -115,6 +115,90 @@ async def test_list_claims_defaults_to_pending(admin_app, make_db_ctx, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_list_claims_returns_total_past_the_first_page(admin_app, make_db_ctx, mock_db):
+    """Spec #551: the numbered pager needs an exact total on every request,
+    not only at offset 0, on both tabs."""
+    db = mock_db
+    db.scalar = AsyncMock(return_value=120)
+    db.scalars = AsyncMock(return_value=scalars_returning([]))
+
+    with (
+        patch_admin_settings() as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
+        _admin_settings(mock_settings)
+        async with AsyncClient(transport=ASGITransport(app=admin_app), base_url="http://test") as client:
+            pending = (await client.get("/admin/claims?limit=50&offset=100", auth=("admin", ""))).json()
+            granted = (
+                await client.get("/admin/claims?status=approved&limit=50&offset=100", auth=("admin", ""))
+            ).json()
+
+    assert (pending["total"], pending["limit"], pending["offset"]) == (120, 50, 100)
+    assert (granted["total"], granted["limit"], granted["offset"]) == (120, 50, 100)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("", "ORDER BY claims.created_at DESC, claims.id DESC"),
+        ("?status=approved", "ORDER BY claims.resolved_at DESC, claims.id DESC"),
+    ],
+)
+async def test_list_claims_breaks_ties_on_id(admin_app, make_db_ctx, mock_db, query, expected):
+    """Rows sharing a sort value must keep one order across pages (spec #551)."""
+    db = mock_db
+    db.scalar = AsyncMock(return_value=0)
+    captured: dict = {}
+
+    def _capture_scalars(stmt):
+        captured["list_stmt"] = stmt
+        return scalars_returning([])
+
+    db.scalars = AsyncMock(side_effect=_capture_scalars)
+
+    with (
+        patch_admin_settings() as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
+        _admin_settings(mock_settings)
+        async with AsyncClient(transport=ASGITransport(app=admin_app), base_url="http://test") as client:
+            await client.get(f"/admin/claims{query}", auth=("admin", ""))
+
+    sql = str(captured["list_stmt"].compile(compile_kwargs={"literal_binds": True}))
+    assert expected in sql
+
+
+@pytest.mark.asyncio
+async def test_claims_list_uses_the_admin_read_bucket(admin_app, make_db_ctx, mock_db):
+    """Spec #551 decision: refetch-after-action costs a list GET per action,
+    so the claims list runs on the browse rate in the shared admin-read
+    bucket, not the 10/minute admin action bucket."""
+    from app.constants.rate_limits import RATE_LIMIT_ADMIN, RATE_LIMIT_BROWSE
+
+    admin_burst = int(RATE_LIMIT_ADMIN.split("/")[0])
+    browse_burst = int(RATE_LIMIT_BROWSE.split("/")[0])
+    db = mock_db
+    db.scalar = AsyncMock(return_value=0)
+    db.scalars = AsyncMock(return_value=scalars_returning([]))
+
+    with (
+        patch_admin_settings() as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
+        _admin_settings(mock_settings)
+        async with AsyncClient(transport=ASGITransport(app=admin_app), base_url="http://test") as client:
+            statuses = [
+                (await client.get("/admin/claims", auth=("admin", ""))).status_code
+                for _ in range(browse_burst + 1)
+            ]
+
+    assert statuses[: admin_burst + 1] == [http.HTTPStatus.OK] * (admin_burst + 1)
+    assert statuses[:browse_burst] == [http.HTTPStatus.OK] * browse_burst
+    assert statuses[browse_burst] == http.HTTPStatus.TOO_MANY_REQUESTS
+
+
+@pytest.mark.asyncio
 async def test_list_claims_rejects_invalid_status(admin_app, make_db_ctx, mock_db):
     app = admin_app
     with (
