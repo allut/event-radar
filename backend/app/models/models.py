@@ -79,8 +79,10 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    # Opt-in: new users start off and choose at onboarding (GDPR Art. 4(11)
+    # consent needs an affirmative act). Rows created before 0059 keep "true".
     email_digest_opt_in: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="true"
+        Boolean, nullable=False, server_default="false"
     )
     # Bumped by /auth/logout-all to invalidate every previously-issued session
     # token at once ("log out everywhere") — compared against the "v" claim in

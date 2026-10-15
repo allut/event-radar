@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { setLocale } from '../../lib/auth';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { PERSONA_MAX_SELECTABLE } from '../../_generated/sharedConstants';
-import { API } from '../../constants/api';
+import { API, QUERY_KEYS } from '../../constants/api';
 import { PERSONAS } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
 import { t, ti, personaName, personaVibe } from '../../i18n';
@@ -24,6 +25,16 @@ export default function Onboarding() {
   const seoMeta = useStaticSeoMeta('onboarding_heading', locale);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  // null until the user touches the box; until then it mirrors the saved choice
+  // (false for a new user, the current value for someone re-picking personas).
+  const [digestChoice, setDigestChoice] = useState<boolean | null>(null);
+  const queryClient = useQueryClient();
+  const { data: settings, isPending: settingsPending } = useQuery({
+    queryKey: [QUERY_KEYS.settings],
+    queryFn: () => api.get<{ email_digest_opt_in: boolean }>(API.me),
+  });
+  const savedDigest = digestChoice ?? settings?.email_digest_opt_in;
+  const digestOn = savedDigest ?? false;
 
   function toggle(slug: string) {
     setSelected((prev) => {
@@ -43,7 +54,12 @@ export default function Onboarding() {
     setIsLoading(true);
     setError('');
     try {
-      await api.post(API.onboardingPersona, { persona_slugs: selected });
+      // Omitted while the saved value is unknown, so a failed read never unsubscribes.
+      await api.post(API.onboardingPersona, {
+        persona_slugs: selected,
+        ...(savedDigest !== undefined && { email_digest_opt_in: savedDigest }),
+      });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.settings] });
       setLocale(locale);
       navigate(ROUTES.home, { replace: true });
     } catch (err) {
@@ -94,6 +110,31 @@ export default function Onboarding() {
                 />
               );
             })}
+          </div>
+
+          <div className={styles.digest}>
+            <label className={styles.digestRow} htmlFor="digest-opt-in">
+              <input
+                id="digest-opt-in"
+                type="checkbox"
+                className={styles.digestInput}
+                checked={digestOn}
+                disabled={settingsPending}
+                onChange={(e) => setDigestChoice(e.target.checked)}
+              />
+              <span className={styles.digestBox}>
+                <svg className={styles.digestMark} viewBox="0 0 14 14" aria-hidden="true">
+                  <path d="M2 7.5l3.5 3.5L12 3.5" />
+                </svg>
+              </span>
+              <span>
+                <span className={styles.digestTitle}>{t('onboarding_digest_label', locale)}</span>
+                <span className={styles.digestDesc}>{t('onboarding_digest_desc', locale)}</span>
+              </span>
+            </label>
+            <p className={styles.digestState} aria-live="polite">
+              {t(digestOn ? 'onboarding_digest_on' : 'onboarding_digest_off', locale)}
+            </p>
           </div>
 
           {error && (

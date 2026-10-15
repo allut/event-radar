@@ -9,7 +9,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 ### Users and Sign-In
 
 - **`users.email_verified` flips true on the first successful magic-link verification.** It gates `build_daily_feeds` and `send_daily_digests`. See [security.md](security.md)'s Email Verification Gate section.
-- **`users.email_digest_opt_in` gates the daily digest send.** `users.locale` is one of `et`, `en` and `ru`.
+- **`users.email_digest_opt_in` gates the daily digest send, and new users start `false`.** The onboarding checkbox sends the choice with `POST /onboarding/persona`. Rows from before migration 0059 kept `true`. `users.locale` is one of `et`, `en` and `ru`.
 - **`session_token_version` is bumped to revoke every session** of a user, or of an organizer on `organizers`. See [security.md](security.md)'s Session Revocation section.
 - **`auth_magic_links` rows are one-use and store only a sha256 `token_hash`.** A non-null `pending_google_sub` marks a link that confirms a pending Google link instead of starting a session ([ADR 0002](adr/0002-google-sign-in-oauth-pkce.md)). There is no second token type.
 

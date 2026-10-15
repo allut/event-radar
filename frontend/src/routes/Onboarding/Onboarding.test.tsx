@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -15,6 +15,7 @@ vi.mock('../../api/client', async (importOriginal) => ({
   // Real ApiError (shared class, no network dependency); only api.* stubbed.
   ...(await importOriginal<typeof import('../../api/client')>()),
   api: {
+    get: vi.fn(),
     post: vi.fn(),
     patch: vi.fn(),
   },
@@ -22,6 +23,11 @@ vi.mock('../../api/client', async (importOriginal) => ({
 
 import { api } from '../../api/client';
 const mockPost = vi.mocked(api.post);
+const mockGet = vi.mocked(api.get);
+
+beforeEach(() => {
+  mockGet.mockResolvedValue({ email_digest_opt_in: false });
+});
 
 describe('Onboarding', () => {
   it('renders persona cards', () => {
@@ -49,6 +55,53 @@ describe('Onboarding', () => {
     await userEvent.click(screen.getAllByTitle('Select')[0]);
     const submitBtn = screen.getAllByRole('button').slice(-1)[0];
     await userEvent.click(submitBtn);
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith('/onboarding/persona', {
+        persona_slugs: expect.any(Array),
+        email_digest_opt_in: false,
+      }),
+    );
+  });
+
+  it('digest checkbox starts unticked for a user who has not opted in', async () => {
+    renderWithProviders(<Onboarding />);
+    const box = await screen.findByRole('checkbox', { name: /daily five each morning/i });
+    expect(box).not.toBeChecked();
+    expect(screen.getByText('Daily Five email is off.')).toBeInTheDocument();
+  });
+
+  it('ticking the digest checkbox sends email_digest_opt_in: true', async () => {
+    mockPost.mockResolvedValueOnce(undefined);
+    renderWithProviders(<Onboarding />);
+    await userEvent.click(await screen.findByRole('checkbox', { name: /daily five each morning/i }));
+    expect(screen.getByText(/Daily Five email is on/)).toBeInTheDocument();
+    await userEvent.click(screen.getAllByTitle('Select')[0]);
+    await userEvent.click(screen.getAllByRole('button').slice(-1)[0]);
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith('/onboarding/persona', {
+        persona_slugs: expect.any(Array),
+        email_digest_opt_in: true,
+      }),
+    );
+  });
+
+  it('shows the saved choice for a user who re-picks personas', async () => {
+    mockGet.mockResolvedValue({ email_digest_opt_in: true });
+    renderWithProviders(<Onboarding />);
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /daily five each morning/i })).toBeChecked(),
+    );
+  });
+
+  it('omits the digest field when the saved choice could not be read', async () => {
+    mockGet.mockRejectedValue(new Error('boom'));
+    mockPost.mockResolvedValueOnce(undefined);
+    renderWithProviders(<Onboarding />);
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /daily five each morning/i })).toBeEnabled(),
+    );
+    await userEvent.click(screen.getAllByTitle('Select')[0]);
+    await userEvent.click(screen.getAllByRole('button').slice(-1)[0]);
     await waitFor(() =>
       expect(mockPost).toHaveBeenCalledWith('/onboarding/persona', {
         persona_slugs: expect.any(Array),

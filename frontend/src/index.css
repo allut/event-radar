@@ -330,6 +330,8 @@
 
   /* Form controls */
   --control-height-lg: 48px;
+  --checkbox-size: 22px;        /* Onboarding digest opt-in box */
+  --checkbox-mark-size: 14px;   /* its check glyph */
   --textarea-height-sm: 100px;  /* EventSubmit description */
   --textarea-height-md: 120px;  /* Contact message */
 

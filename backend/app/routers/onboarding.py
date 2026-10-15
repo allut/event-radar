@@ -34,6 +34,8 @@ router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 class PersonaBody(BaseModel):
     persona_slugs: list[str]
+    # Explicit digest choice from the onboarding checkbox; None leaves it as is.
+    email_digest_opt_in: bool | None = None
 
 
 @router.post("/persona", status_code=status.HTTP_200_OK)
@@ -85,6 +87,9 @@ async def set_persona(
             )
         )
         result.append({"slug": slug, "weight": weight})
+
+    if body.email_digest_opt_in is not None:
+        current_user.email_digest_opt_in = body.email_digest_opt_in
 
     await db.commit()
 
