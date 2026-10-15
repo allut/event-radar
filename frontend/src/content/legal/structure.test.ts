@@ -10,7 +10,7 @@ import type { LegalBlock, LegalDoc } from './types';
 // Guards translation drift: every locale of a doc must share the same section
 // count, the same per-section block count, AND the same per-block inline shape
 // (paragraph run count / list item count) as the authoritative English — so a
-// dropped inline link (e.g. a mailto/AKI/ODR link) in one translation is caught.
+// dropped inline link (e.g. a mailto/AKI link) in one translation is caught.
 const docs: Record<string, { en: LegalDoc; et: LegalDoc; ru: LegalDoc }> = {
   privacy: { en: privacyEn, et: privacyEt, ru: privacyRu },
   terms: { en: termsEn, et: termsEt, ru: termsRu },
@@ -43,4 +43,12 @@ describe('legal doc structure parity', () => {
       }
     });
   }
+});
+
+describe('terms regulator links', () => {
+  it('does not cite the shut-down EU ODR platform in any locale', () => {
+    for (const doc of [termsEn, termsEt, termsRu]) {
+      expect(JSON.stringify(doc)).not.toContain('ec.europa.eu/consumers/odr');
+    }
+  });
 });

@@ -1,4 +1,4 @@
-import { CONTACT_EMAIL, CONTACT_MAILTO, ODR_URL } from '../../constants/core';
+import { CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants/core';
 import type { LegalDoc } from './types';
 
 const doc: LegalDoc = {
@@ -124,9 +124,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Neid tingimusi reguleerib Eesti õigus. Vaidlused kuuluvad pädevate Eesti kohtute pädevusse, ilma et see piiraks kohustuslikke tarbijakaitseõigusi või sinu õigust algatada menetlus oma elukohariigis. ELi tarbijad võivad kasutada ka Euroopa Komisjoni veebipõhise vaidluste lahendamise platvormi (',
-            { text: ODR_URL, href: ODR_URL },
-            ').',
+            'Neid tingimusi reguleerib Eesti õigus. Vaidlused kuuluvad pädevate Eesti kohtute pädevusse, ilma et see piiraks kohustuslikke tarbijakaitseõigusi või sinu õigust algatada menetlus oma elukohariigis.',
           ],
         },
       ],

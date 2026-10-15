@@ -50,5 +50,5 @@
 .link {
   color: var(--accent);
   text-decoration: underline;
-  overflow-wrap: anywhere; /* bare URLs (the ODR link) on a phone at a larger default font size */
+  overflow-wrap: anywhere; /* bare URLs (the AKI link) on a phone at a larger default font size */
 }

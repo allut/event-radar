@@ -190,7 +190,6 @@ export const MAILTO_SCHEME = 'mailto';
 export const CONTACT_MAILTO = `${MAILTO_SCHEME}:${CONTACT_EMAIL}`;
 // External regulator links the legal docs cite (identical in every locale).
 export const AKI_URL = 'https://www.aki.ee';
-export const ODR_URL = 'https://ec.europa.eu/consumers/odr';
 
 // Scroll hysteresis: the bar condenses past 24px and expands back only under
 // 4px, so its 18px height change can't oscillate around one threshold.
