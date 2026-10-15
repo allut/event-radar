@@ -152,6 +152,14 @@ charge, is still a Promotion: it is labelled, rotated and counted exactly like
 one that was paid for.
 _Avoid_: boost, bump, ad campaign, featured
 
+**Promotion window**:
+The whole Tallinn days, first and last included, during which a paid Promotion
+may fill Sponsored slots. It never runs past the event's last day. Being inside
+its window doesn't guarantee a Promotion shows: if the event stops being
+eligible, the Promotion pauses and resumes by itself, and the days it loses are
+never added back automatically.
+_Avoid_: campaign, flight, run
+
 **Sponsored slot**:
 A labelled position on a public surface that shows one Promotion's event as
 advertising and names the paying Organizer. It sits beside the organic results,
