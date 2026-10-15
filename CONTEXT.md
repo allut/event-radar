@@ -153,8 +153,10 @@ _Avoid_: boost, bump, ad campaign, featured
 **Sponsored slot**:
 A labelled position on a public surface that shows one Promotion's event as
 advertising and names the paying Organizer. It sits beside the organic results,
-outside them, and is never counted as one. When no Promotion is eligible, the
-slot collapses and is never filled with something else.
+outside them, and is never counted as one. Its Promotion is chosen by context
+(the surface and the viewer's active filters), never by the viewer's tastes; a
+viewer's own signals can only exclude a Promotion. When no Promotion is
+eligible, the slot collapses and is never filled with something else.
 _Avoid_: featured slot, promoted result, ad unit
 
 **Featured** (reserved):
