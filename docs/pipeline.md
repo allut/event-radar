@@ -280,7 +280,7 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 ### Landing Showcase
 
 - **`GET /public/showcase` (`app/routers/public.py`) is the only user-facing list with no auth-dependent behaviour.** Explore is reachable signed out but branches on the user; the showcase never does. Never add a user-scoped field to its response.
-- **It shows `SHOWCASE_EVENT_COUNT` (6) top-quality events this week** (`SHOWCASE_WINDOW_DAYS`). A thin week widens to `SHOWCASE_FALLBACK_WINDOW_DAYS`. It is rate-limited by `RATE_LIMIT_PUBLIC` and cached in-process per locale.
+- **It returns `SHOWCASE_EVENT_COUNT` (6) top-quality events this week** (`SHOWCASE_WINDOW_DAYS`). Landing renders only the first `LANDING_SHOWCASE_PLATE_COUNT` (3), as plates. A thin week widens to `SHOWCASE_FALLBACK_WINDOW_DAYS`. It is rate-limited by `RATE_LIMIT_PUBLIC` and cached in-process per locale.
 - **The SQL mirrors `_browse_sql_path`'s quality sort without any personalization.** The query is unlimited, because a LIMIT before the series collapse could drop a series' only surviving row.
 - **After `collapse_series_duplicates()`, Python re-sorts and slices.** The keys match the SQL `ORDER BY`: narrow window first, `quality_score` descending with nulls last, then `starts_at`. The collapse survivor isn't always the row SQL ranked first.
 

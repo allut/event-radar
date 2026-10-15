@@ -141,6 +141,27 @@ duplicate-claim creation) is untouched. Reactivates automatically the next
 dedup pass in which its target is canonical again.
 _Avoid_: revoked claim, suspended claim, inactive claim
 
+## Promotions
+
+**Promotion**:
+A paid placement, bought for a set window, of one event the Organizer owns:
+either an event they submitted or one covered by an approved claim that is not
+dormant. A Promotion buys Sponsored slots only. It never changes where the
+event ranks in any organic list.
+_Avoid_: boost, bump, ad campaign, featured
+
+**Sponsored slot**:
+A labelled position on a public surface that shows one Promotion's event as
+advertising and names the paying Organizer. It sits beside the organic results,
+outside them, and is never counted as one. When no Promotion is eligible, the
+slot collapses and is never filled with something else.
+_Avoid_: featured slot, promoted result, ad unit
+
+**Featured** (reserved):
+Kept for a future editorial pick that nobody pays for. Never use it for paid
+placement.
+_Avoid_: featured (for anything a Promotion bought)
+
 ## Theming
 
 **Device theme**:
