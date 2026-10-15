@@ -144,10 +144,12 @@ _Avoid_: revoked claim, suspended claim, inactive claim
 ## Promotions
 
 **Promotion**:
-A paid placement, bought for a set window, of one event the Organizer owns:
+A placement, sold for a set window, of one event the Organizer owns:
 either an event they submitted or one covered by an approved claim that is not
 dormant. A Promotion buys Sponsored slots only. It never changes where the
-event ranks in any organic list.
+event ranks in any organic list. A complimentary Promotion, granted at no
+charge, is still a Promotion: it is labelled, rotated and counted exactly like
+one that was paid for.
 _Avoid_: boost, bump, ad campaign, featured
 
 **Sponsored slot**:
