@@ -32,10 +32,16 @@ the facts in
   claims, except for a board member's breach of duty. Products under the same
   OÜ share that liability. A product that grows risky can move into its own
   company later.
-- **The overhead is small but real.** It is €200 to found, about €84 a year
-  with self-kept books in e-arveldaja, an accountant for the annual report,
-  and 22/78 on anything paid out. Running costs are about €125 a year, so
-  deductibility hardly mattered.
+- **The overhead is small but real.** It is €200 to found, then about €115 a
+  year (up to €125 at the revenue cap): self-kept books in e-arveldaja, an
+  accountant for the annual report, and the VAT below. Anything paid out owes
+  22/78. Running costs are about €125 a year, so deductibility hardly
+  mattered.
+- **The OÜ is a limited VAT payer from its first foreign vendor bill**
+  (KMS § 21(1)). It self-assesses 24% on the Cloudflare, Render and Stripe
+  Invoicing bills with no deduction, about €30 a year, and files a KMD for
+  each month with such bills. Promotions still carry no VAT. Found in
+  [limited VAT payer status](https://github.com/allut/event-radar/issues/591).
 - **Switching later is expensive.** A new legal person means a new Stripe
   account, new Terms and Organizer terms, a new Privacy notice controller and
   a new invoice series. So the switch from the owner, who runs Event Radar as
