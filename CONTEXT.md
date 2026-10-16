@@ -170,6 +170,14 @@ Organizer, or expires once its event can no longer be promoted or its start
 date arrives.
 _Avoid_: promotion order, booking, pending promotion
 
+**Promotion restriction**:
+A kind of event content that may be listed but not promoted without an admin's
+review: tobacco, gambling, alcohol-led, political, or a weapons sale. It never
+affects whether or where the event lists organically. An admin who grants a
+Promotion despite it gives a *Restriction clearance*, which belongs to that
+Promotion, not to the event, and covers only the restriction it was given for.
+_Avoid_: restricted category, banned event, unpromotable
+
 **Sponsored slot**:
 A labelled position on a public surface that shows one Promotion's event as
 advertising and names the paying Organizer. It sits beside the organic results,
