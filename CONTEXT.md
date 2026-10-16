@@ -179,6 +179,14 @@ viewer's own signals can only exclude a Promotion. When no Promotion is
 eligible, the slot collapses and is never filled with something else.
 _Avoid_: featured slot, promoted result, ad unit
 
+**Email ad consent**:
+A digest subscriber's separate, affirmative agreement to receive a Sponsored
+slot in their Daily Five email, and in no other email. Subscribing to the
+digest is not this consent, and it starts off. It ends when the subscriber
+withdraws it, unsubscribes from the digest, or its wording changes in
+substance; it never expires on its own.
+_Avoid_: marketing consent, sponsored consent, ad opt-in
+
 **Featured** (reserved):
 Kept for a future editorial pick that nobody pays for. Never use it for paid
 placement.
