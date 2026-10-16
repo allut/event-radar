@@ -187,6 +187,15 @@ viewer's own signals can only exclude a Promotion. When no Promotion is
 eligible, the slot collapses and is never filled with something else.
 _Avoid_: featured slot, promoted result, ad unit
 
+**Ranking disclosure**:
+The public statement of what decides which events can appear and in what order
+the organic lists show them, giving the main signals and their relative
+importance but never their weights. It also says how Sponsored slots relate to
+those lists. It is owed to consumers whether or not any Promotion exists, and
+it is part of the Organizer terms, so a change in substance is a change to
+those terms.
+_Avoid_: ranking page, how-it-works page, transparency page, algorithm
+
 **Email ad consent**:
 A digest subscriber's separate, affirmative agreement to receive a Sponsored
 slot in their Daily Five email, and in no other email. Subscribing to the
