@@ -160,6 +160,16 @@ eligible, the Promotion pauses and resumes by itself, and the days it loses are
 never added back automatically.
 _Avoid_: campaign, flight, run
 
+**Promotion request**:
+An Organizer's request for a Promotion on one event they own, with the dates
+they want and the business that would pay. It is not a Promotion: nothing has
+been sold, and it holds no days against the cap. An admin either grants it,
+which creates the Promotion (possibly on other dates agreed with the
+Organizer), or declines it with a reason. Otherwise it is withdrawn by the
+Organizer, or expires once its event can no longer be promoted or its start
+date arrives.
+_Avoid_: promotion order, booking, pending promotion
+
 **Sponsored slot**:
 A labelled position on a public surface that shows one Promotion's event as
 advertising and names the paying Organizer. It sits beside the organic results,
