@@ -49,7 +49,7 @@ the consumer track and is never interchangeable with it.
 _Avoid_: portal auth, submitter auth
 
 **Admin track**:
-The authentication track for the operator console. Password + required TOTP
+The authentication track for the admin console. Password + required TOTP
 rather than a magic link, with its own cookie name, path, and lifetime. Never
 interchangeable with the consumer or organizer tracks.
 _Avoid_: staff auth, ops login, superuser
@@ -140,6 +140,16 @@ the row is never deleted or revoked, and `status` (which still gates
 duplicate-claim creation) is untouched. Reactivates automatically the next
 dedup pass in which its target is canonical again.
 _Avoid_: revoked claim, suspended claim, inactive claim
+
+## Operator
+
+**Operator**:
+The legal person that runs Event Radar: it sells Promotions, controls the
+personal data of consumers and Organizers, and is the party to the Terms and
+the Organizer terms. There is exactly one at any time, and every published
+identity (imprint, invoices, Privacy notice) names it. A person who signs in to
+the admin console is an *admin*, not the Operator.
+_Avoid_: owner, company, seller, platform, sole trader
 
 ## Promotions
 
