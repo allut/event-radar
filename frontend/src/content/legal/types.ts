@@ -11,12 +11,15 @@
 /** A run of inline content: a plain string, or a link (`text` → `href`). */
 export type LegalInline = string | { text: string; href: string };
 
-/** A block within a section: a paragraph or an unordered list. */
+/** A block within a section: a paragraph, or an unordered or ordered list. */
 export type LegalBlock =
   | { kind: 'p'; content: LegalInline[] }
-  | { kind: 'ul'; items: LegalInline[][] };
+  | { kind: 'ul'; items: LegalInline[][] }
+  | { kind: 'ol'; items: LegalInline[][] };
 
 export interface LegalSection {
+  /** Optional stable anchor (`/ranking#relevance`), the same in every locale. */
+  id?: string;
   heading: string;
   blocks: LegalBlock[];
 }

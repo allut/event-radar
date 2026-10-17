@@ -3,7 +3,7 @@ import { ROUTES } from '../../constants/routes';
 import type { FaqDoc } from './types';
 
 const doc: FaqDoc = {
-  lastUpdated: '2026-10-06',
+  lastUpdated: '2026-10-17',
   seoTitle: 'Korduma kippuvad küsimused',
   metaDescription:
     'Kuidas Event Radar töötab: kust Tallinna üritused pärinevad, kuidas valitakse Päeva 5, hommikune e-kiri, sinu andmed ja kuidas korraldajad üritusi lisavad.',
@@ -115,6 +115,10 @@ const doc: FaqDoc = {
               content: [
                 'Tehisintellekt jagab iga ürituse kategooriatesse ja meeleoludesse — nii leitakse sinu eelistustele sobivad üritused. Sinu esimene Päeva 5 on valmis kohe, kui oled eelistused valinud, ja uus valmib iga päev varahommikul.',
               ],
+            },
+            {
+              kind: 'p',
+              content: [{ text: 'Kuidas tulemused järjestatakse', to: ROUTES.ranking }],
             },
           ],
         },

@@ -79,6 +79,13 @@ describe('Feed', () => {
     expect(screen.getByText('Explore all events →')).toBeInTheDocument();
   });
 
+  it('links to the ranking disclosure under the list', async () => {
+    mockGet.mockResolvedValueOnce(feedResponse);
+    renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
+    const link = await screen.findByRole('link', { name: 'How results are ordered' });
+    expect(link).toHaveAttribute('href', '/en/ranking');
+  });
+
   it('disables the locale selector while a locale switch PATCH is pending, guarding against a stale-mutation rollback race', async () => {
     // A locale switch refetches the feed under a new query key — resolve
     // every fetch, not just the first, so Feed (and its TopBar) stays

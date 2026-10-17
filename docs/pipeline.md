@@ -126,6 +126,20 @@ The LLM classifies each event against a fixed category and vibe taxonomy (`VALID
 - **`feedback_signal` maps the raw `[-1, 1]` feedback score to `[0, 1]` before weighting**, as `(fb + 1.0) / 2.0`.
 - **Signed-out reads redistribute the dropped feedback weight.** Explore without a session has no feedback and no persona. The three remaining differentiating terms scale by `1/0.80` to absorb feedback's 0.20.
 
+### Ranking Disclosure
+
+The public `/ranking` page states the signals and their order, never the weights. Its copy is `frontend/src/content/legal/ranking.{en,et,ru}.ts`; `CONTEXT.md` defines the **Ranking disclosure**.
+
+- **Edit the page and bump `lastUpdated` in all three locales for any of these:**
+  - a new or removed score term;
+  - a change in weight order;
+  - a new publish-gate criterion;
+  - a new hard exclude;
+  - a new Daily 5 diversity or cooldown rule.
+- **A reweight that keeps the order needs no page edit.**
+- **Two tests catch the order drift.** `backend/tests/ranking/test_ranking_disclosure_sync.py` sorts `SCORE_WEIGHT_*` and `SCORE_WEIGHT_ANON_*` into tiers and compares them with `ranking_tiers` in `shared/app-config.json`. `content/legal/ranking.test.ts` checks each locale's Relevance lists against the same tiers.
+- **A changed tier means editing `ranking_tiers`, then the page copy,** then `python scripts/generate_shared.py`.
+
 ## Feedback Decay
 
 - **Feedback decays as `FEEDBACK_DECAY_BASE ** days_since_feedback`** (0.9 per day, `app/ranking/score.py`). Recent signals weigh more than old ones.

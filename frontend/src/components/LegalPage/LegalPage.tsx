@@ -45,13 +45,17 @@ function renderInline(content: LegalInline[]): React.ReactNode[] {
 }
 
 function renderBlock(block: LegalBlock): React.ReactNode {
-  if (block.kind === 'ul') {
+  if (block.kind === 'ul' || block.kind === 'ol') {
+    const List = block.kind;
     return (
-      <ul key={`ul:${inlineText(block.items[0] ?? [])}`} className={styles.list}>
+      <List
+        key={`${block.kind}:${inlineText(block.items[0] ?? [])}`}
+        className={block.kind === 'ol' ? styles.orderedList : styles.list}
+      >
         {block.items.map((item) => (
           <li key={inlineText(item)}>{renderInline(item)}</li>
         ))}
-      </ul>
+      </List>
     );
   }
   return (
@@ -71,7 +75,7 @@ export default function LegalPage({ docId, titleKey }: LegalPageProps) {
   // No server data keyed to locale — the doc is re-loaded by the effect below —
   // so the invalidation key is an inert sentinel (matches StaticPage).
   const { locale, handleLocaleChange } = useLocaleMutation();
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   const seoMeta = useSeoMeta({ title: titleWithBrand(t(titleKey, locale), locale), locale, path: pathname });
   // Keyed by `${docId}:${locale}` so a stale-key load renders as loading without
   // a synchronous setState(null) in the effect (react-hooks/set-state-in-effect).
@@ -109,6 +113,13 @@ export default function LegalPage({ docId, titleKey }: LegalPageProps) {
 
   const current = result?.key === currentKey ? result : null;
   const doc = current && 'doc' in current ? current.doc : null;
+
+  // createRoot replaces the prerendered DOM and the doc loads lazily, so the
+  // browser's own hash jump fires before the sections exist (/ranking#relevance).
+  useEffect(() => {
+    if (!doc || !hash) return;
+    document.getElementById(hash.slice(1))?.scrollIntoView();
+  }, [doc, hash]);
   const failed = current != null && 'error' in current;
 
   return (
@@ -134,7 +145,7 @@ export default function LegalPage({ docId, titleKey }: LegalPageProps) {
             </p>
             {doc.intro.map((block) => renderBlock(block))}
             {doc.sections.map((section) => (
-              <section key={section.heading} className={styles.section}>
+              <section key={section.heading} id={section.id} className={styles.section}>
                 <h2 className={styles.h2}>{section.heading}</h2>
                 {section.blocks.map((block) => renderBlock(block))}
               </section>

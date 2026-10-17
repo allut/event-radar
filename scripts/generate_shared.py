@@ -50,6 +50,16 @@ def _ts_str(s: str) -> str:
     return f"'{escaped}'"
 
 
+def _py_tiers(tiers: list[list[str]]) -> str:
+    """Emit a tuple of tuples, keeping declared order (heaviest tier first)."""
+    inner = ", ".join("(" + ", ".join(_py_str(v) for v in tier) + ",)" for tier in tiers)
+    return f"({inner},)"
+
+
+def _ts_tiers(tiers: list[list[str]]) -> str:
+    return "[" + ", ".join("[" + ", ".join(_ts_str(v) for v in tier) + "]" for tier in tiers) + "]"
+
+
 def _py_frozenset(items: list[str]) -> str:
     quoted = ", ".join(_py_str(v) for v in sorted(items))
     return f"frozenset({{{quoted}}})"
@@ -277,6 +287,9 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         f"CLAIM_EXPIRY_DAYS: int = {cfg['claim_expiry_days']}",
         f"CLAIM_ADMIN_REVIEW_EXPIRY_DAYS: int = {cfg['claim_admin_review_expiry_days']}",
         f"EMAIL_BRAND_MARK_PATH: str = {cfg['email_brand_mark_path']!r}".replace("'", '"'),
+        # Signal tiers named on the public /ranking page, heaviest first (issue #588).
+        f"RANKING_TIERS_SIGNED_IN: tuple[tuple[str, ...], ...] = {_py_tiers(cfg['ranking_tiers']['signed_in'])}",
+        f"RANKING_TIERS_SIGNED_OUT: tuple[tuple[str, ...], ...] = {_py_tiers(cfg['ranking_tiers']['signed_out'])}",
         "",
     ]
     return "\n".join(parts)
@@ -352,6 +365,9 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         f"export const CLAIM_EXPIRY_DAYS = {cfg['claim_expiry_days']};",
         f"export const CLAIM_ADMIN_REVIEW_EXPIRY_DAYS = {cfg['claim_admin_review_expiry_days']};",
         f"export const EMAIL_BRAND_MARK_PATH = '{cfg['email_brand_mark_path']}';",
+        # Signal tiers named on the public /ranking page, heaviest first (issue #588).
+        f"export const RANKING_TIERS_SIGNED_IN: readonly (readonly string[])[] = {_ts_tiers(cfg['ranking_tiers']['signed_in'])};",
+        f"export const RANKING_TIERS_SIGNED_OUT: readonly (readonly string[])[] = {_ts_tiers(cfg['ranking_tiers']['signed_out'])};",
         "",
     ]
     return "\n".join(parts)

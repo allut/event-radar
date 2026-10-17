@@ -131,6 +131,29 @@ describe('Explore', () => {
     expect(screen.getByText('Jazz Night')).toBeInTheDocument();
   });
 
+  it('links to the ranking disclosure in every state, with no search set', async () => {
+    // Loading: the request never settles.
+    mockGet.mockImplementation((path: string) => {
+      if (path.startsWith('/users/me')) return Promise.resolve(currentUser);
+      return new Promise(() => undefined);
+    });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
+    expect(await screen.findByRole('link', { name: 'How results are ordered' })).toHaveAttribute(
+      'href',
+      '/en/ranking',
+    );
+  });
+
+  it('keeps the ranking link when results load', async () => {
+    mockGet.mockImplementation((path: string) => {
+      if (path.startsWith('/users/me')) return Promise.resolve(currentUser);
+      return Promise.resolve(exploreResponse([makeEvent({ id: 1, title: 'Jazz Night' })]));
+    });
+    renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
+    await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(1));
+    expect(screen.getByRole('link', { name: 'How results are ordered' })).toHaveAttribute('href', '/en/ranking');
+  });
+
   it('fresh load defaults to All events with every category/vibe chip selected', async () => {
     mockGet.mockImplementation((path: string) => {
       if (path.startsWith('/users/me')) return Promise.resolve(currentUser);

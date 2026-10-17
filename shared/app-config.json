@@ -27,6 +27,10 @@
     "indie", "underground", "mainstream", "accessible", "niche"
   ],
   "themes": ["light", "dark"],
+  "ranking_tiers": {
+    "signed_in": [["affinity"], ["recency", "feedback"], ["quality"], ["locality"]],
+    "signed_out": [["recency"], ["quality"], ["locality"]]
+  },
   "browse_page_size": 24,
   "pagination_max_offset": 5000,
   "organizer_max_categories": 3,

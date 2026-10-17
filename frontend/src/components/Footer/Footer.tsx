@@ -69,6 +69,7 @@ export default function Footer() {
           <Link to={localePath(ROUTES.privacy)} className={styles.link}>{t('footer_privacy', locale)}</Link>
           <Link to={localePath(ROUTES.terms)} className={styles.link}>{t('footer_terms', locale)}</Link>
           <Link to={localePath(ROUTES.faq)} className={styles.link}>{t('nav_faq', locale)}</Link>
+          <Link to={localePath(ROUTES.ranking)} className={styles.link}>{t('ranking_link', locale)}</Link>
           <Link to={localePath(contactRoute)} className={styles.link}>{t(contactLabelKey, locale)}</Link>
           <Link to={localePath(isOrganizer ? ROUTES.organizerDashboard : ROUTES.organizerLogin)} className={styles.link}>
             {t(isOrganizer ? 'footer_organizer_dashboard' : 'footer_organizers', locale)}

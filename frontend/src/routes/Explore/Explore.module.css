@@ -117,6 +117,12 @@
   composes: settleTarget from '../../components/shared/PageSettle.module.css';
 }
 
+/* Results header: the ranking link, end-aligned above the grid. */
+.resultsHeader {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .grid {
   composes: cardGrid from '../../components/shared/Page.module.css';
 }

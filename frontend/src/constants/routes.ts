@@ -20,6 +20,7 @@ export const ROUTES = {
   unsubscribe: '/unsubscribe',
   privacy: '/privacy',
   terms: '/terms',
+  ranking: '/ranking',
   contact: '/contact',
   faq: '/faq',
   organizerLogin: '/organizer/login',

@@ -55,6 +55,7 @@ import {
   vibeOptions,
   type ExploreFilters,
 } from '../../utils';
+import RankingLink from '../../components/RankingLink';
 import styles from './Explore.module.css';
 
 interface ExploreResponse {
@@ -429,6 +430,11 @@ export default function Explore() {
           <h2 ref={resultsHeadingRef} tabIndex={-1} className={styles.resultsHeading}>
             {t('explore_results_heading', locale)}
           </h2>
+          {/* UCPD Art. 7(4a): the ordering parameters stay reachable from the
+              results in every state, not only when a search is set. */}
+          <div className={styles.resultsHeader}>
+            <RankingLink locale={locale} />
+          </div>
           {isLoading ? (
             <PageState kind={UI_STATE.loading} message={t('loading', locale)} inline />
           ) : isError ? (

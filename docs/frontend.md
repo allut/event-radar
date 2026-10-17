@@ -33,6 +33,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **The account identity loads when the menu or drawer opens, never on mount.** That's `GET /auth/me`, or `GET /organizer/profile` on the organizer bar.
 - **The bar condenses on every route through `useBarScrolled()`:** past 24px, and back under 4px. It starts unscrolled, so prerendered HTML shows the unscrolled bar.
 - **`Footer` labels follow the URL's locale through `usePathLocale()`, never the saved preference.** Its FAQ link always goes to the public `/faq`, organizer pages included.
+- **`/ranking` is a `LegalPage` doc, and `RankingLink` is its entry point.** Explore's results header, the Daily 5 list and the `Footer` link to it in every state. A `LegalSection.id` becomes the anchor, scrolled to once the lazy doc loads.
 
 ### Admin Console
 

@@ -16,6 +16,7 @@ import { formatHourMinute, formatIsoDate, formatTodayDate, padIndex, titleWithBr
 import { API, QUERY_KEYS } from '../../constants/api';
 import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
+import RankingLink from '../../components/RankingLink';
 import styles from './Feed.module.css';
 
 interface FeedResponse {
@@ -114,6 +115,8 @@ export default function Feed() {
             ))}
           </ol>
         )}
+
+        <RankingLink locale={locale} className={styles.rankingLink} />
       </main>
     </div>
   );

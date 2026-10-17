@@ -23,6 +23,7 @@ import Settings from './routes/Settings';
 import Unsubscribe from './routes/Unsubscribe';
 import Privacy from './routes/Privacy';
 import Terms from './routes/Terms';
+import Ranking from './routes/Ranking';
 import Contact from './routes/Contact';
 import Faq from './routes/Faq';
 import OrganizerLogin from './routes/OrganizerLogin';
@@ -129,6 +130,7 @@ const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.unsubscribe, element: <Unsubscribe /> },
   { path: ROUTES.privacy, element: <Privacy /> },
   { path: ROUTES.terms, element: <Terms /> },
+  { path: ROUTES.ranking, element: <Ranking /> },
   { path: ROUTES.contact, element: <Contact /> },
   { path: ROUTES.faq, element: <Faq />, noRedirect: true },
   { path: ROUTES.organizerLogin, element: <OrganizerLogin /> },

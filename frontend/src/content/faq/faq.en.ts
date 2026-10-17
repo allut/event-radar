@@ -3,7 +3,7 @@ import { ROUTES } from '../../constants/routes';
 import type { FaqDoc } from './types';
 
 const doc: FaqDoc = {
-  lastUpdated: '2026-10-06',
+  lastUpdated: '2026-10-17',
   seoTitle: 'Frequently asked questions',
   metaDescription:
     "How Event Radar works: where Tallinn's events come from, how your Daily 5 is picked, the morning email, your data, and how organizers list or claim events.",
@@ -115,6 +115,10 @@ const doc: FaqDoc = {
               content: [
                 "AI sorts every event into categories and moods, which is how events are matched to your tastes. Your first Daily 5 is ready as soon as you've picked your tastes, and a new one is ready early each morning.",
               ],
+            },
+            {
+              kind: 'p',
+              content: [{ text: 'How results are ordered', to: ROUTES.ranking }],
             },
           ],
         },

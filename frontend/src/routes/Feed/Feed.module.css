@@ -203,3 +203,8 @@
   }
 }
 
+
+.rankingLink {
+  display: inline-block;
+  margin-top: var(--space-5);
+}
