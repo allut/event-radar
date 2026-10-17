@@ -3,7 +3,7 @@ import type { LegalDoc } from './types';
 
 const doc: LegalDoc = {
   title: 'Privacy Policy',
-  lastUpdated: '2026-09-16',
+  lastUpdated: '2026-10-17',
   intro: [
     {
       kind: 'p',
@@ -56,7 +56,8 @@ const doc: LegalDoc = {
           kind: 'ul',
           items: [
             ['To provide the Service — sign-in, your account, and the personalised feed: performance of a contract and our legitimate interest in operating the Service (Art. 6(1)(b),(f)).'],
-            ['The email digest — your consent (Art. 6(1)(a)); opt-in, and withdrawable at any time.'],
+            ['The email digest, for accounts created on or after 15 October 2026 — your consent (Art. 6(1)(a)); opt-in, and withdrawable at any time.'],
+            ['The email digest, for accounts created before 15 October 2026 — these accounts were subscribed by default, so we rely on our legitimate interest in keeping existing users informed (Art. 6(1)(f)) and the existing-customer exception in § 103¹ of the Estonian Information Society Services Act. Every digest email has an unsubscribe link, and you can switch the digest off in Settings at any time.'],
             ['Security, rate-limiting, abuse prevention and logging — our legitimate interest in keeping the Service safe and available (Art. 6(1)(f)).'],
             ['Aggregate, privacy-friendly analytics — our legitimate interest in understanding overall usage and performance (Art. 6(1)(f)).'],
           ],

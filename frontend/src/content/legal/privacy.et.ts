@@ -3,7 +3,7 @@ import type { LegalDoc } from './types';
 
 const doc: LegalDoc = {
   title: 'Privaatsuspoliitika',
-  lastUpdated: '2026-09-16',
+  lastUpdated: '2026-10-17',
   intro: [
     {
       kind: 'p',
@@ -56,7 +56,8 @@ const doc: LegalDoc = {
           kind: 'ul',
           items: [
             ['Teenuse osutamiseks — sisselogimine, sinu konto ja isikupärastatud voog: lepingu täitmine ja meie õigustatud huvi teenuse käitamisel (art. 6(1)(b),(f)).'],
-            ['E-posti kokkuvõte — sinu nõusolek (art. 6(1)(a)); tellitav ja igal ajal tagasi võetav.'],
+            ['E-posti kokkuvõte, 15. oktoobril 2026 või hiljem loodud kontode puhul — sinu nõusolek (art. 6(1)(a)); tellitav ja igal ajal tagasi võetav.'],
+            ['E-posti kokkuvõte, enne 15. oktoobrit 2026 loodud kontode puhul — need kontod tellisid kokkuvõtte vaikimisi, seega tugineme oma õigustatud huvile hoida olemasolevaid kasutajaid kursis (art. 6(1)(f)) ning infoühiskonna teenuse seaduse § 103¹ erandile olemasolevate klientide puhul. Igas kokkuvõttes on loobumislink ja kokkuvõtte saab Seadetes igal ajal välja lülitada.'],
             ['Turvalisus, päringute piiramine, väärkasutuse ennetamine ja logimine — meie õigustatud huvi hoida teenus turvaline ja kättesaadav (art. 6(1)(f)).'],
             ['Koondatud, privaatsussõbralik analüütika — meie õigustatud huvi mõista üldist kasutust ja jõudlust (art. 6(1)(f)).'],
           ],
