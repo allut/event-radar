@@ -152,14 +152,11 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 - **Cloudflare Pages reads `_headers` only from the build output**, so the test reads `frontend/public/_headers`, not a repo-root copy.
 - **The dev server sends no CSP.** Verify a CSP change against the built `dist/index.html` and `dist/_headers` before shipping.
 
-### Google Analytics
+### Analytics and device access
 
-- **The GA4 entries are exact for `script-src` and wildcarded for `connect-src`.** `script-src` adds only `https://www.googletagmanager.com`. `connect-src` adds `*.google-analytics.com` and `*.analytics.google.com`, per Google's CSP guidance for regional collection hosts. Don't narrow them without confirming beacons still land.
-- **`frontend/src/lib/gtag.ts` sets `client_storage: 'none'`, so GA4 sets no cookie.** That keeps the privacy page's "cookieless and aggregated" claim true and avoids a consent banner.
-- **Pageviews are sent manually through `maskAnalyticsUrl()`**, never automatically. That keeps the magic-link token and `/explore` search text out of GA4's `page_path`.
-- **A new dynamic route needs its own collapse in `maskAnalyticsUrl()`** (`frontend/src/utils.ts`), the way `/events/:id` becomes `/events/[id]`. Otherwise its ids reach GA4.
-- **GA4 no-ops when `isPrerenderRender()` is true**, so prerender snapshots send no fake pageviews.
-- **`VITE_GA_MEASUREMENT_ID` is the only switch.** It's a Cloudflare Pages build variable, never committed. Unset, `initGtag()` loads nothing.
+- **The app loads no analytics or advertising script.** GA4 was removed because "cookieless" doesn't answer ePrivacy Art. 5(3), which covers any access to the device, not only cookies. The Estonian DPA (AKI) applies the consent rule directly and lists analytics among the trackers that need prior consent.
+- **A new third-party measurement tool needs a consent prompt first.** Add it to the CSP and the privacy notice's section 4 only together with that prompt.
+- **`click_external` and `view` are the one passive-signal exception.** `utils.ts::trackExternalClick()` posts to our own `/feedback` endpoint, which needs the consumer session, so only a signed-in user's activity is recorded. It feeds their personalised feed, the function they asked for, so it is strictly necessary for it. Keep it out of any aggregate-reporting use.
 
 ## Dependency Audit
 

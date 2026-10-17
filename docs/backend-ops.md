@@ -60,12 +60,12 @@ Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). B
 |---|---|---|
 | `img-src` | `'self' https: data:` | event images from arbitrary source hosts |
 | `style-src` | `'self' 'unsafe-inline'` | React inline styles |
-| `script-src` | `'self'`, Google Analytics, one `sha256-…` hash | GA, and `index.html`'s pre-paint theme script |
-| `connect-src` | `'self'`, Google Analytics | GA beacons |
+| `script-src` | `'self'`, one `sha256-…` hash | `index.html`'s pre-paint theme script |
+| `connect-src` | `'self'` | the same-origin `/api/*` proxy |
 | `font-src` | `'self'` | the `@fontsource` faces bundled in `src/main.tsx` |
 
-- **Moving a resource off-origin breaks it silently unless the CSP widens to match.** A CDN font host or an off-platform analytics beacon are the likely cases.
-- **The hash, its drift guard and the GA entries are in [security.md](security.md)'s Frontend CSP section.**
+- **Moving a resource off-origin breaks it silently unless the CSP widens to match.** A CDN font host is the likely case.
+- **The hash and its drift guard are in [security.md](security.md)'s Frontend CSP section.**
 - **The document block applies to `/*`, then un-sets each header on `/api/*` with the `!` prefix.** `_headers` has no negative lookahead. API responses carry only the backend's own `app/main.py::add_security_headers` headers.
 - **`/api/seo-audit` and `/api/prerender-cadence` get their own locked-down block** (`default-src 'none'`, `Cache-Control: no-store`). Their own Functions answer them, so they never reach the backend proxy.
 

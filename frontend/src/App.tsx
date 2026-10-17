@@ -1,17 +1,15 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HelmetProvider } from 'react-helmet-async';
 import { useAuth } from './hooks/useAuth';
 import { useOrganizerAuth } from './hooks/useOrganizerAuth';
 import { useLocalePath } from './hooks/useLocalePath';
-import { PAGEVIEW_TRACK_DELAY_MS } from './constants/analytics';
 import { QUERY_RETRY, QUERY_STALE_TIME } from './constants/api';
 import { LOCALE_ET } from './constants/core';
 import { ROUTES } from './constants/routes';
-import { maskAnalyticsUrl, localizedTo } from './utils';
+import { localizedTo } from './utils';
 import { getStoredLocale } from './lib/auth';
-import { initGtag, trackPageview } from './lib/gtag';
 import ErrorBoundary from './components/ErrorBoundary';
 import Landing from './routes/Landing';
 import Login from './routes/Login';
@@ -79,36 +77,6 @@ function OrganizerProtected({ children }: { children: React.ReactNode }) {
 function Home() {
   const authed = useAuth();
   return authed ? <Feed /> : <Landing />;
-}
-
-// GA4 pageview tracking — a route-change effect rather than gtag.js's own
-// automatic pageview, so every reported path goes through maskAnalyticsUrl
-// first (the /auth/verify magic-link token or an /explore free-text search
-// must never reach Google in a query string). initGtag() itself no-ops with
-// no VITE_GA_MEASUREMENT_ID configured or under Playwright's prerender render
-// pass (see lib/gtag.ts's isPrerenderRender), so this is safe to mount always.
-//
-// The tracking effect is deferred a tick rather than firing synchronously on
-// every pathname change: BareLocaleGate below client-side-redirects a bare
-// URL to a stored non-Estonian locale's prefixed equivalent, which is a real
-// history change, not just a re-render — without the defer, a redirected
-// visit would fire one pageview for the pre-redirect bare path and a second
-// for the post-redirect prefixed path, double-counting one visit. Deferring
-// lets the redirect's own pathname change land first and cancel this timer
-// (the cleanup below) before it ever fires, so only the settled path is sent.
-function GoogleAnalytics() {
-  const location = useLocation();
-  useEffect(() => {
-    initGtag(import.meta.env.VITE_GA_MEASUREMENT_ID);
-  }, []);
-  useEffect(() => {
-    const id = window.setTimeout(
-      () => trackPageview(maskAnalyticsUrl(location.pathname)),
-      PAGEVIEW_TRACK_DELAY_MS,
-    );
-    return () => window.clearTimeout(id);
-  }, [location.pathname]);
-  return null;
 }
 
 // Bare-path locale redirect, applied only to "standard" routes (everything
@@ -211,7 +179,6 @@ export default function App() {
               <Route path="/:locale/*" element={<Protected><NotFound /></Protected>} />
             </Routes>
             <ConditionalFooter />
-            <GoogleAnalytics />
           </BrowserRouter>
         </QueryClientProvider>
       </HelmetProvider>

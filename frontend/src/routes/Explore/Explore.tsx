@@ -13,7 +13,6 @@ import { usePagedQuery } from '../../hooks/usePagedQuery';
 import { usePageSettledFocus } from '../../hooks/usePageSettledFocus';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import { buildExploreItemListJsonLd } from '../../lib/structuredData';
-import { trackEvent } from '../../lib/gtag';
 import EventCard, { type EventData } from '../../components/EventCard';
 import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
@@ -27,22 +26,17 @@ import DateRangeMenu from '../../components/DateRangeMenu';
 import SignInModal from '../../components/SignInModal';
 import UpsellCard from './UpsellCard';
 import { BROWSE_PAGE_SIZE, CATEGORIES, VIBES } from '../../_generated/sharedConstants';
-import { ANALYTICS_EVENTS } from '../../constants/analytics';
 import { API, QUERY_KEYS } from '../../constants/api';
 import { UI_STATE } from '../../constants/core';
 import {
   EXPLORE_AUDIENCE_ALL,
   EXPLORE_AUDIENCE_FOR_YOU,
-  EXPLORE_FILTER_TYPES,
   EXPLORE_SEARCH_DEBOUNCE_MS,
   SORT_DEFAULT,
   SORT_OPTIONS,
   SIGNAL_TO_SIGNIN_TRIGGER,
-  SIGNAL_TO_UPSELL_ACTION,
   SIGN_IN_TRIGGER_FOR_YOU,
-  UPSELL_ACTION_FOR_YOU,
   type DatePreset,
-  type ExploreFilterType,
   type SignInTrigger,
   type SortOption,
 } from '../../constants/explore';
@@ -99,39 +93,25 @@ export default function Explore() {
   // while it's already open is a no-op (requestSignIn below).
   const [signInTrigger, setSignInTrigger] = useState<SignInTrigger | null>(null);
 
-  useEffect(() => {
-    trackEvent(ANALYTICS_EVENTS.exploreView, { signed_in: authed, locale });
-    // Fired once on route landing, not on every auth/locale change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Stable identities (only changing when signInTrigger itself changes, not
   // on every Explore re-render) — passed down to EventCard as
-  // onFeedbackBlocked/onCardClick, so a new reference on every keystroke in
+  // onFeedbackBlocked, so a new reference on every keystroke in
   // the search box doesn't defeat EventCard's memo (issue #235 review).
   const requestSignIn = useCallback((trigger: SignInTrigger) => {
-    // A second trigger click while the modal is already open is a no-op —
-    // signin_modal_open only fires for the click that actually opens it.
+    // A second trigger click while the modal is already open is a no-op.
     setSignInTrigger((current) => {
       if (current !== null) return current;
-      trackEvent(ANALYTICS_EVENTS.signinModalOpen, { trigger });
       return trigger;
     });
   }, []);
 
   const handleFeedbackBlocked = useCallback((signal: Signal) => {
-    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action: SIGNAL_TO_UPSELL_ACTION[signal] });
     requestSignIn(SIGNAL_TO_SIGNIN_TRIGGER[signal]);
   }, [requestSignIn]);
 
   const handleUpsellCtaClick = useCallback(() => {
-    trackEvent(ANALYTICS_EVENTS.exploreUpsellClick, { action: UPSELL_ACTION_FOR_YOU });
     requestSignIn(SIGN_IN_TRIGGER_FOR_YOU);
   }, [requestSignIn]);
-
-  const handleCardClick = useCallback((index: number) => {
-    trackEvent(ANALYTICS_EVENTS.exploreCardClick, { signed_in: authed, position: index });
-  }, [authed]);
 
   const [searchInput, setSearchInput] = useState(filters.q);
 
@@ -151,21 +131,10 @@ export default function Explore() {
   // none of which are memo'd, so a fresh closure per render defeated any
   // future memoization (Big-O audit #5, item 3.6) — mirrors requestSignIn's
   // rationale above for EventCard.
-  // Returns whether the URL changed: a re-pick of the active option pushes
-  // nothing, so the handlers below skip its filter-change analytics too.
   const commitFilters = useCallback(
     (next: ExploreFilters) => setListParams(() => exploreFiltersToSearchParams(next)),
     [setListParams],
   );
-  // filter_type is a fixed vocabulary (EXPLORE_FILTER_TYPES) — see
-  // ANALYTICS_EVENTS.exploreFilterChange in constants/analytics.ts and the Code Quality Rule
-  // on not inlining literal event/param values at call sites.
-  const trackFilterChange = useCallback(
-    (filterType: ExploreFilterType) =>
-      trackEvent(ANALYTICS_EVENTS.exploreFilterChange, { filter_type: filterType, signed_in: authed }),
-    [authed],
-  );
-
   // Debounced write-through: the URL (and thus the query) only updates
   // EXPLORE_SEARCH_DEBOUNCE_MS after the user stops typing. `filters` is a
   // dependency so a chip toggle mid-debounce reschedules with the fresh
@@ -173,10 +142,10 @@ export default function Explore() {
   useEffect(() => {
     if (searchInput === filters.q) return;
     const handle = setTimeout(() => {
-      if (commitFilters({ ...filters, q: searchInput })) trackFilterChange(EXPLORE_FILTER_TYPES.q);
+      commitFilters({ ...filters, q: searchInput });
     }, EXPLORE_SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [searchInput, filters, trackFilterChange, commitFilters]);
+  }, [searchInput, filters, commitFilters]);
 
   // Gated on authed — an anonymous visitor must never call this. The `api`
   // client hard-redirects to /login on any 401, which would break the
@@ -239,36 +208,34 @@ export default function Explore() {
         const preferred = kind === 'category' ? currentUser?.preferred_categories : currentUser?.preferred_vibes;
         if (preferred && !preferred.includes(value)) forYou = false;
       }
-      if (commitFilters({ ...filters, [kind]: next, forYou })) trackFilterChange(EXPLORE_FILTER_TYPES[kind]);
+      commitFilters({ ...filters, [kind]: next, forYou });
     },
-    [filters, currentUser, trackFilterChange, commitFilters],
+    [filters, currentUser, commitFilters],
   );
 
   const setDatePreset = useCallback(
     (preset: DatePreset) => {
-      if (commitFilters({ ...filters, datePreset: preset })) trackFilterChange(EXPLORE_FILTER_TYPES.date);
+      commitFilters({ ...filters, datePreset: preset });
     },
-    [filters, trackFilterChange, commitFilters],
+    [filters, commitFilters],
   );
 
   const setCustomRange = useCallback(
     (from: string, to: string) => {
-      if (commitFilters({ ...filters, datePreset: 'custom', customFrom: from, customTo: to })) {
-        trackFilterChange(EXPLORE_FILTER_TYPES.date);
-      }
+      commitFilters({ ...filters, datePreset: 'custom', customFrom: from, customTo: to });
     },
-    [filters, trackFilterChange, commitFilters],
+    [filters, commitFilters],
   );
 
   const toggleFree = useCallback(() => {
-    if (commitFilters({ ...filters, free: !filters.free })) trackFilterChange(EXPLORE_FILTER_TYPES.free);
-  }, [filters, trackFilterChange, commitFilters]);
+    commitFilters({ ...filters, free: !filters.free });
+  }, [filters, commitFilters]);
 
   const setSort = useCallback(
     (sort: SortOption) => {
-      if (commitFilters({ ...filters, sort })) trackFilterChange(EXPLORE_FILTER_TYPES.sort);
+      commitFilters({ ...filters, sort });
     },
-    [filters, trackFilterChange, commitFilters],
+    [filters, commitFilters],
   );
 
   const setForYou = useCallback(
@@ -279,20 +246,18 @@ export default function Explore() {
         handleUpsellCtaClick();
         return;
       }
-      let changed: boolean;
       if (next) {
         // Fall back to "all" when the persona hasn't loaded yet (or has no
         // preference set) — avoids an accidental empty-selection/no-results
         // flash before /users/me resolves.
         const category = currentUser?.preferred_categories?.length ? currentUser.preferred_categories : [...CATEGORIES];
         const vibe = currentUser?.preferred_vibes?.length ? currentUser.preferred_vibes : [...VIBES];
-        changed = commitFilters({ ...filters, forYou: true, category, vibe });
+        commitFilters({ ...filters, forYou: true, category, vibe });
       } else {
-        changed = commitFilters({ ...filters, forYou: false, category: [...CATEGORIES], vibe: [...VIBES] });
+        commitFilters({ ...filters, forYou: false, category: [...CATEGORIES], vibe: [...VIBES] });
       }
-      if (changed) trackFilterChange(EXPLORE_FILTER_TYPES.forYou);
     },
-    [authed, currentUser, filters, trackFilterChange, commitFilters, handleUpsellCtaClick],
+    [authed, currentUser, filters, commitFilters, handleUpsellCtaClick],
   );
 
   const clearFilters = useCallback(() => {
@@ -492,7 +457,6 @@ export default function Explore() {
                   nav={nav}
                   variant="standard"
                   onFeedbackBlocked={authed ? undefined : handleFeedbackBlocked}
-                  onCardClick={handleCardClick}
                 />
               ))}
             </div>

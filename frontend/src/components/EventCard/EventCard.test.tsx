@@ -191,7 +191,7 @@ describe('EventCard', () => {
     });
   });
 
-  describe('onFeedbackBlocked / onCardClick (issue #235)', () => {
+  describe('onFeedbackBlocked (issue #235)', () => {
     it('routes a bookmark press through onFeedbackBlocked instead of useFeedback when set', async () => {
       const { useFeedback } = await import('../../hooks/useFeedback');
       const sendFeedback = vi.fn();
@@ -216,16 +216,6 @@ describe('EventCard', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Like' }));
 
       expect(sendFeedback).toHaveBeenCalledWith('like');
-    });
-
-    it('fires onCardClick with the card index when the title link is clicked', async () => {
-      const onCardClick = vi.fn();
-      const event = makeEvent({ title: 'Cool Concert' });
-      renderWithProviders(<EventCard event={event} index={2} locale="en" onCardClick={onCardClick} />);
-
-      await userEvent.click(screen.getByRole('link', { name: 'Cool Concert' }));
-
-      expect(onCardClick).toHaveBeenCalledWith(2);
     });
   });
 });

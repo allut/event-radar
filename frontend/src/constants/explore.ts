@@ -45,32 +45,13 @@ export const SIGN_IN_TRIGGER_COPY: Record<SignInTrigger, { headingKey: string; b
   for_you: { headingKey: 'sign_in_modal_foryou_heading', bodyKey: 'sign_in_modal_foryou_body' },
 };
 // What an anonymous visitor's blocked feedback click maps to: the
-// explore_upsell_click `action` param, and the SignInTrigger copy variant.
-export const SIGNAL_TO_UPSELL_ACTION: Record<Signal, string> = {
-  bookmark: 'save',
-  like: 'thumbs_up',
-  dislike: 'thumbs_down',
-};
+// SignInTrigger copy variant.
 export const SIGNAL_TO_SIGNIN_TRIGGER: Record<Signal, SignInTrigger> = {
   bookmark: 'save',
   like: 'thumbs',
   dislike: 'thumbs',
 };
-export const UPSELL_ACTION_FOR_YOU = 'for_you';
 
-// explore_filter_change's `filter_type` param (issue #235) is a fixed
-// vocabulary — the facet name, or which other control changed — centralized
-// here rather than inlined as string literals at each Explore.tsx call site.
-export const EXPLORE_FILTER_TYPES = {
-  category: 'category',
-  vibe: 'vibe',
-  date: 'date',
-  free: 'free',
-  sort: 'sort',
-  forYou: 'for_you',
-  q: 'q',
-} as const;
-export type ExploreFilterType = (typeof EXPLORE_FILTER_TYPES)[keyof typeof EXPLORE_FILTER_TYPES];
 export const SORT_DEFAULT: SortOption = 'relevance';
 export const DATE_PRESET_DEFAULT: DatePreset = 'any';
 export const DATE_PRESET_TODAY: DatePreset = 'today';

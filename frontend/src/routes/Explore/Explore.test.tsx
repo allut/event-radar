@@ -25,31 +25,22 @@ vi.mock('../../api/client', () => ({
 }));
 
 vi.mock('../../components/EventCard', () => ({
-  default: ({ event, index, onFeedbackBlocked, onCardClick }: {
+  default: ({ event, onFeedbackBlocked }: {
     event: { id: number; title: string };
-    index: number;
     onFeedbackBlocked?: (signal: string) => void;
-    onCardClick?: (index: number) => void;
   }) => (
     <div data-testid="event-card">
       {event.title}
       {onFeedbackBlocked && (
         <button onClick={() => onFeedbackBlocked('bookmark')}>block-bookmark-{event.id}</button>
       )}
-      {onCardClick && <button onClick={() => onCardClick(index)}>card-click-{event.id}</button>}
     </div>
   ),
 }));
 
-vi.mock('../../lib/gtag', () => ({
-  trackEvent: vi.fn(),
-}));
-
 import { api } from '../../api/client';
-import { trackEvent } from '../../lib/gtag';
 import { isAuthenticated } from '../../lib/auth';
 const mockGet = vi.mocked(api.get);
-const mockTrackEvent = vi.mocked(trackEvent);
 const mockIsAuthenticated = vi.mocked(isAuthenticated);
 
 interface ExploreResponse {
@@ -118,7 +109,6 @@ function renderExplore(route: string) {
 
 beforeEach(() => {
   mockGet.mockReset();
-  mockTrackEvent.mockClear();
   mockIsAuthenticated.mockReturnValue(true);
 });
 
@@ -606,12 +596,6 @@ describe('Explore', () => {
       expect(calls.some((c) => c.startsWith('/users/me'))).toBe(false);
     });
 
-    it('fires explore_view with signed_in: false on landing', async () => {
-      mockGet.mockImplementation(() => Promise.resolve(exploreResponse([])));
-      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
-      await waitFor(() => expect(mockTrackEvent).toHaveBeenCalledWith('explore_view', { signed_in: false, locale: 'en' }));
-    });
-
     it('renders the persistent upsell card and opens the sign-in modal from its CTA', async () => {
       mockGet.mockImplementation(() => Promise.resolve(exploreResponse([makeEvent({ id: 1 })])));
       renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
@@ -621,8 +605,6 @@ describe('Explore', () => {
 
       expect(screen.getByRole('dialog', { name: 'Sign in' })).toBeInTheDocument();
       expect(screen.getByText('Sign in for your picks')).toBeInTheDocument();
-      expect(mockTrackEvent).toHaveBeenCalledWith('explore_upsell_click', { action: 'for_you' });
-      expect(mockTrackEvent).toHaveBeenCalledWith('signin_modal_open', { trigger: 'for_you' });
     });
 
     it('intercepts a blocked feedback press into the save/thumbs sign-in modal without a second trigger reopening it', async () => {
@@ -638,25 +620,11 @@ describe('Explore', () => {
 
       await userEvent.click(screen.getByText('block-bookmark-1'));
       expect(screen.getByText('Sign in to save this')).toBeInTheDocument();
-      expect(mockTrackEvent).toHaveBeenCalledWith('explore_upsell_click', { action: 'save' });
-      expect(mockTrackEvent).toHaveBeenCalledWith('signin_modal_open', { trigger: 'save' });
 
-      mockTrackEvent.mockClear();
-      // A second trigger click while the modal is open is a no-op — no
-      // second signin_modal_open, and the modal keeps its original copy.
+      // A second trigger click while the modal is open is a no-op — the
+      // modal keeps its original copy.
       await userEvent.click(screen.getByText('block-bookmark-2'));
-      expect(mockTrackEvent).not.toHaveBeenCalledWith('signin_modal_open', expect.anything());
       expect(screen.getByText('Sign in to save this')).toBeInTheDocument();
-    });
-
-    it('fires explore_card_click with signed_in and position when a card is opened', async () => {
-      mockGet.mockImplementation(() => Promise.resolve(exploreResponse([makeEvent({ id: 1 }), makeEvent({ id: 2 })])));
-      renderWithProviders(<Explore />, { route: '/en/explore', pathPattern: '/:locale/explore' });
-      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
-
-      await userEvent.click(screen.getByText('card-click-1'));
-
-      expect(mockTrackEvent).toHaveBeenCalledWith('explore_card_click', { signed_in: false, position: 0 });
     });
 
     it('turning on For-you intercepts into the sign-in modal instead of applying the filter', async () => {
@@ -711,7 +679,7 @@ describe('Explore', () => {
     });
   });
 
-  it('keeps the page and tracks nothing when the already-active "All events" option is picked again', async () => {
+  it('keeps the page when the already-active "All events" option is picked again', async () => {
     mockPagedExplore(100);
     renderExplore('/en/explore?page=3');
     await waitFor(() => expect(screen.getByText('Event 49')).toBeInTheDocument());
@@ -720,10 +688,5 @@ describe('Explore', () => {
 
     expect(screen.getByTestId('location-probe')).toHaveTextContent(/^\/en\/explore\?page=3$/);
     expect(screen.getByText('Event 49')).toBeInTheDocument();
-    expect(mockTrackEvent).not.toHaveBeenCalledWith('explore_filter_change', expect.anything());
-
-    // A real change still tracks.
-    await userEvent.click(screen.getByRole('button', { name: 'Free only' }));
-    expect(mockTrackEvent).toHaveBeenCalledWith('explore_filter_change', { filter_type: 'free', signed_in: true });
   });
 });

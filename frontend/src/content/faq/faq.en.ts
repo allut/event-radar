@@ -209,7 +209,7 @@ const doc: FaqDoc = {
             {
               kind: 'p',
               content: [
-                "We set one cookie, to keep you signed in. Our analytics run without cookies, and page addresses are masked before they're sent. The ",
+                'We set one cookie, to keep you signed in, and we run no analytics or advertising trackers. The ',
                 { text: 'Privacy Policy', to: ROUTES.privacy },
                 ' has the full list.',
               ],

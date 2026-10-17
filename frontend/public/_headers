@@ -4,7 +4,7 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), interest-cohort=()
-  Content-Security-Policy: default-src 'self'; script-src 'self' https://www.googletagmanager.com 'sha256-TCk1YWEjk2XOsrtzphJNED8CEGUcFB3ZaPeKN2SZC5w='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https: data:; connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'; frame-src 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'sha256-TCk1YWEjk2XOsrtzphJNED8CEGUcFB3ZaPeKN2SZC5w='; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'; frame-src 'none'
 
 # Everything under /api/ (proxied straight through to the Render backend by
 # functions/api/[[path]].ts, except the two exact paths below) must carry

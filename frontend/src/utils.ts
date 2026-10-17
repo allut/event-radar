@@ -13,7 +13,6 @@ import {
   DEFAULT_LOCALE_CODE,
   TALLINN_TZ,
 } from './_generated/sharedConstants';
-import { ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE } from './constants/analytics';
 import { API, QUERY_KEYS } from './constants/api';
 import { CLAIM_JUSTIFICATION_REQUIRED_ERROR } from './constants/claims';
 import {
@@ -168,17 +167,6 @@ export function vibeOptions(locale: string): { value: string; label: string }[] 
  * than by auth state alone. */
 export function isOrganizerPortalPath(pathname: string): boolean {
   return /\/organizer(\/|$)/.test(pathname);
-}
-
-/** Reshapes a URL before it's forwarded to Google Analytics: strips the query string and
- * hash (query params can carry sensitive values — the /auth/verify magic-link token, an
- * /explore free-text search — that must never reach a third-party analytics vendor) and
- * groups `/events/:id` under one row instead of one per event id. */
-export function maskAnalyticsUrl(url: string): string {
-  const pathname = url.split(/[?#]/)[0];
-  return pathname
-    .replace(ANALYTICS_EVENT_PATH_RE, '$1/events/[id]')
-    .replace(ANALYTICS_ORGANIZER_EDIT_PATH_RE, '$1/organizer/events/[id]/edit');
 }
 
 /** Defense-in-depth render guard: only allow the given URL schemes (http(s) by

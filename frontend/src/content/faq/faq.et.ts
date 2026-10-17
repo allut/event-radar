@@ -211,7 +211,7 @@ const doc: FaqDoc = {
             {
               kind: 'p',
               content: [
-                'Kasutame ühte küpsist, et hoida sind sisselogituna. Meie analüütika töötab ilma küpsisteta ja lehtede aadressid maskeeritakse enne saatmist. Täielik loetelu on ',
+                'Kasutame ühte küpsist, et hoida sind sisselogituna, ning me ei kasuta analüütika- ega reklaamijälgijaid. Täielik loetelu on ',
                 { text: 'privaatsuspoliitikas', to: ROUTES.privacy },
                 '.',
               ],

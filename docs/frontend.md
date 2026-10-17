@@ -61,7 +61,7 @@ Every list pages with a numbered pager and a `?page` URL param. There is no Load
 
 - **A list composes three pieces: `hooks/usePageParam.ts`, `hooks/usePagedQuery.ts` and `components/Pager/`.** Change paging behaviour there, never per route.
 - **`usePageParam` owns `?page` and `setListParams`.** It reads and normalizes `?page` (page 1 omits it, a malformed value replaces to page 1). `setListParams` is the one writer for filter, sort, search and tab params: it drops `page` and default-valued params in a single push.
-- **`setListParams` skips a write where only `page` would change**, such as re-picking the active tab, sort or preset. It returns false then, so Explore skips that click's filter-change analytics.
+- **`setListParams` skips a write where only `page` would change**, such as re-picking the active tab, sort or preset. It returns false then.
 - **`usePagedQuery` owns the fetch.** Give it `queryKey`, `pageSize`, `fetchPage` and a `select` that maps the response to `{ items, total, offset }`. It keeps the previous page while the next loads, clamps a past-end page, syncs a server-placed offset and calls `onPageSettled`.
 - **`<Pager {...pagerProps} />` renders the links and the live-region announcement**, with `pagerProps` returned by `usePagedQuery`. The caller adds `locale`, `liveNoun` (`events` or `items`), a `className` for placement and, if needed, `dropOnPageChange`. Its strings come from shared/i18n.
 - **The request carries `limit` and `offset` only.** `PAGE_PARAM` in `constants/api.ts` names them, and `?page` is never sent to the backend. Each list's page size is a constant in `frontend/src/constants/`.
