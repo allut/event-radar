@@ -32,16 +32,25 @@ the facts in
   claims, except for a board member's breach of duty. Products under the same
   OÜ share that liability. A product that grows risky can move into its own
   company later.
-- **The overhead is small but real.** It is €200 to found, then about €115 a
-  year (up to €125 at the revenue cap): self-kept books in e-arveldaja, an
-  accountant for the annual report, and the VAT below. Anything paid out owes
-  22/78. Running costs are about €125 a year, so deductibility hardly
+- **The overhead is small but real.** It is €200 to found, then about €85 a
+  year: self-kept books in e-arveldaja and an accountant for the annual
+  report. The VAT on its own costs is deductible (below). Anything paid out
+  owes 22/78. Running costs are about €125 a year, so deductibility hardly
   mattered.
-- **The OÜ is a limited VAT payer from its first foreign vendor bill**
-  (KMS § 21(1)). It self-assesses 24% on the Cloudflare, Render and Stripe
-  Invoicing bills with no deduction, about €30 a year, and files a KMD for
-  each month with such bills. Promotions still carry no VAT. Found in
-  [limited VAT payer status](https://github.com/allut/event-radar/issues/591).
+- **The OÜ registers fully for VAT** (KMS § 20(2)), applying at founding.
+  The VAT number gates `PROMOTIONS_OFFER_ENABLED`; there is no launch as a
+  limited VAT payer. Promotions are sold at €5/day + VAT at the applicable
+  rate (€6.20 at 24%), so the Operator keeps €5 whatever the rate, and Stripe
+  adds one manual 24% Tax Rate. It deducts the VAT on vendor bills and
+  Estonian purchases and files one KMD a month; KMD INF never triggers on
+  sales, which stay under €1,000 per buyer a month. Organizers without a VAT
+  number, about half of buyers by count, pay 24% more. The registration
+  covers the legal person, so every product the OÜ sells charges VAT.
+  Staying a limited VAT payer (§ 21(1)) at €5 with no VAT was rejected,
+  though it cost the Operator only about €80 a year more. Decided in
+  [limited or full VAT registration](https://github.com/allut/event-radar/issues/596),
+  from [limited VAT payer status](https://github.com/allut/event-radar/issues/591)
+  and [share of Organizers that are VAT-registered](https://github.com/allut/event-radar/issues/595).
 - **Switching later is expensive.** A new legal person means a new Stripe
   account, new Terms and Organizer terms, a new Privacy notice controller and
   a new invoice series. So the switch from the owner, who runs Event Radar as
