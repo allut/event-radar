@@ -22,5 +22,5 @@ fi
 
 if staged '^(CLAUDE\.md|README\.md|docs/)'; then
   echo "pre-commit: docs style"
-  bash backend/scripts/scratch-test.sh tests/test_docs_style.py -q
+  out=$(bash backend/scripts/scratch-test.sh tests/test_docs_style.py -q 2>&1) || { echo "$out"; exit 1; }
 fi
