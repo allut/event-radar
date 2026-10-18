@@ -1,6 +1,7 @@
 """Automatic Promotion lifecycle (#602), run by a scheduled sweep.
 
-Void an `unpaid` Promotion once its start date begins; end a `paid` one early
+Void an `unpaid` Promotion once its start date begins, or once its card checkout
+is stale (session expiry plus an hour); end a `paid` one early
 when its event is cancelled (carrying the cancellation cause over as
 `end_reason`) or when the claim that gave its Organizer ownership is gone
 (`claim_revoked`). A dormant claim or a lost dedup collision never ends one:
@@ -16,9 +17,9 @@ expiry (one SELECT and two owner queries) and the flush.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.admin import (
@@ -26,11 +27,13 @@ from app.constants.admin import (
     ADMIN_ACTION_PROMOTION_SYSTEM_VOID,
 )
 from app.constants.events import EVENT_STATUS_CANCELLED
-from app.constants.log_events import LOG_EVENT_ADMIN_ACTION, LOG_EVENT_EMAIL_SEND_FAILED
+from app.constants.log_events import LOG_EVENT_EMAIL_SEND_FAILED
 from app.constants.promotions import (
     PROMOTION_AUTO_END_EMAIL_REASONS,
     PROMOTION_AUTO_END_NOTES,
     PROMOTION_END_REASON_CANCELLATION_FALLBACK,
+    PROMOTION_CHECKOUT_SWEEP_GRACE_SECONDS,
+    PROMOTION_END_REASON_CHECKOUT_EXPIRED,
     PROMOTION_END_REASON_CLAIM_REVOKED,
     PROMOTION_END_REASON_UNPAID_AT_START,
     PROMOTION_STATUS_ENDED_EARLY,
@@ -40,7 +43,8 @@ from app.constants.promotions import (
 )
 from app.email.promotion_notice import send_promotion_ended_email
 from app.events.localize import resolve_title
-from app.models.models import AdminAction, Event, Organizer, Promotion
+from app.models.models import Event, Organizer, Promotion
+from app.promotions.audit import record_system_action
 from app.promotions.cap import lock_cap
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.requests import expire_requests
@@ -50,23 +54,7 @@ log = logging.getLogger(__name__)
 
 
 def _audit(db: AsyncSession, promotion: Promotion, action: str, reason: str) -> None:
-    result = {
-        "actor": "system",
-        "status": promotion.status,
-        "end_reason": reason,
-        "event_id": promotion.event_id,
-    }
-    db.add(AdminAction(action=action, target=str(promotion.id), result=result))
-    log.info(
-        "admin action: %s",
-        action,
-        extra={
-            "event": LOG_EVENT_ADMIN_ACTION,
-            "action": action,
-            "target": promotion.id,
-            "result": result,
-        },
-    )
+    record_system_action(db, promotion, action, end_reason=reason)
 
 
 def _stop(promotion: Promotion, status: str, reason: str, now: datetime) -> None:
@@ -84,21 +72,32 @@ async def sweep_promotions(db: AsyncSession, now: datetime | None = None) -> dic
     durable change; wire it with `commit=False`."""
     now = now or now_tallinn()
     today = tallinn_today(now)
+    stale_before = now - timedelta(seconds=PROMOTION_CHECKOUT_SWEEP_GRACE_SECONDS)
     await lock_cap(db)
 
     unpaid = (
         await db.scalars(
             select(Promotion)
-            .where(Promotion.status == PROMOTION_STATUS_UNPAID, Promotion.start_date <= today)
+            .where(
+                Promotion.status == PROMOTION_STATUS_UNPAID,
+                or_(
+                    Promotion.start_date <= today,
+                    # An abandoned card checkout: past its session expiry plus the grace.
+                    Promotion.checkout_expires_at < stale_before,
+                ),
+            )
             .with_for_update()
             .execution_options(populate_existing=True)
         )
     ).all()
     for promotion in unpaid:
-        _stop(promotion, PROMOTION_STATUS_VOID, PROMOTION_END_REASON_UNPAID_AT_START, now)
-        _audit(
-            db, promotion, ADMIN_ACTION_PROMOTION_SYSTEM_VOID, PROMOTION_END_REASON_UNPAID_AT_START
+        reason = (
+            PROMOTION_END_REASON_UNPAID_AT_START
+            if promotion.start_date <= today
+            else PROMOTION_END_REASON_CHECKOUT_EXPIRED
         )
+        _stop(promotion, PROMOTION_STATUS_VOID, reason, now)
+        _audit(db, promotion, ADMIN_ACTION_PROMOTION_SYSTEM_VOID, reason)
 
     rows = (
         await db.execute(

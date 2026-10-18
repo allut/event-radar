@@ -22,6 +22,11 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 - **Cross-router auth dependencies live in `app/auth/dependencies.py`** so no router imports another router's module. Router modules stay leaves of the import graph.
 - **Every frontend request goes through `frontend/src/api/client.ts`.** It owns the per-track 401 handling, so a raw `fetch` misses the session-expiry redirect. See [frontend.md](frontend.md)'s API Client section.
 
+### Outbound Adapters
+
+- **Each external service the Promotions code calls sits behind a `Protocol` in `app/integrations/`.** `registry.py` is the Äriregister lookup and `payments.py` is Stripe. Domain code takes the adapter as an argument, and routers get it through `app/integrations/providers.py`.
+- **Tests swap in `backend/tests/promotions/fakes.py`, never patch an SDK or `httpx`.** The fakes script found, deleted, not-found and outage for the register, and record every Stripe call. The Äriregister call itself goes through `http_get()`.
+
 ### Underscore Names
 
 - **A leading underscore means module-private, so an imported `_name` is a dishonest API.** Drop the underscore once a second module needs the name.
@@ -55,12 +60,13 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 
 ### HTTP Retry Bypasses
 
-Four groups skip `http_get()`/`http_post()`. Add another only with a reason recorded here.
+These groups skip `http_get()`/`http_post()`. Add another only with a reason recorded here.
 
 - **Request-path Resend sends use `app/email/resend.py::send_resend_email()`, a single attempt.** A five-attempt backoff would stall the user's response for up to about 150 seconds. This covers the magic link, contact form, report notify, reporter outcome and claim resolution sends.
 - **Fan-out Resend callers share one client instead of retrying per send.** The report-outcome and claim-expiry sweeps pass `resend_http_client()` into each `send_resend_email()` call.
 - **`app/llm/router.py` calls each `LLM_PROVIDERS` entry directly.** The Groq → Cloudflare Workers AI → Mistral fallback chain is the retry strategy. A tenacity backoff underneath would fight its fast-fail-and-advance behaviour.
 - **`app/logging_config.py` ships logs with a sync `httpx.Client`.** It runs on the `QueueListener` background thread, which can't await the async `http_post()`.
+- **`app/integrations/payments.py` calls Stripe through the official `stripe` SDK.** The SDK signs requests, sets idempotency keys and verifies webhook signatures, and rebuilding that on `http_post()` would be riskier than the bypass. It is the only module that imports `stripe`.
 - **`app/auth/google_oauth.py`'s `PyJWKClient` fetches Google's JWKS itself, with its own caching.** Routing it through `http_get()` would mean hand-rolling that cache. ADR 0002 records the same trade-off.
 
 These are not bypasses, and they show where the line falls:

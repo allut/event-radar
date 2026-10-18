@@ -69,6 +69,15 @@ def vat_cents(net_cents: int, vat_rate_percent: Decimal) -> int:
     return int((Decimal(net_cents) * vat_rate_percent / 100).quantize(Decimal(1), ROUND_HALF_UP))
 
 
+def split_vat_cents(gross_cents: int, vat_rate_percent: Decimal) -> int:
+    """The VAT part of a gross amount (the inverse of `vat_cents`)."""
+    return int(
+        (Decimal(gross_cents) * vat_rate_percent / (100 + vat_rate_percent)).quantize(
+            Decimal(1), ROUND_HALF_UP
+        )
+    )
+
+
 def net_price_cents(days: int, is_complimentary: bool) -> int:
     return 0 if is_complimentary else days * PROMOTION_DAY_PRICE_CENTS
 

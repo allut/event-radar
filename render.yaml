@@ -70,3 +70,17 @@ services:
         sync: false
       - key: GOOGLE_SIGNIN_ORGANIZER_ENABLED
         sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_TAX_RATE_ID
+        sync: false
+      - key: PROMOTIONS_INVOICE_FOOTER
+        sync: false
+      - key: ARIREGISTER_BASE_URL
+        sync: false
+      - key: ARIREGISTER_USERNAME
+        sync: false
+      - key: ARIREGISTER_PASSWORD
+        sync: false

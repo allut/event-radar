@@ -88,3 +88,18 @@ async def send_promotion_request_declined_email(
         "email.promotion_request_declined", to_email, event_title, start, end, reason,
         locale, http_client, "promotion-request-declined",
     )
+
+
+async def send_promotion_late_refund_email(
+    to_email: str,
+    event_title: str,
+    start: date,
+    end: date,
+    reason: str,
+    locale: str,
+    http_client: httpx.AsyncClient | None = None,
+) -> None:
+    await _send_notice(
+        "email.promotion_late_refund", to_email, event_title, start, end, reason, locale,
+        http_client, "promotion-late-refund",
+    )

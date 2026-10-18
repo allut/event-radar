@@ -150,6 +150,15 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 - **The sender-domain check runs before the `RawInboundEmail` insert**, so a rejected sender's content is never stored.
 - **`_sender_domain_allowed()` trusts the forgeable `From` header.** It's dormant while `NEWSLETTER_SENDER_ALLOWED_DOMAINS` is empty. Never add a domain without also requiring an SPF/DKIM/DMARC pass for it.
 
+## Stripe Webhook
+
+- **`POST /webhooks/stripe` (public `/api/webhooks/stripe`) sits outside all three auth tracks.** The `Stripe-Signature` over the raw body is the only credential. `routers/stripe_webhook.py` verifies it through `PaymentGateway.construct_event()` with a 300-second tolerance, and answers 400 for a bad, missing or stale one before any work.
+- **An unset `STRIPE_WEBHOOK_SECRET` also answers 400.** The route never fails open, even in development.
+- **It has its own `RATE_LIMIT_WEBHOOK_STRIPE` bucket,** generous because Stripe retries and bursts. There is no `Origin` header, so the CSRF check lets it through.
+- **Replays are no-ops.** `app/promotions/stripe_events.py` inserts each event id into `processed_stripe_events` in the handler's transaction. A replay returns 200 with `duplicate`, and a failing handler rolls the id back so Stripe retries.
+- **Handlers read current state and never assume order.** An `expired` after a `completed` changes nothing. A `completed` after the hold was voided is refunded in full and stays void.
+- **A refund failure answers 500 on purpose.** The refund carries an idempotency key per Promotion, so Stripe's retry can't refund twice.
+
 ## Frontend CSP
 
 `frontend/public/_headers` holds the SPA document's headers. [backend-ops.md](backend-ops.md)'s SPA Security Headers section describes the file's layout and the full policy. This section covers the parts that fail silently.

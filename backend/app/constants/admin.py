@@ -53,6 +53,9 @@ ADMIN_ACTION_PROMOTION_SYSTEM_END = "promotion_system_end"
 # so these stay out of PROMOTION_ADMIN_ACTIONS (the Promotion detail's audit).
 ADMIN_ACTION_PROMOTION_REQUEST_GRANT = "promotion_request_grant"
 ADMIN_ACTION_PROMOTION_REQUEST_DECLINE = "promotion_request_decline"
+# Written by the Stripe webhook (#618, #619), not by an admin.
+ADMIN_ACTION_PROMOTION_SYSTEM_PAID = "promotion_system_paid"
+ADMIN_ACTION_PROMOTION_SYSTEM_LATE_REFUND = "promotion_system_late_refund"
 PROMOTION_ADMIN_ACTIONS = frozenset(
     {
         ADMIN_ACTION_PROMOTION_GRANT,
@@ -65,6 +68,8 @@ PROMOTION_ADMIN_ACTIONS = frozenset(
         ADMIN_ACTION_PROMOTION_CLEAR_RESTRICTION,
         ADMIN_ACTION_PROMOTION_SYSTEM_VOID,
         ADMIN_ACTION_PROMOTION_SYSTEM_END,
+        ADMIN_ACTION_PROMOTION_SYSTEM_PAID,
+        ADMIN_ACTION_PROMOTION_SYSTEM_LATE_REFUND,
     }
 )
 # `action` field values for the /admin/pipeline job triggers (issue #159).

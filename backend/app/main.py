@@ -124,6 +124,8 @@ from app.db import run_in_session
 from app.constants.promotions import PROMOTION_COUNTER_FLUSH_SECONDS, PROMOTION_SWEEP_SECONDS
 from app.promotions.counters import flush as flush_promotion_counters
 from app.promotions.sweep import sweep_promotions
+from app.routers.organizer_promotion_checkout import router as organizer_promotion_checkout_router
+from app.routers.stripe_webhook import router as stripe_webhook_router
 from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_publishers, seed_sources
 
@@ -804,6 +806,8 @@ app.include_router(reports_router)
 app.include_router(settings_router)
 app.include_router(unsubscribe_router)
 app.include_router(webhooks_router)
+app.include_router(stripe_webhook_router)
+app.include_router(organizer_promotion_checkout_router)
 
 
 @app.get("/health")

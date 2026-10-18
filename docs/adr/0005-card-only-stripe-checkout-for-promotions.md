@@ -1,13 +1,16 @@
 # Card-only Stripe checkout for Promotions; bank transfer goes through admin requests
 
-Status: accepted
+Status: accepted (amended: EU VAT-number buyers dropped from the request path)
 
 Self-serve Promotions are paid through Stripe Checkout with Stripe's
 post-payment invoice, and only by card. Stripe's Pay by Bank doesn't reach
 Estonian payers, so Swedbank, SEB and LHV bank links aren't offered. An
-Organizer who wants to pay by bank transfer, or a buyer with an EU VAT
-number, sends a Promotion request instead. An admin grants it into an
-`unpaid` Promotion and invoices it off-platform. Decided in
+Organizer who wants to pay by bank transfer sends a Promotion request
+instead. An admin grants it into an `unpaid` Promotion and invoices it
+off-platform. Buyers with an EU VAT number are out of scope on the request
+path: Promotions are sold to Estonian-registered businesses only, so no
+reverse-charge invoice is issued (amended per
+[accounting and operator setup](https://github.com/allut/event-radar/issues/583)). Decided in
 [self-serve checkout and invoicing](https://github.com/allut/event-radar/issues/578).
 The provider research is in
 [payment and invoicing providers](https://github.com/allut/event-radar/issues/577).

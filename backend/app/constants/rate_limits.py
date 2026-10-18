@@ -6,6 +6,14 @@
 RATE_LIMIT_AUTH_REQUEST_LINK = "10/minute"
 RATE_LIMIT_AUTH_VERIFY = "30/minute"
 RATE_LIMIT_WEBHOOK_INBOUND_MAIL = "60/minute"
+# Stripe webhook (routers/stripe_webhook.py): its own bucket, generous because Stripe
+# retries and bursts, and every request is signature-verified before any work.
+RATE_LIMIT_WEBHOOK_STRIPE = "300/minute"
+# Organizer Promotion checkout start and Äriregister lookup
+# (routers/organizer_promotion_checkout.py): session-gated; a checkout start
+# writes a row and calls Stripe, a lookup calls the register (cached 24 h).
+RATE_LIMIT_PROMOTION_CHECKOUT = "10/minute"
+RATE_LIMIT_PROMOTION_REGISTRY_LOOKUP = "20/minute"
 # Public digest unsubscribe/resubscribe (routers/unsubscribe.py) — no auth, token-verified.
 RATE_LIMIT_UNSUBSCRIBE = "30/minute"
 # Public contact form (routers/contact.py) — no auth; tight cap since each hit sends an email.

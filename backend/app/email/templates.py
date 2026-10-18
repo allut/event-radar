@@ -218,3 +218,10 @@ PROMOTION_REQUEST_NOTIFY_TEXT = (
     "{organizer} requested a Promotion of {title} ({start} to {end}) for "
     "{advertiser}.\n\nReview: {href}\n"
 )
+# Admin notices for card payments (#618, #619): one generic shape, the headline
+# says what happened. Sent to the contact address with a deep link.
+PROMOTION_PAYMENT_NOTIFY_SUBJECT = "[Event Radar] {headline}"
+PROMOTION_PAYMENT_NOTIFY_HTML = (
+    "<p><strong>{headline}</strong></p><p>{detail}</p><p><a href='{href}'>Open in the admin console</a></p>"
+)
+PROMOTION_PAYMENT_NOTIFY_TEXT = "{headline}\n\n{detail}\n\nOpen: {href}\n"

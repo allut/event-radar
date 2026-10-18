@@ -27,6 +27,7 @@ from app.constants.promotions import (
 from app.models.models import AdminAction, Event, Organizer, Promotion, PromotionDailyStat
 from app.promotions.grant import net_price_cents, vat_cents
 from app.promotions.owners import resolve_owner_ids
+from app.promotions.refunds import refund_prefill
 from app.promotions.restriction import is_restricted
 from app.promotions.snapshots import list_snapshots, serialize_snapshot
 from app.promotions.windows import (
@@ -100,6 +101,14 @@ def serialize_promotion(
             }
             if promotion.restriction_cleared is not None
             else None
+        ),
+        "invoice_url": promotion.invoice_url,
+        "awaiting_checkout": (
+            promotion.status == PROMOTION_STATUS_UNPAID
+            and promotion.stripe_checkout_session_id is not None
+        ),
+        "checkout_expires_at": (
+            promotion.checkout_expires_at.isoformat() if promotion.checkout_expires_at else None
         ),
         "created_at": promotion.created_at.isoformat() if promotion.created_at else None,
     }
@@ -265,6 +274,8 @@ async def promotion_detail(db: AsyncSession, promotion: Promotion, now: datetime
         and is_restricted(event.promotion_restriction)
         and promotion.restriction_cleared != event.promotion_restriction
     )
+    stored = (await load_daily_stats(db, [promotion.id]))[promotion.id]
+    payload["refund_prefill"] = refund_prefill(promotion, stored, today)
     payload["repoint_candidates"] = await repoint_candidates(db, promotion, event)
     payload["snapshots"] = [serialize_snapshot(sn) for sn in await list_snapshots(db, promotion.id)]
     payload["audit"] = [

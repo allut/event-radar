@@ -1166,6 +1166,17 @@ class Promotion(Base):
         Index("ix_promotions_organizer_id", "organizer_id"),
         # Cap accounting and the list read promotions by window.
         Index("ix_promotions_status_window", "status", "start_date", "end_date"),
+        Index(
+            "uq_promotions_stripe_checkout_session_id",
+            "stripe_checkout_session_id",
+            unique=True,
+            postgresql_where=text("stripe_checkout_session_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_promotions_stripe_payment_intent_id",
+            "stripe_payment_intent_id",
+            postgresql_where=text("stripe_payment_intent_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -1225,6 +1236,24 @@ class Promotion(Base):
     source_request_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("promotion_requests.id", ondelete="SET NULL"), nullable=True
     )
+    # Card checkout (#618). A manual or complimentary Promotion leaves all NULL.
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    stripe_checkout_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_payment_intent_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_invoice_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    checkout_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    invoice_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # What the Organizer attested and accepted at checkout, and which wording.
+    content_policy_attested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    content_policy_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    terms_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    terms_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -1292,6 +1321,38 @@ class PromotionRequest(Base):
 
     event: Mapped["Event"] = relationship()
     organizer: Mapped["Organizer"] = relationship()
+
+
+class StripeCustomer(Base):
+    """The Stripe Customer an Organizer pays as for one registry code (#618),
+    so a repeat checkout reuses it instead of creating another."""
+
+    __tablename__ = "stripe_customers"
+    __table_args__ = (
+        UniqueConstraint("organizer_id", "registry_code", name="uq_stripe_customers_organizer_code"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    organizer_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizers.id", ondelete="CASCADE"), nullable=False
+    )
+    registry_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    stripe_customer_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class ProcessedStripeEvent(Base):
+    """A Stripe event id the webhook has handled (#618): a replay finds its id
+    here and changes nothing."""
+
+    __tablename__ = "processed_stripe_events"
+
+    stripe_event_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class PromotionDailyStat(Base):

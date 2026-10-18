@@ -18,3 +18,4 @@ slowapi==0.1.9
 python-multipart==0.0.31
 pyotp==2.9.0
 PyJWT[crypto]==2.15.0
+stripe==16.0.0

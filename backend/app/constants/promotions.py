@@ -258,6 +258,8 @@ PROMOTION_COUNTER_FLUSH_SECONDS = 60
 # effect within a minute.
 PROMOTION_SWEEP_SECONDS = 60
 PROMOTION_END_REASON_CLAIM_REVOKED = "claim_revoked"
+# Stripe said the session expired, or the sweep found the checkout stale. Silent.
+PROMOTION_END_REASON_CHECKOUT_EXPIRED = "checkout_expired"
 # `end_reason` of an `unpaid` Promotion voided by the sweep at its start date.
 PROMOTION_END_REASON_UNPAID_AT_START = "unpaid_at_start"
 # Cancellation causes are carried over verbatim as `end_reason`; an event
@@ -273,10 +275,12 @@ PROMOTION_AUTO_END_NOTES = {
         "Your claim over the event was revoked, so its Promotion ended."
     ),
     PROMOTION_END_REASON_UNPAID_AT_START: "The Promotion was not paid before its start date.",
+    PROMOTION_END_REASON_CHECKOUT_EXPIRED: "The card checkout was not completed.",
 }
 # End reasons whose Organizer gets an email. The system void is silent.
 PROMOTION_AUTO_END_EMAIL_REASONS = frozenset(PROMOTION_AUTO_END_NOTES) - {
-    PROMOTION_END_REASON_UNPAID_AT_START
+    PROMOTION_END_REASON_UNPAID_AT_START,
+    PROMOTION_END_REASON_CHECKOUT_EXPIRED,
 }
 ERROR_PROMOTION_NOT_FOUND = "promotion not found"
 
@@ -356,3 +360,96 @@ ERROR_PROMOTION_OFFER_DISABLED = "Not Found"
 ERROR_PROMOTION_REQUEST_INVALID_STATUS = (
     "status must be one of pending, granted, declined, withdrawn, expired"
 )
+# Card checkout and the Stripe webhook (#617, #618, #619).
+PROMOTION_INVOICE_SOURCE_STRIPE = "stripe"
+# `end_reason` of an `unpaid` hold voided because Stripe could not open a session.
+PROMOTION_END_REASON_CHECKOUT_FAILED = "checkout_failed"
+PROMOTION_CHECKOUT_SESSION_MINUTES = 30
+# Stripe rejects an expiry under 30 minutes from the moment it receives the
+# call, so the request carries a little extra to survive our own latency.
+PROMOTION_CHECKOUT_EXPIRY_MARGIN_SECONDS = 60
+# An `unpaid` checkout Promotion is voided this long after its session expiry.
+PROMOTION_CHECKOUT_SWEEP_GRACE_SECONDS = 3600
+PROMOTION_CHECKOUT_CURRENCY = "eur"
+PROMOTION_CHECKOUT_PATH_SUCCESS = "/organizer/promotions/checkout/success"
+PROMOTION_CHECKOUT_PATH_CANCEL = "/organizer/promotions"
+# Wording versions recorded when the Organizer attests and accepts at checkout.
+PROMOTION_CONTENT_POLICY_VERSION = "1"
+PROMOTION_ORGANIZER_TERMS_VERSION = "1"
+PROMOTION_SNAPSHOT_TRIGGER_CHECKOUT_PAID = "checkout_paid"
+# Stripe custom-field limits: a label of 40 characters and a value of 140.
+STRIPE_CUSTOM_FIELD_VALUE_MAX_CHARS = 140
+STRIPE_CUSTOM_FIELD_LABELS = {
+    "registry_code": "Registry code",
+    "event": "Event",
+    "window": "Promotion window",
+}
+STRIPE_PRODUCT_NAME_TEMPLATE = "Promotion: {title} ({start} to {end})"
+STRIPE_WEBHOOK_TOLERANCE_SECONDS = 300
+STRIPE_WEBHOOK_SIGNATURE_HEADER = "stripe-signature"
+STRIPE_EVENT_CHECKOUT_COMPLETED = "checkout.session.completed"
+STRIPE_EVENT_CHECKOUT_EXPIRED = "checkout.session.expired"
+STRIPE_EVENT_DISPUTE_CREATED = "charge.dispute.created"
+STRIPE_PAYMENT_STATUS_PAID = "paid"
+STRIPE_WEBHOOK_STATUS_OK = "ok"
+STRIPE_WEBHOOK_STATUS_DUPLICATE = "duplicate"
+STRIPE_WEBHOOK_STATUS_IGNORED = "ignored"
+ERROR_STRIPE_SIGNATURE_INVALID = "invalid signature"
+ERROR_STRIPE_WEBHOOK_NOT_CONFIGURED = "stripe webhook not configured"
+
+# Äriregister lookup (#617).
+ARIREGISTER_CACHE_TTL_SECONDS = 24 * 60 * 60
+ARIREGISTER_CACHE_MAX_ENTRIES = 2000
+ARIREGISTER_TIMEOUT_SECONDS = 8.0
+# The register's status code for a company struck from the register.
+ARIREGISTER_STATUS_DELETED = "K"
+REGISTRY_LOOKUP_FOUND = "found"
+REGISTRY_LOOKUP_DELETED = "deleted"
+REGISTRY_LOOKUP_NOT_FOUND = "not_found"
+
+# Coded refusals of the registry lookup and the checkout start.
+PROMOTION_ERROR_OFFER_DISABLED = "promotions_unavailable"
+PROMOTION_ERROR_REGISTRY_INVALID_CODE = "registry_invalid_code"
+PROMOTION_ERROR_REGISTRY_DELETED = "registry_company_deleted"
+PROMOTION_ERROR_REGISTRY_NOT_FOUND = "registry_company_not_found"
+PROMOTION_ERROR_REGISTRY_UNAVAILABLE = "registry_unavailable"
+PROMOTION_ERROR_CHECKOUT_NEEDS_REVIEW = "event_needs_review"
+PROMOTION_ERROR_CHECKOUT_NOT_PROMOTABLE = "event_not_promotable"
+PROMOTION_ERROR_CHECKOUT_NOT_OWNER = "not_event_owner"
+PROMOTION_ERROR_CHECKOUT_ATTESTATION = "content_policy_attestation_required"
+PROMOTION_ERROR_CHECKOUT_TERMS = "organizer_terms_required"
+PROMOTION_ERROR_CHECKOUT_PROVIDER = "checkout_unavailable"
+PROMOTION_ERROR_REFUND_PROVIDER = "refund_provider_failed"
+PROMOTION_REGISTRY_ERROR_MESSAGES = {
+    PROMOTION_ERROR_REGISTRY_INVALID_CODE: "The registry code must be 8 digits.",
+    PROMOTION_ERROR_REGISTRY_DELETED: "This company has been deleted from the business register.",
+    PROMOTION_ERROR_REGISTRY_NOT_FOUND: "No company with this registry code is in the business register.",
+    PROMOTION_ERROR_REGISTRY_UNAVAILABLE: (
+        "The business register cannot be reached right now. Send a Promotion request instead."
+    ),
+}
+PROMOTION_CHECKOUT_ERROR_MESSAGES = {
+    PROMOTION_ERROR_CHECKOUT_NEEDS_REVIEW: "This event needs a quick review before it can be promoted.",
+    PROMOTION_ERROR_CHECKOUT_NOT_PROMOTABLE: "This event cannot be promoted.",
+    PROMOTION_ERROR_CHECKOUT_NOT_OWNER: "You do not own this event.",
+    PROMOTION_ERROR_CHECKOUT_ATTESTATION: "Confirm that the event complies with the Promotion content policy.",
+    PROMOTION_ERROR_CHECKOUT_TERMS: "Accept the Organizer terms to continue.",
+    PROMOTION_ERROR_CHECKOUT_PROVIDER: "Card checkout could not be opened. Try again or send a request.",
+    PROMOTION_ERROR_REFUND_PROVIDER: "The card refund could not be issued. Nothing was recorded.",
+}
+# Refusals that mean "the register could not confirm this business" (HTTP 422),
+# except an outage, which is a 503.
+PROMOTION_REGISTRY_REFUSAL_CODES = frozenset(
+    {
+        PROMOTION_ERROR_REGISTRY_INVALID_CODE,
+        PROMOTION_ERROR_REGISTRY_DELETED,
+        PROMOTION_ERROR_REGISTRY_NOT_FOUND,
+    }
+)
+
+# Late payment and refund wording (the Organizer email reason, the audit note).
+PROMOTION_LATE_PAYMENT_REASON = (
+    "Your payment arrived after the checkout hold had lapsed, so the Promotion was not "
+    "created. The full amount is being refunded to your card."
+)
+PROMOTION_LATE_REFUND_NOTE = "Automatic full refund: payment arrived after the checkout hold lapsed."

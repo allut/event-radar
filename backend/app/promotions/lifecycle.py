@@ -41,6 +41,7 @@ from app.constants.promotions import (
     PROMOTION_HOLDING_STATUSES,
     PROMOTION_INVOICE_REFERENCE_RE,
     PROMOTION_INVOICE_SOURCE_MANUAL,
+    PROMOTION_INVOICE_SOURCE_STRIPE,
     PROMOTION_REGISTRY_CODE_RE,
     PROMOTION_SNAPSHOT_TRIGGER_EDIT,
     PROMOTION_SNAPSHOT_TRIGGER_MARK_PAID,
@@ -50,12 +51,15 @@ from app.constants.promotions import (
     PROMOTION_STATUS_UNPAID,
     PROMOTION_STATUS_VOID,
 )
+from app.config import settings
+from app.integrations.payments import PaymentGateway, RefundRequest
 from app.models.models import Event, Promotion
 from app.promotions.cap import lock_cap
 from app.promotions.restriction import clear_existing
 from app.promotions.grant import (
     PromotionRefused,
     net_price_cents,
+    split_vat_cents,
     validate_grant,
     vat_cents,
 )
@@ -329,11 +333,21 @@ async def void_promotion(
 
 
 async def record_refund(
-    db: AsyncSession, promotion_id: int, amount_cents: int, note: str, now: datetime
+    db: AsyncSession,
+    promotion_id: int,
+    amount_cents: int,
+    note: str,
+    now: datetime,
+    gateway: PaymentGateway | None = None,
 ) -> Promotion:
-    """Record an off-platform refund (cents, gross) with a required note.
-    Cumulative; the total can't exceed what was charged (net plus VAT). Only a
-    paid, non-complimentary Promotion, live or ended early, can be refunded."""
+    """Refund `amount_cents` (gross) with a required note. Cumulative; the total
+    can't exceed what was charged (net plus VAT). Only a paid, non-complimentary
+    Promotion, live or ended early, can be refunded.
+
+    An off-platform payment is only recorded. A Stripe-paid one is issued:
+    `gateway.refund()` makes the credit note (reversing the VAT) and the card
+    refund in one call, and the credit note and refund ids go into the note. A
+    provider failure raises `PaymentProviderError` and writes nothing."""
     cleaned = (note or "").strip()
     promotion = await _load_locked(db, promotion_id)
     if amount_cents <= 0:
@@ -350,8 +364,27 @@ async def record_refund(
     )
     if promotion.refunded_cents + amount_cents > gross:
         raise _refuse(PROMOTION_ERROR_REFUND_EXCEEDS_PAID)
+    recorded = cleaned
+    if promotion.invoice_source == PROMOTION_INVOICE_SOURCE_STRIPE:
+        if gateway is None or not promotion.stripe_payment_intent_id:
+            raise _refuse(PROMOTION_ERROR_REFUND_NOT_PAID)
+        vat_part = split_vat_cents(amount_cents, promotion.vat_rate_percent)
+        result = await gateway.refund(
+            RefundRequest(
+                payment_intent_id=promotion.stripe_payment_intent_id,
+                invoice_id=promotion.stripe_invoice_id,
+                net_cents=amount_cents - vat_part,
+                vat_cents=vat_part,
+                tax_rate_id=settings.STRIPE_TAX_RATE_ID,
+                reason=cleaned,
+                idempotency_key=f"refund-{promotion.id}-{promotion.refunded_cents}-{amount_cents}",
+                metadata={"promotion_id": str(promotion.id)},
+            )
+        )
+        refs = [f"{label} {ref}" for label, ref in (("credit note", result.credit_note_id), ("refund", result.refund_id)) if ref]
+        recorded = f"{cleaned} ({', '.join(refs)})" if refs else cleaned
     promotion.refunded_cents += amount_cents
-    promotion.refund_note = f"{promotion.refund_note}\n{cleaned}" if promotion.refund_note else cleaned
+    promotion.refund_note = f"{promotion.refund_note}\n{recorded}" if promotion.refund_note else recorded
     promotion.updated_at = now
     await db.flush()
     return promotion

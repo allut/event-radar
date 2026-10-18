@@ -22,7 +22,16 @@ Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). B
 - **Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET`, not `GOOGLE_CLIENT_*`.** `GOOGLE_SIGNIN_CONSUMER_ENABLED` and `GOOGLE_SIGNIN_ORGANIZER_ENABLED` default to `false`.
 - **The `CLOUDINARY_*` trio backs organizer image upload.** See [organizer-portal.md](organizer-portal.md)'s Image Upload section.
 - **`ADMIN_TOTP_SECRET` comes from `backend/scripts/admin_totp_enroll.py`.** See Maintenance Scripts.
+- **`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `STRIPE_TAX_RATE_ID` back card checkout,** and `PROMOTIONS_INVOICE_FOOTER` carries the Operator's VAT number. `ARIREGISTER_BASE_URL`, `ARIREGISTER_USERNAME` and `ARIREGISTER_PASSWORD` back the company lookup. An empty value fails closed. See Stripe Setup.
 - **`EDGE_SHARED_SECRET` must match the Cloudflare Pages Secret of the same name.** See API Proxy.
+
+### Stripe Setup
+
+- **Never create invoices by hand in the Stripe Dashboard.** Checkout creates every `ER-` invoice. A hand-made one breaks the sequence the accountant expects, and off-platform invoices use the `ER-M-` series instead.
+- **Set the `ER` prefix and starting number in Invoice settings with account-level sequencing.** A per-customer prefix would repeat numbers across customers.
+- **Create the 24% Tax Rate as exclusive, and put its id in `STRIPE_TAX_RATE_ID`.** Checkout sends the net price, so Stripe adds the VAT.
+- **Point one webhook endpoint at `/api/webhooks/stripe`** with `checkout.session.completed`, `checkout.session.expired` and `charge.dispute.created`. Its signing secret is `STRIPE_WEBHOOK_SECRET`.
+- **Test the account in Stripe test mode before the offer flag goes on.** `PROMOTIONS_CHECKOUT_ENABLED` does nothing while `PROMOTIONS_OFFER_ENABLED` is off.
 
 ### Cloudflare Pages Frontend
 
@@ -118,7 +127,9 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 - **`/admin/promotions`, `/admin/promotions/cap-strip` and `/admin/events/{id}/promotion-context|promotions[/validate]` back the Promotion console.** A grant writes a `promotion_grant` audit row in its own transaction. See [data-model.md](data-model.md)'s Promotions section.
 - **`POST /admin/promotions/{id}/clear-restriction` records a Restriction clearance** (`note` required) for a scheduled or live Promotion whose event became restricted, and the gate resumes it. The grant body takes `restriction_clearance_confirmed` and `restriction_clearance_note`, required when the event is restricted.
 - **`sweep_promotions` (`app/promotions/sweep.py`) runs every minute and acts as the system.** It voids an `unpaid` Promotion at its start date (Tallinn), and ends a `paid` one when its event is cancelled (`end_reason` is the cancellation cause) or its claim is gone (`claim_revoked`). Each change writes a `promotion_system_void` or `promotion_system_end` audit row.
+- **The sweep also voids an `unpaid` card checkout an hour after its session expiry** (`checkout_expires_at`, `PROMOTION_CHECKOUT_SWEEP_GRACE_SECONDS`), as `checkout_expired`. Abandoned checkouts are never emailed or listed to the Organizer.
 - **The sweep emails the Organizer after its commit for every automatic end, never for the void.** The notes are in `PROMOTION_AUTO_END_NOTES`. A dormant claim or a lost dedup collision never ends a Promotion. The query count stays fixed however many Promotions exist.
+- **`POST /admin/promotions/{id}/refund` records or issues a refund.** An off-platform payment is only recorded. A Stripe-paid one makes the credit note (reversing the VAT) and the card refund in one adapter call, then stores the refunded cents; Stripe refusing answers 502 and records nothing. The detail's `refund_prefill` suggests (unused + paused days) × the price paid per day.
 - **`GET /admin/promotions/{id}` is the Promotion detail,** and `POST .../{id}/mark-paid|repoint|end|void|refund` plus `PATCH .../{id}` are its commands. Each runs under the cap lock, writes its audit row in the same transaction (409 for a state conflict, 422 for bad input, 404 for a missing row) and returns the refreshed detail.
 - **`GET /admin/promotions/trust` is the Trust panel, and `POST /admin/promotions/complaints` logs a complaint.** `POST .../{id}/withdraw` and `POST /admin/promotions/withdraw-all` run Withdraw. See Promotions: Trust Review and Withdrawal.
 - **`GET /admin/promotion-requests` is the request queue** (`status` defaults to `pending`). It returns `pending_count`, and each pending row carries `not_eligible_reason` and its event's `promotion_restriction`. The path avoids `/promotions/requests`, which `/promotions/{id}` would shadow.

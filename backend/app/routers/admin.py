@@ -111,6 +111,8 @@ from app.constants.promotions import (
     PROMOTION_DECLINE_REASON_MAX_CHARS,
     PROMOTION_ERROR_MESSAGES,
     PROMOTION_ERROR_REASON_REQUIRED,
+    PROMOTION_CHECKOUT_ERROR_MESSAGES,
+    PROMOTION_ERROR_REFUND_PROVIDER,
     PROMOTION_NOTE_MAX_CHARS,
     PROMOTION_REQUEST_STATUS_PENDING,
     VALID_PROMOTION_REQUEST_STATUSES,
@@ -155,6 +157,8 @@ from app.ingestion.jobs import (
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
+from app.integrations.payments import PaymentGateway, PaymentProviderError
+from app.integrations.providers import get_payment_gateway
 from app.promotions.cap import cap_strip
 from app.promotions.request_queue import list_requests as list_promotion_requests
 from app.promotions.request_queue import pending_count as pending_request_count
@@ -2100,6 +2104,13 @@ async def _run_promotion_command(
             except PromotionRefused as refused:
                 await db.rollback()
                 raise promotion_refusal(refused) from None
+            except PaymentProviderError:
+                await db.rollback()
+                log.error("Stripe refused a Promotion command (%s)", action, exc_info=True)
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=PROMOTION_CHECKOUT_ERROR_MESSAGES[PROMOTION_ERROR_REFUND_PROVIDER],
+                ) from None
             emit_admin_log = log_admin_action(
                 db, action, promotion.id, {**_promotion_audit_summary(promotion), **audit_extra}
             )
@@ -2478,13 +2489,21 @@ async def admin_void_promotion(
 @router.post("/promotions/{promotion_id}/refund", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_record_promotion_refund(
-    promotion_id: int, body: _PromotionRefundBody, request: Request
+    promotion_id: int,
+    body: _PromotionRefundBody,
+    request: Request,
+    gateway: PaymentGateway = Depends(get_payment_gateway),
 ) -> dict:
-    """Record an off-platform refund: gross `amount_cents` and a required
-    note. Cumulative, capped at what was charged."""
+    """Refund gross `amount_cents` with a required note. Cumulative, capped at
+    what was charged. An off-platform payment is only recorded; a Stripe-paid
+    one is issued (credit note and card refund in one Stripe call), 502 when
+    Stripe refuses and nothing is recorded. `refund_prefill` on the detail
+    holds the suggested amount."""
     return await _run_promotion_command(
         promotion_id,
         ADMIN_ACTION_PROMOTION_REFUND,
-        lambda db, now: record_refund(db, promotion_id, body.amount_cents, body.note, now),
+        lambda db, now: record_refund(
+            db, promotion_id, body.amount_cents, body.note, now, gateway=gateway
+        ),
         {"amount_cents": body.amount_cents, "note": body.note.strip()},
     )
