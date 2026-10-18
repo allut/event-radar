@@ -143,3 +143,6 @@ export const ADMIN_PIPELINE_STAGE_LABELS: Record<string, string> = {
   build_feeds: 'Build feeds',
   send_digests: 'Send digests',
 };
+
+// Admin screens are English-only; the shared DatePicker still wants a locale.
+export const ADMIN_LOCALE = 'en';

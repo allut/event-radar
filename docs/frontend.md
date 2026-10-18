@@ -26,6 +26,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **`App.tsx`'s `Home` picks `Landing` or `Feed` from `useAuth()`, a live subscription.** A one-shot `isAuthenticated()` read would leave a stale Feed on screen after signing out on `/`.
 - **Organizer routes sit behind `OrganizerProtected`.** It mirrors `Protected` but reads `useOrganizerAuth()` and redirects to `/organizer/login`. The auth tracks never share a guard; see [security.md](security.md)'s Track Separation section.
 - **Trigger-button popovers build on `hooks/useDropdown.ts`.** It owns open and close, outside-click, Escape, focus and the mobile flip. `FacetMenu`, `SelectMenu`, `DatePicker` and `EventOverflowMenu` all use it.
+- **`DatePicker` takes `dateOnly`, `max`, `isDayDisabled` and `invalid`.** `dateOnly` swaps the value to `YYYY-MM-DD`, hides the time fields and closes on pick. Out-of-range or disabled days grey out, skip on arrow keys and are rejected when typed. Never use `<input type="date">`.
 - **Each card list resolves `useEventCardNav()` once and passes the result as `EventCard`'s `nav` prop.** That way no card subscribes to the router or the auth store itself.
 
 ### Top Bar Behaviour

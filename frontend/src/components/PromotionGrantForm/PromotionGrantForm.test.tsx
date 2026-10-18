@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PromotionGrantForm from './PromotionGrantForm';
 import { renderWithProviders } from '../../test/utils';
@@ -53,11 +53,11 @@ function validation(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function setup(ctx: unknown = context(), validate: (path: string) => unknown = () => validation()) {
+function setup(ctx: unknown = context(), validate: (path: string) => unknown = () => validation(), strip: unknown = capStrip) {
   mockGet.mockImplementation(async (path: string) => {
     if (path.includes('/promotion-context')) return ctx;
     if (path.includes('/promotions/validate')) return validate(path);
-    if (path.startsWith('/admin/promotions/cap-strip')) return capStrip;
+    if (path.startsWith('/admin/promotions/cap-strip')) return strip;
     throw new Error(`unexpected ${path}`);
   });
   const onNotify = vi.fn();
@@ -66,9 +66,8 @@ function setup(ctx: unknown = context(), validate: (path: string) => unknown = (
 }
 
 async function pickDates(start = '2026-10-20', end = '2026-10-26') {
-  const startInput = await screen.findByLabelText('Start date');
-  fireEvent.change(startInput, { target: { value: start } });
-  fireEvent.change(screen.getByLabelText('End date'), { target: { value: end } });
+  await userEvent.type(await screen.findByLabelText('Start date'), start);
+  await userEvent.type(screen.getByLabelText('End date'), end);
 }
 
 beforeEach(() => {
@@ -77,6 +76,24 @@ beforeEach(() => {
 });
 
 describe('PromotionGrantForm', () => {
+  it('greys out full days and days outside the earliest start and event end in the date picker', async () => {
+    const full = { ...capStrip, days: capStrip.days.map((d) => (d.date === '2026-10-22' ? { ...d, free: 0 } : d)) };
+    setup(context(), () => validation(), full);
+    const input = await screen.findByLabelText('Start date');
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('cap-strip')));
+    await userEvent.type(input, '2026-10-22');
+    await userEvent.tab();
+    expect(input).toHaveValue('');
+    const calendar = screen.getAllByRole('button', { name: /open calendar/i })[0];
+    await userEvent.click(calendar);
+    const cell = (day: number) => document.querySelector(`[data-date="${new Date(2026, 9, day).toDateString()}"]`) as HTMLElement;
+    expect(cell(22)).toBeDisabled();
+    expect(cell(17)).toBeDisabled();
+    expect(cell(18)).not.toBeDisabled();
+    expect(cell(30)).not.toBeDisabled();
+    expect(cell(31)).toBeDisabled();
+  });
+
   it('explains why an unowned event cannot be promoted and renders no form', async () => {
     setup(context({ owner: null, prefill: { advertiser_legal_name: null, billing_email: null } }));
     expect(await screen.findByText(/no owning Organizer/)).toBeInTheDocument();

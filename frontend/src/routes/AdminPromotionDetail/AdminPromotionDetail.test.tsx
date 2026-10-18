@@ -220,6 +220,8 @@ describe('AdminPromotionDetail', () => {
   });
 
   it('shortens a live window: only the end date is editable and only it is sent', async () => {
+    // Pin only Date so the "never before today" bound on the end date stays stable.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 9, 17, 12) });
     serve(detail());
     mockPatch.mockResolvedValue(detail());
     renderWithProviders(<AdminPromotionDetail promotionId="5" />);
@@ -228,10 +230,10 @@ describe('AdminPromotionDetail', () => {
     expect(screen.getByLabelText('Start date')).toBeDisabled();
     expect(screen.queryByLabelText('Advertiser legal name')).not.toBeInTheDocument();
     const end = screen.getByLabelText('End date');
-    await userEvent.clear(end);
-    await userEvent.type(end, '2026-10-18');
+    await userEvent.type(end, '2026-10-18', { initialSelectionStart: 0, initialSelectionEnd: 10 });
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
     expect(mockPatch).toHaveBeenCalledWith('/admin/promotions/5', { end_date: '2026-10-18' });
+    vi.useRealTimers();
   });
 
   it('edits advertiser details before the start date, sending only changes', async () => {

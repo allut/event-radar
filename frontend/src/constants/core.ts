@@ -164,6 +164,11 @@ export const TIME_FIELD_MAX_LENGTH = 2;
 // Placeholder for the picker's typeable field. Mirrors the 'YYYY-MM-DDTHH:mm'
 // wire format with a space in place of the literal 'T' — see toDisplayDateTime.
 export const PICKER_VALUE_PLACEHOLDER = 'YYYY-MM-DD HH:mm';
+export const PICKER_DATE_ONLY_PLACEHOLDER = 'YYYY-MM-DD';
+// Midnight suffix that lets a date-only value reuse the date-time parser.
+export const PICKER_MIDNIGHT_SUFFIX = 'T00:00';
+// Upper bound on a skip-disabled-days walk (a year of cells).
+export const PICKER_SKIP_LIMIT = 366;
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 // Ordered to match a user's ranked persona picks (see PERSONA_RANK_WEIGHTS on

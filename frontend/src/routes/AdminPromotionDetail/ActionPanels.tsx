@@ -1,4 +1,6 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import DatePicker from '../../components/DatePicker';
+import { ADMIN_LOCALE } from '../../constants/admin';
 import { API } from '../../constants/api';
 import {
   PROMOTION_DETAIL_COPY as COPY,
@@ -8,6 +10,7 @@ import {
   PROMOTION_REGISTRY_CODE_RE,
 } from '../../constants/promotions';
 import { formatEuro, isIsoDay, parseEuroToCents, type PromotionDetail } from '../../lib/promotions';
+import { tallinnToday, toDateStr } from '../../utils';
 import styles from './AdminPromotionDetail.module.css';
 
 /** One command the page runs: the request, resolved to the refreshed detail. */
@@ -115,6 +118,10 @@ export function EditPanel({ detail, serverError, pending, run, onCancel, patch }
   const [invoice, setInvoice] = useState(detail.invoice_reference ?? '');
   const [error, setError] = useState<string | null>(null);
 
+  // A live window can only be shortened, never to a day before today; a
+  // not-yet-started one ends no earlier than its (edited) start.
+  const endMin = full ? (isIsoDay(start) ? start : undefined) : toDateStr(tallinnToday());
+
   function submit() {
     const body: Record<string, string | null> = {};
     if (full && start !== detail.start_date) body.start_date = start;
@@ -151,23 +158,29 @@ export function EditPanel({ detail, serverError, pending, run, onCancel, patch }
       onSubmit={submit}
     >
       <Field label="Start date" htmlFor={`${id}-start`}>
-        <input
+        <DatePicker
           id={`${id}-start`}
-          className={styles.input}
-          type="date"
+          ariaLabel="Start date"
+          locale={ADMIN_LOCALE}
+          dateOnly
+          required
           value={start}
+          max={detail.event.last_day}
           disabled={!full}
-          onChange={(e) => setStart(e.target.value)}
+          onChange={setStart}
         />
       </Field>
       <Field label="End date" htmlFor={`${id}-end`}>
-        <input
+        <DatePicker
           id={`${id}-end`}
-          className={styles.input}
-          type="date"
+          ariaLabel="End date"
+          locale={ADMIN_LOCALE}
+          dateOnly
+          required
           value={end}
+          min={endMin}
           max={full ? detail.event.last_day : detail.end_date}
-          onChange={(e) => setEnd(e.target.value)}
+          onChange={setEnd}
         />
       </Field>
       {full && (

@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useId, useMemo, useState, type FormEvent } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
 import { API, QUERY_KEYS } from '../../constants/api';
@@ -10,7 +10,7 @@ import {
   PROMOTION_NOTE_ROWS,
   PROMOTION_REGISTRY_CODE_RE,
 } from '../../constants/promotions';
-import { ADMIN_GENERIC_ERROR } from '../../constants/admin';
+import { ADMIN_GENERIC_ERROR, ADMIN_LOCALE } from '../../constants/admin';
 import {
   formatDay,
   formatEuro,
@@ -21,6 +21,7 @@ import {
   type PromotionValidation,
 } from '../../lib/promotions';
 import { apiErrorMessage } from '../../utils';
+import DatePicker from '../DatePicker';
 import PageState from '../PageState';
 import PromotionCapStrip from '../PromotionCapStrip';
 import styles from './PromotionGrantForm.module.css';
@@ -53,6 +54,13 @@ export default function PromotionGrantForm({ eventId, onNotify }: PromotionGrant
     queryKey: [QUERY_KEYS.adminPromotionCapStrip],
     queryFn: () => adminApi.get<CapStripResponse>(API.adminPromotionCapStrip),
   });
+
+  // Days already at the cap: greyed out and unselectable. The server's
+  // /validate answer stays authoritative for overlap and window rules.
+  const fullDays = useMemo(
+    () => new Set((strip.data?.days ?? []).filter((d) => d.free <= 0).map((d) => d.date)),
+    [strip.data],
+  );
 
   const datesPicked = isIsoDay(start) && isIsoDay(end);
   const validation = useQuery({
@@ -172,26 +180,34 @@ export default function PromotionGrantForm({ eventId, onNotify }: PromotionGrant
 
         <div className={styles.field}>
           <label className={styles.label} htmlFor={`${ids}-start`}>Start date</label>
-          <input
+          <DatePicker
             id={`${ids}-start`}
-            className={styles.input}
-            type="date"
+            ariaLabel="Start date"
+            locale={ADMIN_LOCALE}
+            dateOnly
+            required
             value={start}
             min={ctx.earliest_start}
-            aria-invalid={startInvalid || undefined}
-            onChange={(e) => setStart(e.target.value)}
+            max={ctx.event_last_day}
+            isDayDisabled={(iso) => fullDays.has(iso)}
+            invalid={startInvalid}
+            onChange={setStart}
           />
         </div>
         <div className={styles.field}>
           <label className={styles.label} htmlFor={`${ids}-end`}>End date</label>
-          <input
+          <DatePicker
             id={`${ids}-end`}
-            className={styles.input}
-            type="date"
+            ariaLabel="End date"
+            locale={ADMIN_LOCALE}
+            dateOnly
+            required
             value={end}
+            min={ctx.earliest_start}
             max={ctx.event_last_day}
-            aria-invalid={endInvalid || undefined}
-            onChange={(e) => setEnd(e.target.value)}
+            isDayDisabled={(iso) => fullDays.has(iso)}
+            invalid={endInvalid}
+            onChange={setEnd}
           />
         </div>
         <div className={styles.wide}>
