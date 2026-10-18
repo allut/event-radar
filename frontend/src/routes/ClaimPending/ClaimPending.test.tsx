@@ -40,6 +40,8 @@ const CACHED_CLAIMS_KEY = [QUERY_KEYS.organizerClaims, 'en', 1];
 
 beforeEach(() => {
   mockGet.mockReset();
+  // A known offer hint keeps the top bar from asking the profile endpoint.
+  localStorage.setItem('organizer_promotions_offer', '0');
   mockPost.mockReset();
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });

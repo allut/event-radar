@@ -33,12 +33,34 @@ describe('OrganizerTopBar Promotions nav (#614)', () => {
     expect(links[2]).toHaveAttribute('href', '/organizer/promotions');
   });
 
-  it('hides Promotions while the offer is off, without a request of its own', async () => {
+  it('makes no request of its own once the hint is known', async () => {
+    localStorage.setItem('organizer_promotions_offer', '0');
     renderWithProviders(<OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
 
     expect(within(screen.getByRole('navigation')).queryByRole('link', { name: 'Promotions' })).not.toBeInTheDocument();
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(mockOrganizerGet).not.toHaveBeenCalled();
+  });
+
+  it('learns the offer is on from the profile on a first visit and remembers it', async () => {
+    mockOrganizerGet.mockResolvedValue({ email: 'org@example.com', name: 'Jazz Club', promotions_offer: true });
+    renderWithProviders(<OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(await within(screen.getByRole('navigation')).findByRole('link', { name: 'Promotions' })).toHaveAttribute(
+      'href',
+      '/organizer/promotions',
+    );
+    expect(localStorage.getItem('organizer_promotions_offer')).toBe('1');
+    expect(mockOrganizerGet).toHaveBeenCalledTimes(1);
+    expect(mockOrganizerGet).toHaveBeenCalledWith('/organizer/profile');
+  });
+
+  it('keeps Promotions out and remembers "off" when the profile says the offer is off', async () => {
+    mockOrganizerGet.mockResolvedValue({ email: 'org@example.com', name: 'Jazz Club', promotions_offer: false });
+    renderWithProviders(<OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
+
+    await waitFor(() => expect(localStorage.getItem('organizer_promotions_offer')).toBe('0'));
+    expect(within(screen.getByRole('navigation')).queryByRole('link', { name: 'Promotions' })).not.toBeInTheDocument();
   });
 });
 
@@ -54,6 +76,7 @@ describe('OrganizerTopBar', () => {
   });
 
   it('has the gold New event CTA, no search and no pulse chip, and never fetches counts', async () => {
+    localStorage.setItem('organizer_promotions_offer', '0');
     renderWithProviders(<OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
 
     expect(screen.getAllByRole('link', { name: 'New event' })[0]).toHaveAttribute('href', '/organizer/submit');

@@ -317,7 +317,7 @@ describe('OrganizerDashboard Promotions row action (#614)', () => {
 
     await screen.findByText('Jazz Night');
     expect(screen.queryByRole('link', { name: /^Promote / })).not.toBeInTheDocument();
-    expect(localStorage.getItem('organizer_promotions_offer')).toBeNull();
+    expect(localStorage.getItem('organizer_promotions_offer')).toBe('0');
   });
 
   it('remembers that the offer is on so the top bar can show its nav item', async () => {

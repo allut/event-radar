@@ -50,6 +50,8 @@ function renderEdit(route = '/en/organizer/claims/42/edit') {
 
 beforeEach(() => {
   mockGet.mockReset();
+  // A known offer hint keeps the top bar from asking the profile endpoint.
+  localStorage.setItem('organizer_promotions_offer', '0');
   mockPatch.mockReset();
 });
 

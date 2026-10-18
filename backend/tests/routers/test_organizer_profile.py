@@ -25,7 +25,26 @@ class TestGetOwnProfile:
             "verified": True,
             "name": "Tallinn Live",
             "google_linked": False,
+            "promotions_offer": False,
         }
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("enabled", [True, False])
+    async def test_promotions_offer_follows_the_flag(
+        self, monkeypatch, mock_db, make_request, make_organizer, enabled
+    ):
+        from app.config import settings
+        from app.routers.organizer_profile import get_own_profile
+
+        monkeypatch.setattr(settings, "PROMOTIONS_OFFER_ENABLED", enabled)
+
+        result = await get_own_profile(
+            make_request(method="GET", path="/organizer/profile"),
+            make_organizer(organizer_id=5),
+            mock_db,
+        )
+
+        assert result["promotions_offer"] is enabled
 
     @pytest.mark.asyncio
     async def test_name_null_when_unset(self, mock_db, make_request, make_organizer):

@@ -80,6 +80,8 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 
 - **Strings are `promo_*` keys in `shared/`, in all three locales.** Counts use `tn()` with `promo_days_*` and `promo_people_*`. Prices format through `lib/organizerPromotions.ts::formatMoney()`, which drops whole-euro cents and uses a comma outside English.
 - **A paused reason maps through `promo_why_<code>`.** Each gate code has a long and a `_short` form, and an unknown code falls back to `promo_why_unknown`, so a new backend code never shows raw text.
+- **The top bar's Promotions item follows the offer hint in `lib/organizerPromotionsOffer.ts`.** It is stored as `'1'` (on) or `'0'` (off); a missing key means unknown. Event rows and the Promotions list refresh it.
+- **While the hint is unknown, `usePromotionsOffer()` reads `promotions_offer` from `GET /organizer/profile`.** A first visit straight to Settings or Contact then shows the item. The query shares its key with Settings and the dashboard nudge, so those pages add no request, and a known hint costs none.
 - **`PromotionBadge/` and `PromotionRowAction/` serve both event lists.** The badge is the one square status look for rows and the Promotions list, one tone per status.
 - **`PromotionResultCard/` is the centred result card** for a sent request, a confirmed payment and the confirming state.
 - **The sponsored caption on the preview reuses `sponsored_label`.** The form renders `EventCard` read-only with the `sponsored` prop, so it never posts feedback.

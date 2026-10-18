@@ -64,6 +64,9 @@ const requests = () => mockGet.mock.calls.map(([url]) => url);
 
 beforeEach(() => {
   mockGet.mockReset();
+  // A known offer hint keeps the top bar from asking the profile endpoint,
+  // which would take the positional list responses queued below.
+  localStorage.setItem('organizer_promotions_offer', '0');
 });
 
 describe('ClaimEvents (#436)', () => {
@@ -177,7 +180,7 @@ describe('ClaimEvents (#436)', () => {
 
 describe('ClaimEvents Promotions row action (#614)', () => {
   beforeEach(() => {
-    localStorage.clear();
+    localStorage.setItem('organizer_promotions_offer', '0');
   });
 
   const promoPage = () =>

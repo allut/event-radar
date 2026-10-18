@@ -26,6 +26,7 @@ from app.constants.organizer import ORGANIZER_NAME_MAX_LEN
 from app.constants.rate_limits import RATE_LIMIT_AUTHENTICATED_WRITE, RATE_LIMIT_SUBMIT
 from app.db import get_db
 from app.models.models import Organizer, OrganizerIdentity
+from app.promotions.flags import offer_enabled
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
@@ -50,6 +51,7 @@ def _serialize(organizer: Organizer, *, google_linked: bool) -> dict:
         "verified": organizer.verified,
         "name": organizer.name,
         "google_linked": google_linked,
+        "promotions_offer": offer_enabled(),
     }
 
 
