@@ -293,6 +293,9 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         # `ref` query markers on promotion links (spec #597): web card and digest.
         f"PROMOTION_REF_AD: str = {_py_str(cfg['promotion_ref_ad'])}",
         f"PROMOTION_REF_DIGEST_AD: str = {_py_str(cfg['promotion_ref_digest_ad'])}",
+        # Version of the Organizer terms page (#613): the label on the page and
+        # the value recorded on acceptance (promotions.py) come from this one number.
+        f"ORGANIZER_TERMS_VERSION: int = {cfg['organizer_terms_version']}",
         # Signal tiers named on the public /ranking page, heaviest first (issue #588).
         f"RANKING_TIERS_SIGNED_IN: tuple[tuple[str, ...], ...] = {_py_tiers(cfg['ranking_tiers']['signed_in'])}",
         f"RANKING_TIERS_SIGNED_OUT: tuple[tuple[str, ...], ...] = {_py_tiers(cfg['ranking_tiers']['signed_out'])}",
@@ -377,6 +380,8 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         # `ref` query markers on promotion links (spec #597): web card and digest.
         f"export const PROMOTION_REF_AD = {_ts_str(cfg['promotion_ref_ad'])};",
         f"export const PROMOTION_REF_DIGEST_AD = {_ts_str(cfg['promotion_ref_digest_ad'])};",
+        # Organizer terms version (#613): the page label and the backend's recorded value.
+        f"export const ORGANIZER_TERMS_VERSION = {cfg['organizer_terms_version']};",
         # Signal tiers named on the public /ranking page, heaviest first (issue #588).
         f"export const RANKING_TIERS_SIGNED_IN: readonly (readonly string[])[] = {_ts_tiers(cfg['ranking_tiers']['signed_in'])};",
         f"export const RANKING_TIERS_SIGNED_OUT: readonly (readonly string[])[] = {_ts_tiers(cfg['ranking_tiers']['signed_out'])};",
