@@ -25,6 +25,10 @@ from dataclasses import dataclass
 _ACCENT = "#c8922a"
 _ON_ACCENT = "#0f1119"
 _ACCENT_ALPHA_PILL_BG = "rgba(200,146,42,0.12)"
+# The paid-placement frame: the price-pill alpha family, so one tint and one
+# hairline serve both themes.
+_ACCENT_ALPHA_FRAME_BG = "rgba(200,146,42,0.10)"
+_ACCENT_ALPHA_FRAME_BORDER = "rgba(200,146,42,0.35)"
 
 _DARK_PALETTE = {
     "bg": "#13161e",
@@ -78,6 +82,7 @@ _THEME_CLASS_RULES: dict[str, tuple[tuple[str, str], ...]] = {
     "e-title": (("color", "text"),),
     "e-bullet": (("color", "text_muted"),),
     "e-ticket-row": (("border-top-color", "border_subtle"),),
+    "e-sponsor-label": (("color", "accent_light"),),
     "e-footer": (("color", "footer_text"), ("border-top-color", "border")),
     "e-footer-link": (("color", "text_muted"),),
 }
@@ -150,6 +155,15 @@ class EmailStyles:
     s_tickets_link: str
     s_footer: str
     s_footer_link: str
+    s_sponsor_wrap: str
+    s_sponsor: str
+    s_sponsor_head: str
+    s_sponsor_label: str
+    s_sponsor_org: str
+    s_sponsor_body: str
+    s_sponsor_foot: str
+    s_sponsor_note: str
+    s_sponsor_stop: str
 
 
 def _build_styles(
@@ -238,6 +252,30 @@ def _build_styles(
             "text-align:center;"
         ),
         s_footer_link=f"color:{p['text_muted']};",
+        s_sponsor_wrap="padding-top:8px;",
+        s_sponsor=(
+            f"background-color:{_ACCENT_ALPHA_FRAME_BG};"
+            f"border:1px solid {_ACCENT_ALPHA_FRAME_BORDER};border-radius:0;"
+        ),
+        s_sponsor_head="padding:16px 20px 12px 20px;",
+        s_sponsor_label=(
+            "font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;"
+            f"font-size:20px;font-weight:600;color:{p['accent_light']};margin:0 0 2px 0;"
+        ),
+        s_sponsor_org=(
+            "font-family:Helvetica,Arial,sans-serif;font-size:13px;"
+            f"color:{p['text_muted']};margin:0;"
+        ),
+        s_sponsor_body="padding:0 20px;",
+        s_sponsor_foot="padding:4px 20px 18px 20px;",
+        s_sponsor_note=(
+            "font-family:Helvetica,Arial,sans-serif;font-size:13px;line-height:1.5;"
+            f"color:{p['text_muted']};margin:0 0 8px 0;"
+        ),
+        s_sponsor_stop=(
+            "font-family:Helvetica,Arial,sans-serif;font-size:13px;"
+            f"color:{p['text_muted']};text-decoration:underline;"
+        ),
     )
 
 

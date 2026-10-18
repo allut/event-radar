@@ -13,6 +13,7 @@ from sqlalchemy import select
 
 from app.auth.dependencies import get_current_admin, get_current_user, get_optional_user
 from app.constants.promotions import (
+    PROMOTION_STAT_DIGEST_SENT,
     PROMOTION_STAT_EXPLORE_SERVED,
     PROMOTION_STAT_SLOT_DISLIKES,
     PROMOTION_STAT_WEB_OPENS,
@@ -119,6 +120,23 @@ async def test_ref_ad_on_live_promotion_counts_a_web_open(db, make, client):
         assert resp.status_code == 200
     await counters.flush(db)
     assert (await stats(db, p.id))[d(1)].web_opens == 2
+
+
+async def test_ref_digest_ad_on_live_promotion_counts_a_digest_open(db, make, client):
+    ev, p = await live_promotion(db, make)
+    for ref in ("digest-ad", "digest-ad", "ad", None):
+        resp = await client.get(f"/events/{ev.id}", params={"ref": ref} if ref else {})
+        assert resp.status_code == 200
+    await counters.flush(db)
+    got = (await stats(db, p.id))[d(1)]
+    assert (got.digest_opens, got.web_opens) == (2, 1)
+
+
+async def test_digest_sent_flushes(db, make):
+    _, p = await live_promotion(db, make)
+    counters.bump(p.id, d(1), PROMOTION_STAT_DIGEST_SENT)
+    await counters.flush(db)
+    assert (await stats(db, p.id))[d(1)].digest_sent == 1
 
 
 async def test_ref_ad_on_non_live_promotion_counts_nothing(db, make, client):

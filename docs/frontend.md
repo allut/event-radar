@@ -186,6 +186,7 @@ Every list pages with a numbered pager and a `?page` URL param. There is no Load
 
 - **`digest.py` formats, assembles and sends the digest,** filling `EMAIL_DOCUMENT` with `DIGEST_HEADER` and `DIGEST_FOOTER`. Subjects, labels and day and month names come from `app/i18n.py`.
 - **Each event block shows its escaped `image_url`, or a plain color band when there's none.** The header carries an "open feed" button (`feed_url`).
+- **A consenting user's digest may end with a framed Sponsored block** (`DIGEST_SPONSORED_BLOCK`): sharp corners, a gold tint, the "Ad" label in Cormorant italic, the advertiser, the unchanged event block, the explanation and a "Stop ads in this email" link to `ADS_OFF_PATH` (`/email-consent-off`) with the `generate_ads_off_token` token. Its class hook is `e-sponsor-label`; never name a hook `ad` or `ads`.
 - **The digest is HTML only, with no plain-text part.**
 - **It sends from a scheduled batch job, so it goes through the retrying `http_post()`.**
 

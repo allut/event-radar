@@ -586,6 +586,10 @@
     "digest.unsubscribe": "Tühista tellimus",
     "digest.no_events": "Täna pole üritusi.",
     "digest.open_feed": "Ava oma voog →",
-    "digest.tickets": "Hangi piletid →"
+    "digest.tickets": "Hangi piletid →",
+    "digest.ad_label": "Reklaam",
+    "digest.ad_advertiser": "Reklaami tellija: {org}",
+    "digest.ad_explain": "Selle ürituse näitamise eest tänases kirjas maksis {org}. See ei kuulu sinu valikute hulka ega ole valitud sinu huvide põhjal.",
+    "digest.ad_stop": "Ära näita reklaame e-kirjas"
   }
 }

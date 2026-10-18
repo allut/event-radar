@@ -137,6 +137,27 @@ EVENT_TICKETS_ROW = (
     "</td></tr>"
 )
 
+# The Sponsored slot in the digest (#611): a sharp-cornered, gold-tinted frame
+# around the unchanged event block. "sponsor" avoids bare ad/ads hooks that
+# content blockers hide.
+DIGEST_SPONSORED_BLOCK = (
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="{s_sponsor_wrap}">'
+    "<tr><td>"
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="e-sponsor" style="{s_sponsor}">'
+    '<tr><td style="{s_sponsor_head}">'
+    '<p class="e-sponsor-label" style="{s_sponsor_label}">{label}</p>'
+    '<p class="e-muted" style="{s_sponsor_org}">{advertiser}</p>'
+    "</td></tr>"
+    '<tr><td style="{s_sponsor_body}">{event_block}</td></tr>'
+    '<tr><td style="{s_sponsor_foot}">'
+    '<p class="e-muted" style="{s_sponsor_note}">{explanation}</p>'
+    '<p style="margin:0;"><a href="{stop_url}" class="e-footer-link" style="{s_sponsor_stop}">{stop_label}</a></p>'
+    "</td></tr>"
+    "</table>"
+    "</td></tr>"
+    "</table>"
+)
+
 CONTACT_HTML_BODY = (
     "<p><strong>From:</strong> {name} ({email})</p><p>{message}</p>"
 )

@@ -63,6 +63,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "digest.no_events": "Täna pole üritusi.",
         "digest.open_feed": "Ava oma voog →",
         "digest.tickets": "Hangi piletid →",
+        "digest.ad_label": "Reklaam",
+        "digest.ad_advertiser": "Reklaami tellija: {org}",
+        "digest.ad_explain": "Selle ürituse näitamise eest tänases kirjas maksis {org}. See ei kuulu sinu valikute hulka ega ole valitud sinu huvide põhjal.",
+        "digest.ad_stop": "Ära näita reklaame e-kirjas",
     },
     "en": {
         "email.magic_link.subject": "Your Event Radar sign-in link",
@@ -123,6 +127,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "digest.no_events": "No events today.",
         "digest.open_feed": "Open your feed →",
         "digest.tickets": "Get tickets →",
+        "digest.ad_label": "Ad",
+        "digest.ad_advertiser": "Paid for by {org}",
+        "digest.ad_explain": "{org} paid to show this event in today's email. It isn't one of your picks and isn't chosen from your interests.",
+        "digest.ad_stop": "Stop ads in this email",
     },
     "ru": {
         "email.magic_link.subject": "Ваша ссылка для входа в Event Radar",
@@ -183,6 +191,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "digest.no_events": "Сегодня нет событий.",
         "digest.open_feed": "Открыть ленту →",
         "digest.tickets": "Получить билеты →",
+        "digest.ad_label": "Реклама",
+        "digest.ad_advertiser": "Рекламодатель: {org}",
+        "digest.ad_explain": "Показ этого события в сегодняшнем письме оплачен организатором {org}. Оно не входит в ваши подборки и не выбрано по вашим интересам.",
+        "digest.ad_stop": "Не показывать рекламу в письмах",
     },
 }
 

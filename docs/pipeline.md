@@ -293,6 +293,13 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 - **`q` is capped at `BROWSE_QUERY_MAX_LEN`.** `_keyword_filter` matches `%...%` against two trigram GIN indexes, so an unbounded string is cheap to send and expensive to scan.
 - **Both paths page on `limit`/`offset` and return an exact `total` on every request.** There is no cursor. Each SQL sort ends in an `id` tie-breaker, so tied rows keep one order across pages. The frontend shows a numbered pager at `BROWSE_PAGE_SIZE`.
 
+### Digest Sponsored slot
+
+- **The digest carries the slot only when four things hold:** `PROMOTIONS_SLOTS_ENABLED` is on, the user's `email_ad_consent` is on, they have `DAILY_5_COUNT` picks that still load, and a `daily_sponsored_slots` row exists for today. `app/promotions/digest_slot.py::load_digest_slots()` reads it, and `send_daily_digests` queries nothing while the flag is off.
+- **The digest never picks a Promotion.** It re-runs the gate on the stored one and drops the slot if it fails; there is no swap. The block sits below the picks and never touches the subject or preheader. Its event links carry `?ref=digest-ad`.
+- **Reads are fixed-count per page:** one for the stored rows, one for the Promotions, and the gate's five. `send_digest_email` bumps `digest_sent` after a successful send.
+- **There is no open pixel,** and the provider's open tracking stays off.
+
 ### Explore Sponsored slot
 
 - **The slot sits beside the organic results and never inside the ranking.** `GET /explore?sponsored_slot=true` opts in; the client never sends it under the prerender. Without the param the response is exactly the organic response, with no slot keys.
@@ -320,7 +327,8 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 - **Delivery counters are anonymous per-day totals in `promotion_daily_stats`** (`app/promotions/counters.py`). `bump()` adds to a module-level dict, so a request never waits on the database.
 - **`flush()` writes the dict as one bulk upsert that adds to the stored totals.** It runs every `PROMOTION_COUNTER_FLUSH_SECONDS` (60) from the `flush_promotion_counters` job and once on shutdown. A crash loses at most a minute, and a failed flush puts the counts back.
 - **Four counters go through the in-process dict:** `explore_served` when page 1 fills a slot, `daily5_placed` when a Daily 5 slot is placed, `web_opens` when `GET /events/{id}?ref=ad` hits an event whose paid Promotion covers today, and `slot_dislikes` when `POST /feedback` sends `signal=dislike` with `ref=ad` (the feedback row is still written).
-- **The gate columns are written by the daily build** (see Daily 5 Sponsored slot). `digest_sent` and `digest_opens` have no writer yet.
+- **`digest_opens` counts `ref=digest-ad` the same way as `web_opens`,** and `digest_sent` counts each digest sent with the slot.
+- **The gate columns are written by the daily build** (see Daily 5 Sponsored slot).
 - **Counters never feed ranking, the persona or `user_event_feedback`.** No viewer identifier is recorded; not counted: ticket clicks, total page views, viewable impressions.
 - **`GET /admin/promotions/{id}/daily-stats` returns one row per complete window day** (today is left out), with zeros where nothing was counted. It reads with one `WHERE promotion_id IN (...)` (`views.load_daily_stats`).
 

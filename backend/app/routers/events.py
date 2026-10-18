@@ -16,7 +16,12 @@ from app.constants.claims import (
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
 )
 from app.constants.events import ERROR_EVENT_NOT_FOUND
-from app.constants.promotions import PROMOTION_REF_AD, PROMOTION_STAT_WEB_OPENS
+from app.constants.promotions import (
+    PROMOTION_REF_AD,
+    PROMOTION_REF_DIGEST_AD,
+    PROMOTION_STAT_DIGEST_OPENS,
+    PROMOTION_STAT_WEB_OPENS,
+)
 from app.constants.rate_limits import RATE_LIMIT_EVENTS_DETAIL
 from app.auth.dependencies import get_optional_user
 from app.db import get_db
@@ -66,6 +71,8 @@ async def get_event(
     # the event's live Promotion. Never read by ranking or the persona.
     if ref == PROMOTION_REF_AD:
         await record_ref_hit(db, event.id, PROMOTION_STAT_WEB_OPENS)
+    elif ref == PROMOTION_REF_DIGEST_AD:
+        await record_ref_hit(db, event.id, PROMOTION_STAT_DIGEST_OPENS)
 
     # get_optional_user already resolved the caller (None when signed out, or
     # for an expired/invalid/revoked token — a revoked token, post logout-all,

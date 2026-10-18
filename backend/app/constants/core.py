@@ -42,6 +42,7 @@ EVENTS_PATH = "/events"
 SETTINGS_PATH = "/settings"
 ADMIN_REPORTS_PATH = "/admin/reports"
 UNSUBSCRIBE_PATH = "/unsubscribe"
+ADS_OFF_PATH = "/email-consent-off"
 
 # Named locale codes for the fixed et/en/ru vocabulary (VALID_LOCALES above) —
 # used where code refers to one specific locale rather than iterating the set.

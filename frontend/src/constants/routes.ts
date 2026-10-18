@@ -18,6 +18,7 @@ export const ROUTES = {
   eventDetailPattern: '/events/:id',
   settings: '/settings',
   unsubscribe: '/unsubscribe',
+  consentOff: '/email-consent-off',
   privacy: '/privacy',
   terms: '/terms',
   ranking: '/ranking',

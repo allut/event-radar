@@ -586,6 +586,10 @@
     "digest.unsubscribe": "Unsubscribe",
     "digest.no_events": "No events today.",
     "digest.open_feed": "Open your feed →",
-    "digest.tickets": "Get tickets →"
+    "digest.tickets": "Get tickets →",
+    "digest.ad_label": "Ad",
+    "digest.ad_advertiser": "Paid for by {org}",
+    "digest.ad_explain": "{org} paid to show this event in today's email. It isn't one of your picks and isn't chosen from your interests.",
+    "digest.ad_stop": "Stop ads in this email"
   }
 }

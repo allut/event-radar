@@ -3,7 +3,10 @@
 import re
 from decimal import Decimal
 
-from app._generated.shared_constants import PROMOTION_REF_AD as PROMOTION_REF_AD
+from app._generated.shared_constants import (
+    PROMOTION_REF_AD as PROMOTION_REF_AD,
+    PROMOTION_REF_DIGEST_AD as PROMOTION_REF_DIGEST_AD,
+)
 
 # Stored statuses are commercial only. Scheduled, live and finished are
 # computed from the window and today's Tallinn date, never stored.
@@ -209,19 +212,23 @@ PROMOTION_STAT_EXPLORE_SERVED = "explore_served"
 PROMOTION_STAT_WEB_OPENS = "web_opens"
 PROMOTION_STAT_SLOT_DISLIKES = "slot_dislikes"
 PROMOTION_STAT_DAILY5_PLACED = "daily5_placed"
+PROMOTION_STAT_DIGEST_SENT = "digest_sent"
+PROMOTION_STAT_DIGEST_OPENS = "digest_opens"
 PROMOTION_COUNTER_COLUMNS = (
     PROMOTION_STAT_EXPLORE_SERVED,
     PROMOTION_STAT_DAILY5_PLACED,
     PROMOTION_STAT_WEB_OPENS,
     PROMOTION_STAT_SLOT_DISLIKES,
+    PROMOTION_STAT_DIGEST_SENT,
+    PROMOTION_STAT_DIGEST_OPENS,
 )
 # Every column the per-day table reports, in display order.
 PROMOTION_STAT_REPORT_COLUMNS = (
     PROMOTION_STAT_EXPLORE_SERVED,
     PROMOTION_STAT_DAILY5_PLACED,
-    "digest_sent",
+    PROMOTION_STAT_DIGEST_SENT,
     PROMOTION_STAT_WEB_OPENS,
-    "digest_opens",
+    PROMOTION_STAT_DIGEST_OPENS,
     PROMOTION_STAT_SLOT_DISLIKES,
 )
 PROMOTION_COUNTER_FLUSH_SECONDS = 60

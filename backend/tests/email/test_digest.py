@@ -13,6 +13,7 @@ from app.email.digest import (
 )
 from app.email.styles import _THEME_CLASS_RULES
 from app.i18n import TRANSLATIONS, t, ti
+from app.promotions.digest_slot import DigestSlot
 
 
 # ---------------------------------------------------------------------------
@@ -546,7 +547,12 @@ class TestThemeClassHooksPresent:
 
         events = [make_event(price_min=12.0, why_go=["Great show"])]
         digest_html = build_digest_html(
-            events, date(2026, 5, 20), "en", "https://eventradar.ee"
+            events,
+            date(2026, 5, 20),
+            "en",
+            "https://eventradar.ee",
+            sponsored=DigestSlot(1, "Acme OÜ", make_event(event_id=99)),
+            ads_off_url="https://eventradar.ee/en/email/ads-off?token=x",
         )
         magic_link_html = build_magic_link_html(
             "https://example.com/verify?token=x", 15, "en"
