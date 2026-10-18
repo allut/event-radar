@@ -7,6 +7,7 @@ import { useFeedback } from '../../hooks/useFeedback';
 import { useEventCardNav } from '../../hooks/useEventCardNav';
 import { renderWithProviders, makeEvent } from '../../test/utils';
 import { SPONSORED_SLOT_ATTR } from '../../_generated/sharedConstants';
+import { t } from '../../i18n';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -279,22 +280,41 @@ describe('EventCard', () => {
       ['filters', 'only by your filters and search'],
       ['none', 'by the day and page'],
       ['daily5', 'not one of your five'],
-    ] as const)('opens the %s explanation panel with a plain link to /ranking#ads, and closes it', async (explanation, snippet) => {
+    ] as const)('opens the %s explanation panel with a plain link to /ranking#paid-slots, and closes it', async (explanation, snippet) => {
       renderWithProviders(<EventCard event={makeEvent()} index={0} locale="en" sponsored={{ advertiser: 'Acme', explanation }} />);
       await userEvent.click(screen.getByRole('button', { name: 'Why?' }));
       expect(screen.getByText(new RegExp(snippet))).toBeInTheDocument();
       const link = screen.getByRole('link', { name: 'How results are ordered' });
-      expect(link).toHaveAttribute('href', '/ranking#ads');
+      expect(link).toHaveAttribute('href', '/ranking#paid-slots');
       expect(link).not.toHaveAttribute('rel');
       expect(screen.getByRole('button', { name: 'Why?' })).toHaveAttribute('aria-expanded', 'true');
       await userEvent.click(screen.getByRole('button', { name: 'Close' }));
       expect(screen.queryByText(new RegExp(snippet))).not.toBeInTheDocument();
     });
 
+    it.each([
+      ['en', 'Why?', 'How results are ordered', '/ranking#paid-slots'],
+      ['et', 'Miks?', 'Kuidas tulemused järjestatakse', '/ranking#paid-slots'],
+      ['ru', 'Почему?', 'Как упорядочены результаты', '/ranking#paid-slots'],
+    ] as const)('words every explanation in %s and links the disclosure', async (locale, why, rankingLabel, href) => {
+      for (const explanation of ['filters', 'none', 'daily5'] as const) {
+        const { unmount } = renderWithProviders(
+          <EventCard event={makeEvent()} index={0} locale={locale} sponsored={{ advertiser: 'Acme', explanation }} />,
+          { route: locale === 'ru' ? '/ru/explore' : locale === 'en' ? '/en/explore' : '/explore' },
+        );
+        await userEvent.click(screen.getByRole('button', { name: why }));
+        expect(screen.getByText(t(`sponsored_explain_${explanation}`, locale))).toBeInTheDocument();
+        const link = screen.getByRole('link', { name: rankingLabel });
+        expect(link.getAttribute('href')).toBe(locale === 'ru' ? `/ru${href}` : locale === 'en' ? `/en${href}` : href);
+        expect(link).not.toHaveAttribute('rel');
+        unmount();
+      }
+    });
+
     it('keeps the locale prefix on the ranking link', async () => {
       renderWithProviders(<EventCard event={makeEvent()} index={0} locale="ru" sponsored={sponsored} />, { route: '/ru/explore' });
       await userEvent.click(screen.getByRole('button', { name: 'Почему?' }));
-      expect(screen.getByRole('link', { name: 'Как упорядочены результаты' })).toHaveAttribute('href', '/ru/ranking#ads');
+      expect(screen.getByRole('link', { name: 'Как упорядочены результаты' })).toHaveAttribute('href', '/ru/ranking#paid-slots');
     });
   });
 });

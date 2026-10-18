@@ -22,6 +22,8 @@ function assertBlocksParity(enBlocks: FaqBlock[], otherBlocks: FaqBlock[]): void
   enBlocks.forEach((block, i) => {
     const other = otherBlocks[i];
     expect(other.kind).toBe(block.kind);
+    // Same slots-flag gate, so a translation can't show paid copy while the flag is off.
+    expect(other.gate).toBe(block.gate);
     if (block.kind === 'p' && other.kind === 'p') {
       // Same inline runs in the same order, so a link can't turn into plain
       // text or point somewhere else while the run count still matches.
@@ -29,6 +31,10 @@ function assertBlocksParity(enBlocks: FaqBlock[], otherBlocks: FaqBlock[]): void
     }
     if (block.kind === 'ul' && other.kind === 'ul') {
       expect(other.items.length).toBe(block.items.length);
+      block.items.forEach((item, j) => {
+        expect(Array.isArray(other.items[j])).toBe(Array.isArray(item));
+        expect(!Array.isArray(other.items[j]) && other.items[j].gate).toBe(!Array.isArray(item) && item.gate);
+      });
     }
   });
 }
@@ -50,6 +56,7 @@ describe('faq doc structure parity', () => {
     it(`${locale}: matches en answer block and inline shape`, () => {
       faqEn.sections.forEach((section, i) => {
         section.items.forEach((item, j) => {
+          expect(other.sections[i].items[j].gate).toBe(item.gate);
           assertBlocksParity(item.answer, other.sections[i].items[j].answer);
         });
       });

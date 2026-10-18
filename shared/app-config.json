@@ -40,6 +40,7 @@
   "sponsored_slot_attr": "data-sponsored-slot",
   "promotion_ref_ad": "ad",
   "promotion_ref_digest_ad": "digest-ad",
+  "organizer_terms_version": 1,
   "safe_url_schemes": ["http", "https"],
   "image_upload_allowed_mime": ["image/jpeg", "image/png", "image/webp"],
   "html_sanitize": {

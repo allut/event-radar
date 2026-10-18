@@ -14,8 +14,21 @@ export const SPONSORED_EXPLANATION_KEY: Record<SponsoredExplanation, string> = {
   daily5: 'sponsored_explain_daily5',
 };
 
-// Where the panel's disclosure link lands: the Ads section of the Ranking disclosure.
-export const SPONSORED_RANKING_TARGET = `${ROUTES.ranking}#ads`;
+// The Ranking disclosure's paid-slots section id (LegalSection.id) and the FAQ
+// ids that start with `paid-`. Never `ads`: ad blockers hide such anchors.
+export const RANKING_PAID_SLOTS_ID = 'paid-slots';
+export const FAQ_PAID_ID_PREFIX = 'paid-';
+
+// Where the panel's disclosure link lands: the paid-slots section of the Ranking disclosure.
+export const SPONSORED_RANKING_TARGET = `${ROUTES.ranking}#${RANKING_PAID_SLOTS_ID}`;
+
+// Build-time mirror of the backend PROMOTIONS_SLOTS_ENABLED flag (set in
+// wrangler.toml [vars]). It only decides whether the legal pages carry the
+// paid-slot copy; the backend flag stays authoritative for serving slots, so
+// flip both together. A function, not a constant: tests stub the env per test.
+export function isPromotionsSlotsEnabled(): boolean {
+  return import.meta.env.VITE_PROMOTIONS_SLOTS_ENABLED === 'true';
+}
 
 // A paid link never passes link equity: the stretched card link and the ticket link.
 export const SPONSORED_LINK_REL = 'sponsored';

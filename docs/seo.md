@@ -7,6 +7,7 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **`frontend/src/hooks/useSeoMeta.ts::useSeoMeta` sets every route's `<title>`, `<html lang>` and default `noindex`.** Landing, `/explore`, `/events/:id` and `/faq` pass `indexable: true`. That adds OG tags, a self-referential canonical and hreflang alternates (`en`/`et`/`ru` + `x-default`).
 - **`/faq` turns `indexable` on only once its `FaqDoc` has loaded.** Until then it stays `noindex` with no canonical, which the prerender's readiness wait relies on.
 - **Every other route goes through the thin `useStaticSeoMeta` wrapper.**
+- **The legal pages (`/privacy`, `/terms`, `/ranking`, `/organizer-terms`) stay `noindex`.** They aren't prerendered, in the sitemap or in the robots allowlist. The draft Organizer terms must never become indexable by accident.
 - **An unfiltered, default-sort `/explore?page=N` with N of 2 or more is self-canonical.** `useSeoMeta`'s `page` input appends `?page=N` to the canonical, every hreflang href and `og:url`. Page 1 stays the bare URL, so the prerender's canonical checks are unchanged.
 - **A filtered, sorted or searched Explore view passes no `page`.** Its canonical stays `/explore` on every page.
 - **The canonical follows the URL after a past-end clamp.** Explore holds `indexable` off while a page is empty but `total` is positive, and while a previous page shows as placeholder data. There is no JS `noindex` and no empty state for a past-end page.

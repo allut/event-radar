@@ -23,6 +23,8 @@ export const ROUTES = {
   privacy: '/privacy',
   terms: '/terms',
   ranking: '/ranking',
+  // Organizer terms (#613): a public legal page, noindex, not prerendered.
+  organizerTerms: '/organizer-terms',
   contact: '/contact',
   faq: '/faq',
   organizerLogin: '/organizer/login',

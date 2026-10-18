@@ -36,7 +36,7 @@ Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). B
 ### Cloudflare Pages Frontend
 
 - **`frontend/wrangler.toml` is the build config's source of truth**, as `render.yaml` is for the backend. Pages serves the static Vite build from `dist`.
-- **Non-secret build vars live in `wrangler.toml`'s `[vars]`**: `NODE_VERSION`, the `VITE_GOOGLE_SIGNIN_*` flags and `PRERENDER_RENDER_BUDGET_MINUTES`.
+- **Non-secret build vars live in `wrangler.toml`'s `[vars]`**: `NODE_VERSION`, the `VITE_GOOGLE_SIGNIN_*` flags, `VITE_PROMOTIONS_SLOTS_ENABLED` and `PRERENDER_RENDER_BUDGET_MINUTES`.
 - **Anything credential-shaped is a Pages Secret**, set in the dashboard or with `wrangler pages secret put`. `wrangler.toml` is checked in, so a secret never goes in `[vars]`.
 - **`frontend/public/_routes.json` keeps static assets off the Functions path**, so serving them never invokes a Function.
 - **Exact-path Functions win over the catch-all automatically.** `functions/api/seo-audit.ts` and `functions/api/prerender-cadence.ts` match ahead of `functions/api/[[path]].ts`, so there's no exclusion pattern to keep in sync.
@@ -175,7 +175,7 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 
 ### Promotions: Trust Review and Withdrawal
 
-- **Three environment flags gate Promotions, all off by default.** `PROMOTIONS_SLOTS_ENABLED` is the master gate on every fill path, the Email ad consent toggle and the `#ads` disclosure. `PROMOTIONS_OFFER_ENABLED` gates the organizer offer and request path. `PROMOTIONS_CHECKOUT_ENABLED` gates card checkout, and only counts while the offer flag is on.
+- **Three environment flags gate Promotions, all off by default.** `PROMOTIONS_SLOTS_ENABLED` is the master gate on every fill path, the Email ad consent toggle and the `#paid-slots` disclosure. `PROMOTIONS_OFFER_ENABLED` gates the organizer offer and request path. `PROMOTIONS_CHECKOUT_ENABLED` gates card checkout, and only counts while the offer flag is on.
 - **A flag flip is a Render dashboard edit plus a restart, with no deploy.** Nothing flips a flag automatically. The operator decides from the figures below.
 - **Review weekly for the first 4 weeks after the first sale.** After that, fold it into the 3-month price review on the same date.
 - **The Trust panel on `/admin/promotions` carries the figures.** It shows the rolling 4 weeks and since launch next to live Promotions, slots served and current consenters. Slot dislikes are admin-only and never reach an Organizer.
@@ -184,7 +184,7 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 - **Also stop selling on complaints or reports.** At least 2 complaints about the ads from different people, or at least 2 upheld reports on promoted events, which suggests the eligibility bar is too loose.
 - **Withdraw at once on a regulator contact** (TTJA or AKI) about ad disclosure, or on a disclosure or dark-pattern problem we find ourselves. Also withdraw when a Stop-selling condition still holds 4 weeks after a fix.
 - **Stop selling:** set `PROMOTIONS_OFFER_ENABLED` and `PROMOTIONS_CHECKOUT_ENABLED` off and restart. Slots keep filling and live or scheduled Promotions run to the end of their window, so nothing is owed. Decline pending requests by hand with a reason.
-- **Withdraw, step one:** do Stop selling, then set `PROMOTIONS_SLOTS_ENABLED` off and restart. Slots stop on every surface at once, and `/ranking#ads` stays because it says what may appear.
+- **Withdraw, step one:** do Stop selling, then set `PROMOTIONS_SLOTS_ENABLED` off and restart. Slots stop on every surface at once, and the frontend `VITE_PROMOTIONS_SLOTS_ENABLED` can stay on, so `/ranking#paid-slots` keeps saying what may appear.
 - **Withdraw, step two:** end each paid Promotion with `POST /admin/promotions/{id}/withdraw`, or all at once with `POST /admin/promotions/withdraw-all`. Both return 409 `slots_still_enabled` until step one is done.
 - **Withdraw ends a Promotion with `feature_withdrawn` and records a full refund of its unused whole days.** Today counts as used, a scheduled Promotion is refunded in full and a complimentary one has nothing to refund. Each Organizer gets the P2B email, and each end and refund writes an audit row.
 - **Withdraw records the refund only; it moves no money.** For a Stripe-paid Promotion, issue the card refund in Stripe. Unpaid checkouts void themselves as usual.

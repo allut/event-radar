@@ -25,6 +25,7 @@ import ConsentOff from './routes/ConsentOff';
 import Privacy from './routes/Privacy';
 import Terms from './routes/Terms';
 import Ranking from './routes/Ranking';
+import OrganizerTerms from './routes/OrganizerTerms';
 import Contact from './routes/Contact';
 import Faq from './routes/Faq';
 import OrganizerLogin from './routes/OrganizerLogin';
@@ -133,6 +134,7 @@ const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.privacy, element: <Privacy /> },
   { path: ROUTES.terms, element: <Terms /> },
   { path: ROUTES.ranking, element: <Ranking /> },
+  { path: ROUTES.organizerTerms, element: <OrganizerTerms /> },
   { path: ROUTES.contact, element: <Contact /> },
   { path: ROUTES.faq, element: <Faq />, noRedirect: true },
   { path: ROUTES.organizerLogin, element: <OrganizerLogin /> },

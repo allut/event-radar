@@ -1,9 +1,10 @@
 import { CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
+import { SPONSORED_RANKING_TARGET } from '../../constants/sponsored';
 import type { FaqDoc } from './types';
 
 const doc: FaqDoc = {
-  lastUpdated: '2026-10-17',
+  lastUpdated: '2026-10-18',
   seoTitle: 'Korduma kippuvad küsimused',
   metaDescription:
     'Kuidas Event Radar töötab: kust Tallinna üritused pärinevad, kuidas valitakse Päeva 5, hommikune e-kiri, sinu andmed ja kuidas korraldajad üritusi lisavad.',
@@ -37,6 +38,15 @@ const doc: FaqDoc = {
               content: [
                 'Jah, nii üritustel käijatele kui ka korraldajatele. Tasu pole ja keegi ei saa maksta, et teda kõrgemal näidataks.',
               ],
+              gate: 'slotsOff',
+            },
+            {
+              kind: 'p',
+              content: [
+                'Jah. Event Radar on tasuta üritustel käijatele ja ürituste lisamine on tasuta korraldajatele. Korraldajad võivad maksta märgistatud reklaamikoha eest, kuid keegi ei saa maksta, et jõuda tavatulemustes või sinu Päeva 5-s kõrgemale. ',
+                { text: 'Kuidas reklaam töötab', to: SPONSORED_RANKING_TARGET },
+              ],
+              gate: 'slotsOn',
             },
           ],
         },
@@ -130,6 +140,83 @@ const doc: FaqDoc = {
               kind: 'p',
               content: [
                 'Hommikul, koos selle päeva Päeva 5-ga. Kui sulle sel päeval valikuid pole, e-kirja ei saadeta. E-kiri on konto loomisel sisse lülitatud. Loobumiseks kasuta mis tahes e-kirjas olevat loobumislinki (või oma e-postirakenduse loobumisnuppu) või lülita see Seadetes välja. Seadetes saad selle igal ajal uuesti sisse lülitada.',
+              ],
+            },
+          ],
+        },
+        {
+          id: 'paid-on-event-radar',
+          question: 'Kas Event Radaris on reklaami?',
+          gate: 'slotsOn',
+          answer: [
+            {
+              kind: 'p',
+              content: [
+                'Korraldajad saavad maksta märgistatud koha eest tulemuste kõrval: kuni üks kaart Avastamise esimesel lehel ja kuni üks eraldi kaart sinu Päeva 5 järel. See on märgitud „Reklaam” ja sellel on maksnud ettevõtte nimi. Kui miski ei sobi, jääb koht tühjaks ja selle asemele ei panda midagi.',
+              ],
+            },
+            {
+              kind: 'p',
+              content: [{ text: 'Kuidas reklaam töötab', to: SPONSORED_RANKING_TARGET }],
+            },
+          ],
+        },
+        {
+          id: 'paid-change-results',
+          question: 'Kas reklaam muudab minu tulemusi või Päeva 5?',
+          gate: 'slotsOn',
+          answer: [
+            {
+              kind: 'p',
+              content: [
+                'Ei. Tulemused ja sinu viis valikut järjestatakse täpselt nii, nagu need oleks ilma reklaamita. Reklaam ei võta kohta järjestuses ega asenda ühtki sinu viiest valikust. Maksmisega ei saa üritust kõrgemale tõsta.',
+              ],
+            },
+          ],
+        },
+        {
+          id: 'paid-chosen',
+          question: 'Kas reklaam valitakse minu huvide põhjal?',
+          gate: 'slotsOn',
+          answer: [
+            {
+              kind: 'p',
+              content: [
+                'Ei. Reklaam valitakse konteksti järgi: lehe, päeva ja Avastamises sinu seatud filtrite ja otsingu järgi. Sinu maitset, meeldimisi ega tegevust selleks ei kasutata. Neid kasutatakse ainult reklaami eemal hoidmiseks: üritust, mis sulle ei meeldinud, mida raporteerisid, salvestasid või mis sulle meeldis, sulle ei reklaamita. Vajuta mis tahes reklaamil „Miks?”, et näha selle ühelauselist selgitust.',
+              ],
+            },
+          ],
+        },
+        {
+          id: 'paid-in-email',
+          question: 'Kas saan hommikuses e-kirjas reklaami?',
+          gate: 'slotsOn',
+          answer: [
+            {
+              kind: 'p',
+              content: [
+                "Ainult siis, kui ise soovid. Reklaam e-kirjas on vaikimisi väljas. Saad selle Seadetes e-kirja seade all sisse lülitada valikuga „Näita mu Daily Five'i kirjas reklaami”. Siis võib kiri sinu valikute all kanda kuni ühe tasulise ürituse, märgitud „Reklaam”. Teemas seda ei mainita.",
+              ],
+            },
+            {
+              kind: 'p',
+              content: [
+                'Lõpetamiseks kasuta mis tahes reklaamiga kirjas linki „Ära näita reklaame e-kirjas” või lülita seade Seadetes välja. E-kirja tellimuse tühistamine lülitab reklaami samuti välja ja see jääb väljas ka siis, kui tellid uuesti.',
+              ],
+            },
+          ],
+        },
+        {
+          id: 'paid-data',
+          question: 'Mida te reklaami kohta salvestate?',
+          gate: 'slotsOn',
+          answer: [
+            {
+              kind: 'p',
+              content: [
+                'Iga reklaami anonüümseid päevakogusummasid: mitu korda seda näidati ja mitu korda avati. Need ei sisalda midagi sinu kohta ja me ei jälgi, kas sa meie e-kirju avad. Reklaami tellija saab ainult need kogusummad, mitte kunagi seda, kes reklaami nägi või sellele klõpsas. Tuntud roboteid ei loeta. Kui lülitad e-kirjas reklaami sisse, hoiame ka kirjet selle kohta, millal sa seda tegid ja millega nõustusid. Üksikasjad on ',
+                { text: 'privaatsuspoliitikas', to: ROUTES.privacy },
+                '.',
               ],
             },
           ],

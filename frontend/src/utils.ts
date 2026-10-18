@@ -399,10 +399,10 @@ export function formatEventShortDate(iso: string, locale: string): string {
   return dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT, true).format(new Date(iso));
 }
 
-/** Flatten an inline run (string or `{ text }` part) to plain text, for building
- * stable React keys off authored content (react/no-array-index-key is an error). */
-export function inlineText(content: ReadonlyArray<string | { text: string }>): string {
-  return content.map((part) => (typeof part === 'string' ? part : part.text)).join('');
+/** Flatten an inline run (string, `{ text }` link or `{ operator }` field) to plain
+ * text, for building stable React keys off authored content (react/no-array-index-key is an error). */
+export function inlineText(content: ReadonlyArray<string | { text: string } | { operator: string }>): string {
+  return content.map((part) => (typeof part === 'string' ? part : 'operator' in part ? part.operator : part.text)).join('');
 }
 
 // ─── Date / number helpers ───────────────────────────────────────────────────

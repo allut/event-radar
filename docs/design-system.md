@@ -179,7 +179,7 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 
 - **`EventCard` has two variants: `standard` and `featured`.** An `editorial` split-row plate variant was built twice and reverted twice on product review. Add a third only after a live visual review. Landing's `.plate` rows are unrelated.
 - **A Sponsored slot is `EventCard` with an optional `sponsored` caption slot, not a third variant.** The caption sits above the image, outside the stretched link. The label is bold small caps in `--text`, then `· {org}` in `--text-muted`, then a "Why?" text button in `--text-soft`.
-- **The "Why?" button opens a panel over the card body (never the caption).** It is `--bg-raised` with a gold `--border-w-accent` top rule, the surface's explanation and a plain link to `/ranking#ads`.
+- **The "Why?" button opens a panel over the card body (never the caption).** It is `--bg-raised` with a gold `--border-w-accent` top rule, the surface's explanation and a plain link to `/ranking#paid-slots`.
 - **Gold text in a Sponsored slot uses `--accent-ink`, not `--accent-light`,** so the link passes AA on the light palette. The card is never banner-styled and carries the `SPONSORED_SLOT_ATTR` marker from `shared/`.
 - **On Daily 5 the card sits in its own section after the list.** A `--rule` hairline and a `--fs-xs` `--text-muted` caption set it apart, so it never reads as pick #6.
 - **`EmptyState` has no icon and is left-aligned.** Its shape is an optional small-caps eyebrow (an existing i18n string), a `--rule` hairline, a Cormorant title, a Manrope message, then an optional hint.

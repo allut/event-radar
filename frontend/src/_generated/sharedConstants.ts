@@ -41,5 +41,6 @@ export const EMAIL_BRAND_MARK_PATH = '/email-mark.png';
 export const SPONSORED_SLOT_ATTR = 'data-sponsored-slot';
 export const PROMOTION_REF_AD = 'ad';
 export const PROMOTION_REF_DIGEST_AD = 'digest-ad';
+export const ORGANIZER_TERMS_VERSION = 1;
 export const RANKING_TIERS_SIGNED_IN: readonly (readonly string[])[] = [['affinity'], ['recency', 'feedback'], ['quality'], ['locality']];
 export const RANKING_TIERS_SIGNED_OUT: readonly (readonly string[])[] = [['recency'], ['quality'], ['locality']];

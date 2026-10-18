@@ -3,6 +3,7 @@ import faqEn from './faq.en';
 import faqEt from './faq.et';
 import faqRu from './faq.ru';
 import type { FaqBlock, FaqDoc, FaqInline } from './types';
+import { resolveSlotsGate } from '../slotsGate';
 import {
   CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
   CLAIM_EXPIRY_DAYS,
@@ -14,7 +15,11 @@ import {
 // Keeps the FAQ copy in step with the product: an answer that quotes a shared
 // config value (link expiry, session length, persona cap, claim expiry) must
 // still quote it after the value changes. Fails until every locale is updated.
-const docs: Record<string, FaqDoc> = { en: faqEn, et: faqEt, ru: faqRu };
+const docs: Record<string, FaqDoc> = {
+  en: resolveSlotsGate(faqEn, true),
+  et: resolveSlotsGate(faqEt, true),
+  ru: resolveSlotsGate(faqRu, true),
+};
 
 const QUOTED_VALUES: Record<string, Record<string, number>> = {
   'sign-in': { MAGIC_LINK_EXPIRY_MINUTES, SESSION_TTL_DAYS },
@@ -27,7 +32,7 @@ function inlineText(run: FaqInline): string {
 }
 
 function blockText(block: FaqBlock): string {
-  const runs = block.kind === 'p' ? block.content : block.items.flat();
+  const runs = block.kind === 'p' ? block.content : (block.items as FaqInline[][]).flat();
   return runs.map(inlineText).join(' ');
 }
 

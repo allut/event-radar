@@ -4,6 +4,7 @@ import type { LegalDoc } from './types';
 const doc: LegalDoc = {
   title: 'Privaatsuspoliitika',
   lastUpdated: '2026-10-17',
+  lastUpdatedSlots: '2026-10-18',
   intro: [
     {
       kind: 'p',
@@ -39,6 +40,18 @@ const doc: LegalDoc = {
             ['E-posti kokkuvõtte eelistus — kas oled tellinud igapäevase e-posti kokkuvõtte.'],
             ['Kui logid sisse Google’iga — sinu Google’i konto tunnus ning e-posti aadress ja kinnitusstaatus, mille Google edastab; me ei küsi ega saa kunagi sinu nime ega fotot.'],
             ['Tehnilised andmed — sinu IP-aadress ja tavapärane päringuteave, mida töödeldakse ajutiselt turvalisuse, päringute piiramise ja väärkasutuse ennetamise ning lühiajaliste serverilogide jaoks.'],
+            {
+              content: [
+                'Sinu e-kirja reklaami nõusoleku kirje, kui lülitad selle sisse või välja: kas see on sees, millal sa selle andsid või tagasi võtsid, millise sõnastusega nõustusid, kus seda tegid (Seaded, e-kirja link või kokkuvõtte tellimuse tühistamine) ja sinu keel.',
+              ],
+              gate: 'slotsOn',
+            },
+            {
+              content: [
+                'Milline reklaam sinu Päeva 5 juurde igal päeval määrati: reklaam ja kuupäev. Kasutame seda, et reklaam püsiks päeva jooksul samana, et see puhkaks kolm päeva ja et saaksime lugeda, mitu inimest reklaamini jõudis.',
+              ],
+              gate: 'slotsOn',
+            },
           ],
         },
         {
@@ -58,6 +71,30 @@ const doc: LegalDoc = {
             ['Teenuse osutamiseks — sisselogimine, sinu konto ja isikupärastatud voog: lepingu täitmine ja meie õigustatud huvi teenuse käitamisel (art. 6(1)(b),(f)).'],
             ['E-posti kokkuvõte, 15. oktoobril 2026 või hiljem loodud kontode puhul — sinu nõusolek (art. 6(1)(a)); tellitav ja igal ajal tagasi võetav.'],
             ['E-posti kokkuvõte, enne 15. oktoobrit 2026 loodud kontode puhul — need kontod tellisid kokkuvõtte vaikimisi, seega tugineme oma õigustatud huvile hoida olemasolevaid kasutajaid kursis (art. 6(1)(f)) ning infoühiskonna teenuse seaduse § 103¹ erandile olemasolevate klientide puhul. Igas kokkuvõttes on loobumislink ja kokkuvõtte saab Seadetes igal ajal välja lülitada.'],
+            {
+              content: [
+                'Reklaami näitamine Avastamises ja Päeva 5-s — reklaamikohad valitakse konteksti, mitte sinu huvide põhjal. Päeva 5 reklaamikoha jaoks salvestame iga kasutaja ja päeva kohta, milline reklaam sulle määrati, ning rakendame sinu enda välistusi (üritused, mis sulle ei meeldinud, mida raporteerisid, salvestasid või mis sulle meeldisid) ja kolmepäevast pausi, enne kui sama reklaam võib tagasi tulla. Meie õigustatud huvi on näidata korraldajate tasutud reklaami nii, et sa ei näe ürituse, mille oled juba tagasi lükanud, ega sama reklaami liiga tihti (art. 6(1)(f)).',
+              ],
+              gate: 'slotsOn',
+            },
+            {
+              content: [
+                'Reklaami mõõtmine — loeme, mitu korda iga reklaami on näidatud ja avatud, päevakogusummadena reklaami kohta, mis ei sisalda midagi sinu kohta. Meie õigustatud huvi on korraldajate tasutud reklaami edastamine ja selle kohta aruandmine (art. 6(1)(f)).',
+              ],
+              gate: 'slotsOn',
+            },
+            {
+              content: [
+                'Reklaam e-kirjas — sinu eraldi nõusolek (art. 6(1)(a); infoühiskonna teenuse seaduse § 103¹). Väljas, kuni sa selle sisse lülitad, ja tagasivõetav Seadetes või igast kirjast, kus reklaam on.',
+              ],
+              gate: 'slotsOn',
+            },
+            {
+              content: [
+                'Valime, millist reklaami sulle näidata, päeva ja saadaolevate reklaamide põhjal, mitte kunagi sinu tegevuse ega huvide põhjal.',
+              ],
+              gate: 'slotsOn',
+            },
             ['Turvalisus, päringute piiramine, väärkasutuse ennetamine ja logimine — meie õigustatud huvi hoida teenus turvaline ja kättesaadav (art. 6(1)(f)).'],
           ],
         },
@@ -72,6 +109,13 @@ const doc: LegalDoc = {
             'Kasutame üht rangelt vajalikku küpsist: allkirjastatud, httpOnly sessiooniküpsist, mis hoiab sind sisse logituna. Sellel pole reklaami- ega jälgimiseesmärki ja lehel töötavad skriptid ei saa seda lugeda. Kuna see on teenuse toimimiseks rangelt vajalik, ei ole küpsiste nõusolekuriba vaja. Kui logid sisse Google’iga, paneme sisselogimise lõpuleviimise mõneks minutiks ka teise rangelt vajaliku küpsise — allkirjastatud, httpOnly, ühekordse olekuküpsise, mis kaitseb sisselogimist saidiülese võltsimise (CSRF) eest; see kustutatakse kohe pärast sisselogimise lõppu, olenemata tulemusest, ja ükski Google’i seatud küpsis ei puuduta kunagi meie saiti. Sinu keelevalik ja tõeväärtuslipp "oled sisse logitud", mis ei sisalda mandaati, salvestatakse sinu brauseri kohalikku salvestusruumi. Me ei kasuta analüütika- ega reklaamijälgijaid: ühtegi kolmanda osapoole analüütikaskripti ei laadita ning mõõtmiseks ei salvestata sinu seadmesse ega loeta sealt midagi. Kui oled sisse logitud, teatab rakendus meie enda serverile, milliseid üritusi vaatad ja milliste piletilinkidele klõpsad; see toidab sinu isikupärastatud „Päeva 5”, mille sisselogimisega tellisid, ning on selle funktsiooni jaoks rangelt vajalik.',
           ],
         },
+        {
+          kind: 'p',
+          content: [
+            'Me ei jälgi, kas sa meie e-kirju avad: kirjades pole jälgimispikslit ega linke, mis sind tuvastaksid. Kui järgid reklaami ürituse lehele, lisandub see külastus reklaami anonüümsele päevakogusummale. Seda ei seota sinu ega sinu e-posti aadressiga.',
+          ],
+          gate: 'slotsOn',
+        },
       ],
     },
     {
@@ -82,6 +126,14 @@ const doc: LegalDoc = {
           content: [
             'Me ei müü kunagi sinu andmeid ega jaga neid reklaamijatega. Kasutame väikest hulka teenusepakkujaid, kes töötlevad andmeid ainult meie juhiste alusel ja andmetöötluslepingute kohaselt:',
           ],
+          gate: 'slotsOff',
+        },
+        {
+          kind: 'p',
+          content: [
+            'Me ei müü kunagi sinu isikuandmeid ega jaga neid reklaamijatega. Korraldajad, kes reklaami eest maksavad, saavad ainult anonüümseid päevakogusummasid selle kohta, mitu korda reklaami näidati ja avati, mitte kunagi seda, kes seda nägi või sellele klõpsas. Kasutame väikest hulka teenusepakkujaid, kes töötlevad andmeid ainult meie juhiste alusel ja andmetöötluslepingute kohaselt:',
+          ],
+          gate: 'slotsOn',
         },
         {
           kind: 'ul',
@@ -123,6 +175,24 @@ const doc: LegalDoc = {
             ['Tehnilised/auditikirjed (töötlemata sissevõtu andmed, päringu-/töötluslogid): kuni 90 päeva.'],
             ['Voo hetktõmmised ja vahemällu salvestatud järjestusskoorid: kuni 30 päeva.'],
             ['Konto andmed (e-post, eelistused, maitseprofiil, tagasiside): säilitatakse konto aktiivsuse ajal ja kustutatakse taotluse alusel (vt allpool). Sündmuste kirjeid säilitame tähtajatult, kuid need on avalik sündmuste teave, mitte sinu isikuandmed.'],
+            {
+              content: [
+                'E-kirja reklaami nõusoleku kirje: säilitatakse nii kaua, kui konto on olemas, ja kustutatakse koos sellega.',
+              ],
+              gate: 'slotsOn',
+            },
+            {
+              content: [
+                'Milline reklaam sinu Päeva 5 juurde igal päeval määrati: kuni 30 päeva.',
+              ],
+              gate: 'slotsOn',
+            },
+            {
+              content: [
+                'Anonüümsed reklaami päevakogusummad: säilitatakse tähtajatult. Need ei sisalda isikuandmeid.',
+              ],
+              gate: 'slotsOn',
+            },
           ],
         },
       ],
@@ -139,6 +209,13 @@ const doc: LegalDoc = {
             { text: AKI_URL, href: AKI_URL },
             '.',
           ],
+        },
+        {
+          kind: 'p',
+          content: [
+            'E-kirja reklaami nõusoleku saad igal ajal tagasi võtta Seadetes või ilma sisse logimata lingiga „Ära näita reklaame e-kirjas” igas kirjas, kus reklaam on. Kokkuvõtte tellimuse tühistamine võtab selle samuti tagasi; kui tellid hiljem uuesti, jääb reklaam väljas, kuni lülitad selle Seadetes ise sisse.',
+          ],
+          gate: 'slotsOn',
         },
       ],
     },

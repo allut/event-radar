@@ -58,3 +58,33 @@
   text-decoration: underline;
   overflow-wrap: anywhere; /* bare URLs (the AKI link) on a phone at a larger default font size */
 }
+
+/* An Operator field not yet filled in (constants/operator.ts): visibly a placeholder. */
+.placeholder {
+  background: var(--accent-faint);
+  color: var(--accent-ink);
+  border: var(--border-w-hair) dashed var(--accent-border);
+  padding: 0 var(--space-1);
+  font-weight: var(--fw-semibold);
+}
+
+/* DRAFT notice above the title (Organizer terms until the Operator publishes them). */
+.draft {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-w-hair) solid var(--danger);
+  border-left-width: var(--border-w-accent);
+  background: var(--bg-raised);
+  font-size: var(--fs-sm);
+  line-height: var(--leading-body);
+  color: var(--text-soft);
+}
+
+.draft strong {
+  font-size: var(--fs-xs);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--danger);
+}

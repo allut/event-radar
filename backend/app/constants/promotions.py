@@ -4,6 +4,7 @@ import re
 from decimal import Decimal
 
 from app._generated.shared_constants import (
+    ORGANIZER_TERMS_VERSION as ORGANIZER_TERMS_VERSION,
     PROMOTION_REF_AD as PROMOTION_REF_AD,
     PROMOTION_REF_DIGEST_AD as PROMOTION_REF_DIGEST_AD,
 )
@@ -320,9 +321,9 @@ PROMOTION_WITHDRAWN_REFUND_NOTE = "Feature withdrawn: unused days refunded in fu
 # Withdraw is refused while the slots flag is still on.
 ERROR_PROMOTION_SLOTS_STILL_ENABLED = "slots_still_enabled"
 # Organizer offer and Promotion requests (#614, #615).
-# Version of the Organizer terms an Organizer accepts on a request (#613 ships
-# the legal page; bump this when the terms change in substance).
-ORGANIZER_TERMS_VERSION = 1
+# Version of the Organizer terms an Organizer accepts on a request. It lives in
+# shared/app-config.json (`organizer_terms_version`) next to the page that shows
+# it; bump it there when the terms change in substance.
 # Soft per-Organizer ceiling on new requests per Tallinn day.
 ORGANIZER_DAILY_PROMOTION_REQUEST_CAP = 10
 PROMOTION_REQUEST_STATUS_PENDING = "pending"
@@ -375,7 +376,7 @@ PROMOTION_CHECKOUT_PATH_SUCCESS = "/organizer/promotions/checkout/success"
 PROMOTION_CHECKOUT_PATH_CANCEL = "/organizer/promotions"
 # Wording versions recorded when the Organizer attests and accepts at checkout.
 PROMOTION_CONTENT_POLICY_VERSION = "1"
-PROMOTION_ORGANIZER_TERMS_VERSION = "1"
+PROMOTION_ORGANIZER_TERMS_VERSION = str(ORGANIZER_TERMS_VERSION)
 PROMOTION_SNAPSHOT_TRIGGER_CHECKOUT_PAID = "checkout_paid"
 # Stripe custom-field limits: a label of 40 characters and a value of 140.
 STRIPE_CUSTOM_FIELD_VALUE_MAX_CHARS = 140

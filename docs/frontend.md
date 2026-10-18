@@ -35,7 +35,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **The bar condenses on every route through `useBarScrolled()`:** past 24px, and back under 4px. It starts unscrolled, so prerendered HTML shows the unscrolled bar.
 - **`Footer` labels follow the URL's locale through `usePathLocale()`, never the saved preference.** Its FAQ link always goes to the public `/faq`, organizer pages included.
 - **Sponsored slot (`components/SponsoredSlot/`, `constants/sponsored.ts`):** `EventCard`'s optional `sponsored` prop (`{ advertiser, explanation }`) renders the caption, the "Why?" panel, the slot marker, `rel="sponsored"` on the stretched link and `rel="sponsored noopener noreferrer"` on the ticket link. The `explanation` is `filters`, `none` (Explore, from the API) or `daily5`. The strings (`sponsored_*`) and the marker attribute are in `shared/`.
-- **The "Why?" link stays a plain `/ranking#ads` link.** Explore and Daily 5 both render the card through `EventCard`.
+- **The "Why?" link stays a plain `/ranking#paid-slots` link** (`SPONSORED_RANKING_TARGET`). Explore and Daily 5 both render the card through `EventCard`. Never name an anchor or id `ads`.
 - **Daily 5 (`routes/Feed/`) renders the `sponsored_slot` after the `<ol>`,** in its own `<section>` with a hairline `--rule`, a small `sponsored_daily5_caption` line and no numeral. The `RankingLink` follows it. The card is passed `explanation: 'daily5'` by the API.
 - **A sponsored card's links carry `?ref=ad`, and its dislike sends `ref: 'ad'`.** `EventDetail` passes a known `ref` on its first request only, then strips it from the URL, so a reload or share can't count again.
 - **Explore opts in with `sponsored_slot=true` unless `isPrerenderRender()`.** It reads the `PRERENDER_RUNTIME_FLAG` window flag that `scripts/prerender.ts` sets with `addInitScript`. Page 1 inserts the payload card at `tile` (the 4th card, after the sign-up strip). Only organic `events` feed the `ItemList` and the range label, so positions skip the slot. The pager reads `page1_has_slot` through `slotRows`.
@@ -169,6 +169,10 @@ Every list pages with a numbered pager and a `?page` URL param. There is no Load
 - **A count-dependent string uses `tn()` and one key per plural category**, `{key}_one`/`_other`, plus `_few`/`_many` in `ru.json`. `Intl.PluralRules` picks the category, so each locale needs every category its rule returns.
 - **The backend reads strings through `backend/app/i18n.py`** (`t`, `ti`, `day_name`, `month_name`) over `_generated/i18n_data.py`. `app/constants.py` takes cross-stack scalars and frozensets from `_generated/shared_constants.py`.
 - **Legal and FAQ copy isn't in `shared/`.** Each is a per-locale TypeScript module under `frontend/src/content/legal/` or `content/faq/`.
+- **Paid-slot copy carries `gate: 'slotsOn'` or `'slotsOff'`** on a block, list item, section or FAQ item. `content/slotsGate.ts` drops the non-matching ones before render, and `LegalDoc.lastUpdatedSlots` replaces the date while on. The Ranking `paid-slots` section, the FAQ `paid-*` items and the Privacy additions use it.
+- **`isPromotionsSlotsEnabled()` reads the build-time `VITE_PROMOTIONS_SLOTS_ENABLED`.** It mirrors the backend `PROMOTIONS_SLOTS_ENABLED` and only decides whether the legal pages carry the copy. The backend flag stays authoritative for serving slots, so flip both.
+- **`/organizer-terms` is a `LegalPage` doc (`organizerTerms`) with a DRAFT notice** until `ORGANIZER_TERMS_IS_DRAFT` in `constants/operator.ts` goes false. Its version label comes from `organizer_terms_version` in `shared/app-config.json`, which the backend records on acceptance.
+- **Operator facts live in `constants/operator.ts` as `OPERATOR_IDENTITY`.** A `null` field renders as a highlighted placeholder (an inline `{ operator }` run); fill the value once and every legal page updates.
 
 ## Brand Assets
 

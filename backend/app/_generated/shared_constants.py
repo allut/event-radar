@@ -32,5 +32,6 @@ EMAIL_BRAND_MARK_PATH: str = "/email-mark.png"
 SPONSORED_SLOT_ATTR: str = "data-sponsored-slot"
 PROMOTION_REF_AD: str = "ad"
 PROMOTION_REF_DIGEST_AD: str = "digest-ad"
+ORGANIZER_TERMS_VERSION: int = 1
 RANKING_TIERS_SIGNED_IN: tuple[tuple[str, ...], ...] = (("affinity",), ("recency", "feedback",), ("quality",), ("locality",),)
 RANKING_TIERS_SIGNED_OUT: tuple[tuple[str, ...], ...] = (("recency",), ("quality",), ("locality",),)

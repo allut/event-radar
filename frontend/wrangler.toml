@@ -50,4 +50,6 @@ NODE_VERSION = "24"
 # managed via the Dashboard" notice once [vars] is present).
 VITE_GOOGLE_SIGNIN_CONSUMER_ENABLED = "true"
 VITE_GOOGLE_SIGNIN_ORGANIZER_ENABLED = "true"
+# Mirrors the backend PROMOTIONS_SLOTS_ENABLED: shows the paid-slot copy on /ranking, /faq and /privacy. Flip both together.
+VITE_PROMOTIONS_SLOTS_ENABLED = "false"
 PRERENDER_RENDER_BUDGET_MINUTES = "10"
