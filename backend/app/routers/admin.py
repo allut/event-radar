@@ -3,12 +3,12 @@
 import asyncio
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
-from datetime import datetime
+from datetime import date, datetime
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import and_, func, select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,7 @@ from app.constants.admin import (
     ADMIN_ACTION_INGEST,
     ADMIN_ACTION_INGEST_SOURCE,
     ADMIN_ACTION_PIPELINE_RUN,
+    ADMIN_ACTION_PROMOTION_GRANT,
     ADMIN_ACTION_REVOKE_CLAIM,
     ADMIN_ACTION_PUBLISH,
     ADMIN_ACTION_REFETCH,
@@ -78,6 +79,19 @@ from app.constants.ranking import (
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
 )
+from app.constants.promotions import (
+    PROMOTION_LIVE_CAP,
+    ADMIN_PROMOTIONS_MAX_PAGE_SIZE,
+    ADMIN_PROMOTIONS_PAGE_SIZE,
+    ERROR_PROMOTION_INVALID_STATE,
+    PROMOTION_ADVERTISER_NAME_MAX_CHARS,
+    PROMOTION_BILLING_EMAIL_MAX_CHARS,
+    PROMOTION_ERROR_CAP_EXCEEDED,
+    PROMOTION_ERROR_NO_OWNER,
+    PROMOTION_ERROR_OVERLAP,
+    PROMOTION_NOTE_MAX_CHARS,
+    VALID_PROMOTION_STATES,
+)
 from app.constants.rate_limits import (
     RATE_LIMIT_ADMIN,
     RATE_LIMIT_BROWSE,
@@ -111,6 +125,20 @@ from app.ingestion.jobs import (
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
+from app.promotions.cap import cap_strip
+from app.promotions.grant import (
+    GrantRequest,
+    PromotionRefused,
+    grant_promotion,
+    validate_grant,
+)
+from app.promotions.views import (
+    grant_context,
+    list_promotions,
+    serialize_promotion,
+    validation_payload,
+)
+from app.promotions.windows import now_tallinn, tallinn_today
 from app.models.models import (
     Claim,
     DailyFeed,
@@ -1562,3 +1590,189 @@ async def admin_stats(request: Request) -> dict:
         "events": {"total": total, "canonical": canonical},
         "sources": {"total": sources_total, "enabled": sources_enabled},
     }
+
+
+# ---------------------------------------------------------------------------
+# Promotions (#600): JSON API for the cap strip, the list and the grant form.
+# ---------------------------------------------------------------------------
+
+
+class _PromotionGrantBody(BaseModel):
+    start_date: date
+    end_date: date
+    advertiser_legal_name: str = Field(max_length=PROMOTION_ADVERTISER_NAME_MAX_CHARS)
+    advertiser_registry_code: str = Field(max_length=32)
+    billing_email: EmailStr | None = Field(
+        default=None, max_length=PROMOTION_BILLING_EMAIL_MAX_CHARS
+    )
+    is_complimentary: bool = False
+    complimentary_note: str | None = Field(default=None, max_length=PROMOTION_NOTE_MAX_CHARS)
+    invoice_reference: str | None = Field(default=None, max_length=64)
+
+
+@router.get("/promotions/cap-strip", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
+async def admin_promotion_cap_strip(request: Request) -> dict:
+    """The 14-day cap strip: reserved, paid and live Promotions per Tallinn
+    day, starting today, each out of the cap."""
+    today = tallinn_today(now_tallinn())
+    async with AsyncSessionLocal() as db:
+        days = await cap_strip(db, today)
+    return {
+        "today": today.isoformat(),
+        "cap": PROMOTION_LIVE_CAP,
+        "days": [d.as_dict() for d in days],
+    }
+
+
+@router.get("/promotions", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
+async def admin_list_promotions(
+    request: Request,
+    state: str | None = Query(None),
+    limit: int = Query(
+        ADMIN_PROMOTIONS_PAGE_SIZE,
+        ge=PAGINATION_MIN_LIMIT,
+        le=ADMIN_PROMOTIONS_MAX_PAGE_SIZE,
+    ),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
+) -> dict:
+    """Promotions, newest window first. `state` (scheduled, live, finished) is
+    computed from the window and today's Tallinn date, never stored."""
+    if state is not None and state not in VALID_PROMOTION_STATES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=ERROR_PROMOTION_INVALID_STATE,
+        )
+    today = tallinn_today(now_tallinn())
+    async with AsyncSessionLocal() as db:
+        items, total = await list_promotions(
+            db, state=state, limit=limit, offset=offset, today=today
+        )
+    return {
+        "today": today.isoformat(),
+        "promotions": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(items) < total,
+    }
+
+
+@router.get(
+    "/events/{event_id}/promotion-context", dependencies=[Depends(get_current_admin)]
+)
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
+async def admin_promotion_context(event_id: int, request: Request) -> dict:
+    """Grant form context: resolved owner (null = cannot grant), prefill,
+    window rules, pricing and the event's existing Promotions."""
+    async with AsyncSessionLocal() as db:
+        event = await _event_or_404(db, event_id)
+        return await grant_context(db, event, now_tallinn())
+
+
+@router.get(
+    "/events/{event_id}/promotions/validate", dependencies=[Depends(get_current_admin)]
+)
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
+async def admin_validate_promotion_dates(
+    event_id: int,
+    request: Request,
+    start_date: date,
+    end_date: date,
+    is_complimentary: bool = False,
+) -> dict:
+    """Live date validation for the grant form: every window, overlap and cap
+    problem for the candidate window, plus the price. Writes nothing."""
+    async with AsyncSessionLocal() as db:
+        event = await _event_or_404(db, event_id)
+        violations = await validate_grant(db, event, start_date, end_date, now_tallinn())
+    return validation_payload(start_date, end_date, violations, is_complimentary)
+
+
+@router.post(
+    "/events/{event_id}/promotions",
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_admin)],
+)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_grant_promotion(
+    event_id: int, body: _PromotionGrantBody, request: Request
+) -> dict:
+    """Grant a Promotion for an owned event. Refused (409 no_owner / overlap /
+    cap_exceeded, 422 for window and field rules) with `detail.errors` listing
+    every rule broken. The cap check and insert run under one advisory lock,
+    and the PROMOTION_GRANT audit row rides the same transaction."""
+    grant_request = GrantRequest(
+        start_date=body.start_date,
+        end_date=body.end_date,
+        advertiser_legal_name=body.advertiser_legal_name.strip(),
+        advertiser_registry_code=body.advertiser_registry_code.strip(),
+        billing_email=str(body.billing_email) if body.billing_email else None,
+        is_complimentary=body.is_complimentary,
+        complimentary_note=body.complimentary_note,
+        invoice_reference=(body.invoice_reference or "").strip() or None,
+    )
+    if not grant_request.advertiser_legal_name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="advertiser_legal_name is required",
+        )
+
+    async def _run() -> dict:
+        now = now_tallinn()
+        async with AsyncSessionLocal() as db:
+            event = await _event_or_404(db, event_id)
+            try:
+                promotion = await grant_promotion(db, event, grant_request, now)
+            except PromotionRefused as refused:
+                await db.rollback()
+                codes = {v.code for v in refused.violations}
+                conflict = codes & {
+                    PROMOTION_ERROR_NO_OWNER,
+                    PROMOTION_ERROR_OVERLAP,
+                    PROMOTION_ERROR_CAP_EXCEEDED,
+                }
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT
+                    if conflict
+                    else status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={
+                        "code": refused.violations[0].code,
+                        "message": refused.violations[0].message,
+                        "errors": [v.as_dict() for v in refused.violations],
+                    },
+                ) from None
+            result = {
+                "id": promotion.id,
+                "event_id": promotion.event_id,
+                "organizer_id": promotion.organizer_id,
+                "status": promotion.status,
+                "start_date": promotion.start_date.isoformat(),
+                "end_date": promotion.end_date.isoformat(),
+                "days": promotion.days,
+                "net_price_cents": promotion.net_price_cents,
+                "vat_rate_percent": str(promotion.vat_rate_percent),
+                "is_complimentary": promotion.is_complimentary,
+                "complimentary_note": promotion.complimentary_note,
+                "invoice_reference": promotion.invoice_reference,
+                "advertiser_legal_name": promotion.advertiser_legal_name,
+                "advertiser_registry_code": promotion.advertiser_registry_code,
+            }
+            emit_admin_log = log_admin_action(
+                db, ADMIN_ACTION_PROMOTION_GRANT, promotion.id, result
+            )
+            organizer = await db.get(Organizer, promotion.organizer_id)
+            payload = serialize_promotion(
+                promotion,
+                event.title_orig,
+                organizer.name if organizer else None,
+                tallinn_today(now),
+            )
+            await db.commit()
+            emit_admin_log()
+            return payload
+
+    return await run_admin_job("Grant promotion", _run())

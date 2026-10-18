@@ -114,6 +114,7 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 
 - **Every `/admin/*` route takes only the console's session cookie** (`app/auth/dependencies.py::get_current_admin`). A script that needs a job or a PII view signs in through `POST /admin/auth/login` and reuses the cookie.
 - **`/admin/pipeline` triggers every job with a live result stream.** It asks for confirmation before an expensive or destructive run, such as a digest send or a cleanup delete.
+- **`/admin/promotions`, `/admin/promotions/cap-strip` and `/admin/events/{id}/promotion-context|promotions[/validate]` back the Promotion console.** A grant writes a `promotion_grant` audit row in its own transaction. See [data-model.md](data-model.md)'s Promotions section.
 - **Every `/admin/*` route is rate-limited.** See [security.md](security.md)'s Rate Limiting section.
 
 ### Job Triggers

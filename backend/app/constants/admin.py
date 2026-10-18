@@ -36,6 +36,7 @@ ADMIN_ACTION_RETRACT_SUBMISSION = "retract_submission"
 ADMIN_ACTION_GRANT_CLAIM = "grant_claim"
 ADMIN_ACTION_DECLINE_CLAIM = "decline_claim"
 ADMIN_ACTION_REVOKE_CLAIM = "revoke_claim"
+ADMIN_ACTION_PROMOTION_GRANT = "promotion_grant"
 # `action` field values for the /admin/pipeline job triggers (issue #159).
 ADMIN_ACTION_INGEST = "ingest"
 ADMIN_ACTION_INGEST_SOURCE = "ingest_source"

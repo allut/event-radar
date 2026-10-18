@@ -1,9 +1,11 @@
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     FetchedValue,
@@ -833,6 +835,13 @@ class Event(Base):
         Text, nullable=True, server_default=FetchedValue()
     )
 
+    # Content-policy assessment for Promotions: NULL = unassessed, "none" =
+    # clear, otherwise a restricted category. Nothing sets it yet (the
+    # content-policy ticket does). Untracked by the updated_at trigger, like
+    # all Promotion bookkeeping: starting or ending a Promotion never moves
+    # the event's change marker.
+    promotion_restriction: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
     sources: Mapped[list["EventSource"]] = relationship(back_populates="event")
     classification: Mapped["EventClassification | None"] = relationship(
         back_populates="event", uselist=False
@@ -1123,6 +1132,83 @@ class LlmCall(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+# ---------------------------------------------------------------------------
+# Promotions
+# ---------------------------------------------------------------------------
+
+
+class Promotion(Base):
+    """A paid (or complimentary) window of whole Tallinn days during which one
+    owned event may fill Sponsored slots. `status` is commercial only;
+    scheduled / live / finished are computed from the window and today's
+    Tallinn date (app/promotions/windows.py). See docs/data-model.md."""
+
+    __tablename__ = "promotions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('unpaid', 'paid', 'ended_early', 'void')",
+            name="ck_promotions_status",
+        ),
+        CheckConstraint("end_date >= start_date", name="ck_promotions_window_order"),
+        CheckConstraint("days >= 1", name="ck_promotions_days_positive"),
+        Index("ix_promotions_event_id", "event_id"),
+        Index("ix_promotions_organizer_id", "organizer_id"),
+        # Cap accounting and the list read promotions by window.
+        Index("ix_promotions_status_window", "status", "start_date", "end_date"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    event_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("events.id", ondelete="RESTRICT"), nullable=False
+    )
+    # The owning Organizer resolved at grant time (a commercial snapshot; a
+    # later ownership change is handled by the fill gate, not by rewriting it).
+    organizer_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizers.id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    # Inclusive Tallinn dates.
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    days: Mapped[int] = mapped_column(Integer, nullable=False)
+    net_price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    vat_rate_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    is_complimentary: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(), default=False
+    )
+    complimentary_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    invoice_reference: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    invoice_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Advertiser snapshot shown in the "REKLAAM" caption and invoiced to.
+    advertiser_legal_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    advertiser_registry_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    billing_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # "admin" for a direct grant; NULL for checkout and system. There is no
+    # admins table (ADR 0001), so no admin id.
+    granted_by: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    end_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    end_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    refunded_cents: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0", default=0
+    )
+    refund_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    event: Mapped["Event"] = relationship()
+    organizer: Mapped["Organizer"] = relationship()
 
 
 # ---------------------------------------------------------------------------

@@ -76,6 +76,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 | `submitted_by_organizer_id` | FK → `organizers`, indexed |
 | `needs_review` | flags the admin review queue; partial index on true |
 | `pinned_fields` | JSONB array of fields a claim has pinned |
+| `promotion_restriction` | content-policy assessment for Promotions; `NULL` is unassessed (migration 0060) |
 | `series_key` | DB-maintained series key (migration 0052) |
 | `dedup_group_id` | the event's dedup group |
 | `updated_at` | trigger-maintained change marker |
@@ -161,11 +162,26 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 | `resolved_at` | set once `status` leaves `pending` |
 | `dormant` | set by `app/dedup/rules.py::resolve_claim_dormancy()`; see [organizer-portal.md](organizer-portal.md)'s Dormant Claims section |
 
+### Promotions
+
+`promotions` holds one row per sold or granted Promotion window. `app/promotions/` owns the logic and never imports from `app/routers/utils.py`. See `CONTEXT.md`'s Promotions glossary.
+
+- **`status` is commercial only:** `unpaid`, `paid`, `ended_early` or `void`. Scheduled, live and finished are computed from the window and today's Tallinn date by `app/promotions/windows.py::promotion_state()`, never stored.
+- **`start_date` and `end_date` are inclusive Tallinn dates,** 3 to 14 days long, starting tomorrow at the earliest. They end on or before the event's last Tallinn day. `days` is stored beside them.
+- **A complimentary grant is created `paid` at `net_price_cents = 0`** with a required `complimentary_note`. A priced grant stores the net price and the `vat_rate_percent` in force at sale, so a later rate change never rewrites it.
+- **`organizer_id` is the owner resolved at grant time** by `app/promotions/owners.py::resolve_owner_ids()`: the submitter, or the holder of an approved, non-dormant claim. It costs two queries for any number of events.
+- **The advertiser name and registry code are snapshots,** prefilled from the Organizer name. The caption names them, so a later Organizer rename must not change a running Promotion.
+- **`invoice_reference` uses the `ER-M-` series with `invoice_source = 'manual'`.** `granted_by` is `admin` for a direct grant. There is no admin id because there is no admins table (ADR 0001).
+- **An `unpaid` or `paid` row holds every day of its window against the cap of 5,** paused days included. `void` releases them all. Back-to-back windows on one event are allowed; overlap is not.
+- **Every grant first takes `pg_advisory_xact_lock` (`PROMOTION_CAP_LOCK_KEY`) in `app/promotions/cap.py::lock_cap()`.** The cap check and insert then run in one transaction, so two concurrent grants can't both take the last day. The lock releases on commit.
+- **Starting or ending a Promotion never touches `events.updated_at`.** `events.promotion_restriction` is deliberately outside the `updated_at` trigger's column list.
+- **Later tickets add the Stripe, clearance, attestation and reach columns,** and the request, snapshot and daily-stats tables.
+
 ### Moderation and Audit
 
 - **`event_reports` holds user-filed content reports from `POST /reports`.** Admins resolve them or take the event down through `/admin/reports`; a takedown cancels the event with `cancellation_reason = report_takedown`. See `CONTEXT.md`'s Content Moderation glossary.
 - **`event_reports.is_illegal_allegation` is legal-sensitive.** It is one reason `/admin/reports` is session-only.
-- **`admin_actions` is a durable audit row per console action,** written by `log_admin_action()` in the same transaction as the mutation. See [backend-ops.md](backend-ops.md)'s Audit Logging section.
+- **`admin_actions` is a durable audit row per console action,** `promotion_grant` included, written by `log_admin_action()` in the same transaction as the mutation. See [backend-ops.md](backend-ops.md)'s Audit Logging section.
 - **The boot-time `assert_schema_at_head` guard exists because of this table.** Its migration (0030) went unapplied in production, and every audited admin action returned 500.
 
 ## Migrations

@@ -105,7 +105,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 
 - **Backend constants live in `app/constants/<domain>.py`**, one file per docs-map domain, imported from the file that defines them. LLM prompts go in `app/llm/prompts.py`, scrape selectors in `app/ingestion/selectors.py`, and cross-stack values in `shared/`. Add the constant there first, then import it.
 - **Frontend constants live in `frontend/src/constants/<domain>.ts`**, imported from the file that defines them, and cross-stack ones in `shared/`. Add the literal there before using it in a component.
-- **Each backend helper has one home.** Router-shared helpers go in `app/routers/utils.py`. Domain packages (`app/auth/`, `app/email/`, `app/claims/`, `app/ingestion/`, `app/events/`) own theirs and never import from `routers/utils.py`. Check both before writing one.
+- **Each backend helper has one home.** Router-shared helpers go in `app/routers/utils.py`. Domain packages (`app/auth/`, `app/email/`, `app/claims/`, `app/ingestion/`, `app/events/`, `app/promotions/`) own theirs and never import from `routers/utils.py`. Check both before writing one.
 - **Cross-router auth dependencies live in `app/auth/dependencies.py`**, so routers never import from each other's modules.
 - **Frontend helpers live in `frontend/src/utils.ts` and hooks in `frontend/src/hooks/`.** Every request goes through `frontend/src/api/client.ts`. Check there before writing a new one.
 - **A leading underscore means module-private.** Drop the underscore before importing a name across modules. Tests, and a third-party library's own documented exports, are exempt.
