@@ -46,10 +46,8 @@ export const ROUTES = {
   // Stripe's success_url (backend PROMOTION_CHECKOUT_PATH_SUCCESS); the cancel
   // url is organizerPromotions.
   organizerPromotionSuccess: '/organizer/promotions/checkout/success',
-  // Placeholder targets for the Organizer terms page (#613, not built yet);
-  // the form's terms and content-policy links point here.
-  organizerTerms: '/organizer/terms',
-  organizerContentPolicy: '/organizer/terms#promotion-content-policy',
+  // The form's content-policy link: the Organizer terms page's own section.
+  organizerContentPolicy: '/organizer-terms#content-policy',
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
   // Admin console (issue #154) — registered entirely outside App.tsx's

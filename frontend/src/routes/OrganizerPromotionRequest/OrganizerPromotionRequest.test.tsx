@@ -323,11 +323,11 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
       setup();
       await screen.findByLabelText('Start date');
 
-      expect(screen.getByRole('link', { name: 'Organizer terms' })).toHaveAttribute('href', '/en/organizer/terms');
+      expect(screen.getByRole('link', { name: 'Organizer terms' })).toHaveAttribute('href', '/en/organizer-terms');
       expect(screen.getByRole('checkbox', { name: 'I accept the Organizer terms (version 1).' })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Promotion content policy' })).toHaveAttribute(
         'href',
-        '/en/organizer/terms#promotion-content-policy',
+        '/en/organizer-terms#content-policy',
       );
     });
 
