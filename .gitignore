@@ -49,7 +49,7 @@ pip-delete-this-directory.txt
 # Node / Vite / React (frontend/)
 # Lockfiles (package-lock.json, pnpm-lock.yaml) are intentionally NOT ignored.
 # -----------------------------------------------------------------------------
-node_modules/
+node_modules
 frontend/dist/
 frontend/build/
 frontend/coverage/

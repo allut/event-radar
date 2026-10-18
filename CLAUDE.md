@@ -82,6 +82,7 @@ The setup walkthrough is in `README.md`. Inside the container:
 
 ### Testing
 
+- **Run the backend suite with `bash backend/scripts/scratch-test.sh [pytest args]`.** It migrates a throwaway database and drops it afterwards. `backend/tests/conftest.py` refuses to run when `DATABASE_URL` names the dev `eventradar` database.
 - **There is no e2e suite.** QA runs through the Playwright MCP server, and `.playwright-mcp/` is disposable scratch. Playwright stays a build dependency for the SEO prerender.
 
 ## Architecture

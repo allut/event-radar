@@ -285,6 +285,11 @@ python scripts/reset_events.py          # dry run: target DB + row counts
 python scripts/reset_events.py --yes    # actually truncate (irreversible)
 ```
 
+### scratch-test.sh
+
+- **`scratch-test.sh` runs pytest against a throwaway Postgres database.** It creates the database, exports `DATABASE_URL` and a `SECRET_KEY`, runs `alembic upgrade head` and `pytest "$@"`, then always drops the database.
+- **The shell `DATABASE_URL` beats `backend/.env`.** That is why the script exports it, and why `tests/conftest.py` aborts the run when it still names the dev `eventradar` database.
+
 ### Other Scripts
 
 - **`admin_totp_enroll.py` enrolls the admin console's TOTP step locally.** It prints a fresh secret and a scannable QR code (`--account` sets the label). Set the secret as `ADMIN_TOTP_SECRET` in the Render dashboard.

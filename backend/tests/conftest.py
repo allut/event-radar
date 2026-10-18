@@ -19,6 +19,22 @@ from app._generated.shared_constants import (
 from app.constants.events import TALLINN_CENTER_LAT, TALLINN_CENTER_LNG
 
 
+DEV_DB_NAME = "eventradar"
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Refuse to run against the dev database; DB-backed tests write to it."""
+    from app.config import settings  # resolves the shell value, then backend/.env
+
+    db_name = settings.DATABASE_URL.split("?")[0].rsplit("/", 1)[-1]
+    if db_name == DEV_DB_NAME:
+        pytest.exit(
+            f"DATABASE_URL names the dev database '{DEV_DB_NAME}'. "
+            "Run bash backend/scripts/scratch-test.sh [pytest args] instead.",
+            returncode=2,
+        )
+
+
 @pytest.fixture
 def mock_db():
     db = AsyncMock()

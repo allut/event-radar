@@ -36,6 +36,15 @@ export default tseslint.config(
       'react/no-array-index-key': 'error',
       quotes: ['error', 'single', { avoidEscape: true, allowTemplateLiterals: true }],
       'jsx-quotes': ['error', 'prefer-double'],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'JSXOpeningElement[name.name="input"] > JSXAttribute[name.name="type"][value.value=/^(date|datetime-local|time)$/]',
+          message:
+            'Native date and time inputs are banned; use the shared DatePicker (docs/design-system.md).',
+        },
+      ],
     },
   },
   {
