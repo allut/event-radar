@@ -295,6 +295,7 @@ Each of these was built or prototyped, reviewed and decided. Reopen one only wit
 ### Prototype Shell
 
 - **A prototype is approved before UI work starts.** It uses the real tokens, the real components and the real `DatePicker`. Fake form styles and hand-copied palettes cost a review round each.
+- **Load the `frontend-design` skill before building a prototype.** Its aesthetic direction applies inside the tokens: it picks layout and hierarchy and never new colors, fonts or radii.
 - **`cd frontend && npx tsx scripts/prototype-shell.ts <out.html>` writes the shell.** It scopes the real `src/index.css` to `#app`, loads Manrope and Cormorant, and adds a working theme switch.
 - **Mount every modal and dialog inside `#app`.** Outside it, a dialog loses the theme tokens and renders unthemed in the light theme.
 - **Keep prototypes out of the repo.** Write them to the session scratchpad and delete them after approval.
