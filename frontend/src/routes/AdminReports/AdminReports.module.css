@@ -44,6 +44,19 @@
 
 .chip { composes: chip from '../../components/shared/Chip.module.css'; }
 
+/* "Promoted" (#612): a live paid Promotion is on the event. */
+.promotedChip {
+  composes: chip from '../../components/shared/Chip.module.css';
+  font-weight: var(--fw-bold);
+}
+
+/* Beats the composed base chip colours whatever the bundle order. */
+.rowMeta .promotedChip,
+.chips .promotedChip {
+  color: var(--accent-ink);
+  border-color: var(--accent-border);
+}
+
 .illegalChip {
   composes: chip from '../../components/shared/Chip.module.css';
   color: var(--danger);

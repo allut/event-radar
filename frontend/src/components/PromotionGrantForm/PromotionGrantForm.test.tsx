@@ -178,4 +178,57 @@ describe('PromotionGrantForm', () => {
       expect(onNotify).toHaveBeenCalledWith('error', 'The window overlaps another Promotion on this event.'),
     );
   });
+
+  describe('Promotion restriction (#612)', () => {
+    it('tags the event, shows the notice and blocks the grant until the box and note are filled', async () => {
+      setup(context({ promotion_restriction: 'alcohol' }));
+      await pickDates();
+      await userEvent.type(screen.getByLabelText('Registry code'), '80123456');
+      expect(await screen.findByText('Dates are available.')).toBeInTheDocument();
+      expect(screen.getByText('Alcohol')).toBeInTheDocument();
+      expect(screen.getByText('This event carries the alcohol restriction')).toBeInTheDocument();
+      const submit = screen.getByRole('button', { name: 'Grant Promotion' });
+      expect(submit).toBeDisabled();
+      await userEvent.click(screen.getByLabelText(/I reviewed this event and clear it/));
+      expect(submit).toBeDisabled();
+      await userEvent.type(screen.getByLabelText('Clearance note (required)'), 'Licensed venue.');
+      expect(submit).toBeEnabled();
+    });
+
+    it('sends the clearance with the grant', async () => {
+      setup(context({ promotion_restriction: 'alcohol' }));
+      mockPost.mockResolvedValue({});
+      await pickDates();
+      await userEvent.type(screen.getByLabelText('Registry code'), '80123456');
+      await screen.findByText('Dates are available.');
+      await userEvent.click(screen.getByLabelText(/I reviewed this event and clear it/));
+      await userEvent.type(screen.getByLabelText('Clearance note (required)'), ' Licensed venue. ');
+      await userEvent.click(screen.getByRole('button', { name: 'Grant Promotion' }));
+      expect(mockPost).toHaveBeenCalledWith(
+        '/admin/events/42/promotions',
+        expect.objectContaining({ restriction_clearance_confirmed: true, restriction_clearance_note: 'Licensed venue.' }),
+      );
+    });
+
+    it('shows no notice for a clear event and sends no clearance', async () => {
+      setup(context({ promotion_restriction: 'none' }));
+      mockPost.mockResolvedValue({});
+      await pickDates();
+      await userEvent.type(screen.getByLabelText('Registry code'), '80123456');
+      await screen.findByText('Dates are available.');
+      expect(screen.queryByText(/restriction/i)).toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: 'Grant Promotion' }));
+      expect(mockPost.mock.calls[0][1]).not.toHaveProperty('restriction_clearance_confirmed');
+    });
+
+    it('tells the admin an unassessed event is saved but stays empty, and the grant still works', async () => {
+      setup(context({ promotion_restriction: null }));
+      await pickDates();
+      await userEvent.type(screen.getByLabelText('Registry code'), '80123456');
+      expect(await screen.findByText('This event has not been assessed yet')).toBeInTheDocument();
+      expect(screen.getByText('Not assessed')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Clearance note (required)')).toBeNull();
+      expect(await screen.findByRole('button', { name: 'Grant Promotion' })).toBeEnabled();
+    });
+  });
 });

@@ -11,6 +11,7 @@ import {
   PROMOTION_GATE_SHOWN,
   PROMOTION_SNAPSHOT_TRIGGER_LABELS,
   PROMOTION_STRIPE_COPY as STRIPE,
+  PROMOTION_REQUEST_COPY as REQUEST,
   type PromotionActionKey,
 } from '../../constants/promotions';
 import { ROUTES } from '../../constants/routes';
@@ -18,6 +19,7 @@ import { ADMIN_GENERIC_ERROR } from '../../constants/admin';
 import {
   DAILY_STAT_COLUMNS,
   dailyStatTotals,
+  detailPill,
   detailReason,
   formatDateTime,
   formatEuro,
@@ -25,13 +27,14 @@ import {
   gateLabel,
   isStripePaid,
   withdrawErrorMessage,
-  promotionPill,
+  restrictionTag,
   formatDay,
   type PromotionDailyStatsResponse,
   type PromotionDetail,
 } from '../../lib/promotions';
 import PageState from '../../components/PageState';
 import {
+  ClearRestrictionPanel,
   EditPanel,
   EndPanel,
   MarkPaidPanel,
@@ -53,6 +56,7 @@ const TONE_CLASS = {
 
 // Action bar order; each button follows the API's `actions` flag of the same name.
 const ACTION_ORDER: PromotionActionKey[] = [
+  PROMOTION_ACTION.clearRestriction,
   PROMOTION_ACTION.markPaid,
   PROMOTION_ACTION.edit,
   PROMOTION_ACTION.repoint,
@@ -64,6 +68,7 @@ const ACTION_ORDER: PromotionActionKey[] = [
 const DANGER_ACTIONS: ReadonlySet<PromotionActionKey> = new Set([PROMOTION_ACTION.end, PROMOTION_ACTION.void, PROMOTION_ACTION.withdraw]);
 
 const PANELS: Record<PromotionActionKey, (props: PanelProps) => ReactNode> = {
+  [PROMOTION_ACTION.clearRestriction]: (p) => <ClearRestrictionPanel {...p} />,
   [PROMOTION_ACTION.markPaid]: (p) => <MarkPaidPanel {...p} />,
   [PROMOTION_ACTION.edit]: (p) => <EditPanel {...p} />,
   [PROMOTION_ACTION.repoint]: (p) => <RepointPanel {...p} />,
@@ -115,6 +120,9 @@ function recordRows(p: PromotionDetail): [string, ReactNode][] {
     mono(p.invoice_reference)
   );
   const prefill = p.refund_prefill;
+  const restriction = p.event.promotion_restriction;
+  const clearance = p.restriction_clearance;
+  const showClearance = clearance !== null || restrictionTag(restriction) !== null;
   return [
     ['Advertiser', p.advertiser_legal_name],
     ['Registry code', mono(p.advertiser_registry_code)],
@@ -136,6 +144,27 @@ function recordRows(p: PromotionDetail): [string, ReactNode][] {
       ? ([
           [STRIPE.pricePerDay, formatEuro(prefill.gross_per_day_cents)],
           [STRIPE.daysUnusedPaused, `${prefill.unused_days} / ${prefill.paused_days}`],
+        ] as [string, ReactNode][])
+      : []),
+    ...(restriction !== undefined
+      ? ([
+          [
+            COPY.eventRestrictionLabel,
+            restriction === null ? REQUEST.notAssessed : (restrictionTag(restriction)?.toLowerCase() ?? COPY.restrictionNone),
+          ],
+        ] as [string, ReactNode][])
+      : []),
+    ...(showClearance
+      ? ([
+          [
+            COPY.clearanceLabel,
+            clearance
+              ? [clearance.restriction, clearance.by, clearance.cleared_at ? formatDateTime(clearance.cleared_at) : null]
+                  .filter(Boolean)
+                  .join(' · ')
+              : '—',
+          ],
+          [COPY.clearanceNoteRowLabel, clearance?.note ?? '—'],
         ] as [string, ReactNode][])
       : []),
     ['Refunded', formatEuro(p.refunded_cents)],
@@ -185,7 +214,7 @@ export default function AdminPromotionDetail({ promotionId }: { promotionId: str
     return <PageState kind={UI_STATE.error} message={COPY.loadFailed} inline />;
   }
   const p = detailQuery.data;
-  const pill = promotionPill(p);
+  const pill = detailPill(p);
   const days = statsQuery.data?.days ?? [];
   const reason = detailReason(p, days);
   const totals = dailyStatTotals(days);

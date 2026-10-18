@@ -92,6 +92,7 @@ export const PROMOTION_SNAPSHOT_TRIGGER_LABELS: Readonly<Record<string, string>>
 };
 
 export const PROMOTION_ACTION = {
+  clearRestriction: 'clear_restriction',
   markPaid: 'mark_paid',
   edit: 'edit',
   repoint: 'repoint',
@@ -105,6 +106,7 @@ export type PromotionActionKey = (typeof PROMOTION_ACTION)[keyof typeof PROMOTIO
 export const PROMOTION_EDIT_SCOPE = { full: 'full', endDate: 'end_date' } as const;
 
 export const PROMOTION_ACTION_LABELS: Readonly<Record<PromotionActionKey, string>> = {
+  clear_restriction: 'Clear restriction',
   mark_paid: 'Mark paid',
   edit: 'Edit',
   repoint: 'Re-point',
@@ -158,6 +160,18 @@ export const PROMOTION_DETAIL_COPY = {
   noSnapshots: 'No snapshots yet. One is taken when the Promotion is paid.',
   noAudit: 'No audit entries.',
   pausedPrefix: 'Paused',
+  clearHeading: (tag: string) => `Clear restriction: ${tag}`,
+  clearNote: (tag: string) =>
+    `Records that you reviewed this event for the ${tag} restriction. The Promotion resumes. It covers only this restriction, so a different flag pauses it again.`,
+  clearNoteLabel: 'Clearance note (required)',
+  clearNoteRequired: 'Add a clearance note. It is recorded with your name.',
+  clearConfirm: 'Clear restriction',
+  restrictionPaused: (tag: string) =>
+    `Paused: the event was flagged for the ${tag} restriction after the Promotion was scheduled. Clear the restriction to resume it, or end it early.`,
+  eventRestrictionLabel: 'Event restriction',
+  clearanceLabel: 'Restriction clearance',
+  clearanceNoteRowLabel: 'Clearance note',
+  restrictionNone: 'None',
   notRecorded: '—',
 } as const;
 

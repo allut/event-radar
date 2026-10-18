@@ -6,6 +6,7 @@ import {
   ADMIN_GENERIC_ERROR,
   ADMIN_QUEUE_DETAIL_LINK_LABEL,
   ADMIN_REPORT_RESOLVED_LINK_LABEL,
+  ADMIN_REPORT_PROMOTED_LABEL,
   ADMIN_REPORT_RESOLVED_NOTICE,
   ADMIN_REPORTS_PARAM,
   ADMIN_REPORTS_QUEUE_PAGE_SIZE,
@@ -43,6 +44,8 @@ interface AdminReportedEvent {
   report_count: number;
   reasons: string[];
   has_illegal_allegation: boolean;
+  /** A live paid Promotion is on the event (#612): sorted first and tagged. */
+  is_promoted?: boolean;
   reports: AdminReport[];
   oldest_open_report_at: string;
 }
@@ -61,6 +64,7 @@ function renderReportRow(item: AdminReportedEvent & { oldestOpenReportRelative: 
     <>
       <div className={styles.rowTitle}>{item.title}</div>
       <div className={styles.rowMeta}>
+        {item.is_promoted && <span className={styles.promotedChip}>{ADMIN_REPORT_PROMOTED_LABEL}</span>}
         {item.has_illegal_allegation && <span className={styles.illegalDot} aria-label="Illegal content alleged" />}
         {item.report_count} report{item.report_count === 1 ? '' : 's'} · {item.oldestOpenReportRelative}
       </div>
@@ -278,6 +282,7 @@ export default function AdminReports() {
                   {ADMIN_QUEUE_DETAIL_LINK_LABEL}
                 </Link>
                 <div className={styles.chips}>
+                  {item.is_promoted && <span className={styles.promotedChip}>{ADMIN_REPORT_PROMOTED_LABEL}</span>}
                   {item.has_illegal_allegation && <span className={styles.illegalChip}>Illegal content alleged</span>}
                   {item.reasons.map((r) => (
                     <span key={r} className={styles.chip}>{reasonLabel(r)}</span>

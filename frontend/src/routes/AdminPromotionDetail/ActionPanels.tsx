@@ -9,7 +9,7 @@ import {
   PROMOTION_REASON_ROWS,
   PROMOTION_REGISTRY_CODE_RE,
 } from '../../constants/promotions';
-import { formatEuro, isIsoDay, parseEuroToCents, type PromotionDetail } from '../../lib/promotions';
+import { formatEuro, isIsoDay, parseEuroToCents, restrictionTag, type PromotionDetail } from '../../lib/promotions';
 import { PROMOTION_STRIPE_COPY as STRIPE } from '../../constants/promotions';
 import { tallinnToday, toDateStr } from '../../utils';
 import styles from './AdminPromotionDetail.module.css';
@@ -292,6 +292,41 @@ function ReasonPanel({
           rows={PROMOTION_REASON_ROWS}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
+        />
+      </Field>
+    </PanelShell>
+  );
+}
+
+/** Clear restriction (#612): a required note records a Restriction clearance
+ * for the event's current restriction, and the Promotion resumes. */
+export function ClearRestrictionPanel({ detail, serverError, pending, run, onCancel, post }: PanelProps) {
+  const id = useId();
+  const [note, setNote] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const tag = (restrictionTag(detail.event.promotion_restriction) ?? '').toLowerCase();
+  function submit() {
+    if (!note.trim()) return setError(COPY.clearNoteRequired);
+    setError(null);
+    run(post(API.adminPromotionClearRestriction(detail.id), { note: note.trim() }));
+  }
+  return (
+    <PanelShell
+      heading={COPY.clearHeading(tag)}
+      note={COPY.clearNote(tag)}
+      error={error ?? serverError}
+      confirmLabel={COPY.clearConfirm}
+      pending={pending}
+      onCancel={onCancel}
+      onSubmit={submit}
+    >
+      <Field label={COPY.clearNoteLabel} htmlFor={`${id}-note`}>
+        <textarea
+          id={`${id}-note`}
+          className={styles.input}
+          rows={PROMOTION_REASON_ROWS}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
         />
       </Field>
     </PanelShell>

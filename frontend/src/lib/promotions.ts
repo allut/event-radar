@@ -181,6 +181,13 @@ export function promotionPill(p: PromotionRow): { label: string; tone: Promotion
   return { label: 'Scheduled', tone: 'scheduled', reason: null };
 }
 
+export interface PromotionRestrictionClearance {
+  restriction: string;
+  by: string;
+  note: string;
+  cleared_at: string | null;
+}
+
 export interface PromotionActions {
   mark_paid: boolean;
   edit: boolean;
@@ -190,6 +197,8 @@ export interface PromotionActions {
   void: boolean;
   refund: boolean;
   refundable_cents: number;
+  /** The event's current restriction is not covered by this Promotion's clearance (#612). */
+  clear_restriction: boolean;
 }
 
 export interface RepointCandidate {
@@ -252,6 +261,7 @@ export interface PromotionDetail extends PromotionRow {
     venue_name: string | null;
     promotion_restriction?: string | null;
   };
+  restriction_clearance: PromotionRestrictionClearance | null;
   actions: PromotionActions;
   repoint_candidates: RepointCandidate[];
   snapshots: PromotionSnapshot[];
@@ -298,9 +308,28 @@ export function gateLabel(stat: PromotionDailyStat): string {
   return reason ? `${PROMOTION_DETAIL_COPY.pausedPrefix} · ${reason}` : PROMOTION_DETAIL_COPY.pausedPrefix;
 }
 
+/** The lowercase restriction tag of a paid Promotion whose event was flagged
+ * after its clearance (or without one); null otherwise (#612). */
+export function newlyFlaggedTag(p: PromotionDetail): string | null {
+  if (p.status !== PROMOTION_STATUS.paid || !p.actions.clear_restriction) return null;
+  return restrictionTag(p.event.promotion_restriction)?.toLowerCase() ?? null;
+}
+
+/** The header pill: a live Promotion that the restriction gate pauses reads
+ * "Paused" in the attention tone. */
+export function detailPill(p: PromotionDetail): ReturnType<typeof promotionPill> {
+  const pill = promotionPill(p);
+  if (p.state === PROMOTION_STATE.live && newlyFlaggedTag(p) !== null) {
+    return { ...pill, label: PROMOTION_DETAIL_COPY.pausedPrefix, tone: 'attention' };
+  }
+  return pill;
+}
+
 /** The not-showing line under the header pill: the unpaid countdown, the
  * stated end reason, or the latest recorded pause while live. */
 export function detailReason(p: PromotionDetail, days: PromotionDailyStat[]): string | null {
+  const flagged = newlyFlaggedTag(p);
+  if (flagged !== null) return PROMOTION_DETAIL_COPY.restrictionPaused(flagged);
   const pill = promotionPill(p);
   if (p.awaiting_checkout) {
     return PROMOTION_STRIPE_COPY.checkoutReason(p.checkout_expires_at ? formatTime(p.checkout_expires_at) : null);

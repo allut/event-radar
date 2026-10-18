@@ -23,6 +23,7 @@ const NO_ACTIONS = {
   void: false,
   refund: false,
   refundable_cents: 0,
+  clear_restriction: false,
 };
 
 function detail(overrides: Record<string, unknown> = {}, actions: Record<string, unknown> = {}) {
@@ -60,7 +61,8 @@ function detail(overrides: Record<string, unknown> = {}, actions: Record<string,
     checkout_expires_at: null,
     refund_prefill: null,
     created_at: '2026-10-13T11:00:00+03:00',
-    event: { id: 7, title: 'Noblessner Food Fest', starts_at: '2026-10-24T12:00:00+03:00', ends_at: null, last_day: '2026-10-24', venue_name: 'Noblessner' },
+    event: { id: 7, title: 'Noblessner Food Fest', starts_at: '2026-10-24T12:00:00+03:00', ends_at: null, last_day: '2026-10-24', venue_name: 'Noblessner', promotion_restriction: 'none' },
+    restriction_clearance: null,
     actions: { ...NO_ACTIONS, edit: true, edit_scope: 'end_date', repoint: true, end: true, refund: true, refundable_cents: 4340, ...actions },
     repoint_candidates: [{ event_id: 9, title: 'Noblessner Food Fest, evening', last_day: '2026-10-24' }],
     snapshots: [
@@ -435,6 +437,90 @@ describe('AdminPromotionDetail', () => {
       renderWithProviders(<AdminPromotionDetail promotionId="5" />);
       await screen.findByText('Awaiting payment');
       expect(screen.getByRole('button', { name: 'Withdraw' })).toBeDisabled();
+    });
+  });
+
+  describe('Restriction clearance (#612)', () => {
+    const FLAGGED = { event: { ...detail().event, promotion_restriction: 'alcohol' } };
+
+    it('shows a newly flagged live Promotion as paused, with why and what to do', async () => {
+      serve(detail(FLAGGED, { clear_restriction: true }));
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      expect(await screen.findByText('Paused')).toBeInTheDocument();
+      expect(screen.queryByText('Live')).toBeNull();
+      expect(
+        screen.getByText(/the event was flagged for the alcohol restriction.*Clear the restriction to resume it, or end it early/),
+      ).toBeInTheDocument();
+    });
+
+    it('lists the restriction and an empty clearance in the record', async () => {
+      serve(detail(FLAGGED, { clear_restriction: true }));
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      const record = await screen.findByRole('region', { name: 'Commercial record' });
+      expect(within(record).getByText('Event restriction').nextSibling).toHaveTextContent('alcohol');
+      expect(within(record).getByText('Restriction clearance').nextSibling).toHaveTextContent('—');
+      expect(within(record).getByText('Clearance note').nextSibling).toHaveTextContent('—');
+    });
+
+    it('records who cleared which restriction, when and why', async () => {
+      serve(
+        detail({
+          ...FLAGGED,
+          restriction_clearance: {
+            restriction: 'alcohol',
+            by: 'admin',
+            note: 'Reviewed: a tasting for adults.',
+            cleared_at: '2026-10-17T22:41:00+03:00',
+          },
+        }),
+      );
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      const record = await screen.findByRole('region', { name: 'Commercial record' });
+      expect(within(record).getByText('Restriction clearance').nextSibling).toHaveTextContent('alcohol · admin · 17 Oct 2026, 22:41');
+      expect(within(record).getByText('Reviewed: a tasting for adults.')).toBeInTheDocument();
+      expect(screen.getByText('Live')).toBeInTheDocument();
+    });
+
+    it('words the record row for a clear or unassessed event', async () => {
+      serve(detail({ event: { ...detail().event, promotion_restriction: null } }));
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      const record = await screen.findByRole('region', { name: 'Commercial record' });
+      expect(within(record).getByText('Event restriction').nextSibling).toHaveTextContent('Not assessed');
+      expect(within(record).queryByText('Restriction clearance')).toBeNull();
+    });
+
+    it('offers Clear restriction only when the API allows it', async () => {
+      serve(detail());
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      expect(await screen.findByRole('button', { name: 'Clear restriction' })).toBeDisabled();
+    });
+
+    it('requires a note, then posts the clearance and shows the refreshed Promotion', async () => {
+      serve(detail(FLAGGED, { clear_restriction: true }));
+      mockPost.mockResolvedValue(detail());
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Clear restriction' }));
+      expect(screen.getByRole('heading', { name: 'Clear restriction: alcohol' })).toBeInTheDocument();
+      expect(screen.getByText(/It covers only this restriction, so a different flag pauses it again/)).toBeInTheDocument();
+      const panel = screen.getByRole('heading', { name: 'Clear restriction: alcohol' }).closest('form') as HTMLElement;
+      await userEvent.click(within(panel).getByRole('button', { name: 'Clear restriction' }));
+      expect(screen.getByText('Add a clearance note. It is recorded with your name.')).toBeInTheDocument();
+      expect(mockPost).not.toHaveBeenCalled();
+      await userEvent.type(screen.getByLabelText('Clearance note (required)'), '  Tasting for adults.  ');
+      await userEvent.click(within(panel).getByRole('button', { name: 'Clear restriction' }));
+      expect(mockPost).toHaveBeenCalledWith('/admin/promotions/5/clear-restriction', { note: 'Tasting for adults.' });
+      expect(await screen.findByText('Live')).toBeInTheDocument();
+    });
+
+    it('shows the server refusal inside the panel', async () => {
+      serve(detail(FLAGGED, { clear_restriction: true }));
+      mockPost.mockRejectedValue(new ApiError(422, 'This event is not restricted.'));
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Clear restriction' }));
+      await userEvent.type(screen.getByLabelText('Clearance note (required)'), 'ok');
+      const panel = screen.getByRole('heading', { name: 'Clear restriction: alcohol' }).closest('form') as HTMLElement;
+      await userEvent.click(within(panel).getByRole('button', { name: 'Clear restriction' }));
+      expect(await within(panel).findByText(/not restricted/)).toBeInTheDocument();
     });
   });
 });

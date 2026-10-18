@@ -194,6 +194,7 @@ export const API = {
   adminPromotionDetail: (id: number | string) => `/admin/promotions/${id}`,
   adminPromotionMarkPaid: (id: number | string) => `/admin/promotions/${id}/mark-paid`,
   adminPromotionRepoint: (id: number | string) => `/admin/promotions/${id}/repoint`,
+  adminPromotionClearRestriction: (id: number | string) => `/admin/promotions/${id}/clear-restriction`,
   adminPromotionEnd: (id: number | string) => `/admin/promotions/${id}/end`,
   adminPromotionVoid: (id: number | string) => `/admin/promotions/${id}/void`,
   adminPromotionRefund: (id: number | string) => `/admin/promotions/${id}/refund`,

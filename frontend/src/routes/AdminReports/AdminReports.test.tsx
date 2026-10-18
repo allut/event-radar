@@ -79,6 +79,18 @@ describe('AdminReports', () => {
     expect(screen.getByText('Contains language that may violate local law.')).toBeInTheDocument();
   });
 
+  it('tags a report on a promoted event and keeps untagged rows plain', async () => {
+    const promoted = { ...sampleReports.events[1], event_id: 3, title: 'Craft Beer Weekend', is_promoted: true };
+    mockGet.mockResolvedValueOnce({ ...sampleReports, total: 3, events: [promoted, ...sampleReports.events] });
+    renderWithProviders(<AdminReports />);
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Craft Beer Weekend' })).toBeInTheDocument());
+    const row = screen.getByRole('button', { name: /Craft Beer Weekend/ });
+    expect(within(row).getByText('Promoted')).toBeInTheDocument();
+    expect(within(screen.getByRole('button', { name: /MEEDIUM/ })).queryByText('Promoted')).toBeNull();
+    // The detail panel carries the tag too.
+    expect(screen.getAllByText('Promoted')).toHaveLength(2);
+  });
+
   it('links the detail panel to the full event inspector', async () => {
     mockGet.mockResolvedValueOnce(sampleReports);
     renderWithProviders(<AdminReports />);

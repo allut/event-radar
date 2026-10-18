@@ -49,6 +49,7 @@ export const ADMIN_QUEUE_DETAIL_LINK_LABEL = 'Open full details →';
 // Shown on page 1 of Admin Reports when an email deep link (?report=<id>)
 // names a report that is no longer in the queue — same no-i18n exemption.
 // `{id}` is the event id.
+export const ADMIN_REPORT_PROMOTED_LABEL = 'Promoted';
 export const ADMIN_REPORT_RESOLVED_NOTICE = 'Report #{id} was already resolved. Showing the start of the queue.';
 export const ADMIN_REPORT_RESOLVED_LINK_LABEL = 'Open event #{id}';
 

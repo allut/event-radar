@@ -211,7 +211,8 @@ export default function PromotionGrantForm({ eventId, onNotify, request, onDone,
       <form className={styles.form} onSubmit={submit} noValidate>
         <div className={styles.event}>
           <strong>{ctx.event_title}</strong>
-          {request && restrictionLabel !== null && <> <span className={styles.tag}>{restrictionLabel}</span></>}
+          {restrictionLabel !== null && <> <span className={styles.tag}>{restrictionLabel}</span></>}
+          {restriction === null && <> <span className={styles.tag}>{REQUEST_COPY.notAssessed}</span></>}
           {request ? (
             <div className={styles.hint}>
               {REQUEST_COPY.requestedBy} {request.organizer_name} for {formatWindow(request.start_date, request.end_date)} · event ends{' '}
