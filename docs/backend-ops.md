@@ -117,6 +117,8 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 - **`/admin/promotions/{id}/daily-stats` serves the per-day delivery table.** The lifespan also flushes the Promotion counters on shutdown.
 - **`/admin/promotions`, `/admin/promotions/cap-strip` and `/admin/events/{id}/promotion-context|promotions[/validate]` back the Promotion console.** A grant writes a `promotion_grant` audit row in its own transaction. See [data-model.md](data-model.md)'s Promotions section.
 - **`POST /admin/promotions/{id}/clear-restriction` records a Restriction clearance** (`note` required) for a scheduled or live Promotion whose event became restricted, and the gate resumes it. The grant body takes `restriction_clearance_confirmed` and `restriction_clearance_note`, required when the event is restricted.
+- **`sweep_promotions` (`app/promotions/sweep.py`) runs every minute and acts as the system.** It voids an `unpaid` Promotion at its start date (Tallinn), and ends a `paid` one when its event is cancelled (`end_reason` is the cancellation cause) or its claim is gone (`claim_revoked`). Each change writes a `promotion_system_void` or `promotion_system_end` audit row.
+- **The sweep emails the Organizer after its commit for every automatic end, never for the void.** The notes are in `PROMOTION_AUTO_END_NOTES`. A dormant claim or a lost dedup collision never ends a Promotion. The query count stays fixed however many Promotions exist.
 - **`GET /admin/promotions/{id}` is the Promotion detail,** and `POST .../{id}/mark-paid|repoint|end|void|refund` plus `PATCH .../{id}` are its commands. Each runs under the cap lock, writes its audit row in the same transaction (409 for a state conflict, 422 for bad input, 404 for a missing row) and returns the refreshed detail.
 - **End and void email the Organizer's reason after the commit.** A failed send is logged and never undoes the command.
 - **Every `/admin/*` route is rate-limited.** See [security.md](security.md)'s Rate Limiting section.
@@ -160,7 +162,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 
 | Cadence | Job |
 |---|---|
-| Every minute | `flush_promotion_counters` |
+| Every minute | `flush_promotion_counters`, `sweep_promotions` |
 | Hourly | `ingest_all_sources` (job id; the callable is `ingest_all_enabled`) |
 | Every 6h | `dedup_pass`, `classify_pending`, `publish_pending`, `geocode_pending`, `backfill_publisher_ids` |
 | Daily 04:30 | `refetch_event_details` |

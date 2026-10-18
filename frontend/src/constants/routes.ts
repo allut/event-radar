@@ -18,6 +18,7 @@ export const ROUTES = {
   eventDetailPattern: '/events/:id',
   settings: '/settings',
   unsubscribe: '/unsubscribe',
+  // Email ad consent withdrawal page. Not named for ads: filter lists hide such paths.
   consentOff: '/email-consent-off',
   privacy: '/privacy',
   terms: '/terms',

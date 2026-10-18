@@ -7,7 +7,7 @@ count (two), because the fill gate reuses it per candidate set.
 
 from collections.abc import Sequence
 
-from sqlalchemy import false, select
+from sqlalchemy import false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.claims import (
@@ -19,13 +19,16 @@ from app.constants.events import EVENT_STATUS_CANCELLED
 from app.models.models import Claim, Event, EventSource
 
 
-async def resolve_owner_ids(db: AsyncSession, events: Sequence[Event]) -> dict[int, int]:
+async def resolve_owner_ids(
+    db: AsyncSession, events: Sequence[Event], *, include_dormant: bool = False
+) -> dict[int, int]:
     """Map event id to owning Organizer id; unowned events are absent.
 
     Submitters win over claimants. A Publisher claim covers every event with a
     listing from that Publisher. A Series claim covers events carrying its
     series key, limited (like the claim-editing surface) to ingested,
-    dedup-canonical, not-cancelled events.
+    dedup-canonical, not-cancelled events. A dormant claim is skipped unless
+    ``include_dormant`` (the sweep: dormancy pauses a Promotion, never ends it).
     """
     owners: dict[int, int] = {}
     unresolved: list[Event] = []
@@ -65,7 +68,7 @@ async def resolve_owner_ids(db: AsyncSession, events: Sequence[Event]) -> dict[i
             select(Claim.id, Claim.kind, Claim.organizer_id, Claim.publisher_id, Claim.event_series_key)
             .where(
                 Claim.status == CLAIM_STATUS_APPROVED,
-                Claim.dormant == false(),
+                true() if include_dormant else Claim.dormant == false(),
                 (Claim.publisher_id.in_(publisher_ids))
                 | (Claim.event_series_key.in_(series_events.keys())),
             )

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { t } from '../../i18n';
 import Settings from './Settings';
 import { renderWithProviders } from '../../test/utils';
 
@@ -158,5 +159,49 @@ describe('Settings', () => {
 
     expect(mockDelete).toHaveBeenCalledWith('/users/me/identities/google');
     await waitFor(() => expect(screen.getAllByText('Google account not linked').length).toBeGreaterThan(0));
+  });
+});
+
+describe('Settings Email ad consent toggle', () => {
+  const consentData = {
+    ...settingsData,
+    email_ad_consent: false,
+    email_ad_consent_available: true,
+    email_ad_consent_wording_version: 1,
+  };
+
+  it('is hidden when email_ad_consent_available is false', async () => {
+    mockGet.mockResolvedValueOnce({ ...consentData, email_ad_consent_available: false });
+    renderWithProviders(<Settings />);
+    await screen.findByText('user@example.com');
+    expect(screen.queryByText(t('consent_label', 'en'))).not.toBeInTheDocument();
+  });
+
+  it('shows the label and description under the digest toggle when available', async () => {
+    mockGet.mockResolvedValueOnce(consentData);
+    renderWithProviders(<Settings />);
+    expect(await screen.findByText(t('consent_label', 'en'))).toBeInTheDocument();
+    expect(screen.getByText(t('consent_desc', 'en'))).toBeInTheDocument();
+  });
+
+  it('PATCHes email_ad_consent when toggled on', async () => {
+    mockGet.mockResolvedValueOnce(consentData);
+    mockPatch.mockResolvedValueOnce({ ...consentData, email_ad_consent: true });
+    renderWithProviders(<Settings />);
+    await screen.findByText(t('consent_label', 'en'));
+    await userEvent.click(screen.getByRole('button', { name: t('consent_label', 'en') }));
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledWith('/users/me', { email_ad_consent: true }));
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: t('consent_label', 'en') })).toHaveAttribute('aria-pressed', 'true')
+    );
+  });
+
+  it('PATCHes false when toggled off', async () => {
+    mockGet.mockResolvedValueOnce({ ...consentData, email_ad_consent: true });
+    mockPatch.mockResolvedValueOnce(consentData);
+    renderWithProviders(<Settings />);
+    await screen.findByText(t('consent_label', 'en'));
+    await userEvent.click(screen.getByRole('button', { name: t('consent_label', 'en') }));
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledWith('/users/me', { email_ad_consent: false }));
   });
 });

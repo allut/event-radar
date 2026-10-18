@@ -232,6 +232,32 @@ PROMOTION_STAT_REPORT_COLUMNS = (
     PROMOTION_STAT_SLOT_DISLIKES,
 )
 PROMOTION_COUNTER_FLUSH_SECONDS = 60
+
+# Automatic lifecycle sweep (#602): void unpaid, end on cancellation or claim
+# revocation. Runs often so a Tallinn-midnight start and a takedown take
+# effect within a minute.
+PROMOTION_SWEEP_SECONDS = 60
+PROMOTION_END_REASON_CLAIM_REVOKED = "claim_revoked"
+# `end_reason` of an `unpaid` Promotion voided by the sweep at its start date.
+PROMOTION_END_REASON_UNPAID_AT_START = "unpaid_at_start"
+# Cancellation causes are carried over verbatim as `end_reason`; an event
+# cancelled with no recorded cause counts as an admin retract.
+PROMOTION_END_REASON_CANCELLATION_FALLBACK = "admin_retract"
+# `end_note` for each automatic end; it is the reason in the Organizer's email.
+PROMOTION_AUTO_END_NOTES = {
+    "organizer_retract": "The event was retracted, so its Promotion ended.",
+    "admin_retract": "The event was taken down, so its Promotion ended.",
+    "report_takedown": "The event was taken down after a report, so its Promotion ended.",
+    "source_gone": "The event is no longer listed by its source, so its Promotion ended.",
+    PROMOTION_END_REASON_CLAIM_REVOKED: (
+        "Your claim over the event was revoked, so its Promotion ended."
+    ),
+    PROMOTION_END_REASON_UNPAID_AT_START: "The Promotion was not paid before its start date.",
+}
+# End reasons whose Organizer gets an email. The system void is silent.
+PROMOTION_AUTO_END_EMAIL_REASONS = frozenset(PROMOTION_AUTO_END_NOTES) - {
+    PROMOTION_END_REASON_UNPAID_AT_START
+}
 ERROR_PROMOTION_NOT_FOUND = "promotion not found"
 
 # Daily 5 Sponsored slot (#607).

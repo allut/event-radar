@@ -21,6 +21,7 @@ import SavedEvents from './routes/SavedEvents';
 import EventDetail from './routes/EventDetail';
 import Settings from './routes/Settings';
 import Unsubscribe from './routes/Unsubscribe';
+import ConsentOff from './routes/ConsentOff';
 import Privacy from './routes/Privacy';
 import Terms from './routes/Terms';
 import Ranking from './routes/Ranking';
@@ -128,6 +129,7 @@ const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.eventDetailPattern, element: <EventDetail />, noRedirect: true },
   { path: ROUTES.settings, element: <Protected><Settings /></Protected> },
   { path: ROUTES.unsubscribe, element: <Unsubscribe /> },
+  { path: ROUTES.consentOff, element: <ConsentOff /> },
   { path: ROUTES.privacy, element: <Privacy /> },
   { path: ROUTES.terms, element: <Terms /> },
   { path: ROUTES.ranking, element: <Ranking /> },

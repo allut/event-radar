@@ -19,6 +19,7 @@ _KNOWN_JOB_IDS = {
     "send_daily_digests",
     "expire_stale_claims",
     "flush_promotion_counters",
+    "sweep_promotions",
 }
 
 

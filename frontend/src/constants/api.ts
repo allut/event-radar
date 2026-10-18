@@ -127,6 +127,8 @@ export const API = {
   publicCounts: '/public/counts',
   emailUnsubscribe: '/email/unsubscribe',
   emailResubscribe: '/email/resubscribe',
+  emailConsentOff: '/email/ads-off',
+  emailConsentOn: '/email/ads-on',
   event: (id: number | string) => `/events/${encodeURIComponent(String(id))}`,
   organizerEvents: '/organizer/events',
   organizerEvent: (id: number | string) => `/organizer/events/${encodeURIComponent(String(id))}`,

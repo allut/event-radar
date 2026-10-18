@@ -35,6 +35,8 @@ interface SettingsData {
   created_at: string;
   personas: PersonaEntry[];
   google_linked: boolean;
+  email_ad_consent: boolean;
+  email_ad_consent_available: boolean;
 }
 
 export default function Settings() {
@@ -67,6 +69,16 @@ export default function Settings() {
   const digestMutation = useMutation({
     mutationFn: (optIn: boolean) =>
       api.patch<SettingsData>(API.me, { email_digest_opt_in: optIn }),
+    onSuccess: (updated) => {
+      queryClient.setQueryData([QUERY_KEYS.settings], updated);
+      showSaved(locale);
+    },
+    onError: (err) => showSaveError(err, locale),
+  });
+
+  const consentMutation = useMutation({
+    mutationFn: (consent: boolean) =>
+      api.patch<SettingsData>(API.me, { email_ad_consent: consent }),
     onSuccess: (updated) => {
       queryClient.setQueryData([QUERY_KEYS.settings], updated);
       showSaved(locale);
@@ -179,6 +191,20 @@ export default function Settings() {
               ariaLabel={data?.email_digest_opt_in ? t('digest_unsubscribe', locale) : t('digest_subscribe', locale)}
             />
           </div>
+          {data?.email_ad_consent_available && (
+            <div className={styles.toggleRow}>
+              <div>
+                <p className={styles.toggleLabel}>{t('consent_label', locale)}</p>
+                <p className={styles.toggleDesc}>{t('consent_desc', locale)}</p>
+              </div>
+              <Toggle
+                on={data.email_ad_consent}
+                onChange={(next) => consentMutation.mutate(next)}
+                disabled={consentMutation.isPending}
+                ariaLabel={t('consent_label', locale)}
+              />
+            </div>
+          )}
           {!data?.email_digest_opt_in && (
             <p className={styles.unsubMsg}>{t('digest_off', locale)}</p>
           )}

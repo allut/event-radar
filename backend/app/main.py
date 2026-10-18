@@ -44,6 +44,7 @@ from app.constants.jobs import (
     JOB_ID_DEDUP_PASS,
     JOB_ID_EXPIRE_STALE_CLAIMS,
     JOB_ID_FLUSH_PROMOTION_COUNTERS,
+    JOB_ID_SWEEP_PROMOTIONS,
     JOB_ID_GEOCODE_PENDING,
     JOB_ID_INGEST_ALL_SOURCES,
     JOB_ID_PUBLISH_PENDING,
@@ -119,8 +120,9 @@ from app.routers.settings import router as settings_router
 from app.email.consent import reset_consent_for_wording_change
 from app.routers.unsubscribe import router as unsubscribe_router
 from app.db import run_in_session
-from app.constants.promotions import PROMOTION_COUNTER_FLUSH_SECONDS
+from app.constants.promotions import PROMOTION_COUNTER_FLUSH_SECONDS, PROMOTION_SWEEP_SECONDS
 from app.promotions.counters import flush as flush_promotion_counters
+from app.promotions.sweep import sweep_promotions
 from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_publishers, seed_sources
 
@@ -219,6 +221,10 @@ _run_expire_stale_claims = _scheduled(
 # Promotion delivery counters (#606) flush as one bulk upsert.
 _run_flush_promotion_counters = _scheduled(
     JOB_ID_FLUSH_PROMOTION_COUNTERS, _in_session(flush_promotion_counters, commit=True)
+)
+# Automatic Promotion void/end sweep (#602) commits internally, then emails.
+_run_sweep_promotions = _scheduled(
+    JOB_ID_SWEEP_PROMOTIONS, _in_session(sweep_promotions, commit=False)
 )
 
 
@@ -327,6 +333,15 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         trigger="interval",
         seconds=PROMOTION_COUNTER_FLUSH_SECONDS,
         id=JOB_ID_FLUSH_PROMOTION_COUNTERS,
+        replace_existing=True,
+    )
+    # Every minute: void unpaid Promotions at their start date, end paid ones
+    # whose event was cancelled or whose claim was revoked (#602).
+    scheduler.add_job(
+        _run_sweep_promotions,
+        trigger="interval",
+        seconds=PROMOTION_SWEEP_SECONDS,
+        id=JOB_ID_SWEEP_PROMOTIONS,
         replace_existing=True,
     )
     # Daily 05:00 EET: expire a pending automated-mechanism claim abandoned

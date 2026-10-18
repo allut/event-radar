@@ -101,6 +101,7 @@ Every list pages with a numbered pager and a `?page` URL param. There is no Load
 - **An unrecognized `:locale` segment, such as `/xx/...`, renders Estonian without redirecting.**
 - **`usePathLocale()` reads the locale from the pathname,** so it also works outside `<Routes>`. The `Footer`, `useLocaleMutation` and the switcher-less pages (login, verify, unsubscribe, `NotFound`) use it, so a page and its footer always share a language.
 - **Internal links go through `useLocalePath()`, and programmatic navigation through `useLocaleNavigate()`.** Both prefix the target against the current URL.
+- **The Email ad consent UI never uses `ad` or `ads` as an element id or class name.** Ad blockers hid it in the prototype, so names say `consent`. The Settings toggle shows only while `email_ad_consent_available` is true.
 - **`useLocaleMutation` switches locale by navigating to the equivalent prefixed path.** It also persists to `localStorage` and `PATCH /users/me`. It takes the locale from the URL segment, else the stored preference, or Estonian for `publicRoute: true` callers.
 
 ## FAQ Page
