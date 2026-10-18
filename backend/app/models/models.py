@@ -1338,6 +1338,10 @@ class StripeCustomer(Base):
     )
     registry_code: Mapped[str] = mapped_column(String(32), nullable=False)
     stripe_customer_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    # What Stripe last got, so a repeat checkout updates the Customer only on
+    # a change. NULL on rows from before #628: the next checkout fills them.
+    billing_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    legal_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -114,18 +114,23 @@ async def _stripe_customer(
     legal_name: str,
     email: str,
 ) -> str:
-    existing = await db.scalar(
-        select(StripeCustomer.stripe_customer_id).where(
-            StripeCustomer.organizer_id == organizer.id,
-            StripeCustomer.registry_code == registry_code,
+    existing = (
+        await db.execute(
+            select(StripeCustomer).where(
+                StripeCustomer.organizer_id == organizer.id,
+                StripeCustomer.registry_code == registry_code,
+            )
         )
-    )
+    ).scalar_one_or_none()
     if existing is not None:
         # This checkout's billing email and the register's current name win,
-        # so the invoice goes to the address the Organizer just gave. We store
-        # neither, so a reused Customer is always updated (one idempotent call).
-        await gateway.update_customer(existing, email, legal_name)
-        return existing
+        # so the invoice goes to the address the Organizer just gave. Stripe
+        # is called only when they differ from what we last sent.
+        if (existing.billing_email, existing.legal_name) != (email, legal_name):
+            await gateway.update_customer(existing.stripe_customer_id, email, legal_name)
+            existing.billing_email = email
+            existing.legal_name = legal_name
+        return existing.stripe_customer_id
     created = await gateway.create_customer(
         CustomerRequest(
             email=email, name=legal_name, registry_code=registry_code, organizer_id=organizer.id
@@ -134,7 +139,13 @@ async def _stripe_customer(
     # A concurrent first checkout may have won; its row is the one to reuse.
     await db.execute(
         pg_insert(StripeCustomer)
-        .values(organizer_id=organizer.id, registry_code=registry_code, stripe_customer_id=created)
+        .values(
+            organizer_id=organizer.id,
+            registry_code=registry_code,
+            stripe_customer_id=created,
+            billing_email=email,
+            legal_name=legal_name,
+        )
         .on_conflict_do_nothing(constraint="uq_stripe_customers_organizer_code")
     )
     winner = await db.scalar(

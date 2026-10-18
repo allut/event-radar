@@ -115,6 +115,42 @@ async def test_customer_is_reused_per_organizer_and_registry_code(
 
 
 @pytest.mark.asyncio
+async def test_repeat_checkout_updates_the_customer_only_when_details_change(
+    db, make, gateway, registry
+) -> None:
+    org = await make.organizer()
+    events = [await clear_event(make, org) for _ in range(4)]
+    await start_checkout(db, gateway, registry, org, data(events[0]), NOW)
+    await start_checkout(db, gateway, registry, org, data(events[1]), NOW)
+    assert gateway.customer_updates == []  # same details: no call
+
+    registry.found("12345678", "Renamed OÜ")
+    await start_checkout(db, gateway, registry, org, data(events[2]), NOW)
+    assert gateway.customer_updates == [("cus_1", org.email, "Renamed OÜ")]
+
+    await start_checkout(db, gateway, registry, org, data(events[3]), NOW)
+    assert len(gateway.customer_updates) == 1  # the new details are stored
+    row = await db.scalar(select(StripeCustomer).where(StripeCustomer.organizer_id == org.id))
+    assert (row.billing_email, row.legal_name) == (org.email, "Renamed OÜ")
+
+
+@pytest.mark.asyncio
+async def test_customer_row_without_stored_details_is_updated_once(
+    db, make, gateway, registry
+) -> None:
+    org = await make.organizer()
+    first = await clear_event(make, org)
+    second = await clear_event(make, org)
+    await start_checkout(db, gateway, registry, org, data(first), NOW)
+    row = await db.scalar(select(StripeCustomer).where(StripeCustomer.organizer_id == org.id))
+    row.billing_email = row.legal_name = None  # a row from before the columns existed
+    await db.commit()
+
+    await start_checkout(db, gateway, registry, org, data(second), NOW)
+    assert len(gateway.customer_updates) == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "restriction,code",
     [(None, "event_needs_review"), ("alcohol", "event_needs_review")],
