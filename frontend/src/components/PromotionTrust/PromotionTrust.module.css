@@ -1,0 +1,221 @@
+/* Trust review: panel, tripwires, complaint logger and Withdraw. Shared admin
+   commerce chrome is composed; only the layout is local. */
+
+.hint { composes: hint from '../shared/AdminCommerce.module.css'; }
+.error { composes: error from '../shared/AdminCommerce.module.css'; }
+.okmsg { composes: okmsg from '../shared/AdminCommerce.module.css'; }
+.mono { composes: mono from '../shared/AdminCommerce.module.css'; }
+.muted { composes: muted from '../shared/AdminCommerce.module.css'; }
+.chip { composes: chip from '../shared/AdminCommerce.module.css'; }
+.chipStripe { composes: chipStripe from '../shared/AdminCommerce.module.css'; }
+.pill { composes: pill from '../shared/AdminCommerce.module.css'; }
+.pillLive { composes: pillLive from '../shared/AdminCommerce.module.css'; }
+.pillDanger { composes: pillDanger from '../shared/AdminCommerce.module.css'; }
+.alert { composes: alert from '../shared/AdminCommerce.module.css'; }
+.alertDanger { composes: alertDanger from '../shared/AdminCommerce.module.css'; }
+.alertSuccess { composes: alertSuccess from '../shared/AdminCommerce.module.css'; }
+.alertTitle { composes: alertTitle from '../shared/AdminCommerce.module.css'; }
+.field { composes: field from '../shared/AdminCommerce.module.css'; }
+.label { composes: label from '../shared/AdminCommerce.module.css'; }
+.input { composes: input from '../shared/AdminCommerce.module.css'; }
+.wide { composes: wide from '../shared/AdminCommerce.module.css'; }
+.primaryButton { composes: primaryButton from '../shared/AdminCommerce.module.css'; }
+.plainButton { composes: plainButton from '../shared/AdminCommerce.module.css'; }
+.dangerButton { composes: dangerButton from '../shared/AdminCommerce.module.css'; }
+.smallButton { composes: smallButton from '../shared/AdminCommerce.module.css'; }
+.actions { composes: actions from '../shared/AdminCommerce.module.css'; }
+.panel { composes: panel from '../shared/AdminCommerce.module.css'; }
+.panelTitle { composes: panelTitle from '../shared/AdminCommerce.module.css'; }
+.panelButtons { composes: panelButtons from '../shared/AdminCommerce.module.css'; }
+.check { composes: check from '../shared/AdminCommerce.module.css'; }
+.rows { composes: rows from '../shared/AdminCommerce.module.css'; }
+.rowMeta { composes: rowMeta from '../shared/AdminCommerce.module.css'; }
+.steps { composes: steps from '../shared/AdminCommerce.module.css'; }
+.stepsPlain { composes: stepsPlain from '../shared/AdminCommerce.module.css'; }
+.tableScroll { composes: tableScroll from '../shared/AdminCommerce.module.css'; }
+.table { composes: table from '../shared/AdminCommerce.module.css'; }
+.num { composes: num from '../shared/AdminCommerce.module.css'; }
+
+.sectionTitle {
+  composes: sectionTitle from '../shared/AdminCommerce.module.css';
+}
+
+.srOnly {
+  composes: srOnly from '../shared/Visually.module.css';
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* Denominators */
+.current {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: var(--border-w-hair) solid var(--border);
+}
+
+.tile {
+  padding: var(--space-3);
+  border-right: var(--border-w-hair) solid var(--border);
+}
+.tile:last-child { border-right: 0; }
+
+.tileNumber {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--heading-xl);
+  font-weight: var(--fw-bold);
+}
+
+.tileLabel {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+}
+
+/* Period columns */
+.periods {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: var(--space-4) 0 var(--space-2);
+}
+
+.period {
+  border: var(--border-w-hair) solid var(--border);
+  background: var(--bg-raised);
+  padding: var(--space-4);
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+
+.periodPrimary {
+  composes: period;
+  border-color: var(--accent-border);
+}
+
+.periodHead {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin-bottom: var(--space-2);
+  flex-wrap: wrap;
+}
+.periodHead b { font-size: var(--fs-sm); }
+
+.rangeHint {
+  composes: hint mono from '../shared/AdminCommerce.module.css';
+}
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: var(--border-w-hair) solid var(--border);
+  align-items: baseline;
+}
+
+.metricSection {
+  composes: metric;
+}
+.metricSection .metricKey { font-weight: var(--fw-semibold); }
+
+.metricKey { color: var(--text-soft); }
+
+.metricSub {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+}
+
+.metricValue {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--fw-bold);
+  text-align: right;
+}
+
+.subKey {
+  color: var(--text-muted);
+  padding-left: var(--space-3);
+}
+
+.subValue {
+  composes: metricValue;
+  color: var(--text-muted);
+}
+
+/* Tripwires */
+.tripwires {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: var(--border-w-hair) solid var(--border);
+}
+
+.tripwire {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: var(--border-w-hair) solid var(--border);
+  align-items: start;
+  font-size: var(--fs-sm);
+}
+
+.rule { color: var(--text-soft); }
+.ruleHit { color: var(--text); }
+
+.figures {
+  composes: mono from '../shared/AdminCommerce.module.css';
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.verdict { margin-top: var(--space-3); }
+
+/* Complaint logger */
+.logger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: var(--space-4);
+  background: var(--bg-raised);
+  border: var(--border-w-hair) solid var(--border);
+  padding: var(--space-4);
+}
+
+.loggerBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.recentTitle { margin-top: var(--space-4); }
+
+/* Withdraw */
+.stepsGap { margin-top: var(--space-3); }
+.tableGap { margin-top: var(--space-4); }
+.panelBody { margin: 0; color: var(--text-muted); }
+.outcome { margin-top: var(--space-3); }
+
+.rowError {
+  composes: error from '../shared/AdminCommerce.module.css';
+  min-height: 0;
+}
+
+@media (max-width: 760px) {
+  .periods, .logger { grid-template-columns: 1fr; }
+  .tileNumber { font-size: var(--fs-lg); }
+}
+
+@media (max-width: 640px) {
+  .tripwire { grid-template-columns: 1fr; }
+}

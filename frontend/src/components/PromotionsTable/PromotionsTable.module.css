@@ -63,3 +63,10 @@
 .srOnly {
   composes: srOnly from '../shared/Visually.module.css';
 }
+
+.chipRow { margin-top: var(--space-1); }
+
+.chip { composes: chip from '../shared/AdminCommerce.module.css'; }
+.chipStripe { composes: chipStripe from '../shared/AdminCommerce.module.css'; }
+.docLink { composes: docLink from '../shared/AdminCommerce.module.css'; }
+.muted { color: var(--text-muted); }

@@ -9,15 +9,19 @@ import {
   PROMOTION_INVOICE_PREFIX,
   PROMOTION_NOTE_ROWS,
   PROMOTION_REGISTRY_CODE_RE,
+  PROMOTION_REQUEST_COPY as REQUEST_COPY,
 } from '../../constants/promotions';
 import { ADMIN_GENERIC_ERROR, ADMIN_LOCALE } from '../../constants/admin';
 import {
   formatDay,
   formatEuro,
+  formatWindow,
   isIsoDay,
   priceLine,
+  restrictionTag,
   type CapStripResponse,
   type PromotionContext,
+  type PromotionRequestRow,
   type PromotionValidation,
 } from '../../lib/promotions';
 import { apiErrorMessage } from '../../utils';
@@ -29,22 +33,31 @@ import styles from './PromotionGrantForm.module.css';
 interface PromotionGrantFormProps {
   eventId: string;
   onNotify: (status: typeof UI_STATE.success | typeof UI_STATE.error, message: string) => void;
+  /** Grants this pending request instead (#615): the form starts from its
+   * dates and advertiser fields, and saving also marks it granted. */
+  request?: PromotionRequestRow;
+  onDone?: () => void;
+  /** Closes the form without granting; shown as Cancel in request mode. */
+  onCancel?: () => void;
 }
 
 /** Grant Promotion (#600): admin direct grant for one event. Dates validate
  * live against the server's window, overlap and cap rules; the price line
- * and the cap strip's selection follow the dates. */
-export default function PromotionGrantForm({ eventId, onNotify }: PromotionGrantFormProps) {
+ * and the cap strip's selection follow the dates. With `request` (#615) it
+ * is the request queue's grant form, prefilled and editable. */
+export default function PromotionGrantForm({ eventId, onNotify, request, onDone, onCancel }: PromotionGrantFormProps) {
   const queryClient = useQueryClient();
   const ids = useId();
-  const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [name, setName] = useState<string | null>(null);
-  const [registry, setRegistry] = useState('');
+  const [start, setStart] = useState(request?.start_date ?? '');
+  const [end, setEnd] = useState(request?.end_date ?? '');
+  const [name, setName] = useState<string | null>(request?.advertiser_legal_name ?? null);
+  const [registry, setRegistry] = useState(request?.advertiser_registry_code ?? '');
   const [invoice, setInvoice] = useState('');
-  const [email, setEmail] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(request ? (request.billing_email ?? '') : null);
   const [complimentary, setComplimentary] = useState(false);
   const [note, setNote] = useState('');
+  const [cleared, setCleared] = useState(false);
+  const [clearNote, setClearNote] = useState('');
 
   const context = useQuery({
     queryKey: [QUERY_KEYS.adminPromotionContext, eventId],
@@ -74,9 +87,17 @@ export default function PromotionGrantForm({ eventId, onNotify }: PromotionGrant
   });
 
   const grant = useMutation({
-    mutationFn: (body: Record<string, unknown>) => adminApi.post(API.adminPromotionGrant(eventId), body),
+    mutationFn: (body: Record<string, unknown>) =>
+      adminApi.post(request ? API.adminPromotionRequestGrant(request.id) : API.adminPromotionGrant(eventId), body),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminPromotions] });
+      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminPromotionRequests] });
+      if (request) {
+        void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminPromotionCapStrip] });
+        onNotify(UI_STATE.success, REQUEST_COPY.granted(request.event_title));
+        onDone?.();
+        return;
+      }
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminPromotionCapStrip] });
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminPromotionContext, eventId] });
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminPromotionValidate, eventId] });
@@ -88,6 +109,8 @@ export default function PromotionGrantForm({ eventId, onNotify }: PromotionGrant
       onNotify(UI_STATE.success, PROMOTION_COPY.granted);
     },
     onError: (err) => {
+      // Another admin may have resolved the request first: refresh the queue.
+      if (request) void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminPromotionRequests] });
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminPromotionCapStrip] });
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminPromotionValidate, eventId] });
       onNotify(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
@@ -113,6 +136,16 @@ export default function PromotionGrantForm({ eventId, onNotify }: PromotionGrant
       ? PROMOTION_COPY.invoiceInvalid
       : null;
   const noteError = complimentary && !note.trim() ? PROMOTION_COPY.noteRequired : null;
+  // null = not assessed yet; "none" = clear; any other tag needs a clearance (#612).
+  const restriction = request ? request.promotion_restriction : ctx.promotion_restriction;
+  const restrictionLabel = restrictionTag(restriction);
+  const clearanceError = restrictionLabel === null
+    ? null
+    : !cleared
+      ? REQUEST_COPY.clearanceAckRequired
+      : !clearNote.trim()
+        ? REQUEST_COPY.clearanceNoteRequired
+        : null;
 
   // The server answers for the dates in view; while the next answer loads
   // (keepPreviousData) the previous one would be for other dates.
@@ -128,6 +161,7 @@ export default function PromotionGrantForm({ eventId, onNotify }: PromotionGrant
     PROMOTION_REGISTRY_CODE_RE.test(registryTrimmed) &&
     !invoiceError &&
     !noteError &&
+    !clearanceError &&
     !grant.isPending;
 
   let message: { text: string; tone: 'error' | 'ok' | 'hint' };
@@ -163,6 +197,9 @@ export default function PromotionGrantForm({ eventId, onNotify }: PromotionGrant
       is_complimentary: complimentary,
       complimentary_note: complimentary ? note.trim() : null,
       invoice_reference: !complimentary && invoiceTrimmed ? invoiceTrimmed : null,
+      ...(restrictionLabel !== null
+        ? { restriction_clearance_confirmed: true, restriction_clearance_note: clearNote.trim() }
+        : {}),
     });
   }
 
@@ -170,12 +207,22 @@ export default function PromotionGrantForm({ eventId, onNotify }: PromotionGrant
 
   return (
     <div className={styles.wrap}>
-      {strip.data && <PromotionCapStrip days={strip.data.days} todayIso={strip.data.today} selected={selected} />}
+      {strip.data && !request && <PromotionCapStrip days={strip.data.days} todayIso={strip.data.today} selected={selected} />}
       <form className={styles.form} onSubmit={submit} noValidate>
         <div className={styles.event}>
           <strong>{ctx.event_title}</strong>
-          <span className={styles.hint}> · ends {formatDay(ctx.event_last_day)}</span>
-          <div className={styles.hint}>Owner: {ctx.owner.name}</div>
+          {request && restrictionLabel !== null && <> <span className={styles.tag}>{restrictionLabel}</span></>}
+          {request ? (
+            <div className={styles.hint}>
+              {REQUEST_COPY.requestedBy} {request.organizer_name} for {formatWindow(request.start_date, request.end_date)} · event ends{' '}
+              {formatDay(ctx.event_last_day)}
+            </div>
+          ) : (
+            <>
+              <span className={styles.hint}> · ends {formatDay(ctx.event_last_day)}</span>
+              <div className={styles.hint}>Owner: {ctx.owner.name}</div>
+            </>
+          )}
         </div>
 
         <div className={styles.field}>
@@ -218,6 +265,13 @@ export default function PromotionGrantForm({ eventId, onNotify }: PromotionGrant
           >
             {message.text}
           </div>
+          {request && datesPicked && (
+            <div className={styles.msgHint}>
+              {start === request.start_date && end === request.end_date
+                ? REQUEST_COPY.datesMatch
+                : REQUEST_COPY.datesDiffer(formatWindow(request.start_date, request.end_date))}
+            </div>
+          )}
         </div>
 
         <div className={styles.field}>
@@ -295,15 +349,55 @@ export default function PromotionGrantForm({ eventId, onNotify }: PromotionGrant
           </div>
         )}
 
+        {restrictionLabel !== null && (
+          <div className={`${styles.alert} ${styles.wide}`}>
+            <div className={styles.alertTitle}>{REQUEST_COPY.restrictionTitle(restrictionLabel.toLowerCase())}</div>
+            <div>{REQUEST_COPY.restrictionBody}</div>
+            <div className={styles.clearAck}>
+              <input
+                id={`${ids}-clear`}
+                type="checkbox"
+                checked={cleared}
+                onChange={(e) => setCleared(e.target.checked)}
+              />
+              <label htmlFor={`${ids}-clear`}>{REQUEST_COPY.clearanceAck}</label>
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor={`${ids}-clearnote`}>{REQUEST_COPY.clearanceNoteLabel}</label>
+              <textarea
+                id={`${ids}-clearnote`}
+                className={styles.input}
+                rows={PROMOTION_NOTE_ROWS}
+                value={clearNote}
+                onChange={(e) => setClearNote(e.target.value)}
+              />
+            </div>
+          </div>
+        )}
+        {restriction === null && (
+          <div className={`${styles.alert} ${styles.wide}`}>
+            <div className={styles.alertTitle}>{REQUEST_COPY.unassessedTitle}</div>
+            <div>{REQUEST_COPY.unassessedBody}</div>
+          </div>
+        )}
+
         <div className={styles.price}>
           <div>
             <span className={styles.mono}>{priceText}</span>
             <div className={styles.hint}>{priceDetail}</div>
           </div>
-          <button type="submit" className={styles.submit} disabled={!canSubmit}>
-            {PROMOTION_COPY.grantHeading}
-          </button>
+          <div className={styles.buttons}>
+            <button type="submit" className={styles.submit} disabled={!canSubmit}>
+              {PROMOTION_COPY.grantHeading}
+            </button>
+            {request && (
+              <button type="button" className={styles.cancel} onClick={onCancel}>
+                Cancel
+              </button>
+            )}
+          </div>
         </div>
+        {request && <p className={`${styles.hint} ${styles.wide}`}>{REQUEST_COPY.grantNote}</p>}
       </form>
     </div>
   );

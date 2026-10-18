@@ -1,7 +1,20 @@
 import { TALLINN_TZ } from '../_generated/sharedConstants';
+import { ApiError } from '../api/client';
+import { MS_PER_DAY } from '../constants/core';
+import { apiErrorMessage } from '../utils';
 import {
   PROMOTION_DETAIL_COPY,
   PROMOTION_GATE_REASON_LABELS,
+  PROMOTION_INVOICE_SOURCE_STRIPE,
+  PROMOTION_RESTRICTION_NONE,
+  PROMOTION_SLOT_WITHDRAWAL_SOURCES,
+  PROMOTION_SLOTS_STILL_ENABLED_CODE,
+  PROMOTION_STRIPE_COPY,
+  PROMOTION_TRIPWIRE_MIN_COMPLAINTS,
+  PROMOTION_TRIPWIRE_MIN_DISLIKES,
+  PROMOTION_TRIPWIRE_MIN_UPHELD,
+  PROMOTION_TRIPWIRE_MIN_WITHDRAWALS,
+  PROMOTION_TRUST_COPY,
   PROMOTION_GATE_SHOWN,
   PROMOTION_STATE,
   PROMOTION_STATUS,
@@ -25,6 +38,11 @@ export interface PromotionRow {
   is_complimentary: boolean;
   complimentary_note: string | null;
   invoice_reference: string | null;
+  refunded_cents: number;
+  invoice_source: string | null;
+  invoice_url: string | null;
+  awaiting_checkout: boolean;
+  checkout_expires_at: string | null;
   advertiser_legal_name: string;
 }
 
@@ -53,6 +71,7 @@ export interface PromotionPrice {
 export interface PromotionContext {
   event_id: number;
   event_title: string;
+  promotion_restriction?: string | null;
   owner: { organizer_id: number; name: string; email: string | null } | null;
   prefill: { advertiser_legal_name: string | null; billing_email: string | null };
   today: string;
@@ -108,6 +127,23 @@ export function formatWindow(start: string, end: string): string {
   return `${DAY_SHORT_FORMAT.format(s)} – ${DAY_SHORT_FORMAT.format(e)}`;
 }
 
+const TIME_FORMAT = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: TALLINN_TZ });
+
+/** "15:42" in Tallinn time. */
+export function formatTime(iso: string): string {
+  return TIME_FORMAT.format(new Date(iso));
+}
+
+export function isStripePaid(p: { invoice_source: string | null }): boolean {
+  return p.invoice_source === PROMOTION_INVOICE_SOURCE_STRIPE;
+}
+
+/** A restriction tag ("alcohol") worded for a tag chip; null for clear or unassessed. */
+export function restrictionTag(restriction: string | null | undefined): string | null {
+  if (restriction === null || restriction === undefined || restriction === PROMOTION_RESTRICTION_NONE) return null;
+  return restriction.charAt(0).toUpperCase() + restriction.slice(1);
+}
+
 export function formatEuro(cents: number): string {
   return `€${(cents / 100).toFixed(2)}`;
 }
@@ -127,6 +163,13 @@ export function promotionPill(p: PromotionRow): { label: string; tone: Promotion
   if (p.status === PROMOTION_STATUS.void) return { label: 'Void', tone: 'finished', reason: null };
   if (p.status === PROMOTION_STATUS.endedEarly) return { label: 'Ended early', tone: 'finished', reason: null };
   if (p.state === PROMOTION_STATE.finished) return { label: 'Finished', tone: 'finished', reason: null };
+  if (p.status === PROMOTION_STATUS.unpaid && p.awaiting_checkout) {
+    return {
+      label: PROMOTION_STRIPE_COPY.awaitingCheckout,
+      tone: 'attention',
+      reason: `Organizer is in Stripe Checkout${p.checkout_expires_at ? ` · session expires ${formatTime(p.checkout_expires_at)}` : ''}, voids on its own`,
+    };
+  }
   if (p.status === PROMOTION_STATUS.unpaid) {
     return {
       label: 'Awaiting payment',
@@ -179,9 +222,18 @@ export interface PromotionAuditEntry {
   created_at: string;
 }
 
+export interface RefundPrefill {
+  mode: 'stripe' | 'manual';
+  unused_days: number;
+  paused_days: number;
+  gross_per_day_cents: number;
+  suggested_cents: number;
+  remaining_cents: number;
+}
+
 export interface PromotionDetail extends PromotionRow {
   organizer_id: number;
-  invoice_source: string | null;
+  refund_prefill: RefundPrefill | null;
   advertiser_registry_code: string;
   billing_email: string | null;
   granted_by: string | null;
@@ -189,7 +241,6 @@ export interface PromotionDetail extends PromotionRow {
   ended_at: string | null;
   end_reason: string | null;
   end_note: string | null;
-  refunded_cents: number;
   refund_note: string | null;
   created_at: string | null;
   event: {
@@ -199,6 +250,7 @@ export interface PromotionDetail extends PromotionRow {
     ends_at: string | null;
     last_day: string;
     venue_name: string | null;
+    promotion_restriction?: string | null;
   };
   actions: PromotionActions;
   repoint_candidates: RepointCandidate[];
@@ -250,6 +302,9 @@ export function gateLabel(stat: PromotionDailyStat): string {
  * stated end reason, or the latest recorded pause while live. */
 export function detailReason(p: PromotionDetail, days: PromotionDailyStat[]): string | null {
   const pill = promotionPill(p);
+  if (p.awaiting_checkout) {
+    return PROMOTION_STRIPE_COPY.checkoutReason(p.checkout_expires_at ? formatTime(p.checkout_expires_at) : null);
+  }
   if (pill.reason) return pill.reason;
   if ((p.status === PROMOTION_STATUS.endedEarly || p.status === PROMOTION_STATUS.void) && p.end_note) {
     return `${p.status === PROMOTION_STATUS.void ? 'Voided' : 'Ended'}: ${p.end_note}`;
@@ -271,6 +326,13 @@ const DATE_TIME_FORMAT = new Intl.DateTimeFormat('en-GB', {
   timeZone: TALLINN_TZ,
 });
 
+const DAY_MONTH_FORMAT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: TALLINN_TZ });
+
+/** "11 Oct" in Tallinn time. */
+export function formatDayMonth(iso: string): string {
+  return DAY_MONTH_FORMAT.format(new Date(iso));
+}
+
 /** "13 Oct 2026, 11:20" in Tallinn time. */
 export function formatDateTime(iso: string): string {
   return DATE_TIME_FORMAT.format(new Date(iso));
@@ -282,4 +344,137 @@ export function parseEuroToCents(text: string): number | null {
   if (!/^\d+(\.\d{1,2})?$/.test(normalised)) return null;
   const cents = Math.round(Number(normalised) * 100);
   return cents > 0 ? cents : null;
+}
+
+export interface PromotionRequestRow {
+  id: number;
+  event_id: number;
+  event_title: string;
+  organizer_id: number;
+  organizer_name: string;
+  organizer_email: string;
+  status: string;
+  start_date: string;
+  end_date: string;
+  days: number;
+  price: PromotionPrice;
+  advertiser_legal_name: string;
+  advertiser_registry_code: string;
+  billing_email: string | null;
+  note: string | null;
+  decline_reason: string | null;
+  promotion_restriction: string | null;
+  not_eligible_reason: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface PromotionRequestsResponse {
+  pending_count: number;
+  requests: PromotionRequestRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+export interface TrustPeriod {
+  reports_on_promoted: number;
+  reports_resolved: number;
+  promotions_taken_down: number;
+  consents_granted: number;
+  consent_withdrawals: { total: number; by_source: Record<string, number> };
+  slots_served: number;
+  slots_served_by_surface: Record<string, number>;
+  web_opens: number;
+  slot_dislikes: number;
+  complaints: number;
+}
+
+export interface PromotionComplaint {
+  id: number;
+  created_at: string;
+  source: string | null;
+  complainant: string | null;
+  note: string | null;
+}
+
+export interface TrustResponse {
+  as_of: string;
+  window_days: number;
+  window_start: string;
+  current: { live_promotions: number; consenters: number };
+  periods: { rolling_4_weeks: TrustPeriod; since_launch: TrustPeriod };
+  recent_complaints: PromotionComplaint[];
+}
+
+/** A withdraw failure worded for the admin: the slots-flag 409 gets its runbook step. */
+export function withdrawErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.status === 409 && (err.code ?? err.message) === PROMOTION_SLOTS_STILL_ENABLED_CODE) {
+    return PROMOTION_TRUST_COPY.slotsStillEnabled;
+  }
+  return apiErrorMessage(err, fallback);
+}
+
+export interface Tripwire {
+  key: string;
+  tripped: boolean;
+  rule: string;
+  figures: string;
+}
+
+/** The four stop-selling conditions over the rolling 4 weeks, with the figures
+ * behind each. Guidance only: nothing here flips a flag. */
+export function evaluateTripwires(p: TrustPeriod): Tripwire[] {
+  const T = PROMOTION_TRUST_COPY;
+  const withdrawals = PROMOTION_SLOT_WITHDRAWAL_SOURCES.reduce((n, s) => n + (p.consent_withdrawals.by_source[s] ?? 0), 0);
+  return [
+    {
+      key: 'withdrawals',
+      tripped: withdrawals > p.consents_granted && withdrawals >= PROMOTION_TRIPWIRE_MIN_WITHDRAWALS,
+      rule: T.tripwireWithdrawals,
+      figures: T.figWithdrawals(withdrawals, p.consents_granted),
+    },
+    {
+      key: 'dislikes',
+      tripped: p.slot_dislikes > p.web_opens && p.slot_dislikes >= PROMOTION_TRIPWIRE_MIN_DISLIKES,
+      rule: T.tripwireDislikes,
+      figures: T.figDislikes(p.slot_dislikes, p.web_opens),
+    },
+    {
+      key: 'complaints',
+      tripped: p.complaints >= PROMOTION_TRIPWIRE_MIN_COMPLAINTS,
+      rule: T.tripwireComplaints,
+      figures: p.complaints >= PROMOTION_TRIPWIRE_MIN_COMPLAINTS ? T.figComplaintsCheck(p.complaints) : T.figComplaints(p.complaints),
+    },
+    {
+      key: 'reports',
+      tripped: p.promotions_taken_down >= PROMOTION_TRIPWIRE_MIN_UPHELD,
+      rule: T.tripwireReports,
+      figures: T.figReports(p.promotions_taken_down, p.reports_on_promoted),
+    },
+  ];
+}
+
+/** Whole days of the window that never started: all of them while scheduled,
+ * the days after today while live. Mirrors backend withdraw.py::unused_days(). */
+export function unusedDays(p: Pick<PromotionRow, 'start_date' | 'end_date' | 'days'>, today: string): number {
+  if (p.start_date > today) return p.days;
+  return Math.max(Math.round((Date.parse(p.end_date) - Date.parse(today)) / MS_PER_DAY), 0);
+}
+
+/** The refund Withdraw will record for `unused` days: the exact amount paid
+ * for the whole window, otherwise the net share plus its VAT, never beyond
+ * what is still refundable. Mirrors backend withdraw.py::refund_for_unused(). */
+export function withdrawRefundCents(p: PromotionRow, unused: number): number {
+  if (p.is_complimentary || unused <= 0) return 0;
+  const rate = Number(p.vat_rate_percent);
+  const vat = (net: number) => Math.round((net * rate) / 100);
+  const gross = p.net_price_cents + vat(p.net_price_cents);
+  let owed = gross;
+  if (unused < p.days) {
+    const net = Math.floor((p.net_price_cents * unused) / p.days);
+    owed = net + vat(net);
+  }
+  return Math.max(Math.min(owed, gross - p.refunded_cents), 0);
 }

@@ -283,3 +283,21 @@ textarea.input { resize: vertical; }
 @media (max-width: 640px) {
   .record { grid-template-columns: 1fr; }
 }
+
+.chip { composes: chip from '../../components/shared/AdminCommerce.module.css'; }
+.chipStripe { composes: chipStripe from '../../components/shared/AdminCommerce.module.css'; }
+.docLink { composes: docLink from '../../components/shared/AdminCommerce.module.css'; }
+
+.calc {
+  composes: alert from '../../components/shared/AdminCommerce.module.css';
+  flex: 1 1 100%;
+}
+.calcTitle { composes: alertTitle from '../../components/shared/AdminCommerce.module.css'; }
+.calcHint {
+  composes: hint from '../../components/shared/AdminCommerce.module.css';
+}
+.refundAmount { flex: 1 1 var(--admin-promotion-field-min); }
+.refundNote { flex: 2 1 var(--admin-promotion-field-min); }
+.fieldHint {
+  composes: hint from '../../components/shared/AdminCommerce.module.css';
+}

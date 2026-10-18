@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatEuro, formatWindow, priceLine, promotionPill, type PromotionRow } from './promotions';
+import { formatEuro, formatWindow, priceLine, promotionPill, unusedDays, withdrawRefundCents, type PromotionRow } from './promotions';
 
 function row(overrides: Partial<PromotionRow> = {}): PromotionRow {
   return {
@@ -19,6 +19,11 @@ function row(overrides: Partial<PromotionRow> = {}): PromotionRow {
     is_complimentary: false,
     complimentary_note: null,
     invoice_reference: null,
+    refunded_cents: 0,
+    invoice_source: 'manual',
+    invoice_url: null,
+    awaiting_checkout: false,
+    checkout_expires_at: null,
     advertiser_legal_name: 'Jazzklubi MTÜ',
     ...overrides,
   };
@@ -54,5 +59,32 @@ describe('formatting', () => {
   it('formats a window within one month and across months', () => {
     expect(formatWindow('2026-10-12', '2026-10-18')).toBe('12–18 Oct');
     expect(formatWindow('2026-10-24', '2026-11-02')).toBe('24 Oct – 2 Nov');
+  });
+});
+
+describe('awaiting checkout', () => {
+  it('shows its own pill with the session expiry instead of the unpaid void line', () => {
+    const pill = promotionPill(
+      row({ status: 'unpaid', state: 'scheduled', awaiting_checkout: true, checkout_expires_at: '2026-10-17T15:42:00+03:00' }),
+    );
+    expect(pill.label).toBe('Awaiting checkout');
+    expect(pill.reason).toBe('Organizer is in Stripe Checkout · session expires 15:42, voids on its own');
+  });
+});
+
+describe('withdraw figures', () => {
+  it('counts a live Promotion as using today and a scheduled one as fully unused', () => {
+    const live = row({ start_date: '2026-10-14', end_date: '2026-10-20', days: 7 });
+    expect(unusedDays(live, '2026-10-18')).toBe(2);
+    expect(unusedDays(live, '2026-10-20')).toBe(0);
+    expect(unusedDays(row({ start_date: '2026-10-21', end_date: '2026-10-25', days: 5 }), '2026-10-18')).toBe(5);
+  });
+
+  it('refunds the net share plus VAT, the exact gross for the whole window, nothing when complimentary', () => {
+    expect(withdrawRefundCents(row(), 2)).toBe(1240);
+    expect(withdrawRefundCents(row(), 7)).toBe(4340);
+    expect(withdrawRefundCents(row(), 0)).toBe(0);
+    expect(withdrawRefundCents(row({ is_complimentary: true }), 7)).toBe(0);
+    expect(withdrawRefundCents(row({ refunded_cents: 4000 }), 7)).toBe(340);
   });
 });

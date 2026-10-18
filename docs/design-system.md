@@ -130,6 +130,7 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 - **`PageSettle.module.css`'s `.settleTarget` gives a paged list's results heading its `scroll-margin-top`.** It clears the top bar at its full, unscrolled height (`--bar-h`, `--bar-h-phone`), so the heading clears the bar whether or not it has condensed.
 - **Every bar and drawer link sets its own `:hover` color.** `index.css`'s global gold `a:hover` otherwise outranks a single-class link color.
 - **`Prose.module.css` is the one typography for sanitized-HTML bodies.** `EventDetail` and `AdminEventDetail` compose it. `RichTextEditor`'s editing surface keeps its own margin model.
+- **`AdminCommerce.module.css` is the admin commerce chrome:** pills, tags, chips, callouts, inline panels, hairline tables and the three admin buttons. The Promotions queue, Trust review and Stripe look compose it. Callouts take `.alertDanger` or `.alertSuccess` as modifiers.
 - **`Landing.module.css` re-rolls its hero, ticker, plate and footer chrome locally, on purpose.** That treatment has no second consumer. Hoisting it into `shared/` adds indirection for nothing.
 
 ## 8. Motion

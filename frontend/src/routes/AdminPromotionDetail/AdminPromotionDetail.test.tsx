@@ -55,6 +55,10 @@ function detail(overrides: Record<string, unknown> = {}, actions: Record<string,
     end_note: null,
     refunded_cents: 0,
     refund_note: null,
+    invoice_url: null,
+    awaiting_checkout: false,
+    checkout_expires_at: null,
+    refund_prefill: null,
     created_at: '2026-10-13T11:00:00+03:00',
     event: { id: 7, title: 'Noblessner Food Fest', starts_at: '2026-10-24T12:00:00+03:00', ends_at: null, last_day: '2026-10-24', venue_name: 'Noblessner' },
     actions: { ...NO_ACTIONS, edit: true, edit_scope: 'end_date', repoint: true, end: true, refund: true, refundable_cents: 4340, ...actions },
@@ -310,5 +314,127 @@ describe('AdminPromotionDetail', () => {
     mockGet.mockRejectedValue(new ApiError(404, 'Promotion not found'));
     renderWithProviders(<AdminPromotionDetail promotionId="5" />);
     expect(await screen.findByText('Couldn’t load this Promotion.')).toBeInTheDocument();
+  });
+
+  describe('Stripe payments (#618, #619)', () => {
+    const STRIPE_PAID = {
+      invoice_source: 'stripe',
+      invoice_reference: 'ER-0042',
+      invoice_url: 'https://invoice.stripe.com/i/abc',
+      refund_prefill: {
+        mode: 'stripe',
+        unused_days: 2,
+        paused_days: 1,
+        gross_per_day_cents: 620,
+        suggested_cents: 1860,
+        remaining_cents: 4340,
+      },
+    };
+
+    it('marks a card payment with the Stripe chip, the hosted invoice link and the Issue refund button', async () => {
+      serve(detail(STRIPE_PAID));
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      expect(await screen.findByText('Paid by card via Stripe')).toBeInTheDocument();
+      const record = screen.getByRole('region', { name: 'Commercial record' });
+      const link = within(record).getByRole('link', { name: /ER-0042/ });
+      expect(link).toHaveAttribute('href', 'https://invoice.stripe.com/i/abc');
+      expect(within(record).getByText('Stripe card')).toBeInTheDocument();
+      expect(within(record).getByText('2 / 1')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Issue refund' })).toBeEnabled();
+      expect(screen.getByText(/credit note against ER-0042/)).toBeInTheDocument();
+    });
+
+    it('prefills the refund with (unused + paused) days x the price paid per day and issues it', async () => {
+      serve(detail(STRIPE_PAID));
+      mockPost.mockResolvedValue(detail(STRIPE_PAID));
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Issue refund' }));
+      expect(screen.getByText('Suggested: €18.60')).toBeInTheDocument();
+      expect(screen.getByText(/\(2 unused \+ 1 paused\) days × €6\.20 per day = €18\.60/)).toBeInTheDocument();
+      expect(screen.getByLabelText('Amount (gross, €)')).toHaveValue('18.60');
+      const confirm = screen.getByRole('button', { name: 'Issue refund of €18.60' });
+
+      await userEvent.click(confirm);
+      expect(screen.getByRole('alert')).toHaveTextContent('A note is required.');
+      expect(mockPost).not.toHaveBeenCalled();
+
+      const amount = screen.getByLabelText('Amount (gross, €)');
+      await userEvent.clear(amount);
+      await userEvent.type(amount, '12.40');
+      expect(screen.getByRole('button', { name: 'Issue refund of €12.40' })).toBeInTheDocument();
+      await userEvent.type(screen.getByLabelText('Note (required)'), 'Goodwill after pause');
+      await userEvent.click(screen.getByRole('button', { name: 'Issue refund of €12.40' }));
+      expect(mockPost).toHaveBeenCalledWith('/admin/promotions/5/refund', { amount_cents: 1240, note: 'Goodwill after pause' });
+    });
+
+    it('shows a Stripe refusal inside the refund panel', async () => {
+      serve(detail(STRIPE_PAID));
+      mockPost.mockRejectedValue(new ApiError(502, 'Stripe could not issue the refund.'));
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Issue refund' }));
+      await userEvent.type(screen.getByLabelText('Note (required)'), 'Test');
+      await userEvent.click(screen.getByRole('button', { name: /^Issue refund of/ }));
+      expect(await screen.findByText('Stripe could not issue the refund.')).toBeInTheDocument();
+    });
+
+    it('keeps a bank-paid refund record-only, prefilled from the server suggestion', async () => {
+      serve(
+        detail({ refund_prefill: { mode: 'manual', unused_days: 5, paused_days: 0, gross_per_day_cents: 620, suggested_cents: 3100, remaining_cents: 4340 } }),
+      );
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Record refund' }));
+      expect(screen.getByText('Suggested: €31.00')).toBeInTheDocument();
+      expect(screen.getByText(/Record-only: this does not move money/)).toBeInTheDocument();
+      expect(screen.getByLabelText('Amount (gross, €)')).toHaveValue('31.00');
+      expect(screen.getByRole('button', { name: 'Confirm refund' })).toBeInTheDocument();
+    });
+
+    it('shows an open checkout as awaiting, offers only Void and never Mark paid', async () => {
+      serve(
+        detail(
+          { ...UNPAID, invoice_source: 'stripe', awaiting_checkout: true, checkout_expires_at: '2026-10-17T15:42:00+03:00' },
+          { mark_paid: true, void: true, edit_scope: 'full', end: false, refund: false, refundable_cents: 0 },
+        ),
+      );
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      expect(await screen.findByText('Awaiting checkout')).toBeInTheDocument();
+      expect(screen.getByText('Stripe Checkout open')).toBeInTheDocument();
+      expect(screen.getByText(/The session expires 15:42; This voids on its own/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Mark paid' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Void' })).toBeEnabled();
+      expect(screen.getByText('Issued when Stripe confirms payment')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Void' }));
+      expect(screen.getByText(/also expires its Stripe session/)).toBeInTheDocument();
+    });
+  });
+
+  describe('Withdraw (#620)', () => {
+    it('withdraws a paid Promotion from its page', async () => {
+      serve(detail());
+      mockPost.mockResolvedValue(detail({ status: 'ended_early', state: 'finished' }, { end: false }));
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Withdraw' }));
+      expect(screen.getByText(/feature_withdrawn/)).toBeInTheDocument();
+      const panel = screen.getByRole('heading', { name: 'Withdraw this Promotion' }).closest('form') as HTMLElement;
+      await userEvent.click(within(panel).getByRole('button', { name: 'Withdraw' }));
+      expect(mockPost).toHaveBeenCalledWith('/admin/promotions/5/withdraw', {});
+    });
+
+    it('words the slots_still_enabled 409 with the runbook step', async () => {
+      serve(detail());
+      mockPost.mockRejectedValue(new ApiError(409, 'slots_still_enabled'));
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      await userEvent.click(await screen.findByRole('button', { name: 'Withdraw' }));
+      const panel = screen.getByRole('heading', { name: 'Withdraw this Promotion' }).closest('form') as HTMLElement;
+      await userEvent.click(within(panel).getByRole('button', { name: 'Withdraw' }));
+      expect(await within(panel).findByText(/Slots are still enabled\. Turn PROMOTIONS_SLOTS_ENABLED off in Render/)).toBeInTheDocument();
+    });
+
+    it('offers Withdraw only while the server allows ending a paid Promotion', async () => {
+      serve(detail(UNPAID, { end: false, mark_paid: true, void: true, refund: false }));
+      renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+      await screen.findByText('Awaiting payment');
+      expect(screen.getByRole('button', { name: 'Withdraw' })).toBeDisabled();
+    });
   });
 });

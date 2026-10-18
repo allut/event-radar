@@ -10,6 +10,7 @@ import {
   PROMOTION_REGISTRY_CODE_RE,
 } from '../../constants/promotions';
 import { formatEuro, isIsoDay, parseEuroToCents, type PromotionDetail } from '../../lib/promotions';
+import { PROMOTION_STRIPE_COPY as STRIPE } from '../../constants/promotions';
 import { tallinnToday, toDateStr } from '../../utils';
 import styles from './AdminPromotionDetail.module.css';
 
@@ -314,16 +315,43 @@ export function VoidPanel(props: PanelProps) {
     <ReasonPanel
       {...props}
       heading={COPY.voidHeading}
+      note={props.detail.awaiting_checkout ? STRIPE.voidNote : undefined}
       path={API.adminPromotionVoid(props.detail.id)}
       confirmLabel="Confirm void"
     />
   );
 }
 
+/** Withdraw this Promotion (#620): ends it with feature_withdrawn and records
+ * a full refund of the unused days. The server refuses with 409 while the
+ * slots flag is on; that message shows here. */
+export function WithdrawPanel({ detail, serverError, pending, run, onCancel, post }: PanelProps) {
+  return (
+    <PanelShell
+      heading={COPY.withdrawHeading}
+      note={COPY.withdrawNote}
+      error={serverError}
+      confirmLabel={COPY.withdrawConfirm}
+      danger
+      pending={pending}
+      onCancel={onCancel}
+      onSubmit={() => run(post(API.adminPromotionWithdraw(detail.id), {}))}
+    >
+      {null}
+    </PanelShell>
+  );
+}
+
+/** Record or issue a refund. The suggestion is the server's `refund_prefill`:
+ * (unused + paused days) x the price paid per day. A Stripe-paid Promotion is
+ * issued (credit note and card refund); any other is only recorded. */
 export function RefundPanel({ detail, serverError, pending, run, onCancel, post }: PanelProps) {
   const id = useId();
-  const max = detail.actions.refundable_cents;
-  const [amount, setAmount] = useState((max / 100).toFixed(2));
+  const prefill = detail.refund_prefill ?? null;
+  const stripe = prefill?.mode === 'stripe';
+  const max = prefill?.remaining_cents ?? detail.actions.refundable_cents;
+  const suggested = prefill ? prefill.suggested_cents : max;
+  const [amount, setAmount] = useState((suggested / 100).toFixed(2));
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   function submit() {
@@ -333,17 +361,37 @@ export function RefundPanel({ detail, serverError, pending, run, onCancel, post 
     setError(null);
     run(post(API.adminPromotionRefund(detail.id), { amount_cents: cents, note: note.trim() }));
   }
+  const typed = parseEuroToCents(amount);
   return (
     <PanelShell
-      heading={COPY.refundHeading}
-      note={`Up to ${formatEuro(max)} (price paid, incl. VAT). Off-platform payments only; nothing is sent to the Organizer.`}
+      heading={stripe ? STRIPE.refundHeading : COPY.refundHeading}
+      note={
+        stripe
+          ? STRIPE.refundCardNote(detail.invoice_reference)
+          : `Up to ${formatEuro(max)} (price paid, incl. VAT). Off-platform payments only; nothing is sent to the Organizer.`
+      }
       error={error ?? serverError}
-      confirmLabel="Confirm refund"
+      confirmLabel={stripe ? STRIPE.issueRefund(typed === null ? null : formatEuro(typed)) : 'Confirm refund'}
       pending={pending}
       onCancel={onCancel}
       onSubmit={submit}
     >
-      <Field label={COPY.refundAmountLabel} htmlFor={`${id}-amount`}>
+      {prefill && (
+        <div className={styles.calc}>
+          <div className={styles.calcTitle}>{STRIPE.refundSuggested}{formatEuro(prefill.suggested_cents)}</div>
+          <div className={styles.mono}>
+            ({prefill.unused_days} unused + {prefill.paused_days} paused) days × {formatEuro(prefill.gross_per_day_cents)} per day ={' '}
+            {formatEuro((prefill.unused_days + prefill.paused_days) * prefill.gross_per_day_cents)}
+          </div>
+          <div className={styles.calcHint}>
+            {stripe ? STRIPE.refundPerDayNote(formatEuro(detail.gross_price_cents), detail.days) : STRIPE.refundManualNote}
+          </div>
+        </div>
+      )}
+      <div className={`${styles.field} ${styles.refundAmount}`}>
+        <label className={styles.label} htmlFor={`${id}-amount`}>
+          {COPY.refundAmountLabel}
+        </label>
         <input
           id={`${id}-amount`}
           className={`${styles.input} ${styles.mono}`}
@@ -351,10 +399,20 @@ export function RefundPanel({ detail, serverError, pending, run, onCancel, post 
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
         />
-      </Field>
-      <Field label={COPY.refundNoteLabel} htmlFor={`${id}-note`}>
-        <input id={`${id}-note`} className={styles.input} value={note} onChange={(e) => setNote(e.target.value)} />
-      </Field>
+        {stripe && <span className={styles.fieldHint}>{STRIPE.refundMax(formatEuro(max))}</span>}
+      </div>
+      <div className={`${styles.field} ${styles.refundNote}`}>
+        <label className={styles.label} htmlFor={`${id}-note`}>
+          {COPY.refundNoteLabel}
+        </label>
+        <input
+          id={`${id}-note`}
+          className={styles.input}
+          placeholder={stripe ? STRIPE.refundPlaceholder : undefined}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+        />
+      </div>
     </PanelShell>
   );
 }

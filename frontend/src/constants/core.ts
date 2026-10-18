@@ -153,6 +153,8 @@ export const MS_PER_MINUTE = 60 * 1000;
 // Milliseconds in an hour — divides a millisecond timestamp delta down to
 // hours, e.g. for SEO_AUDIT_STALE_THRESHOLD_HOURS's staleness comparison.
 export const MS_PER_HOUR = MINUTES_PER_HOUR * MS_PER_MINUTE;
+// Milliseconds in a day — whole-day differences between two calendar dates.
+export const MS_PER_DAY = HOURS_PER_DAY * MS_PER_HOUR;
 
 // Arrow-key increment/decrement step per time field.
 export const TIME_STEP_HOURS = 1;

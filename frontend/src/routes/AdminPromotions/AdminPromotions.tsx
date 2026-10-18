@@ -8,6 +8,9 @@ import {
   ADMIN_PROMOTIONS_STATE_FILTERS,
   ADMIN_PROMOTIONS_STATE_PARAM,
   PROMOTION_COPY,
+  PROMOTION_STRIPE_COPY,
+  PROMOTION_TRUST_CADENCE,
+  PROMOTION_TRUST_HEADING,
 } from '../../constants/promotions';
 import { usePageParam } from '../../hooks/usePageParam';
 import { usePagedQuery } from '../../hooks/usePagedQuery';
@@ -17,6 +20,8 @@ import EmptyState from '../../components/EmptyState';
 import PageState from '../../components/PageState';
 import Pager from '../../components/Pager';
 import PromotionCapStrip from '../../components/PromotionCapStrip';
+import PromotionRequests from '../../components/PromotionRequests';
+import PromotionTrust from '../../components/PromotionTrust';
 import PromotionsTable from '../../components/PromotionsTable';
 import queueStyles from '../../components/shared/AdminQueue.module.css';
 import styles from './AdminPromotions.module.css';
@@ -84,6 +89,8 @@ export default function AdminPromotions() {
         )}
       </section>
 
+      <PromotionRequests />
+
       <section aria-labelledby="list-heading" className={styles.section}>
         <h2 id="list-heading" className={styles.sectionTitle}>{PROMOTION_COPY.listHeading}</h2>
         <div className={queueStyles.queueTabStrip} role="tablist">
@@ -112,8 +119,17 @@ export default function AdminPromotions() {
         ) : (
           <PromotionsTable rows={list.items} ariaBusy={list.isPlaceholderData} />
         )}
+        <p className={styles.listHint}>{PROMOTION_STRIPE_COPY.listHint}</p>
         {/* The pager's strings come from shared/i18n even here: docs/frontend.md "Admin Console" */}
         <Pager {...list.pagerProps} locale={LOCALE_EN} liveNoun="items" className={queueStyles.queuePager} />
+      </section>
+
+      <section aria-labelledby="trust-review-heading" className={styles.section}>
+        <div className={styles.trustHead}>
+          <h2 id="trust-review-heading" className={styles.sectionTitleInline}>{PROMOTION_TRUST_HEADING}</h2>
+          <span className={styles.trustCadence}>{PROMOTION_TRUST_CADENCE}</span>
+        </div>
+        <PromotionTrust />
       </section>
     </div>
   );

@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
-import { formatWindow, promotionPill, promotionPriceLabel, type PromotionRow } from '../../lib/promotions';
+import { PROMOTION_INVOICE_SOURCE_MANUAL, PROMOTION_STRIPE_COPY } from '../../constants/promotions';
+import { formatWindow, isStripePaid, promotionPill, promotionPriceLabel, type PromotionRow } from '../../lib/promotions';
 import styles from './PromotionsTable.module.css';
 
 const TONE_CLASS = {
@@ -23,6 +24,7 @@ export default function PromotionsTable({ rows, ariaBusy }: { rows: PromotionRow
             <th>Window</th>
             <th>Price</th>
             <th>Status</th>
+            <th>{PROMOTION_STRIPE_COPY.invoiceColumn}</th>
             <th><span className={styles.srOnly}>Details</span></th>
           </tr>
         </thead>
@@ -38,10 +40,28 @@ export default function PromotionsTable({ rows, ariaBusy }: { rows: PromotionRow
                 </td>
                 <td>{p.advertiser_legal_name}</td>
                 <td className={styles.mono}>{formatWindow(p.start_date, p.end_date)}</td>
-                <td className={styles.mono}>{promotionPriceLabel(p)}</td>
+                <td>
+                  <span className={styles.mono}>{promotionPriceLabel(p)}</span>
+                  {isStripePaid(p) ? (
+                    <div className={styles.chipRow}><span className={`${styles.chip} ${styles.chipStripe}`}>{PROMOTION_STRIPE_COPY.chip}</span></div>
+                  ) : p.invoice_source === PROMOTION_INVOICE_SOURCE_MANUAL && !p.is_complimentary ? (
+                    <div className={styles.chipRow}><span className={styles.chip}>{PROMOTION_STRIPE_COPY.bankChip}</span></div>
+                  ) : null}
+                </td>
                 <td>
                   <span className={`${styles.pill} ${TONE_CLASS[pill.tone]}`}>{pill.label}</span>
                   {pill.reason && <div className={styles.reason}>{pill.reason}</div>}
+                </td>
+                <td>
+                  {p.invoice_url && p.invoice_reference ? (
+                    <a href={p.invoice_url} className={`${styles.docLink} ${styles.mono}`} target="_blank" rel="noopener noreferrer">
+                      {p.invoice_reference} ↗
+                    </a>
+                  ) : p.invoice_reference ? (
+                    <span className={styles.mono}>{p.invoice_reference}</span>
+                  ) : (
+                    <span className={styles.muted}>—</span>
+                  )}
                 </td>
                 <td>
                   <Link to={ROUTES.adminPromotionDetail(p.id)} className={styles.eventLink}>

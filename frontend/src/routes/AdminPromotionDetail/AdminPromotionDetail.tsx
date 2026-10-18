@@ -10,6 +10,7 @@ import {
   PROMOTION_DETAIL_COPY as COPY,
   PROMOTION_GATE_SHOWN,
   PROMOTION_SNAPSHOT_TRIGGER_LABELS,
+  PROMOTION_STRIPE_COPY as STRIPE,
   type PromotionActionKey,
 } from '../../constants/promotions';
 import { ROUTES } from '../../constants/routes';
@@ -22,12 +23,13 @@ import {
   formatEuro,
   formatWindow,
   gateLabel,
+  isStripePaid,
+  withdrawErrorMessage,
   promotionPill,
   formatDay,
   type PromotionDailyStatsResponse,
   type PromotionDetail,
 } from '../../lib/promotions';
-import { apiErrorMessage } from '../../utils';
 import PageState from '../../components/PageState';
 import {
   EditPanel,
@@ -36,6 +38,7 @@ import {
   RefundPanel,
   RepointPanel,
   VoidPanel,
+  WithdrawPanel,
   type PanelProps,
   type PromotionCommand,
 } from './ActionPanels';
@@ -56,8 +59,9 @@ const ACTION_ORDER: PromotionActionKey[] = [
   PROMOTION_ACTION.end,
   PROMOTION_ACTION.void,
   PROMOTION_ACTION.refund,
+  PROMOTION_ACTION.withdraw,
 ];
-const DANGER_ACTIONS: ReadonlySet<PromotionActionKey> = new Set([PROMOTION_ACTION.end, PROMOTION_ACTION.void]);
+const DANGER_ACTIONS: ReadonlySet<PromotionActionKey> = new Set([PROMOTION_ACTION.end, PROMOTION_ACTION.void, PROMOTION_ACTION.withdraw]);
 
 const PANELS: Record<PromotionActionKey, (props: PanelProps) => ReactNode> = {
   [PROMOTION_ACTION.markPaid]: (p) => <MarkPaidPanel {...p} />,
@@ -66,6 +70,7 @@ const PANELS: Record<PromotionActionKey, (props: PanelProps) => ReactNode> = {
   [PROMOTION_ACTION.end]: (p) => <EndPanel {...p} />,
   [PROMOTION_ACTION.void]: (p) => <VoidPanel {...p} />,
   [PROMOTION_ACTION.refund]: (p) => <RefundPanel {...p} />,
+  [PROMOTION_ACTION.withdraw]: (p) => <WithdrawPanel {...p} />,
 };
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -79,8 +84,37 @@ function Section({ id, title, children }: { id: string; title: string; children:
   );
 }
 
+/** Which command buttons are on. Mark paid is never offered while a Stripe
+ * checkout is open (Stripe marks it paid), and Withdraw follows End: both
+ * need a paid Promotion that has not finished. */
+function allowedActions(p: PromotionDetail): Record<PromotionActionKey, boolean> {
+  return {
+    ...p.actions,
+    mark_paid: p.actions.mark_paid && !p.awaiting_checkout,
+    withdraw: p.actions.end,
+  };
+}
+
+function paymentChip(p: PromotionDetail): string | null {
+  if (p.awaiting_checkout) return STRIPE.checkoutOpen;
+  if (isStripePaid(p) && p.paid_at) return STRIPE.paidByCard;
+  if (p.paid_at && !p.is_complimentary) return STRIPE.bankChip;
+  return null;
+}
+
 function recordRows(p: PromotionDetail): [string, ReactNode][] {
   const mono = (v: string | null) => <span className={styles.mono}>{v ?? '—'}</span>;
+  const stripe = isStripePaid(p);
+  const invoice: ReactNode = p.invoice_url && p.invoice_reference ? (
+    <a href={p.invoice_url} className={`${styles.docLink} ${styles.mono}`} target="_blank" rel="noopener noreferrer">
+      {p.invoice_reference} ↗ {STRIPE.hostedInvoice}
+    </a>
+  ) : p.awaiting_checkout ? (
+    <span className={styles.muted}>{STRIPE.invoiceAfterPayment}</span>
+  ) : (
+    mono(p.invoice_reference)
+  );
+  const prefill = p.refund_prefill;
   return [
     ['Advertiser', p.advertiser_legal_name],
     ['Registry code', mono(p.advertiser_registry_code)],
@@ -90,8 +124,20 @@ function recordRows(p: PromotionDetail): [string, ReactNode][] {
     ['Net price', p.is_complimentary ? '€0.00 (complimentary)' : formatEuro(p.net_price_cents)],
     [`VAT ${Number(p.vat_rate_percent)}%`, formatEuro(p.vat_cents)],
     ['Gross', formatEuro(p.gross_price_cents)],
-    ['Invoice', mono(p.invoice_reference)],
+    ...(stripe || p.paid_at
+      ? ([[STRIPE.paymentLabel, stripe ? <span className={`${styles.chip} ${styles.chipStripe}`}>{STRIPE.stripeCard}</span> : STRIPE.bankTransfer]] as [string, ReactNode][])
+      : []),
+    ['Invoice', invoice],
+    ...(p.awaiting_checkout && p.checkout_expires_at
+      ? ([[STRIPE.checkoutExpires, mono(formatDateTime(p.checkout_expires_at))]] as [string, ReactNode][])
+      : []),
     ['Paid at', p.paid_at ? formatDateTime(p.paid_at) : '—'],
+    ...(prefill
+      ? ([
+          [STRIPE.pricePerDay, formatEuro(prefill.gross_per_day_cents)],
+          [STRIPE.daysUnusedPaused, `${prefill.unused_days} / ${prefill.paused_days}`],
+        ] as [string, ReactNode][])
+      : []),
     ['Refunded', formatEuro(p.refunded_cents)],
     ...(p.complimentary_note ? ([['Complimentary note', p.complimentary_note]] as [string, ReactNode][]) : []),
     ...(p.refund_note ? ([['Refund note', p.refund_note]] as [string, ReactNode][]) : []),
@@ -128,7 +174,7 @@ export default function AdminPromotionDetail({ promotionId }: { promotionId: str
       setServerError(null);
     },
     onError: (err) => {
-      setServerError(apiErrorMessage(err, ADMIN_GENERIC_ERROR));
+      setServerError(withdrawErrorMessage(err, ADMIN_GENERIC_ERROR));
       // Another admin may have moved the Promotion on: refresh what the buttons allow.
       void queryClient.invalidateQueries({ queryKey: detailKey });
     },
@@ -143,12 +189,19 @@ export default function AdminPromotionDetail({ promotionId }: { promotionId: str
   const days = statsQuery.data?.days ?? [];
   const reason = detailReason(p, days);
   const totals = dailyStatTotals(days);
-  const anyAction = ACTION_ORDER.some((k) => p.actions[k]);
-  const hint = anyAction
-    ? COPY.actionsHint
-    : p.actions.refund
-      ? COPY.noActions
-      : COPY.noActionsAtAll;
+  const actions = allowedActions(p);
+  const anyAction = ACTION_ORDER.some((k) => actions[k]);
+  const stripePaid = isStripePaid(p) && p.paid_at !== null;
+  const hint = p.awaiting_checkout
+    ? STRIPE.checkoutOpenHint
+    : stripePaid && actions.refund
+      ? STRIPE.creditNoteHint(p.invoice_reference)
+      : anyAction
+        ? COPY.actionsHint
+        : p.actions.refund
+          ? COPY.noActions
+          : COPY.noActionsAtAll;
+  const chip = paymentChip(p);
 
   function toggle(key: PromotionActionKey) {
     setServerError(null);
@@ -174,6 +227,7 @@ export default function AdminPromotionDetail({ promotionId }: { promotionId: str
       <div className={styles.head}>
         <h1 className={styles.title}>{p.event_title}</h1>
         <span className={`${styles.pill} ${TONE_CLASS[pill.tone]}`}>{pill.label}</span>
+        {chip && <span className={`${styles.chip} ${isStripePaid(p) ? styles.chipStripe : ''}`}>{chip}</span>}
         <span className={styles.window}>{formatWindow(p.start_date, p.end_date)}</span>
         {reason && <div className={styles.reason}>{reason}</div>}
         <div className={styles.sub}>
@@ -192,16 +246,16 @@ export default function AdminPromotionDetail({ promotionId }: { promotionId: str
               key={key}
               type="button"
               className={DANGER_ACTIONS.has(key) ? styles.dangerButton : key === PROMOTION_ACTION.markPaid ? styles.primaryButton : styles.plainButton}
-              disabled={!p.actions[key]}
+              disabled={!actions[key]}
               aria-expanded={open === key}
               onClick={() => toggle(key)}
             >
-              {PROMOTION_ACTION_LABELS[key]}
+              {key === PROMOTION_ACTION.refund && stripePaid ? STRIPE.stripeActionLabel : PROMOTION_ACTION_LABELS[key]}
             </button>
           ))}
         </div>
         <p className={styles.note}>{hint}</p>
-        {open !== null && p.actions[open] && <div key={open}>{PANELS[open](panelProps)}</div>}
+        {open !== null && actions[open] && <div key={open}>{PANELS[open](panelProps)}</div>}
       </Section>
 
       <Section id="record-heading" title={COPY.recordHeading}>

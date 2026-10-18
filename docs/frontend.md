@@ -65,6 +65,13 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **Detail action buttons follow the API's `actions` flags and never recompute a rule.** Each opens an inline panel, never a modal. A command's refusal shows inside its panel, and any command error refetches the detail.
 - **A command's response is the refreshed detail, written straight into the query cache.** The list, cap strip, grant context and per-day table are invalidated. Edit sends only the changed fields, and a live edit sends just `end_date`.
 - **The per-day table lists complete days only and always shows the note that served is not seen.** Totals are summed client-side from the rows; gate labels come from `PROMOTION_GATE_REASON_LABELS`.
+- **`/admin/promotions` stacks the cap strip, the request queue, the list and the Trust review.** `PromotionRequests` shows while requests are pending or a history tab is picked (`?requests=granted`), and otherwise collapses to a header with a Show history button.
+- **Granting a request reuses `PromotionGrantForm` with its `request` prop.** Dates and advertiser fields start from the request and stay editable, the event's restriction asks for a clearance tick and note, and the grant posts to the request endpoint. The server emails no one.
+- **Decline is the shared admin `Modal`, never a hand-rolled overlay.** An empty reason is refused client side. A 409 or 404 shows inside the dialog and refetches the queue.
+- **`not_eligible_reason` codes are worded in `PROMOTION_REQUEST_REASON_LABELS`.** Only `organizer_not_owner` (dormant claim) says it stays pending; every other code points at editing the dates.
+- **Stripe payments show as a chip, a hosted-invoice link and an Awaiting checkout pill.** Mark paid is hidden while a checkout is open. A Stripe-paid refund is issued, not recorded, and its amount starts from the server's `refund_prefill`.
+- **Trust review (`components/PromotionTrust/`) is read only apart from the complaint logger and Withdraw.** The four stop-selling tripwires are worked out client side from the rolling 4 weeks, with thresholds in `constants/promotions.ts` mirroring docs/backend-ops.md.
+- **Withdraw buttons stay clickable whatever the slots flag.** The client cannot see it, so the server's 409 `slots_still_enabled` is worded by `withdrawErrorMessage()`. The table's unused days and refund mirror `withdraw.py`, and are an estimate until the server answers.
 - **`AdminShell/` is the nav-rail chrome every signed-in admin screen renders inside.** `AdminLogin` renders outside it. The console replaces curl calls to `/admin/*`; see [backend-ops.md](backend-ops.md)'s Admin Endpoints section.
 
 ## Paged Lists

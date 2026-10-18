@@ -110,6 +110,32 @@ textarea.input { resize: vertical; }
   cursor: pointer;
 }
 
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cancel {
+  composes: plainButton from '../shared/AdminCommerce.module.css';
+}
+
+.tag {
+  composes: tag from '../shared/AdminCommerce.module.css';
+}
+
+.alert {
+  composes: alert from '../shared/AdminCommerce.module.css';
+}
+
+.alertTitle {
+  composes: alertTitle from '../shared/AdminCommerce.module.css';
+}
+
+.clearAck {
+  composes: check from '../shared/AdminCommerce.module.css';
+}
+
 @media (max-width: 640px) {
   .form { grid-template-columns: 1fr; }
 }

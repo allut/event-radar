@@ -98,6 +98,7 @@ export const PROMOTION_ACTION = {
   end: 'end',
   void: 'void',
   refund: 'refund',
+  withdraw: 'withdraw',
 } as const;
 export type PromotionActionKey = (typeof PROMOTION_ACTION)[keyof typeof PROMOTION_ACTION];
 
@@ -110,9 +111,14 @@ export const PROMOTION_ACTION_LABELS: Readonly<Record<PromotionActionKey, string
   end: 'End early',
   void: 'Void',
   refund: 'Record refund',
+  withdraw: 'Withdraw',
 };
 
 export const PROMOTION_DETAIL_COPY = {
+  withdrawHeading: 'Withdraw this Promotion',
+  withdrawNote:
+    'Ends it with feature_withdrawn and records a full refund of its unused days. The Organizer gets the P2B email. Needs the slots flag off.',
+  withdrawConfirm: 'Withdraw',
   loadFailed: 'Couldn’t load this Promotion.',
   back: '← Promotions',
   actionsHeading: 'Actions',
@@ -154,3 +160,256 @@ export const PROMOTION_DETAIL_COPY = {
   pausedPrefix: 'Paused',
   notRecorded: '—',
 } as const;
+
+// Request queue (#615): status tabs, row copy and the not-grantable reasons.
+export const ADMIN_PROMOTION_REQUESTS_PAGE_SIZE = 50;
+// URL param that opens the queue on a non-pending status; omitted while pending.
+export const ADMIN_PROMOTION_REQUESTS_PARAM = 'requests';
+export const PROMOTION_REQUEST_STATUS = {
+  pending: 'pending',
+  granted: 'granted',
+  declined: 'declined',
+  expired: 'expired',
+} as const;
+export const PROMOTION_REQUEST_STATUS_OPTIONS = [
+  { value: PROMOTION_REQUEST_STATUS.pending, label: 'Pending' },
+  { value: PROMOTION_REQUEST_STATUS.granted, label: 'Granted' },
+  { value: PROMOTION_REQUEST_STATUS.declined, label: 'Declined' },
+  { value: PROMOTION_REQUEST_STATUS.expired, label: 'Expired' },
+] as const;
+// Mirrors backend PROMOTION_DECLINE_REASON_MAX_CHARS.
+export const PROMOTION_DECLINE_REASON_MAX = 1000;
+export const PROMOTION_DECLINE_ROWS = 4;
+// Backend PROMOTION_NOT_SHOWING_NOT_OWNED: a dormant claim, which can recover.
+export const PROMOTION_REQUEST_DORMANT_CODE = 'organizer_not_owner';
+export const PROMOTION_RESTRICTION_NONE = 'none';
+
+// Backend rule codes (PROMOTION_ERROR_*) worded for a request row.
+export const PROMOTION_REQUEST_REASON_LABELS: Readonly<Record<string, string>> = {
+  no_owner: 'The event has no owning Organizer.',
+  window_order: 'The end date is before the start date.',
+  window_too_short: 'The window is shorter than the minimum.',
+  window_too_long: 'The window is longer than the maximum.',
+  starts_too_early: 'The start date has passed. Pick dates from tomorrow.',
+  ends_after_event: 'The window ends after the event’s last day.',
+  overlap: 'The window overlaps another Promotion on this event.',
+  cap_exceeded: 'A day in the window is already full.',
+  not_promotable: 'The event cannot be promoted right now.',
+  organizer_not_owner: 'Your claim is inactive, so this event cannot be promoted yet.',
+};
+
+export const PROMOTION_REQUEST_COPY = {
+  heading: 'Requests',
+  pendingCount: (n: number) => `${n} pending`,
+  statusLabel: 'Request status',
+  hint: 'Oldest first. A request stays pending through a dormant claim or dates that no longer fit; it expires at once when its event is cancelled or its claim revoked, and otherwise at its start date.',
+  historyHint: 'Newest first.',
+  showHistory: 'Show history',
+  noPending: 'No pending requests',
+  noPendingHint: 'Requests from the Organizer portal appear here, oldest first.',
+  nothingHere: 'Nothing here',
+  noneInStatus: (status: string) => `No ${status} requests yet.`,
+  loadFailed: 'Couldn’t load the requests.',
+  truncated: (shown: number, total: number) => `Showing the first ${shown} of ${total}.`,
+  grant: 'Grant',
+  decline: 'Decline',
+  notAssessed: 'Not assessed',
+  organizerNote: 'Organizer note: ',
+  notGrantable: 'Not grantable as requested: ',
+  dormantTail: 'Stays pending until the claim is active again.',
+  editTail: 'Edit the dates in the grant form, or leave it to expire at its start date.',
+  reasonSent: 'Reason sent: ',
+  grantHeading: (id: number) => `Grant Promotion from request #${id}`,
+  requestedBy: 'Requested by',
+  datesMatch: 'Dates match the request.',
+  datesDiffer: (window: string) => `Dates differ from the request (${window}). Fine when agreed with the Organizer.`,
+  grantNote:
+    'Granting creates the Promotion and marks the request granted in one step, audited as promotion_request_grant. Nothing is emailed to the Organizer, so send the invoice yourself.',
+  granted: (title: string) => `Promotion granted for ${title}. The request is marked granted. The Organizer was not emailed.`,
+  declined: (title: string) => `Declined ${title}. The reason is queued as an email to the Organizer.`,
+  declineHeading: (title: string) => `Decline request for ${title}`,
+  declineTo: (email: string) => `The reason is emailed to ${email} in their language. Write it so the Organizer knows what to change.`,
+  declineReasonLabel: 'Reason (required, sent to the Organizer)',
+  declineReasonRequired: 'Give a reason. It is emailed to the Organizer.',
+  declineConfirm: 'Decline request',
+  restrictionTitle: (tag: string) => `This event carries the ${tag} restriction`,
+  restrictionBody: 'It cannot show until you review it and record a clearance. Granting without one is refused.',
+  clearanceAck: 'I reviewed this event and clear it for a Promotion despite the restriction.',
+  clearanceNoteLabel: 'Clearance note (required)',
+  clearanceAckRequired: 'Tick the box to confirm you reviewed the event.',
+  clearanceNoteRequired: 'Add a clearance note. It is recorded with your name.',
+  unassessedTitle: 'This event has not been assessed yet',
+  unassessedBody:
+    'The Promotion is saved, but the slot stays empty until the content policy check marks the event clear or you clear its restriction later.',
+} as const;
+
+// Stripe look in the list and the detail (#618, #619).
+export const PROMOTION_INVOICE_SOURCE_STRIPE = 'stripe';
+export const PROMOTION_INVOICE_SOURCE_MANUAL = 'manual';
+export const PROMOTION_STRIPE_COPY = {
+  chip: 'Stripe',
+  bankChip: 'Bank transfer',
+  paidByCard: 'Paid by card via Stripe',
+  checkoutOpen: 'Stripe Checkout open',
+  awaitingCheckout: 'Awaiting checkout',
+  invoiceColumn: 'Invoice',
+  hostedInvoice: 'hosted invoice',
+  invoiceAfterPayment: 'Issued when Stripe confirms payment',
+  paymentLabel: 'Payment',
+  stripeCard: 'Stripe card',
+  bankTransfer: 'Bank transfer',
+  listHint:
+    'Awaiting checkout: the Organizer has opened Stripe and not finished. It holds its days until the session expires (30 min, swept at +1 h) and then voids on its own. Abandoned checkouts drop out of the Organizer’s list but stay visible here while open.',
+  checkoutOpenHint: 'Mark paid is not offered: Stripe marks it paid when the card payment completes. Void is the only action while checkout is open.',
+  voidNote: 'Voiding an open checkout also expires its Stripe session. A payment that lands afterwards is refunded in full automatically.',
+  refundHeading: 'Issue refund',
+  refundSuggested: 'Suggested: ',
+  refundCardNote: (invoice: string | null) =>
+    `Issuing creates a credit note against ${invoice ?? 'the invoice'} (reversing the VAT) and refunds the card, in one step. Audited as promotion_refund.`,
+  refundPerDayNote: (gross: string, days: number) =>
+    `Price per day is what was paid (${gross} incl. VAT over ${days} days). Paused days come from the daily stats and count in the Organizer’s favour. Edit the amount for a partial or goodwill refund.`,
+  refundManualNote: 'Record-only: this does not move money. Pay it back off-platform first.',
+  refundMax: (max: string) => `Up to ${max} (paid, minus refunded)`,
+  refundPlaceholder: 'Why is this refund being issued?',
+  issueRefund: (amount: string | null) => (amount ? `Issue refund of ${amount}` : 'Issue refund'),
+  stripeActionLabel: 'Issue refund',
+  checkoutReason: (expires: string | null) =>
+    `Organizer is in Stripe Checkout.${expires ? ` The session expires ${expires};` : ''} This voids on its own an hour after that. Days are held meanwhile.`,
+  creditNoteHint: (invoice: string | null) =>
+    `Issue refund creates a credit note against ${invoice ?? 'the invoice'} (reversing the VAT) and refunds the card in one step.`,
+  bankRefundHint: 'Bank-transfer refunds are record-only: pay the money back yourself, then record it here. Withdraw needs the slots flag off.',
+  checkoutExpires: 'Checkout expires',
+  pricePerDay: 'Price per day (gross)',
+  daysUnusedPaused: 'Days unused / paused',
+} as const;
+
+// Trust panel, complaint logger and Withdraw (#620).
+export const PROMOTION_COMPLAINT_NOTE_ROWS = 3;
+export const PROMOTION_COMPLAINT_NOTE_MAX = 1000;
+export const PROMOTION_COMPLAINT_SOURCES = [
+  { value: 'email', label: 'Email' },
+  { value: 'contact_form', label: 'Contact form' },
+  { value: 'other', label: 'Other' },
+] as const;
+export const PROMOTION_COMPLAINT_SOURCE_DEFAULT = 'email';
+export const PROMOTION_SLOTS_STILL_ENABLED_CODE = 'slots_still_enabled';
+// One page of live or scheduled Promotions is the whole Withdraw table (backend max page size).
+export const ADMIN_PROMOTIONS_WITHDRAW_LIMIT = 500;
+export const PROMOTION_PERIODS = ['rolling_4_weeks', 'since_launch'] as const;
+export type PromotionPeriod = (typeof PROMOTION_PERIODS)[number];
+export const PROMOTION_PERIOD_LABELS: Readonly<Record<PromotionPeriod, string>> = {
+  rolling_4_weeks: 'Rolling 4 weeks',
+  since_launch: 'Since launch',
+};
+// Backend consent sources (EmailAdConsentLog.source), worded for the panel.
+export const PROMOTION_CONSENT_SOURCE_LABELS: Readonly<Record<string, string>> = {
+  settings: 'Settings toggle',
+  email_link: 'Slot email link',
+  email_link_undo: 'Slot email link undo',
+  digest_unsubscribe: 'Digest unsubscribe',
+  wording_change: 'Wording change',
+  account_deletion: 'Account deletion',
+};
+export const PROMOTION_SURFACE_LABELS: Readonly<Record<string, string>> = {
+  explore: 'Explore',
+  daily5: 'Daily 5',
+  digest: 'Digest',
+};
+// docs/backend-ops.md "Promotions: Trust Review and Withdrawal" thresholds.
+export const PROMOTION_TRIPWIRE_MIN_WITHDRAWALS = 3;
+export const PROMOTION_TRIPWIRE_MIN_DISLIKES = 3;
+export const PROMOTION_TRIPWIRE_MIN_COMPLAINTS = 2;
+export const PROMOTION_TRIPWIRE_MIN_UPHELD = 2;
+export const PROMOTION_SLOT_WITHDRAWAL_SOURCES = ['settings', 'email_link'] as const;
+
+export const PROMOTION_TRUST_COPY = {
+  heading: 'Trust panel',
+  loadFailed: 'Couldn’t load the Trust panel.',
+  livePromotions: 'Live Promotions',
+  currentConsenters: 'Current consenters',
+  complaintsLogged: 'Complaints logged',
+  reports: 'Reports on promoted events',
+  reportsSub: (upheld: number, resolved: number) => `upheld ${upheld} · resolved ${resolved}`,
+  consentsGranted: 'Consents granted',
+  consentsGrantedSub: 'Email ad consent',
+  withdrawals: 'Consent withdrawals',
+  slotsServed: 'Slots served',
+  webOpens: 'Web opens from the slot',
+  dislikes: 'Slot dislikes',
+  adminOnly: 'admin-only',
+  complaints: 'Complaints logged',
+  sinceFirstSale: 'since first sale',
+  panelHint: (start: string) =>
+    `Rolling 4 weeks runs from ${start} (window_start). Slot dislikes and complaints are admin-only; they never reach an Organizer. Read only: nothing here flips a flag.`,
+  tripwiresHeading: 'Stop-selling tripwires · rolling 4 weeks',
+  tripped: 'Tripped',
+  clear: 'Clear',
+  tripwireWithdrawals: 'Consent withdrawals through the slot link or the toggle outnumber new consents, with at least 3 withdrawals.',
+  tripwireDislikes: 'Slot dislikes outnumber web opens from the slot, with at least 3 dislikes.',
+  tripwireComplaints: 'At least 2 complaints about the ads from different people.',
+  tripwireReports: 'At least 2 upheld reports on promoted events: the eligibility bar may be too loose.',
+  figWithdrawals: (w: number, c: number) => `${w} withdrawals (settings + slot link) vs ${c} new consents`,
+  figDislikes: (d: number, o: number) => `${d} dislikes vs ${o} web opens`,
+  figComplaints: (n: number) => `${n} logged`,
+  figComplaintsCheck: (n: number) => `${n} logged (check the names below are different people)`,
+  figReports: (upheld: number, all: number) => `${upheld} upheld, ${all} reports in all`,
+  verdictTripped: (n: number) => `${n} of 4 stop-selling conditions hold`,
+  verdictTrippedBody:
+    'Stop selling: set PROMOTIONS_OFFER_ENABLED and PROMOTIONS_CHECKOUT_ENABLED off in Render and restart. Slots keep filling and live or scheduled Promotions run to the end of their window. Decline pending requests by hand with a reason.',
+  verdictClear: 'No stop-selling condition holds',
+  verdictClearBody: 'Nothing to do this week. Review again next week.',
+  thresholdsHint:
+    'Thresholds from docs/backend-ops.md, Promotions: Trust Review and Withdrawal. Withdraw at once on regulator contact (TTJA or AKI) about ad disclosure or a dark-pattern problem, and when a Stop-selling condition still holds 4 weeks after a fix.',
+  complaintHeading: 'Log a complaint',
+  complaintSource: 'Arrived by',
+  complaintWho: 'Complainant (optional)',
+  complaintWhoPlaceholder: 'Name or address. Two complaints from one person count once.',
+  complaintNote: 'Note (required)',
+  complaintNotePlaceholder: 'What did they say, and which placement or email were they talking about?',
+  complaintNoteRequired: 'A note is required. Say what they said and where they saw it.',
+  complaintSubmit: 'Log complaint',
+  complaintAudit: 'Audited as promotion_complaint. Counted in the panel above.',
+  complaintLogged: 'Complaint logged and counted above.',
+  recentHeading: 'Recent complaints',
+  noComplaints: 'No complaints logged.',
+  noName: 'No name given',
+  withdrawHeading: 'Withdraw',
+  slotsOnTitle: 'Withdraw needs the slots flag off',
+  slotsOnBody:
+    'The server refuses with 409 slots_still_enabled until PROMOTIONS_SLOTS_ENABLED is off, so no ad is still served while Promotions end. The buttons below stay clickable and show that refusal if the flag is still on.',
+  slotsStillEnabled: 'Slots are still enabled. Turn PROMOTIONS_SLOTS_ENABLED off in Render and restart, then try again.',
+  steps: [
+    'Stop selling: offer and checkout flags off, restart.',
+    'Slots flag off, restart.',
+    'End each paid Promotion below, or all at once.',
+  ],
+  colEvent: 'Event',
+  colWindow: 'Window',
+  colUnused: 'Unused days',
+  colRefund: 'Refund on withdraw',
+  noRefund: '€0.00 (nothing to refund)',
+  withdraw: 'Withdraw',
+  withdrawAll: (n: number) => `Withdraw all (${n})`,
+  noneLeft: 'No paid Promotions left to withdraw.',
+  withdrawOneHeading: 'Withdraw this Promotion',
+  withdrawOneBody:
+    'Ends it with feature_withdrawn and records a full refund of its unused days. The Organizer gets the P2B email. Needs the slots flag off.',
+  withdrawAllHeading: (n: number) => `Withdraw all ${n} paid Promotions`,
+  withdrawAllBody:
+    'Each ends with feature_withdrawn, records a full refund of its unused whole days (today counts as used; scheduled ones refund in full; complimentary have nothing to refund), emails each Organizer the P2B notice and writes an audit row. One failing Promotion is skipped and listed; the rest still end.',
+  withdrawAck: 'I turned the slots flag off and understand this cannot be undone.',
+  withdrawAckRequired: 'Tick the box to confirm.',
+  withdrawn: (n: number, refunds: string) => `Withdrew ${n} Promotion${n === 1 ? '' : 's'} · ${refunds} refunds recorded`,
+  withdrawnUnused: (days: number) => `${days} unused days`,
+  withdrawnRefund: (amount: string) => `${amount} recorded`,
+  withdrawnNothing: 'nothing to refund',
+  withdrawnHint: 'Each Organizer was emailed the P2B notice and each end and refund wrote an audit row.',
+  withdrawnStripe: (titles: string) => ` Withdraw records the refund only. Issue the card refund in Stripe for ${titles}.`,
+  skipped: (n: number) => `Skipped ${n}`,
+  skippedHint: 'The rest still ended. Open a skipped Promotion to see why, then withdraw it on its own page.',
+  withdrawFailed: 'Couldn’t withdraw.',
+  loadWithdrawFailed: 'Couldn’t load the paid Promotions.',
+} as const;
+
+export const PROMOTION_TRUST_HEADING = 'Trust review';
+export const PROMOTION_TRUST_CADENCE = 'weekly for the first 4 weeks after the first sale, then with the price review';

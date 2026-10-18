@@ -1,0 +1,110 @@
+.section {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.bar {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  composes: sectionTitle from '../shared/AdminCommerce.module.css';
+}
+
+.sectionTitleInline {
+  composes: sectionTitle from '../shared/AdminCommerce.module.css';
+  margin: 0;
+}
+
+.hintBlock {
+  composes: hint from '../shared/AdminCommerce.module.css';
+  margin: 0 0 var(--space-1);
+}
+
+.countPill { composes: countPill from '../shared/AdminCommerce.module.css'; }
+.chip { composes: chip from '../shared/AdminCommerce.module.css'; }
+.tag { composes: tag from '../shared/AdminCommerce.module.css'; }
+.mono { composes: mono from '../shared/AdminCommerce.module.css'; }
+.reason { composes: reason from '../shared/AdminCommerce.module.css'; }
+.hint { composes: hint from '../shared/AdminCommerce.module.css'; }
+.error { composes: error from '../shared/AdminCommerce.module.css'; }
+.field { composes: field from '../shared/AdminCommerce.module.css'; }
+.label { composes: label from '../shared/AdminCommerce.module.css'; }
+.input { composes: input from '../shared/AdminCommerce.module.css'; }
+.actions { composes: actions from '../shared/AdminCommerce.module.css'; }
+.panelButtons { composes: panelButtons from '../shared/AdminCommerce.module.css'; }
+.plainButton { composes: plainButton from '../shared/AdminCommerce.module.css'; }
+.primaryButton { composes: primaryButton from '../shared/AdminCommerce.module.css'; }
+.dangerButton { composes: dangerButton from '../shared/AdminCommerce.module.css'; }
+.smallButton { composes: smallButton from '../shared/AdminCommerce.module.css'; }
+
+/* The queue: hairline rows, the oldest request first. */
+.queue {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: var(--border-w-hair) solid var(--border);
+}
+
+.row {
+  padding: var(--space-3) 0;
+  border-bottom: var(--border-w-hair) solid var(--border);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: start;
+}
+
+.rowSelected {
+  composes: row;
+  background: var(--accent-subtle);
+}
+
+.rowEmpty {
+  composes: row;
+  grid-template-columns: 1fr;
+}
+
+.rowTitle {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+}
+
+.rowMeta {
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+  margin-top: var(--space-0-45);
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.rowNote {
+  font-size: var(--fs-2xs);
+  color: var(--text-soft);
+  margin-top: var(--space-1);
+}
+
+.grant { margin-top: var(--space-5); }
+
+.declineForm {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.declineTo {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 640px) {
+  .row { grid-template-columns: 1fr; }
+}
