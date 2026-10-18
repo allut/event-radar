@@ -213,7 +213,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 
 ## CI
 
-- **`.github/workflows/tests.yml` runs on every push and PR to `master`.** It runs `pytest --cov` on Python 3.12, `npm run test:coverage` on Node 24, and a `migrations` job. The two test jobs run no Postgres, because backend tests mock the DB.
+- **`.github/workflows/tests.yml` runs on every push and PR to `master`.** It runs `scratch-test.sh --cov` on Python 3.12 against a Postgres 16 service, `npm run test:coverage` on Node 24, and a `migrations` job. The frontend job runs no Postgres.
 - **The `migrations` job round-trips the alembic chain against a `postgres:16` service.** It runs `upgrade head`, `downgrade base`, `upgrade head`, then `alembic check`, which fails when a model changed without a matching migration.
 - **That job exists because of a prod incident.** Code shipped the `admin_actions` model and its migration, but the deployed DB never ran it, so every audited admin action returned 500.
 - **The `lint` job runs ruff, mypy, eslint and the TypeScript type-check.** `.githooks/pre-commit` runs the same checks on the staged areas, plus the docs style test. The dependency CVE audit is described in [security.md](security.md)'s Dependency Audit section.
