@@ -1,6 +1,6 @@
 # Code Quality Rationale
 
-What's in here: the reasons behind CLAUDE.md's inline Code Quality Rules, the HTTP retry bypasses, and the `fetch`-stub exceptions in frontend tests.
+What's in here: the reasons behind CLAUDE.md's inline Code Quality Rules, the HTTP retry bypasses, the `fetch`-stub exceptions in frontend tests, and spec-work conventions.
 
 CLAUDE.md states each rule. This doc says why it holds and where its edges are. Area mechanics live in the area doc that owns the code.
 
@@ -120,3 +120,10 @@ A test may stub global `fetch` only when its subject calls `fetch` itself. Add a
 - **`frontend/src/routes/Feed/Feed.logoutRedirect.test.tsx`** tests `api/client.ts`'s own 401 redirect surviving a logout race. Mocking `api` would remove the code path under test.
 - **`api/client.test.ts`, `lib/githubRequest.test.ts`, `lib/seoAuditIssue.test.ts` and `scripts/prerender.test.ts`** each test code that calls `fetch` directly.
 - **The Pages Functions tests under `frontend/tests/functions/`** test handlers that call `fetch` directly. See [frontend.md](frontend.md)'s Tests section for why they live outside `functions/`.
+
+## Spec Work
+
+- **Bug fixes and new behaviour need a test that failed before the change.** Three agents wrote code first on the Promotions spec, and review then found real defects in lock order and the withdraw refund.
+- **Spec work lands on an integration branch, then flattens to linear commits on `master`.** Run `python scripts/linearize-branch.py <branch> --base master` for the plan, add `--apply` for the new tip, then `git merge --ff-only <tip>`.
+- **One agent owns each migration number.** The orchestrator rechains `down_revision` at merge, and `backend/tests/test_migration_chain.py` catches a collision or a stale "Revises" line.
+

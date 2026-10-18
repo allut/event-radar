@@ -290,3 +290,12 @@ Each of these was built or prototyped, reviewed and decided. Reopen one only wit
 5. Check with imagery stripped and under `prefers-reduced-motion: reduce`. For display type, also zoom to 300% and raise the default font size (§4's Browser Zoom).
 6. Verify visually before landing. A CSS retrofit that reads correctly in the diff can still look wrong on screen.
 7. Run `npm run lint` and `npm run type-check`; CI runs neither.
+8. Start a new surface from an approved prototype built on the shell below.
+
+### Prototype Shell
+
+- **A prototype is approved before UI work starts.** It uses the real tokens, the real components and the real `DatePicker`. Fake form styles and hand-copied palettes cost a review round each.
+- **`cd frontend && npx tsx scripts/prototype-shell.ts <out.html>` writes the shell.** It scopes the real `src/index.css` to `#app`, loads Manrope and Cormorant, and adds a working theme switch.
+- **Mount every modal and dialog inside `#app`.** Outside it, a dialog loses the theme tokens and renders unthemed in the light theme.
+- **Keep prototypes out of the repo.** Write them to the session scratchpad and delete them after approval.
+- **Name no id or class with a bare `ad` or `ads` word.** Ad blockers hide those elements. `frontend/src/adBlockerNames.test.ts` enforces it across the CSS Modules and JSX.
