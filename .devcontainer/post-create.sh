@@ -46,6 +46,7 @@ npm --prefix frontend install
 
 echo "==> [5/5] git hooks and database migrations"
 git config core.hooksPath .githooks
+chmod +x .githooks/pre-commit
 for _ in $(seq 1 30); do
   pg_isready -h db -U eventradar -q && break
   sleep 1
