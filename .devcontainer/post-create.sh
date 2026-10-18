@@ -44,7 +44,8 @@ python -m pip install --upgrade pip
 python -m pip install -r backend/requirements-dev.txt   # includes requirements.txt
 npm --prefix frontend install
 
-echo "==> [5/5] database migrations"
+echo "==> [5/5] git hooks and database migrations"
+git config core.hooksPath .githooks
 for _ in $(seq 1 30); do
   pg_isready -h db -U eventradar -q && break
   sleep 1

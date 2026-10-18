@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { renderWithProviders } from '../../test/utils';
+import { renderWithProviders, seedPromotionsOfferHint } from '../../test/utils';
 import OrganizerTopBar from './OrganizerTopBar';
 
 vi.mock('../../api/client', () => ({
@@ -25,7 +25,7 @@ describe('OrganizerTopBar Promotions nav (#614)', () => {
   });
 
   it('shows Promotions after Your claims only once the offer is known to be on', () => {
-    localStorage.setItem('organizer_promotions_offer', '1');
+    seedPromotionsOfferHint(true);
     renderWithProviders(<OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
 
     const links = within(screen.getByRole('navigation')).getAllByRole('link');
@@ -34,7 +34,7 @@ describe('OrganizerTopBar Promotions nav (#614)', () => {
   });
 
   it('makes no request of its own once the hint is known', async () => {
-    localStorage.setItem('organizer_promotions_offer', '0');
+    seedPromotionsOfferHint();
     renderWithProviders(<OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
 
     expect(within(screen.getByRole('navigation')).queryByRole('link', { name: 'Promotions' })).not.toBeInTheDocument();
@@ -76,7 +76,7 @@ describe('OrganizerTopBar', () => {
   });
 
   it('has the gold New event CTA, no search and no pulse chip, and never fetches counts', async () => {
-    localStorage.setItem('organizer_promotions_offer', '0');
+    seedPromotionsOfferHint();
     renderWithProviders(<OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
 
     expect(screen.getAllByRole('link', { name: 'New event' })[0]).toHaveAttribute('href', '/organizer/submit');

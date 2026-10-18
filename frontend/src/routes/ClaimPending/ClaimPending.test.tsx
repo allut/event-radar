@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ClaimPending from './ClaimPending';
 import { QueryClient } from '@tanstack/react-query';
-import { renderWithProviders } from '../../test/utils';
+import { renderWithProviders, seedPromotionsOfferHint } from '../../test/utils';
 import { QUERY_KEYS, QUERY_STALE_TIME } from '../../constants/api';
 
 vi.mock('../../api/client', async (importOriginal) => ({
@@ -41,7 +41,7 @@ const CACHED_CLAIMS_KEY = [QUERY_KEYS.organizerClaims, 'en', 1];
 beforeEach(() => {
   mockGet.mockReset();
   // A known offer hint keeps the top bar from asking the profile endpoint.
-  localStorage.setItem('organizer_promotions_offer', '0');
+  seedPromotionsOfferHint();
   mockPost.mockReset();
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });

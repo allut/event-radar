@@ -83,7 +83,8 @@ The setup walkthrough is in `README.md`. Inside the container:
 ### Testing
 
 - **Run the backend suite with `bash backend/scripts/scratch-test.sh [pytest args]`.** It migrates a throwaway database and drops it afterwards. `backend/tests/conftest.py` refuses to run when `DATABASE_URL` names the dev `eventradar` database.
-- **UI work starts with an approved prototype built on the real `index.css`.** Recipe: `docs/design-system.md` "Prototype Shell".
+- **UI work starts with an approved prototype built on the real `index.css`.** Recipe: `docs/design-system.md` "Prototype Shell". A change with no visual difference (data, wiring, when an existing control shows) needs none.
+- **After editing `CLAUDE.md`, `README.md` or `docs/*.md`, run `bash backend/scripts/scratch-test.sh tests/test_docs_style.py`.** It enforces the 60-word bullet cap in `docs/writing-docs.md`.
 - **There is no e2e suite.** QA runs through the Playwright MCP server, and `.playwright-mcp/` is disposable scratch. Playwright stays a build dependency for the SEO prerender.
 
 ## Architecture
@@ -139,7 +140,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 ## Traps
 
 - **Production builds from `release`, not `master`.** `master` is the CI/PR branch. A Cloudflare Pages build of any other branch skips the prerender pass (`PRERENDER_CADENCE_GIT_BRANCH`, `frontend/src/constants/prerender.ts`).
-- **CI runs no ruff, mypy, eslint or type-check.** A green PR doesn't mean they ran, so run them locally before committing.
+- **CI's `lint` job and `.githooks/pre-commit` run ruff, mypy, eslint and type-check.** The devcontainer enables the hook (`git config core.hooksPath .githooks`). Elsewhere, enable it yourself, or run the four checks by hand before committing.
 - **Edit translations and shared values in `shared/`, then run `python scripts/generate_shared.py`.** Commit the JSON and the regenerated `_generated/` files together, and leave `_generated/` to the script. `backend/tests/test_generated_sync.py` fails on drift.
 - **The three auth tracks never mix.** Consumer, organizer and admin sessions use separate signing salts and cookies, and consumer and organizer accounts live in separate tables. `CONTEXT.md` names them and `docs/security.md` has the flows.
 

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Runs the checks CI also runs, on the areas the commit stages. Enabled by
+# .devcontainer/post-create.sh (git config core.hooksPath .githooks).
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+staged() { git diff --cached --name-only --diff-filter=ACMR | grep -qE "$1"; }
+
+if staged '^(backend/|shared/)'; then
+  echo "pre-commit: ruff"
+  (cd backend && python -m ruff check .)
+  echo "pre-commit: mypy"
+  (cd backend && python -m mypy app)
+fi
+
+if staged '^(frontend/|shared/)'; then
+  echo "pre-commit: eslint"
+  (cd frontend && npm run --silent lint)
+  echo "pre-commit: type-check"
+  (cd frontend && npm run --silent type-check)
+fi
+
+if staged '^(CLAUDE\.md|README\.md|docs/)'; then
+  echo "pre-commit: docs style"
+  bash backend/scripts/scratch-test.sh tests/test_docs_style.py -q
+fi

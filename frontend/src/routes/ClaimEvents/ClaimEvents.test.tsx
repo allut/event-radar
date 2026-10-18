@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ClaimEvents from './ClaimEvents';
-import { LocationProbe, renderWithProviders } from '../../test/utils';
+import { LocationProbe, renderWithProviders, seedPromotionsOfferHint } from '../../test/utils';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -66,7 +66,7 @@ beforeEach(() => {
   mockGet.mockReset();
   // A known offer hint keeps the top bar from asking the profile endpoint,
   // which would take the positional list responses queued below.
-  localStorage.setItem('organizer_promotions_offer', '0');
+  seedPromotionsOfferHint();
 });
 
 describe('ClaimEvents (#436)', () => {
@@ -180,7 +180,7 @@ describe('ClaimEvents (#436)', () => {
 
 describe('ClaimEvents Promotions row action (#614)', () => {
   beforeEach(() => {
-    localStorage.setItem('organizer_promotions_offer', '0');
+    seedPromotionsOfferHint();
   });
 
   const promoPage = () =>

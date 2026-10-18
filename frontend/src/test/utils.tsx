@@ -4,6 +4,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { type EventData } from '../components/EventCard';
+import { ORGANIZER_PROMOTIONS_OFFER_KEY } from '../constants/organizer';
+
+/** Marks the Promotions offer as known, so `OrganizerTopBar` skips its
+ * first-visit `GET /organizer/profile`. Call it in a route test's `beforeEach`
+ * when the test queues `organizerApi.get` responses by position. */
+export function seedPromotionsOfferHint(offered = false): void {
+  localStorage.setItem(ORGANIZER_PROMOTIONS_OFFER_KEY, offered ? '1' : '0');
+}
 
 /** Renders the current router location as text (`pathname + search + hash`)
  * under `data-testid="location-probe"` — mount alongside `children` in a

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ClaimEventEdit from './ClaimEventEdit';
-import { renderWithProviders } from '../../test/utils';
+import { renderWithProviders, seedPromotionsOfferHint } from '../../test/utils';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -51,7 +51,7 @@ function renderEdit(route = '/en/organizer/claims/42/edit') {
 beforeEach(() => {
   mockGet.mockReset();
   // A known offer hint keeps the top bar from asking the profile endpoint.
-  localStorage.setItem('organizer_promotions_offer', '0');
+  seedPromotionsOfferHint();
   mockPatch.mockReset();
 });
 

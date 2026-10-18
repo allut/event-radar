@@ -158,6 +158,7 @@ Every list pages with a numbered pager and a `?page` URL param. There is no Load
 ## Tests
 
 - **Tests sit beside their subject as `Name.test.tsx` or `Name.test.ts`.** Shared helpers live in `frontend/src/test/`. The stack is Vitest, Testing Library and jsdom.
+- **Seed the offer hint when a route test queues `organizerApi.get` responses by position.** `OrganizerTopBar` mounts on every Organizer page and asks `GET /organizer/profile` while the hint is unknown, which takes a queued response. Call `test/utils.tsx::seedPromotionsOfferHint()`, or route mocks by path as `OrganizerDashboard.test.tsx` does.
 - **`frontend/functions/` stays free of test files.** Cloudflare's file-based routing would claim a `.test.ts` there as a route. Pages Functions tests live in `frontend/tests/functions/`, mirroring that tree.
 - **`npm run lint` covers `src`, `scripts`, `functions` and `tests`.**
 
