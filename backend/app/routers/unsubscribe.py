@@ -22,6 +22,7 @@ from app.constants.email import (
 )
 from app.constants.rate_limits import RATE_LIMIT_UNSUBSCRIBE
 from app.db import get_db
+from app.email.subscription import set_digest_subscription
 from app.models.models import User
 from app.rate_limit import limiter
 from app.auth.utils import mask_email
@@ -63,7 +64,7 @@ async def unsubscribe(
     clients POST `List-Unsubscribe=One-Click` as the body, which FastAPI simply
     ignores since no body param is declared here."""
     user = await _load_user_from_token(token, db)
-    user.email_digest_opt_in = False
+    set_digest_subscription(user, False)
     await db.commit()
     log.info("digest unsubscribe: user=%s", mask_email(user.email))
     return {"ok": True, "email": mask_email(user.email)}
@@ -79,7 +80,7 @@ async def resubscribe(
     """Undo an unsubscribe — same token stays valid, mirroring the reversible
     intent described on the /unsubscribe confirmation page."""
     user = await _load_user_from_token(token, db)
-    user.email_digest_opt_in = True
+    set_digest_subscription(user, True)
     await db.commit()
     log.info("digest resubscribe: user=%s", mask_email(user.email))
     return {"ok": True, "email": mask_email(user.email)}

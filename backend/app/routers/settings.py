@@ -20,6 +20,7 @@ from app.constants.log_events import LOG_EVENT_IDENTITY_UNLINKED
 from app.constants.rate_limits import RATE_LIMIT_AUTHENTICATED_WRITE
 from app.config import settings
 from app.db import get_db
+from app.email.subscription import set_digest_subscription
 from app.models.models import Persona, User, UserIdentity, UserPersona
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
@@ -171,7 +172,7 @@ async def patch_settings(
     if body.locale is not None:
         current_user.locale = body.locale
     if body.email_digest_opt_in is not None:
-        current_user.email_digest_opt_in = body.email_digest_opt_in
+        set_digest_subscription(current_user, body.email_digest_opt_in)
 
     await db.commit()
     await db.refresh(current_user)

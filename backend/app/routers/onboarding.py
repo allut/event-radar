@@ -23,6 +23,7 @@ from app.constants.ranking import (
 )
 from app.constants.rate_limits import RATE_LIMIT_AUTHENTICATED_WRITE
 from app.db import get_db
+from app.email.subscription import set_digest_subscription
 from app.models.models import Persona, User, UserPersona
 from app.ranking.score import build_daily_feed_for_user
 from app.rate_limit import limiter
@@ -89,7 +90,7 @@ async def set_persona(
         result.append({"slug": slug, "weight": weight})
 
     if body.email_digest_opt_in is not None:
-        current_user.email_digest_opt_in = body.email_digest_opt_in
+        set_digest_subscription(current_user, body.email_digest_opt_in)
 
     await db.commit()
 
