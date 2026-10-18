@@ -238,7 +238,7 @@ Accepted residual risks, all bounded because the token only toggles a reversible
 ### Email Ad Consent Withdrawal
 
 - **`POST /email/ads-off?token=` withdraws Email ad consent without a login.** The digest keeps coming. The token has its own salt (`AUTH_ADS_OFF_SALT`) and `UNSUBSCRIBE_TOKEN_TTL_DAYS`, so it can't unsubscribe the digest or be replayed the other way. Errors match `/email/unsubscribe`.
-- **`POST /email/ads-on?token=` is the undo.** It grants again at the current wording version, and returns 409 while the digest or `PROMOTIONS_SLOTS_ENABLED` is off.
+- **`POST /email/ads-on?token=` is the undo.** It grants again at the current wording version only for a user whose latest consent-log row is an `email_link` withdrawal; anyone else gets the invalid-link 400. It returns 409 while the digest or `PROMOTIONS_SLOTS_ENABLED` is off.
 - **The email link opens the frontend `/email-consent-off?token=` page**, which strips the token, POSTs `ads-off` on mount and offers Undo (`ads-on`). The path avoids "ad" so filter lists don't hide it.
 - **Both routes use `RATE_LIMIT_UNSUBSCRIBE` and the normal Origin check.** The token stays a query parameter, like unsubscribe's.
 

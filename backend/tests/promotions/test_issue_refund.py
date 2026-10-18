@@ -9,8 +9,9 @@ from app.integrations.payments import PaymentProviderError
 from app.integrations.providers import get_payment_gateway
 from app.models.models import AdminAction, PromotionDailyStat
 from app.promotions.grant import PromotionRefused
-from app.promotions.lifecycle import end_early, record_refund
+from app.promotions.lifecycle import edit_promotion, end_early, record_refund
 from app.promotions.refunds import refund_prefill
+from app.promotions.withdraw import withdraw_all, withdraw_promotion
 from tests.promotions.conftest import NOW, Clock, at_tallinn, d
 from tests.promotions.fakes import FakePaymentGateway
 from tests.promotions.test_lifecycle_commands import make_promo
@@ -163,3 +164,128 @@ async def test_endpoint_reports_a_provider_failure_as_502_and_records_nothing(wi
     resp = await wired.post(f"{url}/refund", json={"amount_cents": 500, "note": "x"})
     assert resp.status_code == 502
     assert (await wired.get(url)).json()["refunded_cents"] == 0
+
+
+# --- withdraw refunds card-paid Promotions through the gateway (#620) ----------
+
+
+@pytest.mark.asyncio
+async def test_withdraw_refunds_a_card_paid_promotion_through_the_gateway(db, make, gateway) -> None:
+    _, promo = await stripe_paid(db, make)
+    result = await withdraw_promotion(db, promo.id, at_tallinn(2090, 1, 5), gateway=gateway)
+    (call,) = gateway.refunds
+    assert (call.net_cents + call.vat_cents, result.refund_cents) == (3100, 3100)
+    assert (promo.status, promo.refunded_cents) == ("ended_early", 3100)
+    assert "credit note cn_1" in (promo.refund_note or "")
+
+
+@pytest.mark.asyncio
+async def test_withdraw_of_a_card_paid_promotion_stays_paid_when_stripe_refuses(db, make, gateway) -> None:
+    _, promo = await stripe_paid(db, make)
+    gateway.fail_refund = True
+    with pytest.raises(PaymentProviderError):
+        await withdraw_promotion(db, promo.id, at_tallinn(2090, 1, 5), gateway=gateway)
+    assert (promo.status, promo.refunded_cents) == ("paid", 0)
+
+
+@pytest.mark.asyncio
+async def test_withdraw_all_skips_a_card_promotion_stripe_refuses_and_ends_the_rest(db, make, gateway) -> None:
+    _, card = await stripe_paid(db, make)
+    _, bank = await make_promo(db, make, 10, 14, paid=True)
+    gateway.fail_refund = True
+    outcome = await withdraw_all(db, at_tallinn(2090, 1, 5), gateway=gateway)
+    assert {"id": card.id, "code": "refund_provider_failed"} in outcome.skipped
+    assert bank.id in {r.promotion.id for r in outcome.withdrawn}
+    assert card.status == "paid"
+
+
+@pytest.mark.asyncio
+async def test_withdraw_endpoints_use_the_gateway(wired, db, make, gateway, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "PROMOTIONS_SLOTS_ENABLED", False)
+    _, promo = await stripe_paid(db, make)
+    await db.commit()
+    url = f"/admin/promotions/{promo.id}/withdraw"
+    Clock.now = at_tallinn(2090, 1, 5)
+    gateway.fail_refund = True
+    assert (await wired.post(url)).status_code == 502
+    gateway.fail_refund = False
+    resp = await wired.post(url)
+    assert resp.status_code == 200
+    assert resp.json()["refunded_cents"] == 3100 and len(gateway.refunds) == 1
+
+
+@pytest.mark.asyncio
+async def test_withdraw_all_endpoint_reports_a_stripe_refusal_in_skipped(wired, db, make, gateway, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "PROMOTIONS_SLOTS_ENABLED", False)
+    _, promo = await stripe_paid(db, make)
+    await db.commit()
+    Clock.now = at_tallinn(2090, 1, 5)
+    gateway.fail_refund = True
+    body = (await wired.post("/admin/promotions/withdraw-all")).json()
+    assert {"id": promo.id, "code": "refund_provider_failed"} in body["skipped"]
+
+
+# --- a card-paid Promotion's dates are fixed --------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_edit_refuses_date_changes_on_a_card_paid_promotion(db, make) -> None:
+    _, promo = await stripe_paid(db, make)
+    with pytest.raises(PromotionRefused) as exc:
+        await edit_promotion(db, promo.id, {"end_date": d(16)}, NOW)
+    assert exc.value.violations[0].code == "stripe_paid_dates_locked"
+    assert promo.net_price_cents == 2500
+    await edit_promotion(db, promo.id, {"billing_email": "new@x.test"}, NOW)  # other fields still edit
+    assert promo.billing_email == "new@x.test"
+
+
+@pytest.mark.asyncio
+async def test_the_dates_locked_refusal_is_a_409(wired, db, make) -> None:
+    _, promo = await stripe_paid(db, make)
+    await db.commit()
+    resp = await wired.patch(f"/admin/promotions/{promo.id}", json={"end_date": "2090-01-16"})
+    assert resp.status_code == 409
+    assert resp.json()["detail"]["code"] == "stripe_paid_dates_locked"
+
+
+# --- the Stripe call runs outside the cap lock (real commits) ---------------------
+
+
+@pytest.mark.asyncio
+async def test_stripe_refund_runs_without_the_cap_lock_held(engine, sessionmaker_for, gateway) -> None:
+    from sqlalchemy import delete, text
+
+    from app.constants.promotions import PROMOTION_CAP_LOCK_KEY
+    from app.models.models import Event, Organizer, Promotion, PromotionSnapshot
+    from tests.promotions.conftest import Factory
+
+    seen: list[bool] = []
+    real_refund = gateway.refund
+
+    async def probing_refund(request):
+        async with engine.connect() as other:  # a second connection can take the lock
+            seen.append(
+                bool(await other.scalar(text("SELECT pg_try_advisory_xact_lock(:k)"), {"k": PROMOTION_CAP_LOCK_KEY}))
+            )
+        return await real_refund(request)
+
+    gateway.refund = probing_refund  # type: ignore[method-assign]
+    ids: dict[str, int] = {}
+    try:
+        async with sessionmaker_for() as setup:
+            ev, promo = await stripe_paid(setup, Factory(setup), 20, 24)
+            ids = {"event": ev.id, "promo": promo.id, "org": ev.submitted_by_organizer_id}
+            await setup.commit()
+        async with sessionmaker_for() as s:
+            await record_refund(s, ids["promo"], 1240, "Operator fault", NOW, gateway=gateway)
+            await s.commit()
+        assert seen == [True]
+        async with sessionmaker_for() as check:
+            assert (await check.get(Promotion, ids["promo"])).refunded_cents == 1240
+    finally:
+        async with sessionmaker_for() as cleanup:
+            await cleanup.execute(delete(PromotionSnapshot).where(PromotionSnapshot.promotion_id == ids.get("promo")))
+            await cleanup.execute(delete(Promotion).where(Promotion.id == ids.get("promo")))
+            await cleanup.execute(delete(Event).where(Event.id == ids.get("event")))
+            await cleanup.execute(delete(Organizer).where(Organizer.id == ids.get("org")))
+            await cleanup.commit()

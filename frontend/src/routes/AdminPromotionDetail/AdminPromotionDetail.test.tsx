@@ -254,6 +254,21 @@ describe('AdminPromotionDetail', () => {
     expect(mockPatch).toHaveBeenCalledWith('/admin/promotions/5', { advertiser_legal_name: 'New OÜ' });
   });
 
+  it('locks the dates of a card-paid Promotion and says why, still editing advertiser details', async () => {
+    serve(detail({ ...UNPAID, invoice_source: 'stripe' }, { edit_scope: 'full', mark_paid: false, void: true, end: false }));
+    mockPatch.mockResolvedValue(detail());
+    renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    expect(screen.getByLabelText('Start date')).toBeDisabled();
+    expect(screen.getByLabelText('End date')).toBeDisabled();
+    expect(screen.getByText(/card-paid Promotion's dates cannot change/)).toBeInTheDocument();
+    const name = screen.getByLabelText('Advertiser legal name');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'New OÜ');
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(mockPatch).toHaveBeenCalledWith('/admin/promotions/5', { advertiser_legal_name: 'New OÜ' });
+  });
+
   it('re-points to a candidate event', async () => {
     serve(detail());
     mockPost.mockResolvedValue(detail());

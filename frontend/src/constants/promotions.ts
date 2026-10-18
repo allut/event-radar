@@ -261,6 +261,7 @@ export const PROMOTION_REQUEST_COPY = {
 export const PROMOTION_INVOICE_SOURCE_STRIPE = 'stripe';
 export const PROMOTION_INVOICE_SOURCE_MANUAL = 'manual';
 export const PROMOTION_STRIPE_COPY = {
+  datesLocked: "A card-paid Promotion's dates cannot change. End it early or refund part of it instead.",
   chip: 'Stripe',
   bankChip: 'Bank transfer',
   paidByCard: 'Paid by card via Stripe',

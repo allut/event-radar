@@ -15,6 +15,10 @@ import stripe
 from app.config import settings
 from app.constants.promotions import (
     PROMOTION_CHECKOUT_CURRENCY,
+    STRIPE_CREDIT_NOTE_LINE_DEFAULT,
+    STRIPE_CREDIT_NOTE_LINE_MAX_CHARS,
+    STRIPE_CREDIT_NOTE_MEMO_MAX_CHARS,
+    STRIPE_CREDIT_NOTE_REASON,
     STRIPE_WEBHOOK_TOLERANCE_SECONDS,
 )
 
@@ -55,7 +59,6 @@ class CheckoutSessionRequest:
     cancel_url: str
     invoice_footer: str
     custom_fields: dict[str, str]
-    customer_email: str
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,10 @@ class PaymentGateway(Protocol):
 
     async def create_customer(self, request: CustomerRequest) -> str: ...
 
+    async def update_customer(self, customer_id: str, email: str, name: str) -> None:
+        """Set the Customer's billing email and legal name."""
+        ...
+
     async def create_checkout_session(self, request: CheckoutSessionRequest) -> CheckoutSession: ...
 
     async def retrieve_invoice(self, invoice_id: str) -> InvoiceInfo: ...
@@ -115,11 +122,14 @@ class StripeGateway:
         self._webhook_secret = (
             settings.STRIPE_WEBHOOK_SECRET if webhook_secret is None else webhook_secret
         )
+        self._stripe_client: stripe.StripeClient | None = None
 
     def _client(self) -> stripe.StripeClient:
         if not self._secret_key:
             raise PaymentProviderError("Stripe is not configured")
-        return stripe.StripeClient(self._secret_key)
+        if self._stripe_client is None:
+            self._stripe_client = stripe.StripeClient(self._secret_key)
+        return self._stripe_client
 
     def construct_event(self, payload: bytes, signature: str | None) -> StripeEvent:
         if not self._webhook_secret or not signature:
@@ -150,6 +160,14 @@ class StripeGateway:
         except stripe.StripeError as exc:
             raise PaymentProviderError(str(exc)) from exc
         return str(customer.id)
+
+    async def update_customer(self, customer_id: str, email: str, name: str) -> None:
+        try:
+            await self._client().v1.customers.update_async(
+                customer_id, params={"email": email, "name": name}
+            )
+        except stripe.StripeError as exc:
+            raise PaymentProviderError(str(exc)) from exc
 
     async def create_checkout_session(self, request: CheckoutSessionRequest) -> CheckoutSession:
         params: dict[str, Any] = {
@@ -212,13 +230,13 @@ class StripeGateway:
                 note = await client.v1.credit_notes.create_async(
                     params={
                         "invoice": request.invoice_id,
-                        "reason": "order_change",
-                        "memo": request.reason[:500],
+                        "reason": STRIPE_CREDIT_NOTE_REASON,
+                        "memo": request.reason[:STRIPE_CREDIT_NOTE_MEMO_MAX_CHARS],
                         "metadata": request.metadata,
                         "lines": [
                             {
                                 "type": "custom_line_item",
-                                "description": request.reason[:200] or "Promotion refund",
+                                "description": request.reason[:STRIPE_CREDIT_NOTE_LINE_MAX_CHARS] or STRIPE_CREDIT_NOTE_LINE_DEFAULT,
                                 "quantity": 1,
                                 "unit_amount": request.net_cents,
                                 "tax_rates": [request.tax_rate_id],

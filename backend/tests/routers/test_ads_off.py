@@ -21,6 +21,15 @@ def _consenting(make_user, user_id: int = 5, opt_in: bool = True):
     return user
 
 
+def _latest_log(db, *, granted: bool = False, source: str = "email_link") -> None:
+    """Script the user's latest consent-log row (the undo's precondition)."""
+    from app.models.models import EmailAdConsentLog
+
+    db.scalar.return_value = EmailAdConsentLog(
+        user_id=5, granted=granted, wording_version=1, source=source, locale="et"
+    )
+
+
 def _logged(db):
     return [c.args[0] for c in db.add.call_args_list]
 
@@ -69,10 +78,55 @@ async def test_ads_on_undo_grants_from_email_link_undo(
     user = make_user(user_id=5)
     user.email_ad_consent = False
     mock_db.get.return_value = user
+    _latest_log(mock_db)
     await ads_on(make_request(method="POST"), generate_ads_off_token(5), mock_db)
     assert user.email_ad_consent is True
     row = _logged(mock_db)[0]
     assert (row.granted, row.source) == (True, "email_link_undo")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "latest",
+    [
+        None,  # never consented
+        ("settings", False),  # withdrew in Settings, not through the email link
+        ("email_link", True),  # latest row is a grant, not the link withdrawal
+        ("digest_unsubscribe", False),
+    ],
+)
+async def test_ads_on_only_undoes_an_email_link_withdrawal(
+    latest, mock_db, make_request, make_user, monkeypatch
+) -> None:
+    from app.constants.email import ERROR_UNSUBSCRIBE_LINK_INVALID
+    from app.routers.unsubscribe import ads_on
+
+    monkeypatch.setattr(settings, "PROMOTIONS_SLOTS_ENABLED", True)
+    user = make_user(user_id=5)
+    user.email_ad_consent = False
+    mock_db.get.return_value = user
+    mock_db.scalar.return_value = None
+    if latest is not None:
+        _latest_log(mock_db, source=latest[0], granted=latest[1])
+    with pytest.raises(HTTPException) as exc:
+        await ads_on(make_request(method="POST"), generate_ads_off_token(5), mock_db)
+    assert (exc.value.status_code, exc.value.detail) == (400, ERROR_UNSUBSCRIBE_LINK_INVALID)
+    assert user.email_ad_consent is False
+    assert _logged(mock_db) == []
+    mock_db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_ads_on_is_idempotent_once_consent_is_on(
+    mock_db, make_request, make_user, monkeypatch
+) -> None:
+    from app.routers.unsubscribe import ads_on
+
+    monkeypatch.setattr(settings, "PROMOTIONS_SLOTS_ENABLED", True)
+    user = _consenting(make_user)
+    mock_db.get.return_value = user
+    assert (await ads_on(make_request(method="POST"), generate_ads_off_token(5), mock_db))["ok"] is True
+    assert _logged(mock_db) == []
 
 
 @pytest.mark.asyncio
@@ -85,6 +139,7 @@ async def test_ads_on_refused_while_digest_off(
     user = make_user(user_id=5, opt_in=False)
     user.email_ad_consent = False
     mock_db.get.return_value = user
+    _latest_log(mock_db)
     with pytest.raises(HTTPException) as exc:
         await ads_on(make_request(method="POST"), generate_ads_off_token(5), mock_db)
     assert exc.value.status_code == 409
@@ -101,6 +156,7 @@ async def test_ads_on_refused_while_slots_flag_off(
     user = make_user(user_id=5)
     user.email_ad_consent = False
     mock_db.get.return_value = user
+    _latest_log(mock_db)
     with pytest.raises(HTTPException) as exc:
         await ads_on(make_request(method="POST"), generate_ads_off_token(5), mock_db)
     assert exc.value.status_code == 409

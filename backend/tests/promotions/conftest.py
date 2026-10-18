@@ -176,6 +176,15 @@ def _fresh_limiter():
     limiter.reset()
 
 
+@pytest.fixture(autouse=True)
+def _checkout_clock(monkeypatch):
+    """The checkout reads a fresh clock just before it opens the Stripe
+    session; tests pin it to NOW so session expiries stay in the 2090 frame."""
+    from app.promotions import checkout as checkout_module
+
+    monkeypatch.setattr(checkout_module, "_clock", lambda: NOW)
+
+
 class Clock:
     now: datetime = NOW
 

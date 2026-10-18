@@ -239,3 +239,28 @@ async def test_expiry_sends_no_email(db, make, monkeypatch) -> None:
     await make_request(db, make, start=2, end=6)
     await sweep_promotions(db, LATER)
     assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_grant_takes_the_cap_lock_before_the_request_row_lock(db, make, monkeypatch) -> None:
+    """The sweep locks the cap, then pending request rows; a grant that locked
+    the row first could deadlock against it. Pin the documented order."""
+    from app.promotions import requests as requests_module
+    from app.promotions.requests import grant_request
+
+    order: list[str] = []
+    real_lock_cap, real_load = requests_module.lock_cap, requests_module._load_locked
+
+    async def lock_cap_spy(session):
+        order.append("cap")
+        await real_lock_cap(session)
+
+    async def load_spy(session, request_id):
+        order.append("row")
+        return await real_load(session, request_id)
+
+    monkeypatch.setattr(requests_module, "lock_cap", lock_cap_spy)
+    monkeypatch.setattr(requests_module, "_load_locked", load_spy)
+    request = await make_request(db, make)
+    await grant_request(db, request.id, GrantRequest(d(10), d(14), "Acme OÜ", "10234957"), NOW)
+    assert order[:2] == ["cap", "row"]

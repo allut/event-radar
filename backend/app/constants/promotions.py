@@ -100,6 +100,8 @@ PROMOTION_ERROR_REFUND_NOT_PAID = "refund_not_paid"
 PROMOTION_ERROR_REFUND_AMOUNT = "refund_amount_invalid"
 PROMOTION_ERROR_REFUND_EXCEEDS_PAID = "refund_exceeds_paid"
 PROMOTION_ERROR_REFUND_NOTE_REQUIRED = "refund_note_required"
+# A card-paid Promotion's dates are fixed: the price paid caps every refund.
+PROMOTION_ERROR_STRIPE_DATES_LOCKED = "stripe_paid_dates_locked"
 
 # Restriction clearance (#612): granting a restricted event needs both.
 PROMOTION_ERROR_CLEARANCE_REQUIRED = "restriction_clearance_required"
@@ -133,6 +135,7 @@ PROMOTION_CONFLICT_ERROR_CODES = frozenset(
         PROMOTION_ERROR_REPOINT_NOT_SAME_GROUP,
         PROMOTION_ERROR_REFUND_NOT_PAID,
         PROMOTION_ERROR_REFUND_EXCEEDS_PAID,
+        PROMOTION_ERROR_STRIPE_DATES_LOCKED,
     }
 )
 
@@ -173,6 +176,9 @@ PROMOTION_ERROR_MESSAGES = {
     PROMOTION_ERROR_REFUND_AMOUNT: "The refund amount must be a positive number of cents.",
     PROMOTION_ERROR_REFUND_EXCEEDS_PAID: "The refund would exceed what was paid.",
     PROMOTION_ERROR_REFUND_NOTE_REQUIRED: "A refund note is required.",
+    PROMOTION_ERROR_STRIPE_DATES_LOCKED: (
+        "A card-paid Promotion's dates cannot change. End it early or refund part of it instead."
+    ),
     PROMOTION_ERROR_CLEARANCE_REQUIRED: "This event carries a Promotion restriction; confirm the clearance.",
     PROMOTION_ERROR_CLEARANCE_NOTE_REQUIRED: "A Restriction clearance needs a note.",
     PROMOTION_ERROR_CLEARANCE_NOT_NEEDED: "This event carries no Promotion restriction to clear.",
@@ -455,3 +461,32 @@ PROMOTION_LATE_PAYMENT_REASON = (
     "created. The full amount is being refunded to your card."
 )
 PROMOTION_LATE_REFUND_NOTE = "Automatic full refund: payment arrived after the checkout hold lapsed."
+
+# Stripe idempotency keys: a replay of the same key returns the first result.
+PROMOTION_REFUND_IDEMPOTENCY_KEY = "refund-{promotion_id}-{refunded_cents}-{amount_cents}"
+PROMOTION_LATE_REFUND_IDEMPOTENCY_KEY = "late-refund-{promotion_id}"
+# Labels in the refund note, and the credit note's fixed Stripe fields.
+PROMOTION_REFUND_NOTE_LABEL_CREDIT_NOTE = "credit note"
+PROMOTION_REFUND_NOTE_LABEL_REFUND = "refund"
+STRIPE_CREDIT_NOTE_REASON = "order_change"
+STRIPE_CREDIT_NOTE_MEMO_MAX_CHARS = 500
+STRIPE_CREDIT_NOTE_LINE_MAX_CHARS = 200
+STRIPE_CREDIT_NOTE_LINE_DEFAULT = "Promotion refund"
+
+# Operator payment notices (subject, then the body with its placeholders).
+PAYMENT_NOTICE_PAID_SUBJECT = "Promotion paid by card"
+PAYMENT_NOTICE_PAID_DETAIL = (
+    'Promotion #{promotion_id} for "{title}" ({start} to {end}) was paid by card by {advertiser}.'
+)
+PAYMENT_NOTICE_LATE_REFUND_SUBJECT = "Late Promotion payment refunded"
+PAYMENT_NOTICE_LATE_REFUND_DETAIL = (
+    "A payment arrived for Promotion #{promotion_id} after it was voided. "
+    "{cents} cents were refunded in full; the Promotion stays void."
+)
+PAYMENT_NOTICE_DISPUTE_SUBJECT = "Stripe dispute opened"
+PAYMENT_NOTICE_DISPUTE_DETAIL = (
+    "Stripe opened a dispute ({dispute_id}, reason: {reason}, {amount} cents) on payment "
+    "{payment_intent}. {match} Nothing was changed; respond in the Stripe Dashboard."
+)
+PAYMENT_NOTICE_DISPUTE_MATCHED = "It belongs to Promotion #{promotion_id}."
+PAYMENT_NOTICE_DISPUTE_UNMATCHED = "No Promotion matched."

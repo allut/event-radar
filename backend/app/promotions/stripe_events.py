@@ -29,6 +29,15 @@ from app.constants.promotions import (
     PROMOTION_END_REASON_CHECKOUT_EXPIRED,
     PROMOTION_INVOICE_SOURCE_STRIPE,
     PROMOTION_LATE_PAYMENT_REASON,
+    PAYMENT_NOTICE_DISPUTE_DETAIL,
+    PAYMENT_NOTICE_DISPUTE_MATCHED,
+    PAYMENT_NOTICE_DISPUTE_SUBJECT,
+    PAYMENT_NOTICE_DISPUTE_UNMATCHED,
+    PAYMENT_NOTICE_LATE_REFUND_DETAIL,
+    PAYMENT_NOTICE_LATE_REFUND_SUBJECT,
+    PAYMENT_NOTICE_PAID_DETAIL,
+    PAYMENT_NOTICE_PAID_SUBJECT,
+    PROMOTION_LATE_REFUND_IDEMPOTENCY_KEY,
     PROMOTION_LATE_REFUND_NOTE,
     PROMOTION_SNAPSHOT_TRIGGER_CHECKOUT_PAID,
     PROMOTION_STATUS_PAID,
@@ -128,14 +137,17 @@ async def _mark_paid(
     record_system_action(
         db, promotion, ADMIN_ACTION_PROMOTION_SYSTEM_PAID, invoice_number=invoice.number
     )
-    detail = (
-        f'Promotion #{promotion.id} for "{event.title_orig}" ({promotion.start_date} to '
-        f"{promotion.end_date}) was paid by card by {promotion.advertiser_legal_name}."
+    detail = PAYMENT_NOTICE_PAID_DETAIL.format(
+        promotion_id=promotion.id,
+        title=event.title_orig,
+        start=promotion.start_date,
+        end=promotion.end_date,
+        advertiser=promotion.advertiser_legal_name,
     )
     promotion_id = promotion.id
     return WebhookOutcome(
         STRIPE_WEBHOOK_STATUS_OK,
-        [lambda: send_payment_notice("Promotion paid by card", detail, promotion_id)],
+        [lambda: send_payment_notice(PAYMENT_NOTICE_PAID_SUBJECT, detail, promotion_id)],
     )
 
 
@@ -161,7 +173,7 @@ async def _refund_late_payment(
             vat_cents=vat,
             tax_rate_id=settings.STRIPE_TAX_RATE_ID,
             reason=PROMOTION_LATE_REFUND_NOTE,
-            idempotency_key=f"late-refund-{promotion.id}",
+            idempotency_key=PROMOTION_LATE_REFUND_IDEMPOTENCY_KEY.format(promotion_id=promotion.id),
             metadata={"promotion_id": str(promotion.id)},
         )
     )
@@ -182,12 +194,9 @@ async def _refund_late_payment(
     organizer = await db.get(Organizer, promotion.organizer_id)
     event = await db.get(Event, promotion.event_id)
     promotion_id = promotion.id
-    detail = (
-        f"A payment arrived for Promotion #{promotion_id} after it was voided. "
-        f"{net + vat} cents were refunded in full; the Promotion stays void."
-    )
+    detail = PAYMENT_NOTICE_LATE_REFUND_DETAIL.format(promotion_id=promotion_id, cents=net + vat)
     after: list[AfterCommit] = [
-        lambda: send_payment_notice("Late Promotion payment refunded", detail, promotion_id)
+        lambda: send_payment_notice(PAYMENT_NOTICE_LATE_REFUND_SUBJECT, detail, promotion_id)
     ]
     if organizer is not None and event is not None:
         to_email, locale = organizer.email, organizer.locale
@@ -239,15 +248,21 @@ async def _on_dispute(db: AsyncSession, dispute: dict[str, Any]) -> WebhookOutco
         promotion_id = await db.scalar(
             select(Promotion.id).where(Promotion.stripe_payment_intent_id == payment_intent)
         )
-    detail = (
-        f"Stripe opened a dispute ({dispute.get('id')}, reason: {dispute.get('reason')}, "
-        f"{dispute.get('amount')} cents) on payment {payment_intent}. "
-        + (f"It belongs to Promotion #{promotion_id}." if promotion_id else "No Promotion matched.")
-        + " Nothing was changed; respond in the Stripe Dashboard."
+    match = (
+        PAYMENT_NOTICE_DISPUTE_MATCHED.format(promotion_id=promotion_id)
+        if promotion_id
+        else PAYMENT_NOTICE_DISPUTE_UNMATCHED
+    )
+    detail = PAYMENT_NOTICE_DISPUTE_DETAIL.format(
+        dispute_id=dispute.get("id"),
+        reason=dispute.get("reason"),
+        amount=dispute.get("amount"),
+        payment_intent=payment_intent,
+        match=match,
     )
     return WebhookOutcome(
         STRIPE_WEBHOOK_STATUS_OK,
-        [lambda: send_payment_notice("Stripe dispute opened", detail, promotion_id)],
+        [lambda: send_payment_notice(PAYMENT_NOTICE_DISPUTE_SUBJECT, detail, promotion_id)],
     )
 
 

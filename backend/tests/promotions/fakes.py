@@ -50,6 +50,7 @@ class FakePaymentGateway:
         self.customers: list[CustomerRequest] = []
         self.sessions: list[CheckoutSessionRequest] = []
         self.refunds: list[RefundRequest] = []
+        self.customer_updates: list[tuple[str, str, str]] = []
         self.invoices: dict[str, InvoiceInfo] = {}
         self.fail_session = False
         self.fail_refund = False
@@ -61,6 +62,9 @@ class FakePaymentGateway:
     async def create_customer(self, request: CustomerRequest) -> str:
         self.customers.append(request)
         return f"cus_{len(self.customers)}"
+
+    async def update_customer(self, customer_id: str, email: str, name: str) -> None:
+        self.customer_updates.append((customer_id, email, name))
 
     async def create_checkout_session(self, request: CheckoutSessionRequest) -> CheckoutSession:
         if self.fail_session:

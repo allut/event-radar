@@ -1803,17 +1803,20 @@ async def _audit_withdrawals(db: AsyncSession, results: list[WithdrawResult]) ->
 
 @router.post("/promotions/withdraw-all", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_withdraw_all_promotions(request: Request) -> dict:
+async def admin_withdraw_all_promotions(
+    request: Request, gateway: PaymentGateway = Depends(get_payment_gateway)
+) -> dict:
     """Withdraw (#620): end every paid, unfinished Promotion with
     `feature_withdrawn` and record a full refund of its unused days. 409
     `slots_still_enabled` while `PROMOTIONS_SLOTS_ENABLED` is on. A Promotion
-    that cannot be ended is listed in `skipped`; the rest still end."""
+    that cannot be ended is listed in `skipped` (a card refund Stripe refused
+    has code `refund_provider_failed`); the rest still end."""
     _withdraw_guard()
 
     async def _run() -> dict:
         now = now_tallinn()
         async with AsyncSessionLocal() as db:
-            outcome = await withdraw_all(db, now)
+            outcome = await withdraw_all(db, now, gateway)
             emits = await _audit_withdrawals(db, outcome.withdrawn)
             mails = [
                 (item.promotion, await db.get(Organizer, item.promotion.organizer_id),
@@ -2432,18 +2435,21 @@ async def admin_end_promotion(
 
 @router.post("/promotions/{promotion_id}/withdraw", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_withdraw_promotion(promotion_id: int, request: Request) -> dict:
+async def admin_withdraw_promotion(
+    promotion_id: int, request: Request, gateway: PaymentGateway = Depends(get_payment_gateway)
+) -> dict:
     """Withdraw (#620) one paid Promotion: `ended_early` with
     `feature_withdrawn` and a full refund of its unused days, emailed to the
-    Organizer. 409 `slots_still_enabled` while the slots flag is on. Returns
-    the refreshed detail."""
+    Organizer. A card-paid one is refunded through Stripe (502 when Stripe
+    refuses; it stays paid). 409 `slots_still_enabled` while the slots flag is
+    on. Returns the refreshed detail."""
     _withdraw_guard()
 
     async def _run() -> dict:
         now = now_tallinn()
         async with AsyncSessionLocal() as db:
             try:
-                item = await withdraw_promotion(db, promotion_id, now)
+                item = await withdraw_promotion(db, promotion_id, now, gateway)
             except PromotionNotFound:
                 await db.rollback()
                 raise HTTPException(
@@ -2452,6 +2458,13 @@ async def admin_withdraw_promotion(promotion_id: int, request: Request) -> dict:
             except PromotionRefused as refused:
                 await db.rollback()
                 raise promotion_refusal(refused) from None
+            except PaymentProviderError:
+                await db.rollback()
+                log.error("Stripe refused a Promotion withdraw refund", exc_info=True)
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=PROMOTION_CHECKOUT_ERROR_MESSAGES[PROMOTION_ERROR_REFUND_PROVIDER],
+                ) from None
             emits = await _audit_withdrawals(db, [item])
             payload = await promotion_detail(db, item.promotion, now)
             organizer = await db.get(Organizer, item.promotion.organizer_id)

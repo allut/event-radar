@@ -187,7 +187,7 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 - **Withdraw, step one:** do Stop selling, then set `PROMOTIONS_SLOTS_ENABLED` off and restart. Slots stop on every surface at once, and the frontend `VITE_PROMOTIONS_SLOTS_ENABLED` can stay on, so `/ranking#paid-slots` keeps saying what may appear.
 - **Withdraw, step two:** end each paid Promotion with `POST /admin/promotions/{id}/withdraw`, or all at once with `POST /admin/promotions/withdraw-all`. Both return 409 `slots_still_enabled` until step one is done.
 - **Withdraw ends a Promotion with `feature_withdrawn` and records a full refund of its unused whole days.** Today counts as used, a scheduled Promotion is refunded in full and a complimentary one has nothing to refund. Each Organizer gets the P2B email, and each end and refund writes an audit row.
-- **Withdraw records the refund only; it moves no money.** For a Stripe-paid Promotion, issue the card refund in Stripe. Unpaid checkouts void themselves as usual.
+- **Withdraw refunds a card-paid Promotion through Stripe.** It refunds first and ends only on success; a Stripe refusal is a 502, or `refund_provider_failed` in `skipped` for withdraw-all, and the Promotion stays paid. A bank-paid refund is recorded only. Each withdraw-all Promotion commits on its own.
 - **Resume selling only after a written change that addresses the cause,** recorded on a new issue. A problem with one Promotion, such as an upheld report, is already handled by `report_takedown` ending it early.
 
 ## Scheduled Jobs

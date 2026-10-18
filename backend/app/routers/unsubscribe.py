@@ -14,6 +14,7 @@ from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from itsdangerous import BadSignature, SignatureExpired
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.tokens import verify_ads_off_token, verify_unsubscribe_token
@@ -30,7 +31,7 @@ from app.constants.rate_limits import RATE_LIMIT_UNSUBSCRIBE
 from app.db import get_db
 from app.email.consent import grant_ad_consent, withdraw_ad_consent
 from app.email.subscription import set_digest_subscription
-from app.models.models import User
+from app.models.models import EmailAdConsentLog, User
 from app.rate_limit import limiter
 from app.auth.utils import mask_email
 
@@ -119,8 +120,24 @@ async def ads_on(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Undo ads-off with the same token: a grant logged as `email_link_undo` at
-    the current wording version. 409 unless the digest and the slot flag are on."""
+    the current wording version. Only a user whose latest consent-log row is an
+    `email_link` withdrawal can be granted this way; anyone else (never
+    consented, or withdrew in Settings) gets the invalid-link 400 and nothing
+    changes. 409 unless the digest and the slot flag are on."""
     user = await _load_user_from_token(token, db, verify_ads_off_token)
+    if user.email_ad_consent:
+        return {"ok": True, "email": mask_email(user.email)}  # already on: idempotent
+    latest = await db.scalar(
+        select(EmailAdConsentLog)
+        .where(EmailAdConsentLog.user_id == user.id)
+        .order_by(EmailAdConsentLog.created_at.desc(), EmailAdConsentLog.id.desc())
+        .limit(1)
+    )
+    if latest is None or latest.granted or latest.source != CONSENT_SOURCE_EMAIL_LINK:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=ERROR_UNSUBSCRIBE_LINK_INVALID,
+        )
     if not (user.email_digest_opt_in and settings.PROMOTIONS_SLOTS_ENABLED):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

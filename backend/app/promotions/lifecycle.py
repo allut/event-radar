@@ -38,10 +38,14 @@ from app.constants.promotions import (
     PROMOTION_ERROR_REPOINT_NOT_SAME_GROUP,
     PROMOTION_ERROR_REPOINT_SAME_EVENT,
     PROMOTION_ERROR_REPOINT_TARGET_NOT_FOUND,
+    PROMOTION_ERROR_STRIPE_DATES_LOCKED,
     PROMOTION_HOLDING_STATUSES,
     PROMOTION_INVOICE_REFERENCE_RE,
     PROMOTION_INVOICE_SOURCE_MANUAL,
     PROMOTION_INVOICE_SOURCE_STRIPE,
+    PROMOTION_REFUND_IDEMPOTENCY_KEY,
+    PROMOTION_REFUND_NOTE_LABEL_CREDIT_NOTE,
+    PROMOTION_REFUND_NOTE_LABEL_REFUND,
     PROMOTION_REGISTRY_CODE_RE,
     PROMOTION_SNAPSHOT_TRIGGER_EDIT,
     PROMOTION_SNAPSHOT_TRIGGER_MARK_PAID,
@@ -187,7 +191,8 @@ async def edit_promotion(
 
     Before the start date: the dates (window, overlap and cap rechecked
     against the other Promotions, price recomputed), advertiser details and
-    invoice reference. While live: only an earlier end date, never before
+    invoice reference. A card-paid Promotion's dates are refused: the price
+    charged is fixed. While live: only an earlier end date, never before
     today; the price paid stays on the row (a refund is recorded separately).
     A finished, ended or void Promotion cannot be edited. Takes a content
     snapshot, because an edit can change what the Promotion displays."""
@@ -215,6 +220,11 @@ async def edit_promotion(
         promotion.end_date = new_end
         promotion.days = window_days(promotion.start_date, new_end)
     else:
+        if promotion.invoice_source == PROMOTION_INVOICE_SOURCE_STRIPE and (
+            {"start_date", "end_date"} & set(diff)
+        ):
+            # The card charge fixed the price, and every refund is capped by it.
+            raise _refuse(PROMOTION_ERROR_STRIPE_DATES_LOCKED)
         violations = _field_violations(promotion, diff)
         if "start_date" in diff or "end_date" in diff:
             start = diff.get("start_date", promotion.start_date)
@@ -349,8 +359,10 @@ async def record_refund(
 
     An off-platform payment is only recorded. A Stripe-paid one is issued:
     `gateway.refund()` makes the credit note (reversing the VAT) and the card
-    refund in one call, and the credit note and refund ids go into the note. A
-    provider failure raises `PaymentProviderError` and writes nothing."""
+    refund in one call, and the credit note and refund ids go into the note. That
+    call runs between two transactions, outside the cap lock: the session is
+    committed first, then the row is re-locked to record the refund. A provider
+    failure raises `PaymentProviderError` and records nothing."""
     cleaned = (note or "").strip()
     promotion = await _load_locked(db, promotion_id)
     if amount_cents <= 0:
@@ -372,19 +384,34 @@ async def record_refund(
         if gateway is None or not promotion.stripe_payment_intent_id:
             raise _refuse(PROMOTION_ERROR_REFUND_NOT_PAID)
         vat_part = split_vat_cents(amount_cents, promotion.vat_rate_percent)
-        result = await gateway.refund(
-            RefundRequest(
-                payment_intent_id=promotion.stripe_payment_intent_id,
-                invoice_id=promotion.stripe_invoice_id,
-                net_cents=amount_cents - vat_part,
-                vat_cents=vat_part,
-                tax_rate_id=settings.STRIPE_TAX_RATE_ID,
-                reason=cleaned,
-                idempotency_key=f"refund-{promotion.id}-{promotion.refunded_cents}-{amount_cents}",
-                metadata={"promotion_id": str(promotion.id)},
-            )
+        request = RefundRequest(
+            payment_intent_id=promotion.stripe_payment_intent_id,
+            invoice_id=promotion.stripe_invoice_id,
+            net_cents=amount_cents - vat_part,
+            vat_cents=vat_part,
+            tax_rate_id=settings.STRIPE_TAX_RATE_ID,
+            reason=cleaned,
+            idempotency_key=PROMOTION_REFUND_IDEMPOTENCY_KEY.format(
+                promotion_id=promotion.id,
+                refunded_cents=promotion.refunded_cents,
+                amount_cents=amount_cents,
+            ),
+            metadata={"promotion_id": str(promotion.id)},
         )
-        refs = [f"{label} {ref}" for label, ref in (("credit note", result.credit_note_id), ("refund", result.refund_id)) if ref]
+        # The network call runs with no lock held. The commit releases the cap
+        # and row locks (and keeps whatever the caller already wrote); a retry
+        # after a crash replays the same idempotency key, so Stripe refunds once.
+        await db.commit()
+        result = await gateway.refund(request)
+        promotion = await _load_locked(db, promotion_id)
+        refs = [
+            f"{label} {ref}"
+            for label, ref in (
+                (PROMOTION_REFUND_NOTE_LABEL_CREDIT_NOTE, result.credit_note_id),
+                (PROMOTION_REFUND_NOTE_LABEL_REFUND, result.refund_id),
+            )
+            if ref
+        ]
         recorded = f"{cleaned} ({', '.join(refs)})" if refs else cleaned
     promotion.refunded_cents += amount_cents
     promotion.refund_note = f"{promotion.refund_note}\n{recorded}" if promotion.refund_note else recorded

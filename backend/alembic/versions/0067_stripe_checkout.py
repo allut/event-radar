@@ -2,7 +2,7 @@
 map and the processed webhook event ids.
 
 Revision ID: 0067
-Revises: 0065
+Revises: 0066
 Create Date: 2026-10-17
 """
 

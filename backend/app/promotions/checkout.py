@@ -2,7 +2,8 @@
 
 Three short transactions, never one long one: (1) recheck everything and insert
 the `unpaid` Promotion under the cap lock, which holds its days; (2) find or
-create the Stripe Customer for (Organizer, registry code); (3) open the session
+create the Stripe Customer for (Organizer, registry code), updating a reused one
+to this checkout's billing email and legal name; (3) open the session
 and store its id. The Stripe calls run outside the cap lock. If Stripe fails
 the hold is voided at once, and a crash in between leaves a hold the expiry
 sweep voids an hour after its expiry. The caller's session is committed here.
@@ -10,7 +11,7 @@ sweep voids an hour after its expiry. The caller's session is committed here.
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -58,6 +59,11 @@ from app.promotions.registry_check import verified_legal_name
 from app.promotions.windows import window_days
 
 log = logging.getLogger(__name__)
+
+
+def _clock() -> datetime:
+    """A fresh read of the clock, for the session expiry (tests pin it)."""
+    return datetime.now(timezone.utc)
 
 
 class CheckoutRefused(Exception):
@@ -115,6 +121,10 @@ async def _stripe_customer(
         )
     )
     if existing is not None:
+        # This checkout's billing email and the register's current name win,
+        # so the invoice goes to the address the Organizer just gave. We store
+        # neither, so a reused Customer is always updated (one idempotent call).
+        await gateway.update_customer(existing, email, legal_name)
         return existing
     created = await gateway.create_customer(
         CustomerRequest(
@@ -216,16 +226,16 @@ async def start_checkout(
             db, gateway, organizer, registry_code, legal_name, billing_email
         )
         await db.commit()
+        expires_at = _clock() + timedelta(
+            minutes=PROMOTION_CHECKOUT_SESSION_MINUTES,
+            seconds=PROMOTION_CHECKOUT_EXPIRY_MARGIN_SECONDS,
+        )
         session = await gateway.create_checkout_session(
             CheckoutSessionRequest(
                 customer_id=customer_id,
                 promotion_id=promotion_id,
                 locale=organizer.locale,
-                expires_at=now
-                + timedelta(
-                    minutes=PROMOTION_CHECKOUT_SESSION_MINUTES,
-                    seconds=PROMOTION_CHECKOUT_EXPIRY_MARGIN_SECONDS,
-                ),
+                expires_at=expires_at,
                 net_cents=net_cents,
                 tax_rate_id=settings.STRIPE_TAX_RATE_ID,
                 product_name=STRIPE_PRODUCT_NAME_TEMPLATE.format(
@@ -244,7 +254,6 @@ async def start_checkout(
                         f"{data.start_date.isoformat()} to {data.end_date.isoformat()}"
                     ),
                 },
-                customer_email=billing_email,
             )
         )
     except PaymentProviderError:

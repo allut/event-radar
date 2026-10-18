@@ -9,7 +9,7 @@ import {
   PROMOTION_REASON_ROWS,
   PROMOTION_REGISTRY_CODE_RE,
 } from '../../constants/promotions';
-import { formatEuro, isIsoDay, parseEuroToCents, restrictionTag, type PromotionDetail } from '../../lib/promotions';
+import { formatEuro, isIsoDay, isStripePaid, parseEuroToCents, restrictionTag, type PromotionDetail } from '../../lib/promotions';
 import { PROMOTION_STRIPE_COPY as STRIPE } from '../../constants/promotions';
 import { tallinnToday, toDateStr } from '../../utils';
 import styles from './AdminPromotionDetail.module.css';
@@ -111,6 +111,8 @@ export function MarkPaidPanel({ detail, serverError, pending, run, onCancel, pos
 export function EditPanel({ detail, serverError, pending, run, onCancel, patch }: PanelProps) {
   const id = useId();
   const full = detail.actions.edit_scope === PROMOTION_EDIT_SCOPE.full;
+  // The price paid caps every card refund, so a card-paid window stays fixed.
+  const datesLocked = full && isStripePaid(detail);
   const [start, setStart] = useState(detail.start_date);
   const [end, setEnd] = useState(detail.end_date);
   const [name, setName] = useState(detail.advertiser_legal_name);
@@ -125,8 +127,8 @@ export function EditPanel({ detail, serverError, pending, run, onCancel, patch }
 
   function submit() {
     const body: Record<string, string | null> = {};
-    if (full && start !== detail.start_date) body.start_date = start;
-    if (end !== detail.end_date) body.end_date = end;
+    if (full && !datesLocked && start !== detail.start_date) body.start_date = start;
+    if (!datesLocked && end !== detail.end_date) body.end_date = end;
     if (full) {
       if (name.trim() !== detail.advertiser_legal_name) body.advertiser_legal_name = name.trim();
       if (registry.trim() !== detail.advertiser_registry_code) body.advertiser_registry_code = registry.trim();
@@ -151,7 +153,7 @@ export function EditPanel({ detail, serverError, pending, run, onCancel, patch }
   return (
     <PanelShell
       heading={full ? COPY.editFullHeading : COPY.editShortenHeading}
-      note={full ? COPY.editFullNote : COPY.editShortenNote}
+      note={datesLocked ? STRIPE.datesLocked : full ? COPY.editFullNote : COPY.editShortenNote}
       error={error ?? serverError}
       confirmLabel="Save changes"
       pending={pending}
@@ -167,7 +169,7 @@ export function EditPanel({ detail, serverError, pending, run, onCancel, patch }
           required
           value={start}
           max={detail.event.last_day}
-          disabled={!full}
+          disabled={!full || datesLocked}
           onChange={setStart}
         />
       </Field>
@@ -181,6 +183,7 @@ export function EditPanel({ detail, serverError, pending, run, onCancel, patch }
           value={end}
           min={endMin}
           max={full ? detail.event.last_day : detail.end_date}
+          disabled={datesLocked}
           onChange={setEnd}
         />
       </Field>

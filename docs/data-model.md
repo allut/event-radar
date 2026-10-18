@@ -181,6 +181,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **`promotions.daily5_reach` is the Daily 5 reach** (migration 0063): NULL until the nightly build computes it, then frozen after the window ends.
 - **`daily_sponsored_slots` holds one row per user per Tallinn day** (migration 0063), unique on `(user_id, slot_date)`. It stores the Daily 5 Sponsored slot apart from `daily_feeds`. Columns: `promotion_id` (NULL when a swap found nothing left), `is_swap` and `replaced_promotion_id`. It cascades with the user and is pruned on `DAILY_FEEDS_RETENTION_DAYS`.
 - **Lifecycle commands live in `app/promotions/lifecycle.py`.** Each takes the cap lock, then a `FOR UPDATE` lock on the row, so it serializes against grants and other commands. Only `unpaid -> paid`, `unpaid -> void` and `paid -> ended_early` change `status`.
+- **A Stripe refund holds no lock during the network call.** It commits first and re-locks after. A card-paid Promotion's dates cannot be edited, because the price charged caps every refund.
 - **Mark paid is allowed while today (Tallinn) is before `start_date`.**
 - **Edit before the start date rechecks window, overlap and cap against the other Promotions** (the row never collides with itself) and recomputes `days` and `net_price_cents`.
 - **While live, edit only moves `end_date` earlier and never before today.** The price paid stays on the row, and a refund is recorded separately. A finished, ended or void row is not editable.

@@ -5,8 +5,13 @@ full refund of its unused whole days. Today counts as used, so a live
 Promotion keeps today; a scheduled one is refunded in full. A complimentary
 Promotion has nothing to refund. The caller adds the audit rows, commits and
 emails the Organizer.
+
+A card-paid Promotion is refunded through the payment gateway. That call
+commits the session, so the refund runs first and the Promotion ends only once
+it succeeded; a provider failure leaves the Promotion paid and untouched.
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -15,14 +20,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.promotions import (
     PROMOTION_END_REASON_FEATURE_WITHDRAWN,
+    PROMOTION_ERROR_REFUND_PROVIDER,
+    PROMOTION_INVOICE_SOURCE_STRIPE,
     PROMOTION_STATUS_PAID,
     PROMOTION_WITHDRAWN_NOTE,
     PROMOTION_WITHDRAWN_REFUND_NOTE,
 )
 from app.models.models import Promotion
 from app.promotions.grant import PromotionRefused, vat_cents
-from app.promotions.lifecycle import end_early, record_refund
+from app.integrations.payments import PaymentGateway, PaymentProviderError
+from app.promotions.lifecycle import PromotionNotFound, end_early, record_refund
 from app.promotions.windows import tallinn_today
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -63,11 +73,33 @@ def refund_for_unused(promotion: Promotion, unused: int) -> int:
 
 
 async def withdraw_promotion(
-    db: AsyncSession, promotion_id: int, now: datetime
+    db: AsyncSession,
+    promotion_id: int,
+    now: datetime,
+    gateway: PaymentGateway | None = None,
 ) -> WithdrawResult:
     """End one paid, unfinished Promotion with `feature_withdrawn` and record
-    the refund. Raises `PromotionRefused` (nothing written) when it is not
-    `paid` or already finished."""
+    the refund (issued through `gateway` when it was paid by card). Raises
+    `PromotionRefused` (nothing written) when it is not `paid` or already
+    finished, and `PaymentProviderError` when Stripe refuses (it stays paid)."""
+    today = tallinn_today(now)
+    current = await db.get(Promotion, promotion_id, populate_existing=True)
+    if current is None:
+        raise PromotionNotFound(promotion_id)
+    card_paid = (
+        current.invoice_source == PROMOTION_INVOICE_SOURCE_STRIPE
+        and current.status == PROMOTION_STATUS_PAID
+        and today <= current.end_date
+    )
+    if card_paid:
+        # record_refund commits around the Stripe call, so refund before ending:
+        # a failed refund then leaves a paid Promotion, never an ended unrefunded one.
+        unused = unused_days(current, today)
+        refund = refund_for_unused(current, unused)
+        if refund > 0:
+            await record_refund(
+                db, promotion_id, refund, PROMOTION_WITHDRAWN_REFUND_NOTE, now, gateway=gateway
+            )
     promotion = await end_early(
         db,
         promotion_id,
@@ -75,17 +107,22 @@ async def withdraw_promotion(
         now,
         end_reason=PROMOTION_END_REASON_FEATURE_WITHDRAWN,
     )
-    unused = unused_days(promotion, tallinn_today(now))
-    refund = refund_for_unused(promotion, unused)
-    if refund > 0:
-        await record_refund(db, promotion.id, refund, PROMOTION_WITHDRAWN_REFUND_NOTE, now)
+    if not card_paid:
+        unused = unused_days(promotion, today)
+        refund = refund_for_unused(promotion, unused)
+        if refund > 0:
+            await record_refund(db, promotion.id, refund, PROMOTION_WITHDRAWN_REFUND_NOTE, now)
     return WithdrawResult(promotion, unused, refund)
 
 
-async def withdraw_all(db: AsyncSession, now: datetime) -> WithdrawAllResult:
+async def withdraw_all(
+    db: AsyncSession, now: datetime, gateway: PaymentGateway | None = None
+) -> WithdrawAllResult:
     """Withdraw every paid Promotion that has not finished. One failing
-    Promotion is rolled back to its savepoint and listed in `skipped`, so it
-    never blocks the rest. The id list is one query."""
+    Promotion is listed in `skipped` (a refused one wrote nothing; a card
+    refund Stripe refused leaves it paid), so it never blocks the rest. Each
+    Promotion is committed on its own, because a card refund commits. The id
+    list is one query."""
     today = tallinn_today(now)
     ids = (
         await db.scalars(
@@ -97,10 +134,11 @@ async def withdraw_all(db: AsyncSession, now: datetime) -> WithdrawAllResult:
     result = WithdrawAllResult()
     for promotion_id in ids:
         try:
-            async with db.begin_nested():
-                result.withdrawn.append(await withdraw_promotion(db, promotion_id, now))
+            result.withdrawn.append(await withdraw_promotion(db, promotion_id, now, gateway))
         except PromotionRefused as refused:
-            result.skipped.append(
-                {"id": promotion_id, "code": refused.violations[0].code}
-            )
+            result.skipped.append({"id": promotion_id, "code": refused.violations[0].code})
+        except PaymentProviderError:
+            log.error("Withdraw refund refused by Stripe (promotion_id=%s)", promotion_id, exc_info=True)
+            result.skipped.append({"id": promotion_id, "code": PROMOTION_ERROR_REFUND_PROVIDER})
+        await db.commit()  # one Promotion per transaction; also frees the locks
     return result

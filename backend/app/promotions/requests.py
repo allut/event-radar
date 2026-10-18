@@ -40,6 +40,7 @@ from app.events.queries import (
     public_event_filter,
 )
 from app.models.models import Event, Promotion, PromotionRequest
+from app.promotions.cap import lock_cap
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion, validate_grant
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.registry import is_valid_registry_checksum
@@ -186,6 +187,9 @@ async def grant_request(
     transaction. The dates and fields come from the admin's form (prefilled
     from the request, editable). Refused when the request is not pending or its
     Organizer no longer owns the event. Nothing is emailed."""
+    # Cap lock first, then the row lock: the sweep takes them in that order
+    # too (lifecycle._load_locked), so the two can never wait on each other.
+    await lock_cap(db)
     request = await _load_locked(db, request_id)
     if request is None:
         raise RequestNotFound(request_id)
