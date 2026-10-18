@@ -121,6 +121,11 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 - **The sweep emails the Organizer after its commit for every automatic end, never for the void.** The notes are in `PROMOTION_AUTO_END_NOTES`. A dormant claim or a lost dedup collision never ends a Promotion. The query count stays fixed however many Promotions exist.
 - **`GET /admin/promotions/{id}` is the Promotion detail,** and `POST .../{id}/mark-paid|repoint|end|void|refund` plus `PATCH .../{id}` are its commands. Each runs under the cap lock, writes its audit row in the same transaction (409 for a state conflict, 422 for bad input, 404 for a missing row) and returns the refreshed detail.
 - **`GET /admin/promotions/trust` is the Trust panel, and `POST /admin/promotions/complaints` logs a complaint.** `POST .../{id}/withdraw` and `POST /admin/promotions/withdraw-all` run Withdraw. See Promotions: Trust Review and Withdrawal.
+- **`GET /admin/promotion-requests` is the request queue** (`status` defaults to `pending`). It returns `pending_count`, and each pending row carries `not_eligible_reason` and its event's `promotion_restriction`. The path avoids `/promotions/requests`, which `/promotions/{id}` would shadow.
+- **`POST /admin/promotion-requests/{id}/grant` takes the grant body,** with dates editable. It creates the Promotion and marks the request `granted` in one transaction and audits `promotion_request_grant`. It emails no one.
+- **`POST /admin/promotion-requests/{id}/decline` needs a `reason`,** emails it to the Organizer in their locale after the commit and audits `promotion_request_decline`.
+- **`sweep_promotions` also expires pending requests,** without email. See [organizer-portal.md](organizer-portal.md)'s Promotions section.
+- **`PROMOTIONS_OFFER_ENABLED` stays off until the switchover checklist is done.** It gates the organizer routes only.
 - **End and void email the Organizer's reason after the commit.** A failed send is logged and never undoes the command.
 - **Every `/admin/*` route is rate-limited.** See [security.md](security.md)'s Rate Limiting section.
 

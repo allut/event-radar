@@ -113,6 +113,7 @@ from app.routers.organizer_claims import router as organizer_claims_router
 from app.routers.organizer_contact import router as organizer_contact_router
 from app.routers.organizer_events import router as organizer_events_router
 from app.routers.organizer_profile import router as organizer_profile_router
+from app.routers.organizer_promotions import router as organizer_promotions_router
 from app.routers.organizer_venues import router as organizer_venues_router
 from app.routers.public import router as public_router
 from app.routers.reports import router as reports_router
@@ -796,6 +797,7 @@ app.include_router(organizer_claims_router)
 app.include_router(organizer_contact_router)
 app.include_router(organizer_events_router)
 app.include_router(organizer_profile_router)
+app.include_router(organizer_promotions_router)
 app.include_router(organizer_venues_router)
 app.include_router(public_router)
 app.include_router(reports_router)

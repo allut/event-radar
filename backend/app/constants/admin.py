@@ -49,6 +49,10 @@ ADMIN_ACTION_PROMOTION_COMPLAINT = "promotion_complaint"
 # Written by the automatic sweep (#602), not by an admin.
 ADMIN_ACTION_PROMOTION_SYSTEM_VOID = "promotion_system_void"
 ADMIN_ACTION_PROMOTION_SYSTEM_END = "promotion_system_end"
+# Promotion requests (#615): the target is the request id, not a Promotion id,
+# so these stay out of PROMOTION_ADMIN_ACTIONS (the Promotion detail's audit).
+ADMIN_ACTION_PROMOTION_REQUEST_GRANT = "promotion_request_grant"
+ADMIN_ACTION_PROMOTION_REQUEST_DECLINE = "promotion_request_decline"
 PROMOTION_ADMIN_ACTIONS = frozenset(
     {
         ADMIN_ACTION_PROMOTION_GRANT,

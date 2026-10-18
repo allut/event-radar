@@ -77,6 +77,7 @@ from app.constants.rate_limits import RATE_LIMIT_BROWSE, RATE_LIMIT_SUBMIT
 from app.constants.reports import REPORT_AUTO_RESOLVE_NOTE
 from app.constants.security import URL_MAX_LEN
 from app.db import get_db
+from app.promotions.organizer_view import promotion_flags_for
 from app.promotions.restriction import reassess_after_edit
 from app.promotions.windows import now_tallinn
 from app.ingestion.adapter import NormalizedEvent, insert_normalized_event
@@ -599,8 +600,12 @@ async def list_own_events(
         .offset(offset)
     )
     events = (await db.scalars(stmt)).all()
+    flags = await promotion_flags_for(db, current_organizer.id, events)
     return {
-        "events": [_serialize_own_event(e, effective_locale) for e in events],
+        "events": [
+            {**_serialize_own_event(e, effective_locale), **flags.get(e.id, {})}
+            for e in events
+        ],
         "total": total,
         "limit": limit,
         "offset": offset,

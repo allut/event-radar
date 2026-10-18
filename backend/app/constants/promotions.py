@@ -105,6 +105,15 @@ PROMOTION_ERROR_CLEARANCE_REQUIRED = "restriction_clearance_required"
 PROMOTION_ERROR_CLEARANCE_NOTE_REQUIRED = "restriction_clearance_note_required"
 PROMOTION_ERROR_CLEARANCE_NOT_NEEDED = "restriction_not_flagged"
 
+# Request-path rule codes beyond the grant ones.
+PROMOTION_ERROR_REQUEST_PENDING = "request_pending"
+PROMOTION_ERROR_TERMS_NOT_ACCEPTED = "terms_not_accepted"
+PROMOTION_ERROR_REGISTRY_CHECKSUM = "registry_code_checksum"
+PROMOTION_ERROR_NOT_PROMOTABLE = "not_promotable"
+PROMOTION_ERROR_REQUEST_NOT_PENDING = "request_not_pending"
+PROMOTION_ERROR_REQUEST_DAILY_LIMIT = "daily_request_limit"
+PROMOTION_ERROR_REQUEST_OWNER_CHANGED = "request_owner_changed"
+
 # Codes that mean "the state of things forbids this" (HTTP 409); every other
 # code is a bad input (HTTP 422).
 PROMOTION_CONFLICT_ERROR_CODES = frozenset(
@@ -112,6 +121,10 @@ PROMOTION_CONFLICT_ERROR_CODES = frozenset(
         PROMOTION_ERROR_NO_OWNER,
         PROMOTION_ERROR_OVERLAP,
         PROMOTION_ERROR_CAP_EXCEEDED,
+        PROMOTION_ERROR_REQUEST_PENDING,
+        PROMOTION_ERROR_NOT_PROMOTABLE,
+        PROMOTION_ERROR_REQUEST_NOT_PENDING,
+        PROMOTION_ERROR_REQUEST_OWNER_CHANGED,
         PROMOTION_ERROR_INVALID_TRANSITION,
         PROMOTION_ERROR_ALREADY_STARTED,
         PROMOTION_ERROR_NOT_EDITABLE,
@@ -133,6 +146,13 @@ PROMOTION_ERROR_MESSAGES = {
     PROMOTION_ERROR_CAP_EXCEEDED: f"More than {PROMOTION_LIVE_CAP} Promotions would be live on a day in this window.",
     PROMOTION_ERROR_NOTE_REQUIRED: "A complimentary Promotion needs a note.",
     PROMOTION_ERROR_INVALID_REGISTRY_CODE: "The registry code must be 8 digits.",
+    PROMOTION_ERROR_REGISTRY_CHECKSUM: "That is not a valid Estonian registry code.",
+    PROMOTION_ERROR_REQUEST_PENDING: "This event already has a pending Promotion request.",
+    PROMOTION_ERROR_TERMS_NOT_ACCEPTED: "The Organizer terms must be accepted.",
+    PROMOTION_ERROR_NOT_PROMOTABLE: "This event cannot be promoted right now.",
+    PROMOTION_ERROR_REQUEST_NOT_PENDING: "The request is no longer pending.",
+    PROMOTION_ERROR_REQUEST_OWNER_CHANGED: "The requesting Organizer no longer owns this event.",
+    PROMOTION_ERROR_REQUEST_DAILY_LIMIT: "Too many Promotion requests today.",
     PROMOTION_ERROR_INVALID_INVOICE_REFERENCE: f"The invoice reference must start with {PROMOTION_INVOICE_PREFIX}.",
     PROMOTION_ERROR_INVOICE_ON_COMPLIMENTARY: "A complimentary Promotion has no invoice.",
     PROMOTION_ERROR_INVALID_TRANSITION: "This Promotion's status does not allow that action.",
@@ -295,3 +315,44 @@ PROMOTION_WITHDRAWN_NOTE = (
 PROMOTION_WITHDRAWN_REFUND_NOTE = "Feature withdrawn: unused days refunded in full."
 # Withdraw is refused while the slots flag is still on.
 ERROR_PROMOTION_SLOTS_STILL_ENABLED = "slots_still_enabled"
+# Organizer offer and Promotion requests (#614, #615).
+# Version of the Organizer terms an Organizer accepts on a request (#613 ships
+# the legal page; bump this when the terms change in substance).
+ORGANIZER_TERMS_VERSION = 1
+# Soft per-Organizer ceiling on new requests per Tallinn day.
+ORGANIZER_DAILY_PROMOTION_REQUEST_CAP = 10
+PROMOTION_REQUEST_STATUS_PENDING = "pending"
+PROMOTION_REQUEST_STATUS_GRANTED = "granted"
+PROMOTION_REQUEST_STATUS_DECLINED = "declined"
+PROMOTION_REQUEST_STATUS_WITHDRAWN = "withdrawn"
+PROMOTION_REQUEST_STATUS_EXPIRED = "expired"
+VALID_PROMOTION_REQUEST_STATUSES = frozenset(
+    {
+        PROMOTION_REQUEST_STATUS_PENDING,
+        PROMOTION_REQUEST_STATUS_GRANTED,
+        PROMOTION_REQUEST_STATUS_DECLINED,
+        PROMOTION_REQUEST_STATUS_WITHDRAWN,
+        PROMOTION_REQUEST_STATUS_EXPIRED,
+    }
+)
+PROMOTION_DECLINE_REASON_MAX_CHARS = 1000
+# Sold-out days are listed for this many days after the earliest start.
+PROMOTION_UNAVAILABLE_HORIZON_DAYS = 90
+ADMIN_PROMOTION_REQUESTS_PAGE_SIZE = 50
+
+# What the Organizer's Promotions list calls each row (plain-word labels are
+# frontend strings keyed by these codes).
+PROMOTION_LIST_REQUESTED = "requested"
+PROMOTION_LIST_DECLINED = "declined"
+PROMOTION_LIST_AWAITING_PAYMENT = "awaiting_payment"
+PROMOTION_LIST_SCHEDULED = "scheduled"
+PROMOTION_LIST_LIVE = "live"
+PROMOTION_LIST_PAUSED = "paused"
+PROMOTION_LIST_FINISHED = "finished"
+PROMOTION_LIST_ENDED_EARLY = "ended_early"
+PROMOTION_LIST_CANCELLED = "cancelled"
+ERROR_PROMOTION_REQUEST_NOT_FOUND = "promotion request not found"
+ERROR_PROMOTION_OFFER_DISABLED = "Not Found"
+ERROR_PROMOTION_REQUEST_INVALID_STATUS = (
+    "status must be one of pending, granted, declined, withdrawn, expired"
+)

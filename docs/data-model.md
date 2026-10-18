@@ -190,13 +190,15 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **A Restriction clearance is four columns on `promotions`:** `restriction_cleared`, `restriction_clearance_by`, `restriction_clearance_note`, `restriction_cleared_at` (migration 0065). It covers only the restriction it names. A grant of a restricted event needs the checkbox and a note, and `POST .../{id}/clear-restriction` clears a newly flagged one.
 - **`promotion_snapshots` is append-only and never pruned.** `app/promotions/snapshots.py::take_snapshot()` stores the title in et/en/ru, a 300-character description excerpt, image URL, venue, event dates, the Promotion's dates and net price, and the caption text (`REKLAAM · {advertiser}`).
 - **A snapshot's `trigger` is `grant`, `mark_paid`, `edit` or `repoint`.** `grant` is a complimentary grant, which is born paid. A priced grant takes none until it is paid, and every edit takes one, scheduled or live.
-- **Later tickets add the Stripe, clearance, attestation and reach columns,** and the request and daily-stats tables.
+- **`promotion_requests` holds an Organizer's request** (migration 0066): event, Organizer, window, advertiser name and registry code, billing email, note, `status`, `decline_reason`, `resolved_by`, the terms version and time. A partial unique index allows one `pending` row per event.
+- **`status` is `pending`, `granted`, `declined`, `withdrawn` or `expired`.** Granting sets `promotions.source_request_id` in the same transaction.
+- **Later tickets add the Stripe, attestation and checkout columns.**
 
 ### Moderation and Audit
 
 - **`event_reports` holds user-filed content reports from `POST /reports`.** Admins resolve them or take the event down through `/admin/reports`; a takedown cancels the event with `cancellation_reason = report_takedown`. See `CONTEXT.md`'s Content Moderation glossary.
 - **`event_reports.is_illegal_allegation` is legal-sensitive.** It is one reason `/admin/reports` is session-only.
-- **`admin_actions` is a durable audit row per console action,** `promotion_grant`, `promotion_mark_paid`, `promotion_edit`, `promotion_repoint`, `promotion_end`, `promotion_void` and `promotion_refund` included, written by `log_admin_action()` in the same transaction as the mutation. See [backend-ops.md](backend-ops.md)'s Audit Logging section.
+- **`admin_actions` is a durable audit row per console action,** `promotion_grant`, `promotion_mark_paid`, `promotion_edit`, `promotion_repoint`, `promotion_end`, `promotion_void`, `promotion_refund`, `promotion_request_grant` and `promotion_request_decline` included (the request audit target is the request id), written by `log_admin_action()` in the same transaction as the mutation. See [backend-ops.md](backend-ops.md)'s Audit Logging section.
 - **The boot-time `assert_schema_at_head` guard exists because of this table.** Its migration (0030) went unapplied in production, and every audited admin action returned 500.
 
 ## Migrations

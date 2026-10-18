@@ -133,6 +133,15 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 - **A Series claim resolves only ingested, dedup-canonical, non-cancelled events** (`app/claims/pinning.py::series_claim_event_filter()`). Its path and body `event_id` must equal the resolved representative.
 - **Pending claims resolve through one guarded UPDATE.** `app/claims/lifecycle.py::transition_pending_claim()` runs `WHERE status='pending' ... RETURNING` for admin grant, admin decline and `recheck_claim`. The loser of a race gets 409 and sends no email.
 
+## Promotions
+
+[organizer-portal.md](organizer-portal.md)'s Promotions section has the flows. These are the guards on the endpoints.
+
+- **`/organizer/promotions/*` sits on the organizer track** (`get_current_organizer`) and returns 404 while `PROMOTIONS_OFFER_ENABLED` is off. Reads use `RATE_LIMIT_BROWSE`; request create and withdraw use `RATE_LIMIT_SUBMIT`.
+- **Ownership is checked on every event and report read.** Another Organizer's event, request or Promotion is a 404, so ids cannot be probed.
+- **Sold-out days leave the server as dates only.** Counts and other Organizers' figures never appear, and the per-day report carries no viewer identifiers.
+- **`/admin/promotion-requests*` shares the admin buckets** (`RATE_LIMIT_ADMIN` for grant and decline, `RATE_LIMIT_BROWSE` for the list). The decline reason is stored and emailed as plain text, HTML-escaped in the email.
+
 ## Inbound Mail Webhook
 
 - **`routers/webhooks.py::inbound_mail()` verifies Resend's Svix HMAC-SHA256** over `"{svix-id}.{svix-timestamp}.{raw body}"` with `settings.RESEND_WEBHOOK_SECRET`. The `SVIX_*` header constants live in `app/constants/email.py`.

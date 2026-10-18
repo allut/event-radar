@@ -1220,6 +1220,69 @@ class Promotion(Base):
     # Distinct users the Daily 5 slot was stored for over the window. Recomputed
     # nightly by build_daily_feeds and frozen once the window has ended (#607).
     daily5_reach: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The Promotion request an admin granted this from (#615); NULL for a
+    # direct grant.
+    source_request_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("promotion_requests.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    event: Mapped["Event"] = relationship()
+    organizer: Mapped["Organizer"] = relationship()
+
+
+class PromotionRequest(Base):
+    """An Organizer's request for a Promotion on an event they own (#614). An
+    admin grants it (creating the Promotion, #615) or declines it with a reason.
+    `status` is pending | granted | declined | withdrawn | expired. At most one
+    pending request per event (partial unique index). See docs/organizer-portal.md."""
+
+    __tablename__ = "promotion_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'granted', 'declined', 'withdrawn', 'expired')",
+            name="ck_promotion_requests_status",
+        ),
+        CheckConstraint("end_date >= start_date", name="ck_promotion_requests_window_order"),
+        Index(
+            "uq_promotion_requests_one_pending_per_event",
+            "event_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+        Index("ix_promotion_requests_organizer_id", "organizer_id", "created_at"),
+        Index("ix_promotion_requests_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    event_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("events.id", ondelete="RESTRICT"), nullable=False
+    )
+    organizer_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("organizers.id", ondelete="RESTRICT"), nullable=False
+    )
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    advertiser_legal_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    advertiser_registry_code: Mapped[str] = mapped_column(String(32), nullable=False)
+    billing_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    decline_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # "admin" once an admin resolved it (no admins table, ADR 0001).
+    resolved_by: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    terms_version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    terms_accepted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

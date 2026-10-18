@@ -7,8 +7,12 @@ when its event is cancelled (carrying the cancellation cause over as
 those only pause it through the fill gate. Each change writes a system audit
 row; the Organizer is emailed after the commit, except for the silent void.
 
+Pending Promotion requests expire here too (``requests.expire_requests``),
+without an email.
+
 The query count is fixed whatever the number of Promotions: the cap lock, one
-SELECT per status, the two owner queries, one Organizer lookup and the flush.
+SELECT per status, the two owner queries, one Organizer lookup, the request
+expiry (one SELECT and two owner queries) and the flush.
 """
 
 import logging
@@ -39,6 +43,7 @@ from app.events.localize import resolve_title
 from app.models.models import AdminAction, Event, Organizer, Promotion
 from app.promotions.cap import lock_cap
 from app.promotions.owners import resolve_owner_ids
+from app.promotions.requests import expire_requests
 from app.promotions.windows import now_tallinn, tallinn_today
 
 log = logging.getLogger(__name__)
@@ -129,6 +134,7 @@ async def sweep_promotions(db: AsyncSession, now: datetime | None = None) -> dic
             o.id: o
             for o in (await db.scalars(select(Organizer).where(Organizer.id.in_(organizer_ids))))
         }
+    requests_expired = await expire_requests(db, now)
     await db.commit()
 
     for promotion, event, reason in to_email:
@@ -151,4 +157,4 @@ async def sweep_promotions(db: AsyncSession, now: datetime | None = None) -> dic
                 exc_info=True,
                 extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
             )
-    return {"voided": len(unpaid), "ended": len(ended)}
+    return {"voided": len(unpaid), "ended": len(ended), "requests_expired": requests_expired}

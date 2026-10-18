@@ -59,6 +59,10 @@ from app.constants.ranking import (
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
 )
+from app.constants.promotions import (
+    PROMOTION_CONFLICT_ERROR_CODES,
+    PROMOTION_ERROR_REQUEST_DAILY_LIMIT,
+)
 from app.constants.reports import (
     ERROR_INVALID_REPORT_REASON,
     REPORT_STATUS_OPEN,
@@ -86,6 +90,7 @@ from app.ingestion.content_filters import content_flags, localized_text_values
 from app.ingestion.http_client import safe_render_url
 from app.ingestion.pricing import normalize_currency
 from app.ingestion.sanitize import sanitize_html
+from app.promotions.grant import PromotionRefused
 from app.models.models import (
     AdminAction,
     Event,
@@ -934,4 +939,25 @@ def check_image_host(image_url: str | None) -> str | None:
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=ERROR_IMAGE_HOST_NOT_ALLOWED,
+    )
+
+
+def promotion_refusal(refused: PromotionRefused) -> HTTPException:
+    """409 when the state of things forbids the command, 429 for the daily
+    request ceiling, 422 for bad input; `detail.errors` lists every rule
+    broken."""
+    codes = [v.code for v in refused.violations]
+    if any(c in PROMOTION_CONFLICT_ERROR_CODES for c in codes):
+        code = status.HTTP_409_CONFLICT
+    elif PROMOTION_ERROR_REQUEST_DAILY_LIMIT in codes:
+        code = status.HTTP_429_TOO_MANY_REQUESTS
+    else:
+        code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    return HTTPException(
+        status_code=code,
+        detail={
+            "code": refused.violations[0].code,
+            "message": refused.violations[0].message,
+            "errors": [v.as_dict() for v in refused.violations],
+        },
     )

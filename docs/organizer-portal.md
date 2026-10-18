@@ -1,6 +1,6 @@
 # Organizer Portal
 
-What's in here: organizer auth, event submission, trust gating and review, rich-text authoring, the organizer contact form, Organizer Settings, and Event Claiming.
+What's in here: organizer auth, event submission, trust gating and review, rich-text authoring, the organizer contact form, Organizer Settings, Event Claiming, and Promotions.
 
 An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter that submits events directly. It is not the Fienta organizer in [pipeline.md](pipeline.md), which is a ticketing-source id being polled. Saved Venues live in [data-model.md](data-model.md)'s Saved Venues section.
 
@@ -182,3 +182,46 @@ An organizer can claim an event Event Radar ingested from Fienta, KUMU, Estonia 
 - **Organizer auth alone was never a real boundary.** Organizer accounts are free to create, and the organizer cookie never reaches `/api/events` anyway.
 - **The pending pill (`ClaimPill`) is claimant-only.** A signed-in organizer's `EventDetail` calls `GET /organizer/claims/for-event/{event_id}` (`own_claim_for_event()`), which returns the caller's own active claim or `null`, and shows the pill only on `pending`.
 - **`claimed` stays public.** It backs the "Organizer-verified" and "Listed by X" labels for every viewer.
+
+## Promotions
+
+The Organizer offer and request path (`app/routers/organizer_promotions.py`, `app/promotions/requests.py`, `app/promotions/organizer_view.py`). A Promotion is defined in [data-model.md](data-model.md)'s Promotions section.
+
+### Offer Flag
+
+- **`PROMOTIONS_OFFER_ENABLED` (default off) gates every `/organizer/promotions/*` route.** While off they return 404, and event rows carry no `promotion` key. Admin direct grants are unaffected.
+- **The offer never appears in submit or edit forms, modals, banners, settings or emails.** It lives on the Promotions page and as a quiet row action.
+
+### Event Row Flags
+
+- **`GET /organizer/events` and `GET /organizer/claims/{id}/events` add `promotion: {promotable, badge}` per row** while the offer is on, from one bulk read (`promotion_flags_for()`).
+- **`promotable` needs current ownership, a public, canonical, not-ended event, room for a 3-day window and nothing open on it.** A dormant claim is not ownership.
+- **`badge` replaces the action** with `requested`, `awaiting_payment`, `scheduled`, `live` or `paused`.
+
+### Requests
+
+- **`POST /organizer/promotions/requests` creates a pending request** with dates, legal name, registry code, optional billing email (default: the account email) and note, plus `terms_accepted`. It records `ORGANIZER_TERMS_VERSION` and the time, and emails the admin a deep link.
+- **The registry code must be 8 digits with a valid check digit** (`app/promotions/registry.py`). Window, overlap and sold-out rules reuse the grant validation.
+- **Limits are one pending request per event, no overlap with an `unpaid` or `paid` Promotion, and `ORGANIZER_DAILY_PROMOTION_REQUEST_CAP` per Tallinn day.** Refusals carry `detail.errors`: 409 for state, 429 for the daily cap, 422 for input.
+- **An event the Organizer does not currently own is a 404,** whoever owns it.
+- **`POST /organizer/promotions/requests/{id}/withdraw` withdraws a pending request.** Another Organizer's request is a 404.
+
+### Form Helpers
+
+- **`GET /organizer/promotions/context?event_id=` feeds the form:** window rules, price, terms version, default billing email and `unavailable_dates`. The dates are sold-out days only; counts never leave the server.
+- **`GET /organizer/promotions/validate?event_id=&start_date=&end_date=` validates live** and returns the errors, the day count and the price. It writes nothing.
+
+### The List
+
+- **`GET /organizer/promotions` returns requests and Promotions newest first.** Status is `requested`, `declined`, `awaiting_payment`, `scheduled`, `live`, `paused`, `finished`, `ended_early` or `cancelled`. Withdrawn and expired requests drop off, and a granted one is replaced by its Promotion.
+- **A `paused` item carries `paused_reason`,** the fill gate's not-showing code. The frontend turns it into plain words.
+
+### Per-Day Report
+
+- **`GET /organizer/promotions/{id}/report` serves the purchasing Organizer only** and does not check current ownership. It stays after a claim goes dormant or is revoked. Another Organizer gets 404.
+- **It returns complete days only,** each with shown or paused (and the reason), Explore shown, Daily 5 placed, digest sent and opens, plus one `daily5_reach`. There is no viewer data and no slot dislikes.
+
+### Expiry
+
+- **A pending request expires inside `sweep_promotions` with no email.** It expires when its event is cancelled, when its Organizer loses the event (claim revoked), or when its start date arrives.
+- **A dormant claim or dates that stop fitting leave it pending.**

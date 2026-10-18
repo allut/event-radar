@@ -73,3 +73,18 @@ async def send_promotion_void_email(
         "email.promotion_void", to_email, event_title, start, end, reason, locale,
         http_client, "promotion-void",
     )
+
+
+async def send_promotion_request_declined_email(
+    to_email: str,
+    event_title: str,
+    start: date,
+    end: date,
+    reason: str,
+    locale: str,
+    http_client: httpx.AsyncClient | None = None,
+) -> None:
+    await _send_notice(
+        "email.promotion_request_declined", to_email, event_title, start, end, reason,
+        locale, http_client, "promotion-request-declined",
+    )

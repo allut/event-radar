@@ -206,3 +206,15 @@ PROMOTION_RESTRICTION_NOTIFY_TEXT = (
     "{restriction}. Its Promotion #{promotion_id} ({start} to {end}) is paused "
     "until you clear it or end it early.\n\nReview: {href}\n"
 )
+
+# Admin notice: a new Promotion request (#614).
+PROMOTION_REQUEST_NOTIFY_SUBJECT = "New Promotion request: {title}"
+PROMOTION_REQUEST_NOTIFY_HTML = (
+    "<p>{organizer} requested a Promotion of <strong>{title}</strong> "
+    "({start} to {end}) for {advertiser}.</p>"
+    "<p><a href='{href}'>Review in the admin console</a></p>"
+)
+PROMOTION_REQUEST_NOTIFY_TEXT = (
+    "{organizer} requested a Promotion of {title} ({start} to {end}) for "
+    "{advertiser}.\n\nReview: {href}\n"
+)
