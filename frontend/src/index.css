@@ -352,6 +352,10 @@
   --admin-tile-min: 220px;              /* AdminDashboard stat tile grid */
   --admin-trigger-min: 240px;           /* AdminPipeline trigger card grid */
   --admin-image-preview-max: 320px;     /* AdminEventDetail image field thumbnail */
+  --admin-cap-bar-height: 72px;         /* PromotionCapStrip day bar */
+  --admin-cap-swatch: 10px;             /* PromotionCapStrip legend swatch */
+  --admin-cap-gap-phone: 2px;           /* PromotionCapStrip day gap on a phone */
+  --admin-promotions-table-min: 640px;  /* PromotionsTable scroll width */
 
   /* Heading scale */
   --heading-2xl: 2.5rem;

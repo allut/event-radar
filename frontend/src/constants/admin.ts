@@ -28,7 +28,7 @@ export const ADMIN_REPORTS_PARAM = {
 } as const;
 
 // AdminEventDetail's tab strip — same no-i18n exemption as ADMIN_NAV_ITEMS.
-export const ADMIN_EVENT_DETAIL_TABS = ['Overview', 'Classification', 'Dedup & reports', 'Raw payload'] as const;
+export const ADMIN_EVENT_DETAIL_TABS = ['Overview', 'Classification', 'Dedup & reports', 'Promotions', 'Raw payload'] as const;
 
 // title/description/important_info — the fields markerState() counts to
 // decide 'matched' vs 'partial' vs 'empty' translation coverage per locale.

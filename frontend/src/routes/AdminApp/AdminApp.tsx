@@ -13,6 +13,7 @@ import AdminClaims from '../AdminClaims';
 import AdminEventDetail from '../AdminEventDetail';
 import AdminPipeline from '../AdminPipeline';
 import AdminDedup from '../AdminDedup';
+import AdminPromotions from '../AdminPromotions';
 
 // Mirrors App.tsx's Protected/OrganizerProtected — a third guard on the
 // admin session track (useAdminAuth, redirect to /admin/login).
@@ -41,6 +42,7 @@ function screenFor(pathname: string): ReactNode | null {
   if (pathname === ROUTES.adminClaims) return <AdminClaims />;
   if (pathname === ROUTES.adminPipeline) return <AdminPipeline />;
   if (pathname === ROUTES.adminDedup) return <AdminDedup />;
+  if (pathname === ROUTES.adminPromotions) return <AdminPromotions />;
   if (
     pathname.startsWith(ROUTES.adminEventDetailPrefix) &&
     pathname.length > ROUTES.adminEventDetailPrefix.length

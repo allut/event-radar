@@ -57,6 +57,7 @@ export const ROUTES = {
   adminEventDetailPrefix: '/admin/events/',
   adminPipeline: '/admin/pipeline',
   adminDedup: '/admin/dedup',
+  adminPromotions: '/admin/promotions',
 } as const;
 
 // The FAQ's Organizers section anchor (FaqSection.id 'organizers') —
@@ -72,6 +73,7 @@ export const ADMIN_NAV_ITEMS = [
   { route: ROUTES.adminReports, label: 'Reports' },
   { route: ROUTES.adminSubmissions, label: 'Submissions' },
   { route: ROUTES.adminClaims, label: 'Claims' },
+  { route: ROUTES.adminPromotions, label: 'Promotions' },
   { route: ROUTES.adminPipeline, label: 'Pipeline' },
   { route: ROUTES.adminDedup, label: 'Dedup groups' },
 ] as const;

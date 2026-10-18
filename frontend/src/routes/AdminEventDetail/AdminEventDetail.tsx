@@ -25,6 +25,7 @@ import { useToast } from '../../hooks/useToast';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
 import SegmentedControl from '../../components/SegmentedControl';
 import chipStyles from '../../components/shared/Chip.module.css';
+import PromotionsPanel from './PromotionsPanel';
 import styles from './AdminEventDetail.module.css';
 
 interface LocaleContent {
@@ -438,6 +439,8 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
             </div>
           </>
         )}
+
+        {tab === 'Promotions' && <PromotionsPanel eventId={eventId} onNotify={showToast} />}
 
         {tab === 'Raw payload' && (
           raw_events.length === 0 ? (

@@ -49,6 +49,10 @@ export const QUERY_KEYS = {
   adminClaims: 'adminClaims',
   adminDedupGroups: 'adminDedupGroups',
   adminEventDetail: 'adminEventDetail',
+  adminPromotions: 'adminPromotions',
+  adminPromotionCapStrip: 'adminPromotionCapStrip',
+  adminPromotionContext: 'adminPromotionContext',
+  adminPromotionValidate: 'adminPromotionValidate',
 } as const;
 
 // Pagination query-param names shared by every paginated list fetch
@@ -163,6 +167,11 @@ export const API = {
   adminClaimDecline: (id: number) => `/admin/claims/${id}/decline`,
   adminClaimRevoke: (id: number) => `/admin/claims/${id}/revoke`,
   adminEventDetail: (id: number | string) => `/admin/events/${encodeURIComponent(String(id))}`,
+  adminPromotions: '/admin/promotions',
+  adminPromotionCapStrip: '/admin/promotions/cap-strip',
+  adminPromotionContext: (eventId: number | string) => `/admin/events/${eventId}/promotion-context`,
+  adminPromotionValidate: (eventId: number | string) => `/admin/events/${eventId}/promotions/validate`,
+  adminPromotionGrant: (eventId: number | string) => `/admin/events/${eventId}/promotions`,
   adminIngestAll: '/admin/ingest',
   adminIngestSource: (slug: string) => `/admin/ingest/${slug}`,
   adminDedupRun: '/admin/dedup',

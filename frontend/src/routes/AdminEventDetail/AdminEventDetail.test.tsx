@@ -399,4 +399,39 @@ describe('AdminEventDetail', () => {
     await waitFor(() => expect(screen.getByText('A late-night jazz set.')).toBeInTheDocument());
     expect(screen.queryByText('fallback')).not.toBeInTheDocument();
   });
+  it('offers the Grant Promotion form on the Promotions tab, listing the event\u2019s existing Promotions', async () => {
+    const context = {
+      event_id: 42,
+      event_title: 'Jazz Cellar Night',
+      owner: { organizer_id: 9, name: 'Jazzklubi MTÜ', email: null },
+      prefill: { advertiser_legal_name: 'Jazzklubi MTÜ', billing_email: null },
+      today: '2026-10-17',
+      earliest_start: '2026-10-18',
+      event_last_day: '2026-10-30',
+      rules: { min_days: 3, max_days: 14, cap: 5, cap_strip_days: 14 },
+      pricing: { day_price_cents: 500, vat_rate_percent: '24.00' },
+      promotions: [
+        {
+          id: 1, event_id: 42, event_title: 'Jazz Cellar Night', organizer_name: 'Jazzklubi MTÜ',
+          status: 'paid', state: 'scheduled', start_date: '2026-10-20', end_date: '2026-10-22', days: 3,
+          net_price_cents: 1500, vat_rate_percent: '24.00', vat_cents: 360, gross_price_cents: 1860,
+          is_complimentary: false, complimentary_note: null, invoice_reference: null,
+          advertiser_legal_name: 'Jazzklubi MTÜ',
+        },
+      ],
+    };
+    mockGet.mockImplementation(async (path: string) => {
+      if (path.includes('/promotion-context')) return context;
+      if (path.startsWith('/admin/promotions/cap-strip')) return { today: '2026-10-17', cap: 5, days: [] };
+      return sampleResponse();
+    });
+    renderWithProviders(<AdminEventDetail eventId="42" />, { route: '/admin/events/42' });
+
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Jazz Cellar Night', level: 1 })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('tab', { name: 'Promotions' }));
+
+    expect(await screen.findByText('20\u201322 Oct')).toBeInTheDocument();
+    expect(screen.getByLabelText('Start date')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Grant Promotion' })).toBeDisabled();
+  });
 });

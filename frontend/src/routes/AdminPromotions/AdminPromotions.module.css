@@ -1,0 +1,41 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-w-hair) solid var(--border);
+}
+
+.eyebrow {
+  composes: adminEyebrow from '../../components/shared/Page.module.css';
+}
+
+.title {
+  composes: adminPageTitle from '../../components/shared/Page.module.css';
+}
+
+.today {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.section { min-width: 0; }
+
+.sectionTitle {
+  font-family: var(--font-system);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  color: var(--text-muted);
+  margin: 0 0 var(--space-3);
+}
