@@ -83,7 +83,7 @@ SCORE_INSERT_CHUNK_SIZE = 1000
 # GET /explore (app/routers/browse.py) — event discovery / search page.
 # BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json → app._generated.shared_constants).
 BROWSE_MAX_PAGE_SIZE: int = 60
-# ?q= keyword search — _keyword_filter builds a %...% pattern against two
+# ?q= keyword search — keyword_filter builds a %...% pattern against two
 # trigram GIN indexes; an unbounded string is cheap to send and expensive to
 # scan, and RATE_LIMIT_BROWSE alone doesn't bound the per-request cost.
 BROWSE_QUERY_MAX_LEN: int = 200

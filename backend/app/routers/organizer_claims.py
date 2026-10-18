@@ -89,12 +89,12 @@ from app.constants.rate_limits import (
     RATE_LIMIT_CLAIM,
 )
 from app.db import get_db
+from app.events.queries import escape_ilike_pattern
 from app.models.models import AdminAction, Claim, Event, EventSource, Organizer, OrganizerMagicLink
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
     claim_dns_record_name,
-    escape_ilike_pattern,
     get_or_create_organizer,
     recent_unused_link_exists,
     resolve_locale_param,

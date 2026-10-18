@@ -4,13 +4,13 @@ claims and dedup — the one home for "which events count" definitions."""
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import Select, and_, ColumnElement, exists, false, func, or_, select
+from sqlalchemy import Select, and_, ColumnElement, exists, false, func, or_, select, true
 from sqlalchemy.orm import aliased, selectinload
 
 from app.constants.core import TALLINN_TZ
 from app.constants.events import EVENT_STATUS_CANCELLED, EVENT_STATUS_PUBLISHED
 from app.events.venue import resolve_venue_name
-from app.models.models import Event
+from app.models.models import Event, EventClassification
 
 
 def canonical_event_filter() -> ColumnElement[bool]:
@@ -203,3 +203,53 @@ def no_live_dedup_sibling_clause(now: datetime) -> ColumnElement[bool]:
             event_not_ended_filter(now, entity=sibling),
         )
     )
+
+
+def escape_ilike_pattern(q: str) -> str:
+    """Escape SQL LIKE wildcards in user-supplied search text, wrapped as a
+    ``%...%`` substring pattern — otherwise a literal ``%``/``_`` in the
+    search box would wildcard-match. Shared by the Explore keyword search and
+    organizer_claims.py's claim-discovery search (#414); pass the result to
+    ``.ilike(pattern, escape="\\\\")``."""
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def free_filter() -> ColumnElement[bool]:
+    return or_(Event.price_min == 0, Event.has_free_tier == true())
+
+
+def keyword_filter(q: str) -> ColumnElement[bool]:
+    pattern = escape_ilike_pattern(q)
+    return or_(
+        Event.title_orig.ilike(pattern, escape="\\"),
+        Event.description_orig.ilike(pattern, escape="\\"),
+    )
+
+
+def facet_conditions(
+    categories: list[str],
+    vibes: list[str],
+    free: bool,
+    q: str | None,
+    date_from: date | None,
+    date_to: date | None,
+    now: datetime,
+) -> list[ColumnElement[bool]]:
+    conds: list[ColumnElement[bool]] = [
+        public_event_filter(),
+        event_not_ended_filter(now),
+        canonical_event_filter(),
+    ]
+    if categories:
+        conds.append(EventClassification.categories.overlap(categories))
+    if vibes:
+        conds.append(EventClassification.vibes.overlap(vibes))
+    if free:
+        conds.append(free_filter())
+    if q:
+        conds.append(keyword_filter(q))
+    date_cond = event_date_range_filter(date_from, date_to)
+    if date_cond is not None:
+        conds.append(date_cond)
+    return conds

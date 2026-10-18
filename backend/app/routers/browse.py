@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import ColumnElement, func, or_, select, true
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, selectinload
 
@@ -66,16 +66,13 @@ from app.ranking.score import (
 from app.rate_limit import limiter
 from app.auth.dependencies import get_optional_user
 from app.routers.utils import (
-    escape_ilike_pattern,
     load_user_reported_events,
     load_user_signals,
     resolve_locale_param,
     serialize_event,
 )
 from app.events.queries import (
-    canonical_event_filter,
-    event_date_range_filter,
-    event_not_ended_filter,
+    facet_conditions,
     public_event_filter,
     select_events_with_classification,
 )
@@ -96,46 +93,6 @@ def _parse_slug_list(raw: str | None, valid: frozenset[str]) -> list[str]:
         if slug and slug in valid and slug not in seen:
             seen.append(slug)
     return seen
-
-
-def _free_filter() -> ColumnElement[bool]:
-    return or_(Event.price_min == 0, Event.has_free_tier == true())
-
-
-def _keyword_filter(q: str) -> ColumnElement[bool]:
-    pattern = escape_ilike_pattern(q)
-    return or_(
-        Event.title_orig.ilike(pattern, escape="\\"),
-        Event.description_orig.ilike(pattern, escape="\\"),
-    )
-
-
-def _facet_conditions(
-    categories: list[str],
-    vibes: list[str],
-    free: bool,
-    q: str | None,
-    date_from: date | None,
-    date_to: date | None,
-    now: datetime,
-) -> list[ColumnElement[bool]]:
-    conds: list[ColumnElement[bool]] = [
-        public_event_filter(),
-        event_not_ended_filter(now),
-        canonical_event_filter(),
-    ]
-    if categories:
-        conds.append(EventClassification.categories.overlap(categories))
-    if vibes:
-        conds.append(EventClassification.vibes.overlap(vibes))
-    if free:
-        conds.append(_free_filter())
-    if q:
-        conds.append(_keyword_filter(q))
-    date_cond = event_date_range_filter(date_from, date_to)
-    if date_cond is not None:
-        conds.append(date_cond)
-    return conds
 
 
 async def _load_signals_and_reported(
@@ -570,7 +527,7 @@ async def explore_events(
     categories = _parse_slug_list(category, VALID_CATEGORIES)
     vibes = _parse_slug_list(vibe, VALID_VIBES)
     now = datetime.now(TALLINN_TZ)
-    conds = _facet_conditions(categories, vibes, free, q, date_from, date_to, now)
+    conds = facet_conditions(categories, vibes, free, q, date_from, date_to, now)
     user_locale = current_user.locale if current_user is not None else DEFAULT_USER_LOCALE
     effective_locale = resolve_locale_param(locale, user_locale)
 

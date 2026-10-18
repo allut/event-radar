@@ -55,7 +55,7 @@ class TestParseSlugList:
 
 class TestKeywordFilter:
     def test_escapes_wildcards_in_pattern(self):
-        from app.routers.browse import _keyword_filter
+        from app.events.queries import keyword_filter as _keyword_filter
 
         cond = _keyword_filter("100% off_sale")
         # cond = or_(title ILIKE ..., description ILIKE ...); first clause's
@@ -90,7 +90,7 @@ class TestDateRangeFilter:
 
 class TestFreeFilter:
     def test_matches_zero_price_or_free_tier(self):
-        from app.routers.browse import _free_filter
+        from app.events.queries import free_filter as _free_filter
 
         compiled = str(_free_filter().compile(compile_kwargs={"literal_binds": True}))
         assert "events.price_min = 0" in compiled

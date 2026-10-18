@@ -270,9 +270,10 @@ class TestSharedDateRangeFilter:
     def test_browse_and_public_share_the_queries_module_predicate(self):
         import app.routers.browse as browse
         import app.routers.public as public
-        from app.events.queries import event_date_range_filter
+        from app.events.queries import event_date_range_filter, facet_conditions
 
-        assert browse.event_date_range_filter is event_date_range_filter
+        # Browse builds its date predicate through the moved facet builder.
+        assert browse.facet_conditions is facet_conditions
         assert public.event_date_range_filter is event_date_range_filter
 
 

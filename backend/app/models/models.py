@@ -710,7 +710,7 @@ class Event(Base):
                 " AND NOT is_explicit AND NOT is_non_event"
             ),
         ),
-        # browse.py's _free_filter() OR-arm (has_free_tier IS TRUE) — the other
+        # events/queries.py's free_filter() OR-arm (has_free_tier IS TRUE) — the other
         # arm (price_min = 0) is already covered by ix_events_price_min.
         Index(
             "ix_events_has_free_tier",
