@@ -84,6 +84,7 @@ from app.promotions.fill import (
     load_visible,
     rotation_order,
     surviving,
+    without_viewer_excluded,
 )
 from app.promotions.windows import now_tallinn, tallinn_today
 from app.events.queries import (
@@ -609,7 +610,9 @@ async def explore_events(
         )
         if min(len(page_one_ids), limit - 1) >= PROMOTION_EXPLORE_MIN_ORGANIC:
             visible = await load_visible(db, page_one_ids)
-            survivors = surviving(eligible, visible)
+            survivors = await without_viewer_excluded(
+                db, user_id, surviving(eligible, visible)
+            )
     if not survivors:
         response = await serve(limit, offset)
         response["page1_has_slot"] = False

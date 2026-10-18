@@ -16,6 +16,10 @@ order:
 An Explore context adds one more reason: the event must pass every active
 facet and ``q`` through ``facet_conditions`` (``filters_mismatch``).
 
+A viewer's own signals only exclude (``without_viewer_excluded``): a dislike
+of the event or its dedup group, a report, a bookmark or a like skips that
+Promotion and the next in rotation order fills the slot.
+
 Everything here reads in bulk with a fixed query count, however many
 Promotions are live. Viewer taste (persona, feedback scores) never selects or
 orders a Promotion; rotation is a seeded hash of the Promotion id.
@@ -27,10 +31,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from sqlalchemy import ColumnElement, select
+from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.constants.ranking import SIGNAL_BOOKMARK, SIGNAL_DISLIKE, SIGNAL_LIKE
 from app.constants.promotions import (
     PROMOTION_BOT_USER_AGENT_RE,
     PROMOTION_NOT_SHOWING_BOT,
@@ -53,7 +58,7 @@ from app.events.queries import (
     public_event_filter,
     select_events_with_classification,
 )
-from app.models.models import Event, Promotion
+from app.models.models import Event, EventReport, Promotion, UserEventFeedback
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.windows import tallinn_today
 
@@ -235,4 +240,53 @@ async def load_visible(db: AsyncSession, event_ids: Sequence[int]) -> VisibleSet
 
 def surviving(results: Sequence[GateResult], visible: VisibleSet) -> list[GateResult]:
     return [r for r in results if not visible.covers(r.event)]
+
+
+def _group(event_id: int, dedup_group_id: int | None) -> int:
+    return dedup_group_id if dedup_group_id is not None else event_id
+
+
+async def without_viewer_excluded(
+    db: AsyncSession, user_id: int | None, results: Sequence[GateResult]
+) -> list[GateResult]:
+    """Drop Promotions the signed-in viewer disliked (event or dedup group),
+    reported, bookmarked or liked. Two queries whatever the row count; a
+    signed-out viewer has no signals and is untouched. Signals only exclude:
+    the disliked-category soft filter is deliberately not applied."""
+    if user_id is None or not results:
+        return list(results)
+    event_ids = sorted({r.event.id for r in results})
+    groups = sorted({_group(r.event.id, r.event.dedup_group_id) for r in results})
+    group_col = func.coalesce(Event.dedup_group_id, Event.id)
+    feedback = (
+        await db.execute(
+            select(UserEventFeedback.signal, UserEventFeedback.event_id, group_col)
+            .join(Event, Event.id == UserEventFeedback.event_id)
+            .where(
+                UserEventFeedback.user_id == user_id,
+                UserEventFeedback.signal.in_((SIGNAL_LIKE, SIGNAL_DISLIKE, SIGNAL_BOOKMARK)),
+                or_(
+                    UserEventFeedback.event_id.in_(event_ids),
+                    and_(UserEventFeedback.signal == SIGNAL_DISLIKE, group_col.in_(groups)),
+                ),
+            )
+        )
+    ).all()
+    reported = set(
+        (
+            await db.scalars(
+                select(EventReport.event_id).where(
+                    EventReport.user_id == user_id, EventReport.event_id.in_(event_ids)
+                )
+            )
+        ).all()
+    )
+    excluded_events = {row[1] for row in feedback} | reported
+    disliked_groups = {row[2] for row in feedback if row[0] == SIGNAL_DISLIKE}
+    return [
+        r
+        for r in results
+        if r.event.id not in excluded_events
+        and _group(r.event.id, r.event.dedup_group_id) not in disliked_groups
+    ]
 

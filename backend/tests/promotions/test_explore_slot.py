@@ -37,11 +37,12 @@ from app.constants.promotions import (
 )
 from app.db import get_db
 from app.events.queries import facet_conditions
-from app.models.models import EventClassification, Promotion, User
+from app.constants.ranking import SIGNAL_BOOKMARK, SIGNAL_DISLIKE, SIGNAL_LIKE
+from app.models.models import EventClassification, EventReport, Promotion, User, UserEventFeedback
 from app.promotions.fill import evaluate_gate, gate_closed_reason
 from app.rate_limit import limiter
 from app.routers import browse
-from tests.promotions.conftest import EVENT_START, NOW, at_tallinn, d
+from tests.promotions.conftest import EVENT_END, EVENT_START, NOW, at_tallinn, d
 
 TOKEN = "zqx603"
 PAGE = 24
@@ -446,3 +447,148 @@ async def test_gate_query_count_is_fixed(db, make) -> None:
     finally:
         sa_event.remove(conn, "before_cursor_execute", count)
     assert one == many
+
+
+# --- Viewer exclusions (#604) -------------------------------------------------
+
+
+async def viewer(db, n: int = 0) -> User:
+    user = User(email=f"slot604-{n}@example.com")
+    db.add(user)
+    await db.flush()
+    Viewer.user = user
+    return user
+
+
+async def two_promoted(db, make):
+    org, events = await world(db, make, n=40)
+    a, b = events[-1], events[-2]
+    await clear(db, b)
+    await promote(db, a, org)
+    await promote(db, b, org)
+    return org, a, b
+
+
+def mark(db, user, event, signal: str) -> None:
+    db.add(UserEventFeedback(user_id=user.id, event_id=event.id, signal=signal, created_at=NOW))
+
+
+async def duplicate_of(make, event):
+    return await make.event(
+        title=f"{TOKEN} dup", dedup_group_id=event.id, starts_at=EVENT_START, ends_at=EVENT_END
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["dislike", "dislike_duplicate", "report", "bookmark", "like"])
+async def test_each_exclusion_falls_through_to_the_next_in_rotation(
+    client, db, make, kind
+) -> None:
+    _, a, b = await two_promoted(db, make)
+    user = await viewer(db)
+    first = (await get(client))["sponsored_slot"]["id"]
+    picked, other = (a, b) if first == a.id else (b, a)
+
+    if kind == "dislike":
+        mark(db, user, picked, SIGNAL_DISLIKE)
+    elif kind == "dislike_duplicate":
+        mark(db, user, await duplicate_of(make, picked), SIGNAL_DISLIKE)
+    elif kind == "report":
+        db.add(EventReport(user_id=user.id, event_id=picked.id, reason="spam"))
+    else:
+        mark(db, user, picked, kind)
+    await db.flush()
+
+    page = await get(client)
+    assert page["sponsored_slot"]["id"] == other.id
+    assert page["page1_has_slot"] is True
+
+
+@pytest.mark.asyncio
+async def test_slot_collapses_when_every_promotion_is_excluded(client, db, make) -> None:
+    _, a, b = await two_promoted(db, make)
+    user = await viewer(db)
+    mark(db, user, a, SIGNAL_LIKE)
+    mark(db, user, b, SIGNAL_BOOKMARK)
+    await db.flush()
+    page = await get(client)
+    assert page["page1_has_slot"] is False
+    assert "sponsored_slot" not in page
+    assert len(page["events"]) == PAGE
+
+
+@pytest.mark.asyncio
+async def test_disliked_category_does_not_exclude_the_slot(client, db, make) -> None:
+    await two_promoted(db, make)
+    user = await viewer(db)
+    sibling = await classified(make, 90)  # same "music" category as both Promotions
+    mark(db, user, sibling, SIGNAL_DISLIKE)
+    await db.flush()
+    assert (await get(client))["page1_has_slot"] is True
+
+
+@pytest.mark.asyncio
+async def test_disliking_the_slot_card_hides_it_from_organic_results_too(
+    client, db, make
+) -> None:
+    org, events = await world(db, make, n=40)
+    await promote(db, events[-1], org)
+    user = await viewer(db)
+    params = {"for_you": "true", "sort": "relevance"}
+    assert (await get(client, **params))["sponsored_slot"]["id"] == events[-1].id
+    mark(db, user, events[-1], SIGNAL_DISLIKE)
+    browse._score_cache.clear()  # the ranked-id cache has a short TTL
+    await db.flush()
+    page = await get(client, **params)
+    assert page["page1_has_slot"] is False
+    assert events[-1].id not in ids(page)
+    assert events[-1].id not in ids(await get(client, offset=PAGE, **params))
+
+
+@pytest.mark.asyncio
+async def test_pick_is_an_equal_share_and_blind_to_feedback(client, db, make) -> None:
+    await two_promoted(db, make)
+    unrelated = await classified(make, 91)
+    picks: dict[int, int] = {}
+    for n in range(40):
+        user = await viewer(db, n)
+        picks[user.id] = (await get(client))["sponsored_slot"]["id"]
+    assert min(Counter(picks.values()).values()) >= 8  # equal share across seeds
+    # Liking an unrelated event moves nobody's pick.
+    for uid in picks:
+        db.add(UserEventFeedback(user_id=uid, event_id=unrelated.id, signal=SIGNAL_LIKE))
+    await db.flush()
+    for uid, expected in picks.items():
+        Viewer.user = await db.get(User, uid)
+        assert (await get(client))["sponsored_slot"]["id"] == expected
+
+
+@pytest.mark.asyncio
+async def test_explore_query_count_is_independent_of_live_promotions(client, db, make) -> None:
+    org, events = await world(db, make, n=40)
+    user = await viewer(db)
+    for e in events[-2:]:
+        await clear(db, e)
+        await promote(db, e, org)
+    await db.flush()
+    statements: list[str] = []
+
+    def count(conn, cursor, statement, *a):
+        statements.append(statement)
+
+    conn = db.sync_session.connection()
+    sa_event.listen(conn, "before_cursor_execute", count)
+    try:
+        await get(client)
+        few = len(statements)
+        for e in events[-8:-2]:
+            await clear(db, e)
+            await promote(db, e, org)
+            mark(db, user, e, SIGNAL_BOOKMARK)
+        await db.flush()
+        statements.clear()
+        await get(client)
+        many = len(statements)
+    finally:
+        sa_event.remove(conn, "before_cursor_execute", count)
+    assert few == many
