@@ -221,6 +221,18 @@ The Organizer offer and request path (`app/routers/organizer_promotions.py`, `ap
 - **`GET /organizer/promotions/{id}/report` serves the purchasing Organizer only** and does not check current ownership. It stays after a claim goes dormant or is revoked. Another Organizer gets 404.
 - **It returns complete days only,** each with shown or paused (and the reason), Explore shown, Daily 5 placed, digest sent and opens, plus one `daily5_reach`. There is no viewer data and no slot dislikes.
 
+### Portal Screens
+
+- **`/organizer/promotions` (`OrganizerPromotions/`) is the explainer and the list.** An item is a request or a Promotion with a status badge and a one-line reason. Withdraw (with a confirm line), the `Invoice` link and the daily-report toggle sit under it.
+- **The nav item and row actions hide while the offer is off.** `lib/organizerPromotionsOffer.ts` keeps a hint learned from the `promotion` key on event rows and from the list's 404, so the top bar needs no request. The page itself redirects to Your events on a 404.
+- **A row's `Promote` link or badge comes from `PromotionRowAction`, after `Edit`.** The badge opens `/organizer/promotions?event=<id>`, which scrolls to that event's open item. Claim event rows keep their stretched title link, and the action sits above it.
+- **The request form (`OrganizerPromotionRequest/`, `/organizer/promotions/new?event_id=`) validates dates through `GET /validate`.** Sold-out days arrive as dates from `/context` and grey out in `DatePicker`. A real `EventCard` previews the ad with the typed or registry name.
+- **Card payment is the default action, with the request as fallback.** The API carries no checkout or review signal, so the form tries `POST /checkout` and falls back to the request on a 409 `event_needs_review` or a 404. A registry outage does the same.
+- **The registry lookup runs once the 8-digit check digit passes.** A found name locks the field. Deleted and not-found codes block the form, and an outage opens a typed name and the request path.
+- **The terms and content-policy links point at placeholder routes** (`ROUTES.organizerTerms`, `organizerContentPolicy`) until the Organizer terms page exists.
+- **`OrganizerPromotionSuccess/` never trusts the redirect.** It polls the list until the Promotion is `scheduled` or later, because the Stripe webhook can land after the return. A late payment still gets the automatic refund the page describes.
+- **The per-day table sums `web_opens` and `digest_opens` into one Opens column.** A paused day shows the gate reason in short words; the long sentence appears under the row's badge. Copy lives in `promo_*` keys, with `promo_why_<code>` per gate code.
+
 ### Expiry
 
 - **A pending request expires inside `sweep_promotions` with no email.** It expires when its event is cancelled, when its Organizer loses the event (claim revoked), or when its start date arrives.

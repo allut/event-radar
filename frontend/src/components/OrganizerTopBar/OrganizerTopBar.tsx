@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
 import { t } from '../../i18n';
-import { ORGANIZER_ACCOUNT_MENU_ITEMS, ORGANIZER_NAV_ITEMS, ROUTES } from '../../constants/routes';
+import { ORGANIZER_ACCOUNT_MENU_ITEMS, ORGANIZER_NAV_ITEMS, ORGANIZER_PROMOTIONS_NAV_ITEM, ROUTES } from '../../constants/routes';
 import { useBarScrolled } from '../../hooks/useBarScrolled';
 import { useLocalePath } from '../../hooks/useLocalePath';
+import { usePromotionsOffer } from '../../hooks/usePromotionsOffer';
 import AccountMenu from '../AccountMenu';
 import BarLogo from '../BarLogo';
 import BarNav from '../BarNav';
@@ -23,6 +24,10 @@ interface OrganizerTopBarProps {
 export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: OrganizerTopBarProps) {
   const localePath = useLocalePath();
   const scrolled = useBarScrolled();
+  // "Promotions" shows only while the offer is on (learned by the pages that load
+  // event rows or the list; the server 404s every promotions route otherwise).
+  const offered = usePromotionsOffer();
+  const navItems = offered ? [...ORGANIZER_NAV_ITEMS, ORGANIZER_PROMOTIONS_NAV_ITEM] : ORGANIZER_NAV_ITEMS;
   const newEvent = (
     <Link to={localePath(ROUTES.organizerSubmit)} className={styles.cta}>{t('organizer_new_event', locale)}</Link>
   );
@@ -34,7 +39,7 @@ export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: Or
         <BarLogo locale={locale} markOnlyOnPhone />
       </div>
 
-      <BarNav items={ORGANIZER_NAV_ITEMS} locale={locale} ariaLabel={t('organizer_dashboard_title', locale)} />
+      <BarNav items={navItems} locale={locale} ariaLabel={t('organizer_dashboard_title', locale)} />
 
       <div className={styles.actions}>
         <span className={styles.deskOnly}>{newEvent}</span>
@@ -51,7 +56,7 @@ export default function OrganizerTopBar({ locale, onLocaleChange, onLogout }: Or
             locale={locale}
             onLocaleChange={onLocaleChange}
             onLogout={onLogout}
-            navItems={ORGANIZER_NAV_ITEMS}
+            navItems={navItems}
             accountItems={ORGANIZER_ACCOUNT_MENU_ITEMS}
             navAriaLabelKey="organizer_dashboard_title"
             track="organizer"

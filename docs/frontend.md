@@ -1,6 +1,6 @@
 # Frontend
 
-What's in here: folder conventions, routing and locale prefixes, the admin console, paged lists, the FAQ page, the API client, auth hints, tests, i18n, brand assets and email.
+What's in here: folder conventions, routing and locale prefixes, the admin console, Organizer Promotions, paged lists, the FAQ page, the API client, auth hints, tests, i18n, brand assets and email.
 
 ## Frontend Structure
 
@@ -73,6 +73,14 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **Trust review (`components/PromotionTrust/`) is read only apart from the complaint logger and Withdraw.** The four stop-selling tripwires are worked out client side from the rolling 4 weeks, with thresholds in `constants/promotions.ts` mirroring docs/backend-ops.md.
 - **Withdraw buttons stay clickable whatever the slots flag.** The client cannot see it, so the server's 409 `slots_still_enabled` is worded by `withdrawErrorMessage()`. The table's unused days and refund mirror `withdraw.py`, and are an estimate until the server answers.
 - **`AdminShell/` is the nav-rail chrome every signed-in admin screen renders inside.** `AdminLogin` renders outside it. The console replaces curl calls to `/admin/*`; see [backend-ops.md](backend-ops.md)'s Admin Endpoints section.
+
+### Organizer Promotions
+
+- **Strings are `promo_*` keys in `shared/`, in all three locales.** Counts use `tn()` with `promo_days_*` and `promo_people_*`. Prices format through `lib/organizerPromotions.ts::formatMoney()`, which drops whole-euro cents and uses a comma outside English.
+- **A paused reason maps through `promo_why_<code>`.** Each gate code has a long and a `_short` form, and an unknown code falls back to `promo_why_unknown`, so a new backend code never shows raw text.
+- **`PromotionBadge/` and `PromotionRowAction/` serve both event lists.** The badge is the one square status look for rows and the Promotions list, one tone per status.
+- **`PromotionResultCard/` is the centred result card** for a sent request, a confirmed payment and the confirming state.
+- **The sponsored caption on the preview reuses `sponsored_label`.** The form renders `EventCard` read-only with the `sponsored` prop, so it never posts feedback.
 
 ## Paged Lists
 

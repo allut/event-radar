@@ -38,6 +38,9 @@ import OrganizerDashboard from './routes/OrganizerDashboard';
 import OrganizerClaims from './routes/OrganizerClaims';
 import OrganizerSettings from './routes/OrganizerSettings';
 import OrganizerContact from './routes/OrganizerContact';
+import OrganizerPromotions from './routes/OrganizerPromotions';
+import OrganizerPromotionRequest from './routes/OrganizerPromotionRequest';
+import OrganizerPromotionSuccess from './routes/OrganizerPromotionSuccess';
 import EventSubmit from './routes/EventSubmit';
 import NotFound from './routes/NotFound';
 import Footer from './components/Footer';
@@ -147,6 +150,9 @@ const ROUTE_DEFS: RouteDef[] = [
   { path: ROUTES.organizerClaims, element: <OrganizerProtected><OrganizerClaims /></OrganizerProtected> },
   { path: ROUTES.organizerSettings, element: <OrganizerProtected><OrganizerSettings /></OrganizerProtected> },
   { path: ROUTES.organizerContact, element: <OrganizerProtected><OrganizerContact /></OrganizerProtected> },
+  { path: ROUTES.organizerPromotions, element: <OrganizerProtected><OrganizerPromotions /></OrganizerProtected> },
+  { path: ROUTES.organizerPromotionRequest, element: <OrganizerProtected><OrganizerPromotionRequest /></OrganizerProtected> },
+  { path: ROUTES.organizerPromotionSuccess, element: <OrganizerProtected><OrganizerPromotionSuccess /></OrganizerProtected> },
   { path: ROUTES.organizerSubmit, element: <OrganizerProtected><EventSubmit /></OrganizerProtected> },
   { path: ROUTES.organizerEventEditPattern, element: <OrganizerProtected><EventSubmit /></OrganizerProtected> },
 ];

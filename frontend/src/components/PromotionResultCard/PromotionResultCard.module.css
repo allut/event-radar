@@ -1,0 +1,108 @@
+.card {
+  composes: card cardAccentTop from '../shared/Card.module.css';
+  width: 100%;
+  max-width: var(--card-max-claim);
+  align-self: center;
+  padding: var(--space-7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: center;
+}
+
+.circle {
+  composes: statusCircle statusCircleSuccess from '../shared/StatusCircle.module.css';
+  font-size: var(--fs-status);
+}
+
+.spinner {
+  composes: ring ringOnPage sizeLg from '../shared/Spinner.module.css';
+}
+
+.title {
+  font-family: var(--font-display);
+  font-size: var(--heading-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  letter-spacing: var(--tracking-tighter);
+  line-height: var(--leading-display);
+}
+
+.message {
+  font-size: var(--fs-base);
+  color: var(--text-muted);
+  max-width: var(--measure-notice);
+}
+
+.recap {
+  width: 100%;
+  text-align: left;
+  margin: var(--space-2) 0;
+  border-top: var(--rule);
+}
+
+.recapRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: var(--rule);
+  font-size: var(--fs-sm);
+}
+
+.recapRow dt {
+  color: var(--text-muted);
+}
+
+.recapRow dd {
+  text-align: right;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.footnote {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  max-width: var(--measure-notice);
+}
+
+.buttons {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: var(--space-2);
+}
+
+.link {
+  padding: var(--space-0-625) var(--space-4);
+  font-size: var(--fs-sm);
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.primary {
+  composes: btnPrimary from '../shared/Button.module.css';
+}
+
+.outline {
+  composes: btnOutline from '../shared/Button.module.css';
+}
+
+/* Global gold a:hover would otherwise outrank the single-class button colors. */
+a.primary:hover {
+  color: var(--on-accent);
+}
+
+a.outline:hover {
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .card {
+    padding: var(--space-5) var(--space-4);
+  }
+}

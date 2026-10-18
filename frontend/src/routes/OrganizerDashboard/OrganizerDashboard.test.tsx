@@ -266,3 +266,66 @@ describe('OrganizerDashboard', () => {
     });
   });
 });
+
+describe('OrganizerDashboard Promotions row action (#614)', () => {
+  const promoRows = {
+    ...sampleEvents,
+    events: [
+      { ...sampleEvents.events[0], promotion: { promotable: true, badge: null } },
+      { ...sampleEvents.events[1], promotion: { promotable: false, badge: 'awaiting_payment' } },
+      { id: 3, slug: 'old', title: 'Old Show', starts_at: '2026-06-01T10:00:00Z', status: 'published', needs_review: false, promotion: { promotable: false, badge: null } },
+    ],
+    total: 3,
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('shows a quiet Promote link after Edit on a promotable row', async () => {
+    mockOrganizerGet(promoRows);
+    renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard' });
+
+    const promote = await screen.findByRole('link', { name: 'Promote Jazz Night' });
+    expect(promote).toHaveTextContent('Promote');
+    expect(promote).toHaveAttribute('href', '/organizer/promotions/new?event_id=1');
+    const actions = promote.parentElement as HTMLElement;
+    const order = within(actions).getAllByRole('link').map((a) => a.textContent);
+    expect(order).toEqual(['Edit', 'Promote']);
+  });
+
+  it('puts the Promotion badge in place of Promote, linking to Promotions for that event', async () => {
+    mockOrganizerGet(promoRows);
+    renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard' });
+
+    const badge = await screen.findByRole('link', { name: 'Awaiting payment: Art Show. Open Promotions.' });
+    expect(badge).toHaveAttribute('href', '/organizer/promotions?event=2');
+    expect(screen.queryByRole('link', { name: 'Promote Art Show' })).not.toBeInTheDocument();
+  });
+
+  it('offers nothing on a row that cannot be promoted', async () => {
+    mockOrganizerGet(promoRows);
+    renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard' });
+
+    await screen.findByText('Old Show');
+    expect(screen.queryByRole('link', { name: 'Promote Old Show' })).not.toBeInTheDocument();
+  });
+
+  it('hides every Promotions action while the offer is off (rows have no promotion key)', async () => {
+    mockOrganizerGet(sampleEvents);
+    renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard' });
+
+    await screen.findByText('Jazz Night');
+    expect(screen.queryByRole('link', { name: /^Promote / })).not.toBeInTheDocument();
+    expect(localStorage.getItem('organizer_promotions_offer')).toBeNull();
+  });
+
+  it('remembers that the offer is on so the top bar can show its nav item', async () => {
+    mockOrganizerGet(promoRows);
+    renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard' });
+
+    await screen.findByRole('link', { name: 'Promote Jazz Night' });
+    expect(localStorage.getItem('organizer_promotions_offer')).toBe('1');
+    expect(within(screen.getByRole('navigation', { name: 'Your events' })).getByRole('link', { name: 'Promotions' })).toHaveAttribute('href', '/organizer/promotions');
+  });
+});

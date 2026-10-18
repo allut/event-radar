@@ -19,6 +19,29 @@ beforeEach(() => {
   mockOrganizerGet.mockResolvedValue({ email: 'org@example.com', name: 'Jazz Club' });
 });
 
+describe('OrganizerTopBar Promotions nav (#614)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('shows Promotions after Your claims only once the offer is known to be on', () => {
+    localStorage.setItem('organizer_promotions_offer', '1');
+    renderWithProviders(<OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
+
+    const links = within(screen.getByRole('navigation')).getAllByRole('link');
+    expect(links.map((a) => a.textContent)).toEqual(['Your events', 'Your claims', 'Promotions']);
+    expect(links[2]).toHaveAttribute('href', '/organizer/promotions');
+  });
+
+  it('hides Promotions while the offer is off, without a request of its own', async () => {
+    renderWithProviders(<OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);
+
+    expect(within(screen.getByRole('navigation')).queryByRole('link', { name: 'Promotions' })).not.toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(mockOrganizerGet).not.toHaveBeenCalled();
+  });
+});
+
 describe('OrganizerTopBar', () => {
   it('links the brand mark home and shows "Your events" and "Your claims" in the nav', () => {
     renderWithProviders(<OrganizerTopBar locale="en" onLocaleChange={vi.fn()} onLogout={vi.fn()} />);

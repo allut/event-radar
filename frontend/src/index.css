@@ -317,6 +317,8 @@
   --wrap-inset: max(var(--space-6), calc((100% - var(--page-max-wide)) / 2 + var(--space-6)));
 
   /* Component max/min-widths */
+  --promo-summary-width: 340px;   /* Promotion request form: preview and price column */
+  --promo-lock-icon-size: 12px;   /* Promotion request form: padlock beside "fixed" notes */
   --card-max-narrow: 400px;       /* shared/Card.module.css .cardPage */
   --explore-search-max: 480px;    /* Explore search field cap in the wide-band toolbar */
   --modal-max-width: 480px;       /* Modal panel */

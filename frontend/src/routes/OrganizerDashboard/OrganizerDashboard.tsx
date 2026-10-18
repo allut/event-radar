@@ -7,9 +7,11 @@ import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { usePagedQuery } from '../../hooks/usePagedQuery';
 import { usePageSettledFocus } from '../../hooks/usePageSettledFocus';
+import { useNotePromotionsOffer } from '../../hooks/usePromotionsOffer';
 import { t, ti, tn } from '../../i18n';
 import { apiErrorMessage, formatCount, formatEventTime, withLocaleQuery, withQueryParam } from '../../utils';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
+import PromotionRowAction from '../../components/PromotionRowAction';
 import OrganizerProfileNudge from '../../components/OrganizerProfileNudge';
 import ClaimEventPicker from '../../components/ClaimEventPicker';
 import PageState from '../../components/PageState';
@@ -23,6 +25,7 @@ import { ORGANIZER_CLAIMS_SUMMARY_KEY, ORGANIZER_CLAIMS_SUMMARY_LIMIT } from '..
 import { UI_STATE } from '../../constants/core';
 import { ORGANIZER_EVENTS_PAGE_SIZE } from '../../constants/organizer';
 import { ROUTES } from '../../constants/routes';
+import type { PromotionRowFlags } from '../../lib/organizerPromotions';
 import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerDashboard.module.css';
 
@@ -33,6 +36,8 @@ interface OrganizerEvent {
   starts_at: string;
   status: string;
   needs_review: boolean;
+  /** Present only while the Promotions offer is on. */
+  promotion?: PromotionRowFlags;
 }
 
 interface OrganizerEventsResponse {
@@ -123,6 +128,8 @@ export default function OrganizerDashboard() {
     onPageSettled,
   });
 
+  useNotePromotionsOffer(events);
+
   const deleteMutation = useMutation({
     mutationFn: (eventId: number) => organizerApi.delete(API.organizerEvent(eventId)),
     onSuccess: () => {
@@ -189,6 +196,12 @@ export default function OrganizerDashboard() {
                   <Link to={localePath(ROUTES.organizerEventEdit(event.id))} className={styles.editBtn}>
                     {t('organizer_edit', locale)}
                   </Link>
+                  <PromotionRowAction
+                    eventId={event.id}
+                    eventTitle={event.title}
+                    promotion={event.promotion}
+                    locale={locale}
+                  />
                   <button
                     type="button"
                     className={styles.deleteBtn}

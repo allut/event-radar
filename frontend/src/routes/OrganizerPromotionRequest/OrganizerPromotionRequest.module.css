@@ -1,0 +1,475 @@
+.page {
+  composes: page from '../../components/shared/Page.module.css';
+}
+
+.main {
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: var(--page-max-organizer);
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.mainWide {
+  max-width: var(--page-max-medium);
+}
+
+.back {
+  align-self: flex-start;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.masthead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.eyebrow {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  color: var(--accent);
+}
+
+.heading {
+  font-family: var(--font-display);
+  font-size: var(--heading-xl);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-tighter);
+  color: var(--text);
+  line-height: var(--leading-display);
+  overflow-wrap: break-word;
+}
+
+.sub {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.unavailable {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.eyebrowSm {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-soft);
+  letter-spacing: var(--eyebrow-tracking);
+  text-transform: uppercase;
+}
+
+/* ─── Layout: fields | summary, actions under the fields ───────────────── */
+.formGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--promo-summary-width);
+  grid-template-areas:
+    'fields summary'
+    'actions summary';
+  grid-template-rows: auto 1fr;
+  column-gap: var(--space-7);
+  row-gap: var(--space-4);
+  align-items: start;
+}
+
+.fields {
+  grid-area: fields;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.summary {
+  grid-area: summary;
+  position: sticky;
+  top: calc(var(--bar-h-condensed) + var(--space-4));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.actionsBox {
+  grid-area: actions;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.fieldRow {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.fieldCol {
+  flex: 1 1 var(--flex-basis-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.group > .fieldCol {
+  flex: 0 0 auto;
+}
+
+.label {
+  composes: fieldLabel from '../../components/shared/Field.module.css';
+}
+
+.optional {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-dim);
+  font-weight: var(--fw-regular);
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.input {
+  composes: fieldInput from '../../components/shared/Field.module.css';
+  width: 100%;
+  min-width: 0;
+  font-family: inherit;
+}
+
+.input[readonly] {
+  background: var(--bg-card);
+  color: var(--text-soft);
+}
+
+.invalid {
+  border-color: var(--danger);
+}
+
+.textarea {
+  resize: vertical;
+  min-height: var(--textarea-height-md);
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-wider);
+}
+
+.lockWrap {
+  position: relative;
+}
+
+.lockWrap .input {
+  padding-right: var(--space-8);
+}
+
+.lockIcon {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--field-icon-size);
+  height: var(--field-icon-size);
+  color: var(--text-muted);
+}
+
+/* ─── Registry lookup states ────────────────────────────────────────────── */
+.lookup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--fs-sm);
+  min-height: var(--space-3);
+}
+
+.lookupOk {
+  color: var(--success);
+}
+
+.lookupBad {
+  color: var(--danger);
+}
+
+.lookupWarn {
+  color: var(--accent-ink);
+}
+
+.lookupMute {
+  color: var(--text-muted);
+}
+
+.spinner {
+  composes: ring ringMuted sizeSm from '../../components/shared/Spinner.module.css';
+}
+
+.onAccent {
+  composes: ringOnAccent from '../../components/shared/Spinner.module.css';
+}
+
+/* ─── Fixed event, notices, errors ──────────────────────────────────────── */
+.fixedEvent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-card);
+  border: var(--border-w-hair) solid var(--border);
+  border-left: var(--border-w-alert) solid var(--border);
+}
+
+.fixedTitle {
+  font-family: var(--font-display);
+  font-size: var(--heading-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  line-height: var(--leading-display);
+}
+
+.rowMeta {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.fixedNote {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.fixedNote svg {
+  width: var(--promo-lock-icon-size);
+  height: var(--promo-lock-icon-size);
+}
+
+.err {
+  composes: alert from '../../components/shared/Alert.module.css';
+}
+
+.notice {
+  composes: alertAccent from '../../components/shared/Alert.module.css';
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-3);
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+.notice strong {
+  color: var(--text);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-base);
+}
+
+.windowRead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.windowRead b {
+  color: var(--text);
+  font-weight: var(--fw-semibold);
+}
+
+/* ─── Checkbox rows (Onboarding's digest opt-in look) ───────────────────── */
+.chkRow {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+.chkInput {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  /* Above the box beside it (a flex item paints in tree order), so a click lands on the input. */
+  z-index: var(--z-card-overlay);
+}
+
+.chkBox {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  border: var(--border-w-hair) solid var(--text-muted);
+  border-radius: 0;
+  background: var(--bg-raised);
+  color: var(--on-accent);
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.chkMark {
+  width: var(--checkbox-mark-size);
+  height: var(--checkbox-mark-size);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  opacity: 0;
+}
+
+.chkInput:checked + .chkBox {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.chkInput:checked + .chkBox .chkMark {
+  opacity: 1;
+}
+
+.chkInput[aria-invalid='true'] + .chkBox {
+  border-color: var(--danger);
+}
+
+.chkInput:focus-visible + .chkBox {
+  outline: var(--border-w-ring) solid var(--accent);
+  outline-offset: var(--space-0-2);
+}
+
+.chkText {
+  cursor: pointer;
+}
+
+.chkText a {
+  text-decoration: underline;
+  text-underline-offset: var(--underline-offset);
+}
+
+/* ─── Actions ───────────────────────────────────────────────────────────── */
+.submit {
+  composes: btnSubmit from '../../components/shared/Button.module.css';
+  gap: var(--space-2);
+  width: 100%;
+  font-family: inherit;
+}
+
+.textButton {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  text-decoration: underline;
+  text-underline-offset: var(--underline-offset);
+  transition: color var(--transition);
+  padding: var(--space-1) 0;
+  text-align: center;
+}
+
+.textButton:hover {
+  color: var(--text);
+}
+
+.small {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ─── Summary ───────────────────────────────────────────────────────────── */
+.ledger {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-w-hair) solid var(--border);
+  background: var(--bg-raised);
+}
+
+.totalHead {
+  margin-top: var(--space-2);
+}
+
+.priceLine {
+  font-family: var(--font-display);
+  font-size: var(--heading-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  line-height: var(--leading-display);
+}
+
+.total {
+  font-family: var(--font-display);
+  font-size: var(--heading-md);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  line-height: var(--leading-display);
+  font-variant-numeric: lining-nums;
+  overflow-wrap: anywhere;
+}
+
+.totalMuted {
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-regular);
+  color: var(--text-muted);
+}
+
+.promise {
+  composes: alertAccent from '../../components/shared/Alert.module.css';
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--fs-sm);
+  color: var(--text-soft);
+}
+
+.promise strong {
+  color: var(--text);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-base);
+}
+
+@media (max-width: 900px) {
+  .formGrid {
+    grid-template-rows: none;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'fields'
+      'summary'
+      'actions';
+  }
+
+  .summary {
+    position: static;
+  }
+}
+
+@media (max-width: 640px) {
+  .main {
+    padding: var(--space-6) var(--space-4);
+  }
+}

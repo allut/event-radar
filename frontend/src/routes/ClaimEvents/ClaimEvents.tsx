@@ -5,8 +5,10 @@ import { useOrganizerLogout } from '../../hooks/useOrganizerLogout';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { usePagedQuery } from '../../hooks/usePagedQuery';
 import { usePageSettledFocus } from '../../hooks/usePageSettledFocus';
+import { useNotePromotionsOffer } from '../../hooks/usePromotionsOffer';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
+import PromotionRowAction from '../../components/PromotionRowAction';
 import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';
 import Pager from '../../components/Pager';
@@ -16,6 +18,7 @@ import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
 import { CLAIM_EVENTS_PAGE_SIZE } from '../../constants/claims';
 import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
+import type { PromotionRowFlags } from '../../lib/organizerPromotions';
 import { formatEventTime, titleWithBrand, withLocaleQuery, withQueryParam } from '../../utils';
 import styles from './ClaimEvents.module.css';
 
@@ -24,6 +27,8 @@ interface ClaimListEvent {
   title: string;
   starts_at: string;
   status: string;
+  /** Present only while the Promotions offer is on. */
+  promotion?: PromotionRowFlags;
 }
 
 interface ClaimEventsResponse {
@@ -79,6 +84,8 @@ export default function ClaimEvents() {
     onPageSettled,
   });
 
+  useNotePromotionsOffer(events);
+
   return (
     <div className={styles.page}>
       <SeoTags meta={seoMeta} />
@@ -106,19 +113,31 @@ export default function ClaimEvents() {
         ) : (
           <ul className={styles.list} aria-labelledby={headingId} aria-busy={isPlaceholderData}>
             {events.map((event) => (
-              <li key={event.id}>
-                <Link
-                  to={`${ROUTES.organizerClaimEdit(claimId)}?event_id=${event.id}`}
-                  className={styles.row}
-                >
-                  <div className={styles.rowMain}>
-                    <span className={styles.rowTitle}>{event.title}</span>
-                    <span className={styles.rowMeta}>{formatEventTime(event.starts_at, locale)}</span>
-                  </div>
-                  <span className={`${styles.statusBadge} ${styles[`status_${event.status}`] ?? ''}`}>
-                    {t(`organizer_status_${event.status}`, locale)}
+              <li key={event.id} className={styles.row}>
+                <div className={styles.rowMain}>
+                  <span className={styles.rowTitle}>
+                    <Link
+                      to={`${ROUTES.organizerClaimEdit(claimId)}?event_id=${event.id}`}
+                      className={styles.rowLink}
+                    >
+                      {event.title}
+                    </Link>
                   </span>
-                </Link>
+                  <span className={styles.rowMeta}>{formatEventTime(event.starts_at, locale)}</span>
+                </div>
+                <span className={`${styles.statusBadge} ${styles[`status_${event.status}`] ?? ''}`}>
+                  {t(`organizer_status_${event.status}`, locale)}
+                </span>
+                {(event.promotion?.badge || event.promotion?.promotable) && (
+                  <div className={styles.rowActions}>
+                    <PromotionRowAction
+                      eventId={event.id}
+                      eventTitle={event.title}
+                      promotion={event.promotion}
+                      locale={locale}
+                    />
+                  </div>
+                )}
               </li>
             ))}
           </ul>

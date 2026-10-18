@@ -174,3 +174,40 @@ describe('ClaimEvents (#436)', () => {
     });
   });
 });
+
+describe('ClaimEvents Promotions row action (#614)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  const promoPage = () =>
+    page({
+      events: [
+        { id: 1, title: 'Jazzkaar Late Night', starts_at: '2026-10-03T20:00:00+03:00', status: 'published', promotion: { promotable: true, badge: null } },
+        { id: 2, title: 'Winter Chamber Series', starts_at: '2026-10-24T19:30:00+03:00', status: 'published', promotion: { promotable: false, badge: 'live' } },
+      ],
+    });
+
+  it('shows Promote on a promotable row and the status badge on a promoted one, keeping the row link', async () => {
+    mockGet.mockResolvedValueOnce(promoPage());
+    renderList();
+
+    expect(await screen.findByRole('link', { name: 'Promote Jazzkaar Late Night' })).toHaveAttribute(
+      'href',
+      '/en/organizer/promotions/new?event_id=1',
+    );
+    expect(screen.getByRole('link', { name: 'Live: Winter Chamber Series. Open Promotions.' })).toHaveAttribute(
+      'href',
+      '/en/organizer/promotions?event=2',
+    );
+    expect(screen.getByText('Jazzkaar Late Night').closest('a')).toHaveAttribute('href', '/organizer/claims/7/edit?event_id=1');
+  });
+
+  it('renders no Promotions action when rows carry no promotion key', async () => {
+    mockGet.mockResolvedValueOnce(page());
+    renderList();
+
+    await screen.findByText('Jazzkaar Late Night');
+    expect(screen.queryByRole('link', { name: /^Promote / })).not.toBeInTheDocument();
+  });
+});

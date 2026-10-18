@@ -33,3 +33,8 @@ export const PRICE_INPUT_STEP = '0.01';
 
 // Heading levels the organizer rich-text editor offers (h1/h2 stay page chrome).
 export const RICH_TEXT_HEADING_LEVELS = [3, 4] as const;
+
+// localStorage hint: whether the Promotions offer is on, learned from the
+// `promotion` key on event rows or the Promotions list. Lets the top bar show
+// its "Promotions" nav item without a request of its own.
+export const ORGANIZER_PROMOTIONS_OFFER_KEY = 'organizer_promotions_offer';

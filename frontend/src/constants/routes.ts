@@ -41,6 +41,15 @@ export const ROUTES = {
   organizerSubmit: '/organizer/submit',
   organizerSettings: '/organizer/settings',
   organizerContact: '/organizer/contact',
+  organizerPromotions: '/organizer/promotions',
+  organizerPromotionRequest: '/organizer/promotions/new',
+  // Stripe's success_url (backend PROMOTION_CHECKOUT_PATH_SUCCESS); the cancel
+  // url is organizerPromotions.
+  organizerPromotionSuccess: '/organizer/promotions/checkout/success',
+  // Placeholder targets for the Organizer terms page (#613, not built yet);
+  // the form's terms and content-policy links point here.
+  organizerTerms: '/organizer/terms',
+  organizerContentPolicy: '/organizer/terms#promotion-content-policy',
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
   // Admin console (issue #154) — registered entirely outside App.tsx's
@@ -123,6 +132,9 @@ export const ORGANIZER_NAV_ITEMS: readonly NavItem[] = [
   { route: ROUTES.organizerDashboard, labelKey: 'organizer_dashboard_title' },
   { route: ROUTES.organizerClaims, labelKey: 'dashboard_claims_title' },
 ];
+
+// Appended by OrganizerTopBar only while the Promotions offer is on.
+export const ORGANIZER_PROMOTIONS_NAV_ITEM: NavItem = { route: ROUTES.organizerPromotions, labelKey: 'promo_nav' };
 
 export const ORGANIZER_ACCOUNT_MENU_ITEMS: readonly NavItem[] = [
   { route: ROUTES.organizerSettings, labelKey: 'organizer_settings_nav' },

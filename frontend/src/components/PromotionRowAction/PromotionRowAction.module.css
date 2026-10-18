@@ -1,0 +1,13 @@
+.promote {
+  composes: btnOutline from '../shared/Button.module.css';
+  padding: var(--space-0-45) var(--space-0-875);
+  font-size: var(--fs-sm);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Global gold a:hover would otherwise outrank the outline button's color. */
+a.promote:hover {
+  color: var(--text);
+}
