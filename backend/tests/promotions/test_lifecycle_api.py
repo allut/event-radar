@@ -76,6 +76,7 @@ async def test_detail_shape(client, db, make) -> None:
         "void": False,
         "refund": True,
         "refundable_cents": 3100,
+        "clear_restriction": False,
     }
     assert [s["trigger"] for s in data["snapshots"]] == ["mark_paid"]
     snap = data["snapshots"][0]

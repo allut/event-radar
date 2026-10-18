@@ -27,6 +27,7 @@ from app.constants.promotions import (
 from app.models.models import AdminAction, Event, Organizer, Promotion, PromotionDailyStat
 from app.promotions.grant import net_price_cents, vat_cents
 from app.promotions.owners import resolve_owner_ids
+from app.promotions.restriction import is_restricted
 from app.promotions.snapshots import list_snapshots, serialize_snapshot
 from app.promotions.windows import (
     event_last_day,
@@ -87,6 +88,18 @@ def serialize_promotion(
         "end_note": promotion.end_note,
         "refunded_cents": promotion.refunded_cents,
         "refund_note": promotion.refund_note,
+        "restriction_clearance": (
+            {
+                "restriction": promotion.restriction_cleared,
+                "by": promotion.restriction_clearance_by,
+                "note": promotion.restriction_clearance_note,
+                "cleared_at": promotion.restriction_cleared_at.isoformat()
+                if promotion.restriction_cleared_at
+                else None,
+            }
+            if promotion.restriction_cleared is not None
+            else None
+        ),
         "created_at": promotion.created_at.isoformat() if promotion.created_at else None,
     }
 
@@ -131,6 +144,7 @@ async def grant_context(db: AsyncSession, event: Event, now: datetime) -> dict:
     return {
         "event_id": event.id,
         "event_title": event.title_orig,
+        "promotion_restriction": event.promotion_restriction,
         "owner": (
             {"organizer_id": owner.id, "name": owner.name, "email": owner.email}
             if owner is not None
@@ -241,8 +255,15 @@ async def promotion_detail(db: AsyncSession, promotion: Promotion, now: datetime
         "ends_at": event.ends_at.isoformat() if event.ends_at else None,
         "last_day": event_last_day(event).isoformat(),
         "venue_name": event.venue_name,
+        "promotion_restriction": event.promotion_restriction,
     }
     payload["actions"] = available_actions(promotion, today)
+    payload["actions"]["clear_restriction"] = (
+        promotion.status in PROMOTION_HOLDING_STATUSES
+        and today <= promotion.end_date
+        and is_restricted(event.promotion_restriction)
+        and promotion.restriction_cleared != event.promotion_restriction
+    )
     payload["repoint_candidates"] = await repoint_candidates(db, promotion, event)
     payload["snapshots"] = [serialize_snapshot(sn) for sn in await list_snapshots(db, promotion.id)]
     payload["audit"] = [

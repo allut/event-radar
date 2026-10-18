@@ -1200,6 +1200,14 @@ class Promotion(Base):
         Integer, nullable=False, server_default="0", default=0
     )
     refund_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Restriction clearance (#612): the Promotion restriction an admin
+    # deliberately reviewed and cleared. It covers only that restriction.
+    restriction_cleared: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    restriction_clearance_by: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    restriction_clearance_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    restriction_cleared_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

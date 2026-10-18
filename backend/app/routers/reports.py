@@ -30,6 +30,8 @@ from app.email.report_notify import send_report_notification
 from app.models.models import Event, EventReport, User
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
+from app.promotions.promoted import is_event_promoted
+from app.promotions.windows import now_tallinn, tallinn_today
 from app.routers.utils import validate_report_reason
 from app.events.queries import public_event_filter
 
@@ -129,6 +131,9 @@ async def submit_report(
     # report (pre_upsert_open_count would already be >= 1 in that case).
     if pre_upsert_open_count == 0:
         try:
+            is_promoted = await is_event_promoted(
+                db, body.event_id, tallinn_today(now_tallinn())
+            )
             await send_report_notification(
                 event,
                 body.reason,
@@ -136,6 +141,7 @@ async def submit_report(
                 body.is_illegal_allegation,
                 1,
                 current_user.email,
+                is_promoted=is_promoted,
             )
         except Exception:
             log.exception(

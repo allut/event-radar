@@ -77,6 +77,8 @@ from app.constants.rate_limits import RATE_LIMIT_BROWSE, RATE_LIMIT_SUBMIT
 from app.constants.reports import REPORT_AUTO_RESOLVE_NOTE
 from app.constants.security import URL_MAX_LEN
 from app.db import get_db
+from app.promotions.restriction import reassess_after_edit
+from app.promotions.windows import now_tallinn
 from app.ingestion.adapter import NormalizedEvent, insert_normalized_event
 from app.ingestion.content_filters import content_flags
 from app.ingestion.http_client import http_post, safe_render_url
@@ -171,6 +173,17 @@ class SubmitEventBody(BaseModel):
         validate_time_ordering(self.starts_at, self.ends_at)
         validate_price_ordering(self.price_min, self.price_max)
         return self
+
+
+# Edits to these re-run the Promotion restriction assessment (#612).
+_RESTRICTION_REASSESS_FIELDS = frozenset(
+    {
+        "title", "title_en", "title_ru",
+        "description", "description_en", "description_ru",
+        "important_info", "important_info_en", "important_info_ru",
+        "venue_name", "venue_id",
+    }
+)
 
 
 class PatchEventBody(BaseModel):
@@ -526,6 +539,9 @@ async def update_own_event(
         linked_venue.name_ru if linked_venue else None,
     ) and event.status == EVENT_STATUS_PUBLISHED:
         event.status = EVENT_STATUS_CLASSIFIED
+
+    if fields_set & _RESTRICTION_REASSESS_FIELDS:
+        await reassess_after_edit(db, event, now_tallinn())
 
     await db.commit()
     return {"id": event.id, "slug": event.slug, "status": event.status}

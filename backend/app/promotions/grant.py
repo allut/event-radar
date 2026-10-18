@@ -31,6 +31,7 @@ from app.constants.promotions import (
 from app.models.models import Event, Promotion
 from app.promotions.cap import full_days, lock_cap
 from app.promotions.owners import resolve_owner_ids
+from app.promotions.restriction import clearance_violations, is_restricted, record_clearance
 from app.promotions.snapshots import take_snapshot
 from app.promotions.windows import (
     RuleViolation,
@@ -59,6 +60,9 @@ class GrantRequest:
     is_complimentary: bool = False
     complimentary_note: str | None = None
     invoice_reference: str | None = None
+    # Restriction clearance (#612): required when the event is restricted.
+    restriction_clearance_confirmed: bool = False
+    restriction_clearance_note: str | None = None
 
 
 def vat_cents(net_cents: int, vat_rate_percent: Decimal) -> int:
@@ -129,8 +133,12 @@ async def grant_promotion(
     owner_id = (await resolve_owner_ids(db, [event])).get(event.id)
     if owner_id is None:
         raise PromotionRefused([RuleViolation(PROMOTION_ERROR_NO_OWNER)])
-    violations = request_violations(request) + await validate_grant(
-        db, event, request.start_date, request.end_date, now
+    violations = (
+        request_violations(request)
+        + clearance_violations(
+            event, request.restriction_clearance_confirmed, request.restriction_clearance_note
+        )
+        + await validate_grant(db, event, request.start_date, request.end_date, now)
     )
     if violations:
         raise PromotionRefused(violations)
@@ -158,6 +166,8 @@ async def grant_promotion(
         granted_by=PROMOTION_GRANTED_BY_ADMIN,
         paid_at=now if request.is_complimentary else None,
     )
+    if is_restricted(event.promotion_restriction):
+        record_clearance(promotion, event, request.restriction_clearance_note or "", now)
     db.add(promotion)
     await db.flush()
     if request.is_complimentary:

@@ -52,6 +52,7 @@ from app.constants.promotions import (
 )
 from app.models.models import Event, Promotion
 from app.promotions.cap import lock_cap
+from app.promotions.restriction import clear_existing
 from app.promotions.grant import (
     PromotionRefused,
     net_price_cents,
@@ -347,6 +348,24 @@ async def record_refund(
         raise _refuse(PROMOTION_ERROR_REFUND_EXCEEDS_PAID)
     promotion.refunded_cents += amount_cents
     promotion.refund_note = f"{promotion.refund_note}\n{cleaned}" if promotion.refund_note else cleaned
+    promotion.updated_at = now
+    await db.flush()
+    return promotion
+
+
+async def clear_restriction(
+    db: AsyncSession, promotion_id: int, note: str | None, now: datetime
+) -> Promotion:
+    """Record a Restriction clearance for the event's current restriction on a
+    scheduled or live Promotion (the newly-flagged path): the fill gate then
+    lets it resume. The clearance covers only that restriction."""
+    promotion = await _load_locked(db, promotion_id)
+    if not _is_holding(promotion, tallinn_today(now)):
+        raise _refuse(PROMOTION_ERROR_NOT_EDITABLE)
+    event = await _event_of(db, promotion)
+    violations = clear_existing(promotion, event, note, now)
+    if violations:
+        raise PromotionRefused(violations)
     promotion.updated_at = now
     await db.flush()
     return promotion

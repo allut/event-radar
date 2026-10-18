@@ -33,6 +33,7 @@ from app.constants.admin import (
     ADMIN_ACTION_INGEST,
     ADMIN_ACTION_INGEST_SOURCE,
     ADMIN_ACTION_PIPELINE_RUN,
+    ADMIN_ACTION_PROMOTION_CLEAR_RESTRICTION,
     ADMIN_ACTION_PROMOTION_EDIT,
     ADMIN_ACTION_PROMOTION_END,
     ADMIN_ACTION_PROMOTION_GRANT,
@@ -135,6 +136,7 @@ from app.ingestion.jobs import (
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.promotions.cap import cap_strip
+from app.promotions.promoted import promoted_clause
 from app.promotions.grant import (
     GrantRequest,
     PromotionRefused,
@@ -142,6 +144,7 @@ from app.promotions.grant import (
     validate_grant,
 )
 from app.promotions.lifecycle import (
+    clear_restriction,
     PromotionNotFound,
     edit_promotion,
     end_early,
@@ -873,7 +876,7 @@ async def admin_list_reports(
     Excludes cancelled events. ``reason``/``illegal_only`` narrow which
     events qualify for the queue (an event with at least one matching open
     report); each qualifying event's row still aggregates *all* of its open
-    reports, not just the matching ones. Ordered illegal-first, then by
+    reports, not just the matching ones. Ordered promoted-first (an event with a live paid Promotion, `is_promoted`), then illegal-first, then by
     report count, then oldest-waiting first, then event id (so offset paging
     never repeats or skips rows that tie on the first three keys).
 
@@ -910,10 +913,15 @@ async def admin_list_reports(
     )
     report_count_col = func.count(EventReport.id).label("report_count")
     oldest_col = func.min(EventReport.created_at).label("oldest_open_report_at")
+    # "Promoted" (#612): a live paid Promotion on the event. Sorts first.
+    promoted_col = promoted_clause(
+        EventReport.event_id, tallinn_today(now_tallinn())
+    ).label("is_promoted")
 
     agg = (
         select(
             EventReport.event_id,
+            promoted_col,
             has_illegal_col,
             report_count_col,
             oldest_col,
@@ -924,6 +932,7 @@ async def admin_list_reports(
     )
 
     order_keys = (
+        promoted_col.desc(),
         has_illegal_col.desc(),
         report_count_col.desc(),
         oldest_col.asc(),
@@ -1003,6 +1012,7 @@ async def admin_list_reports(
                 "report_count": row.report_count,
                 "reasons": sorted({r.reason for r in event_reports}),
                 "has_illegal_allegation": bool(row.has_illegal_allegation),
+                "is_promoted": bool(row.is_promoted),
                 "reports": [
                     {
                         "reason": r.reason,
@@ -1646,6 +1656,9 @@ class _PromotionGrantBody(BaseModel):
     is_complimentary: bool = False
     complimentary_note: str | None = Field(default=None, max_length=PROMOTION_NOTE_MAX_CHARS)
     invoice_reference: str | None = Field(default=None, max_length=64)
+    # Required (both) when the event carries a Promotion restriction (#612).
+    restriction_clearance_confirmed: bool = False
+    restriction_clearance_note: str | None = Field(default=None, max_length=PROMOTION_NOTE_MAX_CHARS)
 
 
 @router.get("/promotions/cap-strip", dependencies=[Depends(get_current_admin)])
@@ -1772,6 +1785,8 @@ async def admin_grant_promotion(
         is_complimentary=body.is_complimentary,
         complimentary_note=body.complimentary_note,
         invoice_reference=(body.invoice_reference or "").strip() or None,
+        restriction_clearance_confirmed=body.restriction_clearance_confirmed,
+        restriction_clearance_note=body.restriction_clearance_note,
     )
     if not grant_request.advertiser_legal_name:
         raise HTTPException(
@@ -1803,6 +1818,8 @@ async def admin_grant_promotion(
                 "invoice_reference": promotion.invoice_reference,
                 "advertiser_legal_name": promotion.advertiser_legal_name,
                 "advertiser_registry_code": promotion.advertiser_registry_code,
+                "restriction_cleared": promotion.restriction_cleared,
+                "restriction_clearance_note": promotion.restriction_clearance_note,
             }
             emit_admin_log = log_admin_action(
                 db, ADMIN_ACTION_PROMOTION_GRANT, promotion.id, result
@@ -1847,6 +1864,10 @@ class _PromotionEditBody(BaseModel):
 
 class _PromotionRepointBody(BaseModel):
     event_id: int
+
+
+class _PromotionClearBody(BaseModel):
+    note: str = Field(max_length=PROMOTION_NOTE_MAX_CHARS)
 
 
 class _PromotionReasonBody(BaseModel):
@@ -2004,6 +2025,22 @@ async def admin_repoint_promotion(
         ADMIN_ACTION_PROMOTION_REPOINT,
         lambda db, now: repoint_promotion(db, promotion_id, body.event_id, now),
         {"to_event_id": body.event_id},
+    )
+
+
+@router.post("/promotions/{promotion_id}/clear-restriction", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_clear_promotion_restriction(
+    promotion_id: int, body: _PromotionClearBody, request: Request
+) -> dict:
+    """Clear the event's current Promotion restriction on a scheduled or live
+    Promotion (a required note); the fill gate then lets it resume. 422 when
+    the event is not restricted or the note is empty. Covers only that restriction."""
+    return await _run_promotion_command(
+        promotion_id,
+        ADMIN_ACTION_PROMOTION_CLEAR_RESTRICTION,
+        lambda db, now: clear_restriction(db, promotion_id, body.note, now),
+        {"note": body.note.strip()},
     )
 
 

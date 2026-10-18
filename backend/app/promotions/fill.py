@@ -10,8 +10,8 @@ order:
 3. status ``paid`` and the window covers today's Tallinn date
 4. the event is public, canonical and not ended
 5. the Organizer still owns it (``owners.resolve_owner_ids``)
-6. ``promotion_restriction`` is ``none`` (a Restriction clearance, when it
-   lands, widens this to the cleared restriction)
+6. ``promotion_restriction`` is ``none`` or the restriction the Promotion's
+   Restriction clearance covers (``restriction_cleared``)
 
 An Explore context adds one more reason: the event must pass every active
 facet and ``q`` through ``facet_conditions`` (``filters_mismatch``).
@@ -93,10 +93,13 @@ def _status_reason(promotion: Promotion, today: date) -> str | None:
     return None
 
 
-def _restriction_reason(event: Event) -> str | None:
+def _restriction_reason(event: Event, promotion: Promotion) -> str | None:
     if event.promotion_restriction is None:
         return PROMOTION_NOT_SHOWING_RESTRICTION_UNASSESSED
-    if event.promotion_restriction != PROMOTION_RESTRICTION_NONE:
+    if event.promotion_restriction not in (
+        PROMOTION_RESTRICTION_NONE,
+        promotion.restriction_cleared,
+    ):
         return PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED
     return None
 
@@ -159,7 +162,7 @@ async def evaluate_gate(
         if reason is None and owners.get(event.id) != promotion.organizer_id:
             reason = PROMOTION_NOT_SHOWING_NOT_OWNED
         if reason is None:
-            reason = _restriction_reason(event)
+            reason = _restriction_reason(event, promotion)
         if reason is None and facet_ids is not None and event.id not in facet_ids:
             reason = PROMOTION_NOT_SHOWING_FILTERS_MISMATCH
         results.append(GateResult(promotion, event, reason))

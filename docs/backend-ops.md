@@ -116,6 +116,7 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 - **`/admin/pipeline` triggers every job with a live result stream.** It asks for confirmation before an expensive or destructive run, such as a digest send or a cleanup delete.
 - **`/admin/promotions/{id}/daily-stats` serves the per-day delivery table.** The lifespan also flushes the Promotion counters on shutdown.
 - **`/admin/promotions`, `/admin/promotions/cap-strip` and `/admin/events/{id}/promotion-context|promotions[/validate]` back the Promotion console.** A grant writes a `promotion_grant` audit row in its own transaction. See [data-model.md](data-model.md)'s Promotions section.
+- **`POST /admin/promotions/{id}/clear-restriction` records a Restriction clearance** (`note` required) for a scheduled or live Promotion whose event became restricted, and the gate resumes it. The grant body takes `restriction_clearance_confirmed` and `restriction_clearance_note`, required when the event is restricted.
 - **`GET /admin/promotions/{id}` is the Promotion detail,** and `POST .../{id}/mark-paid|repoint|end|void|refund` plus `PATCH .../{id}` are its commands. Each runs under the cap lock, writes its audit row in the same transaction (409 for a state conflict, 422 for bad input, 404 for a missing row) and returns the refreshed detail.
 - **End and void email the Organizer's reason after the commit.** A failed send is logged and never undoes the command.
 - **Every `/admin/*` route is rate-limited.** See [security.md](security.md)'s Rate Limiting section.

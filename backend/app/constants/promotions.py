@@ -95,6 +95,11 @@ PROMOTION_ERROR_REFUND_AMOUNT = "refund_amount_invalid"
 PROMOTION_ERROR_REFUND_EXCEEDS_PAID = "refund_exceeds_paid"
 PROMOTION_ERROR_REFUND_NOTE_REQUIRED = "refund_note_required"
 
+# Restriction clearance (#612): granting a restricted event needs both.
+PROMOTION_ERROR_CLEARANCE_REQUIRED = "restriction_clearance_required"
+PROMOTION_ERROR_CLEARANCE_NOTE_REQUIRED = "restriction_clearance_note_required"
+PROMOTION_ERROR_CLEARANCE_NOT_NEEDED = "restriction_not_flagged"
+
 # Codes that mean "the state of things forbids this" (HTTP 409); every other
 # code is a bad input (HTTP 422).
 PROMOTION_CONFLICT_ERROR_CODES = frozenset(
@@ -142,6 +147,9 @@ PROMOTION_ERROR_MESSAGES = {
     PROMOTION_ERROR_REFUND_AMOUNT: "The refund amount must be a positive number of cents.",
     PROMOTION_ERROR_REFUND_EXCEEDS_PAID: "The refund would exceed what was paid.",
     PROMOTION_ERROR_REFUND_NOTE_REQUIRED: "A refund note is required.",
+    PROMOTION_ERROR_CLEARANCE_REQUIRED: "This event carries a Promotion restriction; confirm the clearance.",
+    PROMOTION_ERROR_CLEARANCE_NOTE_REQUIRED: "A Restriction clearance needs a note.",
+    PROMOTION_ERROR_CLEARANCE_NOT_NEEDED: "This event carries no Promotion restriction to clear.",
 }
 ERROR_PROMOTION_INVALID_STATE = "state must be one of scheduled, live, finished"
 
@@ -177,6 +185,11 @@ PROMOTION_NOT_SHOWING_FILTERS_MISMATCH = "filters_mismatch"
 
 # `events.promotion_restriction`: `None` = unassessed, `none` = clear.
 PROMOTION_RESTRICTION_NONE = "none"
+PROMOTION_RESTRICTIONS = ("tobacco", "gambling", "alcohol", "political", "weapons")
+VALID_PROMOTION_RESTRICTION_VALUES = frozenset((PROMOTION_RESTRICTION_NONE, *PROMOTION_RESTRICTIONS))
+# Restriction clearance (#612): granting a restricted event needs both.
+# Admin-facing paths (frontend) linked from the newly-flagged email.
+ADMIN_PROMOTIONS_PATH = "/admin/promotions"
 
 # Content snapshots (#601): what a Promotion displayed, taken when it becomes
 # paid and on every edit or re-point while scheduled or live. Never pruned.

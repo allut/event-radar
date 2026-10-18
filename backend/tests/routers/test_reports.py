@@ -224,7 +224,7 @@ class TestFirstReportNotification:
         from app.routers.reports import ReportBody, submit_report
 
         event = make_event(10)
-        mock_db.scalar.side_effect = [event, 0]
+        mock_db.scalar.side_effect = [event, 0, None]
         user = make_user()
 
         with patch(
@@ -238,7 +238,7 @@ class TestFirstReportNotification:
             )
 
         mock_send.assert_awaited_once_with(
-            event, "spam_or_scam", None, False, 1, user.email
+            event, "spam_or_scam", None, False, 1, user.email, is_promoted=False
         )
 
     @pytest.mark.asyncio
@@ -298,7 +298,7 @@ class TestFirstReportNotification:
         the durable record regardless of delivery."""
         from app.routers.reports import ReportBody, submit_report
 
-        mock_db.scalar.side_effect = [make_event(10), 0]
+        mock_db.scalar.side_effect = [make_event(10), 0, None]
 
         with patch(
             "app.routers.reports.send_report_notification",

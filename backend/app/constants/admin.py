@@ -43,6 +43,7 @@ ADMIN_ACTION_PROMOTION_REPOINT = "promotion_repoint"
 ADMIN_ACTION_PROMOTION_END = "promotion_end"
 ADMIN_ACTION_PROMOTION_VOID = "promotion_void"
 ADMIN_ACTION_PROMOTION_REFUND = "promotion_refund"
+ADMIN_ACTION_PROMOTION_CLEAR_RESTRICTION = "promotion_clear_restriction"
 PROMOTION_ADMIN_ACTIONS = frozenset(
     {
         ADMIN_ACTION_PROMOTION_GRANT,
@@ -52,6 +53,7 @@ PROMOTION_ADMIN_ACTIONS = frozenset(
         ADMIN_ACTION_PROMOTION_END,
         ADMIN_ACTION_PROMOTION_VOID,
         ADMIN_ACTION_PROMOTION_REFUND,
+        ADMIN_ACTION_PROMOTION_CLEAR_RESTRICTION,
     }
 )
 # `action` field values for the /admin/pipeline job triggers (issue #159).

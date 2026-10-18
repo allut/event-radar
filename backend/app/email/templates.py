@@ -145,6 +145,7 @@ CONTACT_SUBJECT = "Contact form — {name}"
 EMAIL_LINE_BREAK = "<br>"
 
 REPORT_NOTIFY_SUBJECT = "New report — {title}"
+REPORT_NOTIFY_SUBJECT_PROMOTED = "New report on a promoted event — {title}"
 REPORT_NOTIFY_TEXT_BODY = (
     "Event: {title} ({event_href})\n"
     "Source: {source}\n"
@@ -169,3 +170,18 @@ REPORT_NOTIFY_COUNT_LINE = "<p><strong>Report count:</strong> {count}</p>"
 REPORT_NOTIFY_ILLEGAL_LINE = "<p><strong>Illegal allegation:</strong> {is_illegal}</p>"
 REPORT_NOTIFY_REPORTER_LINE = "<p><strong>Reporter:</strong> {email}</p>"
 REPORT_NOTIFY_REVIEW_LINE = "<p><a href='{href}'>Review in the admin console</a></p>"
+
+
+# Admin notice: a scheduled or live Promotion's event became restricted (#612).
+PROMOTION_RESTRICTION_NOTIFY_SUBJECT = "Promotion paused: {restriction} restriction — {title}"
+PROMOTION_RESTRICTION_NOTIFY_HTML = (
+    "<p>The event <strong>{title}</strong> was newly flagged with the Promotion "
+    "restriction <strong>{restriction}</strong>. Its Promotion #{promotion_id} "
+    "({start} to {end}) is paused until you clear it or end it early.</p>"
+    "<p><a href='{href}'>Review in the admin console</a></p>"
+)
+PROMOTION_RESTRICTION_NOTIFY_TEXT = (
+    "The event {title} was newly flagged with the Promotion restriction "
+    "{restriction}. Its Promotion #{promotion_id} ({start} to {end}) is paused "
+    "until you clear it or end it early.\n\nReview: {href}\n"
+)

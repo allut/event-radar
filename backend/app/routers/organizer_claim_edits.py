@@ -56,6 +56,8 @@ from app.constants.organizer import (
 from app.constants.rate_limits import RATE_LIMIT_SUBMIT
 from app.constants.security import URL_MAX_LEN
 from app.db import get_db
+from app.promotions.restriction import reassess_after_edit
+from app.promotions.windows import now_tallinn
 from app.ingestion.http_client import host_matches_domain, safe_render_url
 from app.ingestion.pricing import normalize_currency
 from app.models.models import ClaimEditAttempt, Event, Organizer
@@ -411,6 +413,8 @@ async def _save_claim_event(
 
     event.status = EVENT_STATUS_CLASSIFIED
     saved_event_id = event.id
+    # Re-assess the Promotion restriction on this edit (#612), best-effort.
+    await reassess_after_edit(db, event, now_tallinn())
     await publish_pending(db, event_ids=[saved_event_id], diagnostics=False)
     final_status = await db.scalar(select(Event.status).where(Event.id == saved_event_id))
     await db.commit()

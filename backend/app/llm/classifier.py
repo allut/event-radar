@@ -56,6 +56,7 @@ from app.constants.llm import (
     LLM_MAX_PROMPT_CHARS,
     LLM_TASK_CLASSIFY,
 )
+from app.promotions.restriction import notify_newly_restricted, parse_promotion_restriction
 from app.constants.organizer import ORGANIZER_SUBMISSION_QUALITY_SCORE_CEILING
 from app.llm.prompts import LLM_CLASSIFY_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.ingestion.pricing import (
@@ -220,6 +221,7 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         "price_max": price_max,
         "currency": currency,
         "explicit": explicit,
+        "promotion_restriction": parse_promotion_restriction(raw.get("promotion_restriction")),
         "non_event": non_event,
         "in_target_city": in_target_city,
         "has_free_tier": has_free_tier,
@@ -374,6 +376,10 @@ def _apply_content_flags(event: Event, parsed: dict[str, Any]) -> None:
     event.is_explicit = event.is_explicit or parsed["explicit"]
     event.is_non_event = event.is_non_event or parsed["non_event"]
     event.is_out_of_area = event.is_out_of_area or not parsed["in_target_city"]
+    # Overwrites (a false positive can clear) and never feeds the publish gate
+    # or organic listing; an unassessable answer keeps the previous value.
+    if parsed["promotion_restriction"] is not None:
+        event.promotion_restriction = parsed["promotion_restriction"]
 
 
 async def classify_event(
@@ -603,6 +609,7 @@ async def classify_pending(
     prefetched_cache = await _prefetch_classify_cache(db, prompts_by_event_id)
 
     semaphore = asyncio.Semaphore(LLM_BATCH_FANOUT_CONCURRENCY)
+    previous_restriction = {event.id: event.promotion_restriction for event in events}
 
     async def _classify_one(event: Event) -> bool:
         async with semaphore:
@@ -633,6 +640,12 @@ async def classify_pending(
             succeeded += 1
         else:
             failed += 1
+
+    # One bulk lookup for every event the pass newly flagged (#612).
+    await db.flush()
+    await notify_newly_restricted(
+        db, [(e, previous_restriction[e.id]) for e in events], now
+    )
 
     log.info(
         "classify_pending: attempted=%d succeeded=%d failed=%d cancelled=%d",

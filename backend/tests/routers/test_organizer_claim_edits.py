@@ -54,6 +54,7 @@ def _patched(**kwargs):
         "fetch_fresh_price": AsyncMock(return_value=None),
         "publish_pending": AsyncMock(return_value={"published": 1}),
         "prepend_organizer_categories": AsyncMock(),
+        "reassess_after_edit": AsyncMock(),
         # A single covered event scales to exactly the flat baseline (#438),
         # so every pre-existing test that doesn't care about cap scaling
         # keeps seeing the unchanged ORGANIZER_DAILY_CLAIM_EDIT_CAP value.
