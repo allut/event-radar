@@ -18,6 +18,7 @@ _KNOWN_JOB_IDS = {
     "build_daily_feeds",
     "send_daily_digests",
     "expire_stale_claims",
+    "flush_promotion_counters",
 }
 
 

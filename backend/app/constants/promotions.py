@@ -122,3 +122,27 @@ PROMOTION_NOT_SHOWING_FILTERS_MISMATCH = "filters_mismatch"
 
 # `events.promotion_restriction`: `None` = unassessed, `none` = clear.
 PROMOTION_RESTRICTION_NONE = "none"
+
+# Delivery counters (#606). Columns of promotion_daily_stats the in-process
+# counter owns; the rest are written by their own jobs.
+PROMOTION_STAT_EXPLORE_SERVED = "explore_served"
+PROMOTION_STAT_WEB_OPENS = "web_opens"
+PROMOTION_STAT_SLOT_DISLIKES = "slot_dislikes"
+PROMOTION_COUNTER_COLUMNS = (
+    PROMOTION_STAT_EXPLORE_SERVED,
+    PROMOTION_STAT_WEB_OPENS,
+    PROMOTION_STAT_SLOT_DISLIKES,
+)
+# Every column the per-day table reports, in display order.
+PROMOTION_STAT_REPORT_COLUMNS = (
+    PROMOTION_STAT_EXPLORE_SERVED,
+    "daily5_placed",
+    "digest_sent",
+    PROMOTION_STAT_WEB_OPENS,
+    "digest_opens",
+    PROMOTION_STAT_SLOT_DISLIKES,
+)
+PROMOTION_COUNTER_FLUSH_SECONDS = 60
+# The ref query value Explore slot card links carry.
+PROMOTION_REF_AD = "ad"
+ERROR_PROMOTION_NOT_FOUND = "promotion not found"

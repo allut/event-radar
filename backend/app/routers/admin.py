@@ -84,6 +84,7 @@ from app.constants.promotions import (
     ADMIN_PROMOTIONS_MAX_PAGE_SIZE,
     ADMIN_PROMOTIONS_PAGE_SIZE,
     ERROR_PROMOTION_INVALID_STATE,
+    ERROR_PROMOTION_NOT_FOUND,
     PROMOTION_ADVERTISER_NAME_MAX_CHARS,
     PROMOTION_BILLING_EMAIL_MAX_CHARS,
     PROMOTION_ERROR_CAP_EXCEEDED,
@@ -134,7 +135,9 @@ from app.promotions.grant import (
 )
 from app.promotions.views import (
     grant_context,
+    daily_stats_table,
     list_promotions,
+    load_daily_stats,
     serialize_promotion,
     validation_payload,
 )
@@ -146,6 +149,7 @@ from app.models.models import (
     EventReport,
     EventSource,
     Organizer,
+    Promotion,
     RawEvent,
     Source,
 )
@@ -1658,6 +1662,26 @@ async def admin_list_promotions(
         "limit": limit,
         "offset": offset,
         "has_more": offset + len(items) < total,
+    }
+
+
+@router.get("/promotions/{promotion_id}/daily-stats", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
+async def admin_promotion_daily_stats(promotion_id: int, request: Request) -> dict:
+    """The per-day delivery table for one Promotion: anonymous counts for each
+    complete window day (today is left out), zeros where nothing was counted."""
+    today = tallinn_today(now_tallinn())
+    async with AsyncSessionLocal() as db:
+        promotion = await db.get(Promotion, promotion_id)
+        if promotion is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_PROMOTION_NOT_FOUND
+            )
+        stored = (await load_daily_stats(db, [promotion_id]))[promotion_id]
+    return {
+        "promotion_id": promotion_id,
+        "today": today.isoformat(),
+        "days": daily_stats_table(promotion, stored, today),
     }
 
 

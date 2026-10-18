@@ -114,6 +114,7 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 
 - **Every `/admin/*` route takes only the console's session cookie** (`app/auth/dependencies.py::get_current_admin`). A script that needs a job or a PII view signs in through `POST /admin/auth/login` and reuses the cookie.
 - **`/admin/pipeline` triggers every job with a live result stream.** It asks for confirmation before an expensive or destructive run, such as a digest send or a cleanup delete.
+- **`/admin/promotions/{id}/daily-stats` serves the per-day delivery table.** The lifespan also flushes the Promotion counters on shutdown.
 - **`/admin/promotions`, `/admin/promotions/cap-strip` and `/admin/events/{id}/promotion-context|promotions[/validate]` back the Promotion console.** A grant writes a `promotion_grant` audit row in its own transaction. See [data-model.md](data-model.md)'s Promotions section.
 - **Every `/admin/*` route is rate-limited.** See [security.md](security.md)'s Rate Limiting section.
 
@@ -156,6 +157,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 
 | Cadence | Job |
 |---|---|
+| Every minute | `flush_promotion_counters` |
 | Hourly | `ingest_all_sources` (job id; the callable is `ingest_all_enabled`) |
 | Every 6h | `dedup_pass`, `classify_pending`, `publish_pending`, `geocode_pending`, `backfill_publisher_ids` |
 | Daily 04:30 | `refetch_event_details` |

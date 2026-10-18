@@ -7,6 +7,7 @@ from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.promotions import (
+    PROMOTION_STAT_REPORT_COLUMNS,
     PROMOTION_CAP_STRIP_DAYS,
     PROMOTION_DAY_PRICE_CENTS,
     PROMOTION_HOLDING_STATUSES,
@@ -19,10 +20,15 @@ from app.constants.promotions import (
     PROMOTION_STATE_SCHEDULED,
     PROMOTION_VAT_RATE_PERCENT,
 )
-from app.models.models import Event, Organizer, Promotion
+from app.models.models import Event, Organizer, Promotion, PromotionDailyStat
 from app.promotions.grant import net_price_cents, vat_cents
 from app.promotions.owners import resolve_owner_ids
-from app.promotions.windows import event_last_day, promotion_state, tallinn_today
+from app.promotions.windows import (
+    event_last_day,
+    promotion_state,
+    tallinn_today,
+    window_dates,
+)
 
 
 def state_filter(state: str, today: date) -> ColumnElement[bool]:
@@ -157,3 +163,42 @@ def validation_payload(
         "days": days,
         "price": price_breakdown(net, PROMOTION_VAT_RATE_PERCENT),
     }
+
+
+async def load_daily_stats(
+    db: AsyncSession, promotion_ids: list[int]
+) -> dict[int, dict[date, PromotionDailyStat]]:
+    """Stored per-day rows for any number of Promotions: one query."""
+    if not promotion_ids:
+        return {}
+    rows = (
+        await db.scalars(
+            select(PromotionDailyStat).where(PromotionDailyStat.promotion_id.in_(promotion_ids))
+        )
+    ).all()
+    grouped: dict[int, dict[date, PromotionDailyStat]] = {pid: {} for pid in promotion_ids}
+    for row in rows:
+        grouped[row.promotion_id][row.day] = row
+    return grouped
+
+
+def daily_stats_table(
+    promotion: Promotion, stored: dict[date, PromotionDailyStat], today: date
+) -> list[dict]:
+    """One row per complete window day (before today), zeros where nothing was
+    counted. Today is left out: its counts are still moving."""
+    last = min(promotion.end_date, today - timedelta(days=1))
+    if last < promotion.start_date:
+        return []
+    table: list[dict] = []
+    for day in window_dates(promotion.start_date, last):
+        row = stored.get(day)
+        table.append(
+            {
+                "day": day.isoformat(),
+                "gate_outcome": row.gate_outcome if row else None,
+                "gate_reason": row.gate_reason if row else None,
+                **{col: getattr(row, col) if row else 0 for col in PROMOTION_STAT_REPORT_COLUMNS},
+            }
+        )
+    return table

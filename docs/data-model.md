@@ -174,6 +174,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **`invoice_reference` uses the `ER-M-` series with `invoice_source = 'manual'`.** `granted_by` is `admin` for a direct grant. There is no admin id because there is no admins table (ADR 0001).
 - **An `unpaid` or `paid` row holds every day of its window against the cap of 5,** paused days included. `void` releases them all. Back-to-back windows on one event are allowed; overlap is not.
 - **Every grant first takes `pg_advisory_xact_lock` (`PROMOTION_CAP_LOCK_KEY`) in `app/promotions/cap.py::lock_cap()`.** The cap check and insert then run in one transaction, so two concurrent grants can't both take the last day. The lock releases on commit.
+- **`promotion_daily_stats` holds one row per Promotion per Tallinn day,** unique on `(promotion_id, day)` and never pruned (migration 0061). Columns: `gate_outcome`, `gate_reason`, and the counts `explore_served`, `daily5_placed`, `digest_sent`, `web_opens`, `digest_opens`, `slot_dislikes`. Counts only, no viewer identifiers. See [pipeline.md](pipeline.md) for the writers.
 - **Starting or ending a Promotion never touches `events.updated_at`.** `events.promotion_restriction` is deliberately outside the `updated_at` trigger's column list.
 - **Later tickets add the Stripe, clearance, attestation and reach columns,** and the request, snapshot and daily-stats tables.
 

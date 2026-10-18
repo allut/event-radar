@@ -16,10 +16,12 @@ from app.constants.claims import (
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
 )
 from app.constants.events import ERROR_EVENT_NOT_FOUND
+from app.constants.promotions import PROMOTION_REF_AD, PROMOTION_STAT_WEB_OPENS
 from app.constants.rate_limits import RATE_LIMIT_EVENTS_DETAIL
 from app.auth.dependencies import get_optional_user
 from app.db import get_db
 from app.models.models import Event, User
+from app.promotions.counters import record_ref_hit
 from app.rate_limit import limiter
 from app.routers.utils import (
     load_user_reported_events,
@@ -38,6 +40,7 @@ async def get_event(
     event_id: int,
     request: Request,
     locale_query: str | None = Query(None, alias="locale"),
+    ref: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
 ) -> dict:
@@ -58,6 +61,11 @@ async def get_event(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
         )
+
+    # A slot card link carries ?ref=ad (#606): one anonymous per-day count for
+    # the event's live Promotion. Never read by ranking or the persona.
+    if ref == PROMOTION_REF_AD:
+        await record_ref_hit(db, event.id, PROMOTION_STAT_WEB_OPENS)
 
     # get_optional_user already resolved the caller (None when signed out, or
     # for an expired/invalid/revoked token — a revoked token, post logout-all,

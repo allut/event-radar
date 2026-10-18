@@ -295,6 +295,11 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 - **With a slot, page 1 returns `limit - 1` organic rows plus `sponsored_slot`** (the card data, `advertiser`, `explanation` = `filters`|`none`, and `tile` = `PROMOTION_EXPLORE_SLOT_TILE`). **Later pages start one organic row earlier** (`offset - 1`) and echo the requested `offset`, so no result is skipped or repeated.
 - **`page1_has_slot` is on every opted-in response, on any page.** It depends only on the eligible set and page 1's organic ids, never on which Promotion a random signed-out pick would choose. `total` stays the organic count, and the pager uses `ceil((total + 1) / limit)` pages when the flag is true.
 - **Organic order is the same with and without Promotions.** The slot only moves the page window by one row. It never reads or writes feedback or the persona.
+- **Delivery counters are anonymous per-day totals in `promotion_daily_stats`** (`app/promotions/counters.py`). `bump()` adds to a module-level dict, so a request never waits on the database.
+- **`flush()` writes the dict as one bulk upsert that adds to the stored totals.** It runs every `PROMOTION_COUNTER_FLUSH_SECONDS` (60) from the `flush_promotion_counters` job and once on shutdown. A crash loses at most a minute, and a failed flush puts the counts back.
+- **Three counters are live:** `explore_served` when page 1 fills a slot, `web_opens` when `GET /events/{id}?ref=ad` hits an event whose paid Promotion covers today, and `slot_dislikes` when `POST /feedback` sends `signal=dislike` with `ref=ad` (the feedback row is still written). The gate, `daily5_placed`, `digest_sent` and `digest_opens` columns exist but have no writer yet.
+- **Counters never feed ranking, the persona or `user_event_feedback`.** No viewer identifier is recorded; not counted: ticket clicks, total page views, viewable impressions.
+- **`GET /admin/promotions/{id}/daily-stats` returns one row per complete window day** (today is left out), with zeros where nothing was counted. It reads with one `WHERE promotion_id IN (...)` (`views.load_daily_stats`).
 
 ### Pagination
 

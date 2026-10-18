@@ -32,10 +32,13 @@ from app.constants.ranking import (
     PAGINATION_MIN_OFFSET,
     PREFERENCE_SIGNALS,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
+    SIGNAL_DISLIKE,
 )
+from app.constants.promotions import PROMOTION_REF_AD, PROMOTION_STAT_SLOT_DISLIKES
 from app.constants.rate_limits import RATE_LIMIT_FEEDBACK
 from app.db import get_db
 from app.models.models import Event, User, UserEventFeedback
+from app.promotions.counters import record_ref_hit
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
 from app.routers.utils import (
@@ -51,6 +54,8 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 class FeedbackBody(BaseModel):
     event_id: int
     signal: str
+    # "ad" when the signal came from a Sponsored slot card (#606).
+    ref: str | None = None
 
 
 @router.post("", status_code=status.HTTP_200_OK)
@@ -116,6 +121,9 @@ async def record_feedback(
             )
             .on_conflict_do_nothing()
         )
+
+    if body.signal == SIGNAL_DISLIKE and body.ref == PROMOTION_REF_AD:
+        await record_ref_hit(db, event_id, PROMOTION_STAT_SLOT_DISLIKES)
 
     await db.commit()
     return {"ok": True}

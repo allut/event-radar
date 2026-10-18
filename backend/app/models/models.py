@@ -1211,6 +1211,32 @@ class Promotion(Base):
     organizer: Mapped["Organizer"] = relationship()
 
 
+class PromotionDailyStat(Base):
+    """Anonymous delivery totals for one Promotion on one Tallinn day (#606).
+    Never pruned. No viewer identifiers: only counts. Written by the in-process
+    counter's bulk upsert (app/promotions/counters.py) and, for the gate and
+    Daily 5 / digest columns, by their own tickets. See docs/pipeline.md."""
+
+    __tablename__ = "promotion_daily_stats"
+    __table_args__ = (
+        UniqueConstraint("promotion_id", "day", name="uq_promotion_daily_stats_promotion_day"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    promotion_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("promotions.id", ondelete="RESTRICT"), nullable=False
+    )
+    day: Mapped[date] = mapped_column(Date, nullable=False)
+    gate_outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    gate_reason: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    explore_served: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    daily5_placed: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    digest_sent: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    web_opens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    digest_opens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    slot_dislikes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+
 # ---------------------------------------------------------------------------
 # Admin Audit Log
 # ---------------------------------------------------------------------------

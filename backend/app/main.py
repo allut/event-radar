@@ -43,6 +43,7 @@ from app.constants.jobs import (
     JOB_ID_CLEANUP_STALE_DATA,
     JOB_ID_DEDUP_PASS,
     JOB_ID_EXPIRE_STALE_CLAIMS,
+    JOB_ID_FLUSH_PROMOTION_COUNTERS,
     JOB_ID_GEOCODE_PENDING,
     JOB_ID_INGEST_ALL_SOURCES,
     JOB_ID_PUBLISH_PENDING,
@@ -117,6 +118,8 @@ from app.routers.reports import router as reports_router
 from app.routers.settings import router as settings_router
 from app.routers.unsubscribe import router as unsubscribe_router
 from app.db import run_in_session
+from app.constants.promotions import PROMOTION_COUNTER_FLUSH_SECONDS
+from app.promotions.counters import flush as flush_promotion_counters
 from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_publishers, seed_sources
 
@@ -211,6 +214,10 @@ _run_send_daily_digests = _scheduled(
 # fan-out must only see durably expired rows, mirrors build_daily_feeds above).
 _run_expire_stale_claims = _scheduled(
     JOB_ID_EXPIRE_STALE_CLAIMS, _in_session(expire_stale_claims, commit=False)
+)
+# Promotion delivery counters (#606) flush as one bulk upsert.
+_run_flush_promotion_counters = _scheduled(
+    JOB_ID_FLUSH_PROMOTION_COUNTERS, _in_session(flush_promotion_counters, commit=True)
 )
 
 
@@ -311,6 +318,14 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         hour=DIGEST_SEND_HOUR,
         minute=DIGEST_SEND_MINUTE,
         id=JOB_ID_SEND_DAILY_DIGESTS,
+        replace_existing=True,
+    )
+    # Every minute: flush the in-process Promotion delivery counters (#606).
+    scheduler.add_job(
+        _run_flush_promotion_counters,
+        trigger="interval",
+        seconds=PROMOTION_COUNTER_FLUSH_SECONDS,
+        id=JOB_ID_FLUSH_PROMOTION_COUNTERS,
         replace_existing=True,
     )
     # Daily 05:00 EET: expire a pending automated-mechanism claim abandoned
@@ -601,6 +616,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
+        try:
+            await run_in_session(flush_promotion_counters, commit=True)
+        except Exception:
+            log.exception("promotion counter flush on shutdown failed")
         await engine.dispose()
         shutdown_log_shipping()
 

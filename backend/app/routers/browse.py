@@ -56,6 +56,7 @@ from app.constants.promotions import (
     PROMOTION_EXPLANATION_NONE,
     PROMOTION_EXPLORE_MIN_ORGANIC,
     PROMOTION_EXPLORE_SLOT_TILE,
+    PROMOTION_STAT_EXPLORE_SERVED,
 )
 from app.constants.rate_limits import RATE_LIMIT_BROWSE
 from app.db import get_db
@@ -76,6 +77,7 @@ from app.routers.utils import (
     resolve_locale_param,
     serialize_event,
 )
+from app.promotions.counters import bump
 from app.promotions.fill import (
     GateResult,
     explore_eligible,
@@ -624,6 +626,7 @@ async def explore_events(
         response = await serve(limit - 1, 0)
         response["limit"] = limit
         picked = rotation_order(survivors, explore_seed(user_id, tallinn_today(now)))[0]
+        bump(picked.promotion.id, tallinn_today(now), PROMOTION_STAT_EXPLORE_SERVED)
         sigs, reported = await _load_signals_and_reported(db, user_id, [picked.event.id])
         response["sponsored_slot"] = {
             **serialize_event(

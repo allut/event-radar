@@ -51,6 +51,7 @@ JOB_ID_REFETCH_EVENT_DETAILS = "refetch_event_details"
 JOB_ID_BUILD_DAILY_FEEDS = "build_daily_feeds"
 JOB_ID_SEND_DAILY_DIGESTS = "send_daily_digests"
 JOB_ID_EXPIRE_STALE_CLAIMS = "expire_stale_claims"
+JOB_ID_FLUSH_PROMOTION_COUNTERS = "flush_promotion_counters"
 
 # Scheduler job labels whose runtime string is load-bearing: the "hourly
 # ingest" value is matched verbatim by an Axiom monitor (docs/observability.md
