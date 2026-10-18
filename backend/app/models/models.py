@@ -1237,6 +1237,41 @@ class PromotionDailyStat(Base):
     slot_dislikes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
 
+class PromotionSnapshot(Base):
+    """What a Promotion displayed at one moment: taken when it becomes paid
+    and on every edit or re-point while scheduled or live. Append-only and
+    never pruned, so an Organizer's or regulator's question about what ran can
+    be answered after the event row has changed."""
+
+    __tablename__ = "promotion_snapshots"
+    __table_args__ = (Index("ix_promotion_snapshots_promotion_id", "promotion_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    promotion_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("promotions.id", ondelete="RESTRICT"), nullable=False
+    )
+    taken_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    trigger: Mapped[str] = mapped_column(String(16), nullable=False)
+    event_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    title_et: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title_en: Mapped[str | None] = mapped_column(Text, nullable=True)
+    title_ru: Mapped[str | None] = mapped_column(Text, nullable=True)
+    description_excerpt: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    venue_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    event_starts_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    event_ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+    net_price_cents: Mapped[int] = mapped_column(Integer, nullable=False)
+    vat_rate_percent: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False)
+    label_text: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 # ---------------------------------------------------------------------------
 # Admin Audit Log
 # ---------------------------------------------------------------------------

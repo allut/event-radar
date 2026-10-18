@@ -6,7 +6,11 @@ from decimal import Decimal
 from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.constants.admin import PROMOTION_ADMIN_ACTIONS
 from app.constants.promotions import (
+    PROMOTION_STATUS_ENDED_EARLY,
+    PROMOTION_STATUS_PAID,
+    PROMOTION_STATUS_UNPAID,
     PROMOTION_STAT_REPORT_COLUMNS,
     PROMOTION_CAP_STRIP_DAYS,
     PROMOTION_DAY_PRICE_CENTS,
@@ -20,9 +24,10 @@ from app.constants.promotions import (
     PROMOTION_STATE_SCHEDULED,
     PROMOTION_VAT_RATE_PERCENT,
 )
-from app.models.models import Event, Organizer, Promotion, PromotionDailyStat
+from app.models.models import AdminAction, Event, Organizer, Promotion, PromotionDailyStat
 from app.promotions.grant import net_price_cents, vat_cents
 from app.promotions.owners import resolve_owner_ids
+from app.promotions.snapshots import list_snapshots, serialize_snapshot
 from app.promotions.windows import (
     event_last_day,
     promotion_state,
@@ -79,6 +84,9 @@ def serialize_promotion(
         "paid_at": promotion.paid_at.isoformat() if promotion.paid_at else None,
         "ended_at": promotion.ended_at.isoformat() if promotion.ended_at else None,
         "end_reason": promotion.end_reason,
+        "end_note": promotion.end_note,
+        "refunded_cents": promotion.refunded_cents,
+        "refund_note": promotion.refund_note,
         "created_at": promotion.created_at.isoformat() if promotion.created_at else None,
     }
 
@@ -163,6 +171,85 @@ def validation_payload(
         "days": days,
         "price": price_breakdown(net, PROMOTION_VAT_RATE_PERCENT),
     }
+
+
+def available_actions(promotion: Promotion, today: date) -> dict:
+    """Which lifecycle commands the console may offer now. `edit_scope` is
+    `full` before the start date, `end_date` while live and null otherwise."""
+    holding = promotion.status in PROMOTION_HOLDING_STATUSES and today <= promotion.end_date
+    price = price_breakdown(promotion.net_price_cents, promotion.vat_rate_percent)
+    refundable = (
+        not promotion.is_complimentary
+        and promotion.status in (PROMOTION_STATUS_PAID, PROMOTION_STATUS_ENDED_EARLY)
+        and promotion.refunded_cents < price["gross_cents"]
+    )
+    return {
+        "mark_paid": promotion.status == PROMOTION_STATUS_UNPAID and today < promotion.start_date,
+        "edit": holding,
+        "edit_scope": (("full" if today < promotion.start_date else "end_date") if holding else None),
+        "repoint": holding,
+        "end": promotion.status == PROMOTION_STATUS_PAID and today <= promotion.end_date,
+        "void": promotion.status == PROMOTION_STATUS_UNPAID,
+        "refund": refundable,
+        "refundable_cents": max(price["gross_cents"] - promotion.refunded_cents, 0) if refundable else 0,
+    }
+
+
+async def repoint_candidates(db: AsyncSession, promotion: Promotion, source: Event) -> list[dict]:
+    """Events the Promotion could move to: same dedup group, same owner."""
+    group = source.dedup_group_id if source.dedup_group_id is not None else source.id
+    events = (
+        await db.scalars(
+            select(Event)
+            .where(or_(Event.dedup_group_id == group, Event.id == group), Event.id != source.id)
+            .order_by(Event.id)
+        )
+    ).all()
+    owners = await resolve_owner_ids(db, events)
+    return [
+        {"event_id": e.id, "title": e.title_orig, "last_day": event_last_day(e).isoformat()}
+        for e in events
+        if owners.get(e.id) == promotion.organizer_id
+    ]
+
+
+async def promotion_detail(db: AsyncSession, promotion: Promotion, now: datetime) -> dict:
+    """Everything the Promotion detail page shows: the row, its event, what it
+    displayed (content snapshots, newest first), the audit trail, the
+    commands available now and the events it could be re-pointed to."""
+    today = tallinn_today(now)
+    event = await db.get(Event, promotion.event_id)
+    assert event is not None
+    organizer = await db.get(Organizer, promotion.organizer_id)
+    audit = (
+        await db.scalars(
+            select(AdminAction)
+            .where(
+                AdminAction.target == str(promotion.id),
+                AdminAction.action.in_(PROMOTION_ADMIN_ACTIONS),
+            )
+            .order_by(AdminAction.id.desc())
+        )
+    ).all()
+    payload = serialize_promotion(
+        promotion, event.title_orig, organizer.name if organizer else None, today
+    )
+    payload["event"] = {
+        "id": event.id,
+        "title": event.title_orig,
+        "starts_at": event.starts_at.isoformat(),
+        "ends_at": event.ends_at.isoformat() if event.ends_at else None,
+        "last_day": event_last_day(event).isoformat(),
+        "venue_name": event.venue_name,
+    }
+    payload["actions"] = available_actions(promotion, today)
+    payload["repoint_candidates"] = await repoint_candidates(db, promotion, event)
+    payload["snapshots"] = [serialize_snapshot(sn) for sn in await list_snapshots(db, promotion.id)]
+    payload["audit"] = [
+        {"action": a.action, "result": a.result, "created_at": a.created_at.isoformat()}
+        for a in audit
+    ]
+    return payload
 
 
 async def load_daily_stats(

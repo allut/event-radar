@@ -23,6 +23,7 @@ from app.constants.promotions import (
     PROMOTION_INVOICE_REFERENCE_RE,
     PROMOTION_INVOICE_SOURCE_MANUAL,
     PROMOTION_REGISTRY_CODE_RE,
+    PROMOTION_SNAPSHOT_TRIGGER_GRANT,
     PROMOTION_STATUS_PAID,
     PROMOTION_STATUS_UNPAID,
     PROMOTION_VAT_RATE_PERCENT,
@@ -30,6 +31,7 @@ from app.constants.promotions import (
 from app.models.models import Event, Promotion
 from app.promotions.cap import full_days, lock_cap
 from app.promotions.owners import resolve_owner_ids
+from app.promotions.snapshots import take_snapshot
 from app.promotions.windows import (
     RuleViolation,
     event_last_day,
@@ -82,30 +84,35 @@ def request_violations(request: GrantRequest) -> list[RuleViolation]:
 
 
 async def validate_grant(
-    db: AsyncSession, event: Event, start: date, end: date, now: datetime
+    db: AsyncSession,
+    event: Event,
+    start: date,
+    end: date,
+    now: datetime,
+    exclude_promotion_id: int | None = None,
 ) -> list[RuleViolation]:
     """Window, overlap and cap violations for a candidate window (no owner or
     field checks, no lock, no write). Backs the live date validation; the
-    grant itself re-runs the same checks under the cap lock."""
+    grant itself re-runs the same checks under the cap lock. An edit passes
+    `exclude_promotion_id` so the Promotion doesn't collide with itself."""
     today = tallinn_today(now)
     found = window_violations(start, end, today, event_last_day(event))
     if end < start:
         return found
-    overlapping = (
-        await db.scalars(
-            select(Promotion.id).where(
-                Promotion.event_id == event.id,
-                Promotion.status.in_(PROMOTION_HOLDING_STATUSES),
-                Promotion.start_date <= end,
-                Promotion.end_date >= start,
-            )
-        )
-    ).first()
+    overlap_query = select(Promotion.id).where(
+        Promotion.event_id == event.id,
+        Promotion.status.in_(PROMOTION_HOLDING_STATUSES),
+        Promotion.start_date <= end,
+        Promotion.end_date >= start,
+    )
+    if exclude_promotion_id is not None:
+        overlap_query = overlap_query.where(Promotion.id != exclude_promotion_id)
+    overlapping = (await db.scalars(overlap_query)).first()
     if overlapping is not None:
         found.append(RuleViolation(PROMOTION_ERROR_OVERLAP))
     # An out-of-bounds window can span years; cap-check only a sane span.
     if window_days(start, end) <= 366:
-        full = await full_days(db, start, end, today)
+        full = await full_days(db, start, end, today, exclude_promotion_id)
         if full:
             found.append(RuleViolation(PROMOTION_ERROR_CAP_EXCEEDED, full))
     return found
@@ -153,4 +160,6 @@ async def grant_promotion(
     )
     db.add(promotion)
     await db.flush()
+    if request.is_complimentary:
+        await take_snapshot(db, promotion, event, now, PROMOTION_SNAPSHOT_TRIGGER_GRANT)
     return promotion

@@ -12,15 +12,20 @@ import itertools
 import os
 from collections.abc import AsyncIterator
 from datetime import date, datetime
+from contextlib import asynccontextmanager
 from typing import Any
 
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from app.auth.dependencies import get_current_admin
 from app.constants.claims import CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES, CLAIM_STATUS_APPROVED
 from app.constants.core import TALLINN_TZ
+from app.rate_limit import limiter
 from app.models.models import Claim, Event, EventSource, Organizer, Publisher, Source
 
 _counter = itertools.count(1)
@@ -49,13 +54,13 @@ async def engine() -> AsyncIterator[Any]:
     eng = create_async_engine(url)
     try:
         async with eng.connect() as conn:
-            ok = await conn.scalar(text("SELECT to_regclass('public.promotions')"))
+            ok = await conn.scalar(text("SELECT to_regclass('public.promotion_snapshots')"))
     except Exception:
         await eng.dispose()
         pytest.skip("Postgres unreachable")
     if not ok:
         await eng.dispose()
-        pytest.skip("DB not at migration 0060")
+        pytest.skip("DB not at migration 0062")
     yield eng
     await eng.dispose()
 
@@ -162,3 +167,32 @@ def make(db: AsyncSession) -> Factory:
 @pytest.fixture
 def sessionmaker_for(engine: Any) -> async_sessionmaker[AsyncSession]:
     return async_sessionmaker(engine, expire_on_commit=False)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_limiter():
+    limiter.reset()
+    yield
+    limiter.reset()
+
+
+class Clock:
+    now: datetime = NOW
+
+
+@pytest_asyncio.fixture
+async def client(db, monkeypatch) -> AsyncIterator[AsyncClient]:
+    from app.routers import admin as admin_module
+
+    @asynccontextmanager
+    async def session_ctx() -> AsyncIterator[Any]:
+        yield db
+
+    monkeypatch.setattr(admin_module, "AsyncSessionLocal", session_ctx)
+    Clock.now = NOW
+    monkeypatch.setattr(admin_module, "now_tallinn", lambda: Clock.now)
+    app = FastAPI()
+    app.include_router(admin_module.router)
+    app.dependency_overrides[get_current_admin] = lambda: None
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+        yield c

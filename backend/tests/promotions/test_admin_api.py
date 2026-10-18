@@ -1,52 +1,15 @@
 """The /admin promotions JSON API, end to end against a real Postgres."""
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
-from datetime import datetime
 from typing import Any
 
 import pytest
-import pytest_asyncio
-from fastapi import FastAPI
-from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 
-from app.auth.dependencies import get_current_admin
 from app.constants.admin import ADMIN_ACTION_PROMOTION_GRANT
 from app.constants.promotions import PROMOTION_LIVE_CAP
 from app.models.models import AdminAction, Promotion
 from app.promotions.grant import GrantRequest, grant_promotion
-from app.rate_limit import limiter
-from tests.promotions.conftest import NOW, at_tallinn, d
-
-
-@pytest.fixture(autouse=True)
-def _fresh_limiter():
-    limiter.reset()
-    yield
-    limiter.reset()
-
-
-class Clock:
-    now: datetime = NOW
-
-
-@pytest_asyncio.fixture
-async def client(db, monkeypatch) -> AsyncIterator[AsyncClient]:
-    from app.routers import admin as admin_module
-
-    @asynccontextmanager
-    async def session_ctx() -> AsyncIterator[Any]:
-        yield db
-
-    monkeypatch.setattr(admin_module, "AsyncSessionLocal", session_ctx)
-    Clock.now = NOW
-    monkeypatch.setattr(admin_module, "now_tallinn", lambda: Clock.now)
-    app = FastAPI()
-    app.include_router(admin_module.router)
-    app.dependency_overrides[get_current_admin] = lambda: None
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-        yield c
+from tests.promotions.conftest import NOW, Clock, at_tallinn, d
 
 
 def body(start: int, end: int, **kw: Any) -> dict:

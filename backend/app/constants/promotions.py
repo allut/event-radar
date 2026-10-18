@@ -29,6 +29,9 @@ VALID_PROMOTION_STATES = frozenset(
 )
 
 PROMOTION_INVOICE_SOURCE_MANUAL = "manual"
+# `end_reason` for an admin-ended or admin-voided Promotion; the free-text
+# reason (the P2B statement of reasons) is stored in `end_note`.
+PROMOTION_END_REASON_ADMIN = "admin"
 PROMOTION_GRANTED_BY_ADMIN = "admin"
 
 # Window and cap rules.
@@ -73,6 +76,41 @@ PROMOTION_ERROR_NOTE_REQUIRED = "complimentary_note_required"
 PROMOTION_ERROR_INVALID_REGISTRY_CODE = "invalid_registry_code"
 PROMOTION_ERROR_INVALID_INVOICE_REFERENCE = "invalid_invoice_reference"
 PROMOTION_ERROR_INVOICE_ON_COMPLIMENTARY = "invoice_on_complimentary"
+# Lifecycle commands (#601).
+PROMOTION_ERROR_INVALID_TRANSITION = "invalid_transition"
+PROMOTION_ERROR_ALREADY_STARTED = "already_started"
+PROMOTION_ERROR_NOT_EDITABLE = "not_editable"
+PROMOTION_ERROR_NO_CHANGES = "no_changes"
+PROMOTION_ERROR_LIVE_EDIT_FIELDS = "live_edit_end_date_only"
+PROMOTION_ERROR_LIVE_END_MUST_SHORTEN = "live_end_must_shorten"
+PROMOTION_ERROR_LIVE_END_IN_PAST = "live_end_in_past"
+PROMOTION_ERROR_ADVERTISER_NAME_REQUIRED = "advertiser_legal_name_required"
+PROMOTION_ERROR_REASON_REQUIRED = "reason_required"
+PROMOTION_ERROR_REPOINT_SAME_EVENT = "repoint_same_event"
+PROMOTION_ERROR_REPOINT_TARGET_NOT_FOUND = "repoint_target_not_found"
+PROMOTION_ERROR_REPOINT_NOT_OWNER = "repoint_not_same_owner"
+PROMOTION_ERROR_REPOINT_NOT_SAME_GROUP = "repoint_not_same_dedup_group"
+PROMOTION_ERROR_REFUND_NOT_PAID = "refund_not_paid"
+PROMOTION_ERROR_REFUND_AMOUNT = "refund_amount_invalid"
+PROMOTION_ERROR_REFUND_EXCEEDS_PAID = "refund_exceeds_paid"
+PROMOTION_ERROR_REFUND_NOTE_REQUIRED = "refund_note_required"
+
+# Codes that mean "the state of things forbids this" (HTTP 409); every other
+# code is a bad input (HTTP 422).
+PROMOTION_CONFLICT_ERROR_CODES = frozenset(
+    {
+        PROMOTION_ERROR_NO_OWNER,
+        PROMOTION_ERROR_OVERLAP,
+        PROMOTION_ERROR_CAP_EXCEEDED,
+        PROMOTION_ERROR_INVALID_TRANSITION,
+        PROMOTION_ERROR_ALREADY_STARTED,
+        PROMOTION_ERROR_NOT_EDITABLE,
+        PROMOTION_ERROR_REPOINT_NOT_OWNER,
+        PROMOTION_ERROR_REPOINT_NOT_SAME_GROUP,
+        PROMOTION_ERROR_REFUND_NOT_PAID,
+        PROMOTION_ERROR_REFUND_EXCEEDS_PAID,
+    }
+)
 
 PROMOTION_ERROR_MESSAGES = {
     PROMOTION_ERROR_NO_OWNER: "This event has no owning Organizer, so it cannot be promoted.",
@@ -87,6 +125,23 @@ PROMOTION_ERROR_MESSAGES = {
     PROMOTION_ERROR_INVALID_REGISTRY_CODE: "The registry code must be 8 digits.",
     PROMOTION_ERROR_INVALID_INVOICE_REFERENCE: f"The invoice reference must start with {PROMOTION_INVOICE_PREFIX}.",
     PROMOTION_ERROR_INVOICE_ON_COMPLIMENTARY: "A complimentary Promotion has no invoice.",
+    PROMOTION_ERROR_INVALID_TRANSITION: "This Promotion's status does not allow that action.",
+    PROMOTION_ERROR_ALREADY_STARTED: "The Promotion has already started.",
+    PROMOTION_ERROR_NOT_EDITABLE: "A finished, ended or void Promotion cannot be edited.",
+    PROMOTION_ERROR_NO_CHANGES: "Nothing to change.",
+    PROMOTION_ERROR_LIVE_EDIT_FIELDS: "While a Promotion is live, only an earlier end date can change.",
+    PROMOTION_ERROR_LIVE_END_MUST_SHORTEN: "A live Promotion's end date can only move earlier.",
+    PROMOTION_ERROR_LIVE_END_IN_PAST: "The new end date cannot be before today.",
+    PROMOTION_ERROR_ADVERTISER_NAME_REQUIRED: "The advertiser legal name is required.",
+    PROMOTION_ERROR_REASON_REQUIRED: "A reason is required.",
+    PROMOTION_ERROR_REPOINT_SAME_EVENT: "The Promotion already points at that event.",
+    PROMOTION_ERROR_REPOINT_TARGET_NOT_FOUND: "The target event does not exist.",
+    PROMOTION_ERROR_REPOINT_NOT_OWNER: "The target event is not owned by the Promotion's Organizer.",
+    PROMOTION_ERROR_REPOINT_NOT_SAME_GROUP: "The target event is not in the same dedup group.",
+    PROMOTION_ERROR_REFUND_NOT_PAID: "Only a paid Promotion that was not complimentary can be refunded.",
+    PROMOTION_ERROR_REFUND_AMOUNT: "The refund amount must be a positive number of cents.",
+    PROMOTION_ERROR_REFUND_EXCEEDS_PAID: "The refund would exceed what was paid.",
+    PROMOTION_ERROR_REFUND_NOTE_REQUIRED: "A refund note is required.",
 }
 ERROR_PROMOTION_INVALID_STATE = "state must be one of scheduled, live, finished"
 
@@ -122,6 +177,16 @@ PROMOTION_NOT_SHOWING_FILTERS_MISMATCH = "filters_mismatch"
 
 # `events.promotion_restriction`: `None` = unassessed, `none` = clear.
 PROMOTION_RESTRICTION_NONE = "none"
+
+# Content snapshots (#601): what a Promotion displayed, taken when it becomes
+# paid and on every edit or re-point while scheduled or live. Never pruned.
+PROMOTION_SNAPSHOT_TRIGGER_GRANT = "grant"
+PROMOTION_SNAPSHOT_TRIGGER_MARK_PAID = "mark_paid"
+PROMOTION_SNAPSHOT_TRIGGER_EDIT = "edit"
+PROMOTION_SNAPSHOT_TRIGGER_REPOINT = "repoint"
+PROMOTION_SNAPSHOT_DESCRIPTION_MAX_CHARS = 300
+# The caption on a Sponsored slot card.
+PROMOTION_LABEL_TEXT_TEMPLATE = "REKLAAM · {advertiser}"
 
 # Delivery counters (#606). Columns of promotion_daily_stats the in-process
 # counter owns; the rest are written by their own jobs.

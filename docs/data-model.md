@@ -176,13 +176,22 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **Every grant first takes `pg_advisory_xact_lock` (`PROMOTION_CAP_LOCK_KEY`) in `app/promotions/cap.py::lock_cap()`.** The cap check and insert then run in one transaction, so two concurrent grants can't both take the last day. The lock releases on commit.
 - **`promotion_daily_stats` holds one row per Promotion per Tallinn day,** unique on `(promotion_id, day)` and never pruned (migration 0061). Columns: `gate_outcome`, `gate_reason`, and the counts `explore_served`, `daily5_placed`, `digest_sent`, `web_opens`, `digest_opens`, `slot_dislikes`. Counts only, no viewer identifiers. See [pipeline.md](pipeline.md) for the writers.
 - **Starting or ending a Promotion never touches `events.updated_at`.** `events.promotion_restriction` is deliberately outside the `updated_at` trigger's column list.
-- **Later tickets add the Stripe, clearance, attestation and reach columns,** and the request, snapshot and daily-stats tables.
+- **Lifecycle commands live in `app/promotions/lifecycle.py`.** Each takes the cap lock, then a `FOR UPDATE` lock on the row, so it serializes against grants and other commands. Only `unpaid -> paid`, `unpaid -> void` and `paid -> ended_early` change `status`.
+- **Mark paid is allowed while today (Tallinn) is before `start_date`.**
+- **Edit before the start date rechecks window, overlap and cap against the other Promotions** (the row never collides with itself) and recomputes `days` and `net_price_cents`.
+- **While live, edit only moves `end_date` earlier and never before today.** The price paid stays on the row, and a refund is recorded separately. A finished, ended or void row is not editable.
+- **Re-point needs the same owner and the same dedup group** (`dedup_group_id`, or the event's own id when it has none). The window must still end on or before the target's last day and not overlap its Promotions.
+- **End early and void store the admin's reason in `end_note`** (`end_reason = admin`) and stamp `ended_at`. Leaving the holding statuses releases every cap day at once, and the fill gate stops serving the row. The Organizer is emailed the reason in their locale by `app/email/promotion_notice.py` after commit, best-effort.
+- **A refund is cumulative in `refunded_cents` (gross) with its notes in `refund_note`.** It needs a paid, non-complimentary row (live or ended early) and cannot exceed net plus VAT.
+- **`promotion_snapshots` is append-only and never pruned.** `app/promotions/snapshots.py::take_snapshot()` stores the title in et/en/ru, a 300-character description excerpt, image URL, venue, event dates, the Promotion's dates and net price, and the caption text (`REKLAAM · {advertiser}`).
+- **A snapshot's `trigger` is `grant`, `mark_paid`, `edit` or `repoint`.** `grant` is a complimentary grant, which is born paid. A priced grant takes none until it is paid, and every edit takes one, scheduled or live.
+- **Later tickets add the Stripe, clearance, attestation and reach columns,** and the request and daily-stats tables.
 
 ### Moderation and Audit
 
 - **`event_reports` holds user-filed content reports from `POST /reports`.** Admins resolve them or take the event down through `/admin/reports`; a takedown cancels the event with `cancellation_reason = report_takedown`. See `CONTEXT.md`'s Content Moderation glossary.
 - **`event_reports.is_illegal_allegation` is legal-sensitive.** It is one reason `/admin/reports` is session-only.
-- **`admin_actions` is a durable audit row per console action,** `promotion_grant` included, written by `log_admin_action()` in the same transaction as the mutation. See [backend-ops.md](backend-ops.md)'s Audit Logging section.
+- **`admin_actions` is a durable audit row per console action,** `promotion_grant`, `promotion_mark_paid`, `promotion_edit`, `promotion_repoint`, `promotion_end`, `promotion_void` and `promotion_refund` included, written by `log_admin_action()` in the same transaction as the mutation. See [backend-ops.md](backend-ops.md)'s Audit Logging section.
 - **The boot-time `assert_schema_at_head` guard exists because of this table.** Its migration (0030) went unapplied in production, and every audited admin action returned 500.
 
 ## Migrations

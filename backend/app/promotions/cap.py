@@ -49,17 +49,24 @@ async def lock_cap(db: AsyncSession) -> None:
     await db.execute(select(func.pg_advisory_xact_lock(PROMOTION_CAP_LOCK_KEY)))
 
 
-async def cap_days(db: AsyncSession, start: date, end: date, today: date) -> list[CapDay]:
-    """Reserved, paid and live counts for each day in [start, end]."""
-    rows = (
-        await db.execute(
-            select(Promotion.status, Promotion.start_date, Promotion.end_date).where(
-                Promotion.status.in_(PROMOTION_HOLDING_STATUSES),
-                Promotion.start_date <= end,
-                Promotion.end_date >= start,
-            )
-        )
-    ).all()
+async def cap_days(
+    db: AsyncSession,
+    start: date,
+    end: date,
+    today: date,
+    exclude_promotion_id: int | None = None,
+) -> list[CapDay]:
+    """Reserved, paid and live counts for each day in [start, end].
+    `exclude_promotion_id` leaves one Promotion out, so an edit is checked
+    against the others rather than against its own current window."""
+    query = select(Promotion.status, Promotion.start_date, Promotion.end_date).where(
+        Promotion.status.in_(PROMOTION_HOLDING_STATUSES),
+        Promotion.start_date <= end,
+        Promotion.end_date >= start,
+    )
+    if exclude_promotion_id is not None:
+        query = query.where(Promotion.id != exclude_promotion_id)
+    rows = (await db.execute(query)).all()
     days = window_dates(start, end)
     reserved = dict.fromkeys(days, 0)
     paid = dict.fromkeys(days, 0)
@@ -75,9 +82,16 @@ async def cap_days(db: AsyncSession, start: date, end: date, today: date) -> lis
     ]
 
 
-async def full_days(db: AsyncSession, start: date, end: date, today: date) -> list[date]:
+async def full_days(
+    db: AsyncSession,
+    start: date,
+    end: date,
+    today: date,
+    exclude_promotion_id: int | None = None,
+) -> list[date]:
     """Days in [start, end] already at the cap (one more would exceed it)."""
-    return [c.day for c in await cap_days(db, start, end, today) if c.reserved >= PROMOTION_LIVE_CAP]
+    days = await cap_days(db, start, end, today, exclude_promotion_id)
+    return [c.day for c in days if c.reserved >= PROMOTION_LIVE_CAP]
 
 
 async def cap_strip(db: AsyncSession, today: date) -> list[CapDay]:

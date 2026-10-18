@@ -33,7 +33,13 @@ from app.constants.admin import (
     ADMIN_ACTION_INGEST,
     ADMIN_ACTION_INGEST_SOURCE,
     ADMIN_ACTION_PIPELINE_RUN,
+    ADMIN_ACTION_PROMOTION_EDIT,
+    ADMIN_ACTION_PROMOTION_END,
     ADMIN_ACTION_PROMOTION_GRANT,
+    ADMIN_ACTION_PROMOTION_MARK_PAID,
+    ADMIN_ACTION_PROMOTION_REFUND,
+    ADMIN_ACTION_PROMOTION_REPOINT,
+    ADMIN_ACTION_PROMOTION_VOID,
     ADMIN_ACTION_REVOKE_CLAIM,
     ADMIN_ACTION_PUBLISH,
     ADMIN_ACTION_REFETCH,
@@ -87,9 +93,7 @@ from app.constants.promotions import (
     ERROR_PROMOTION_NOT_FOUND,
     PROMOTION_ADVERTISER_NAME_MAX_CHARS,
     PROMOTION_BILLING_EMAIL_MAX_CHARS,
-    PROMOTION_ERROR_CAP_EXCEEDED,
-    PROMOTION_ERROR_NO_OWNER,
-    PROMOTION_ERROR_OVERLAP,
+    PROMOTION_CONFLICT_ERROR_CODES,
     PROMOTION_NOTE_MAX_CHARS,
     VALID_PROMOTION_STATES,
 )
@@ -113,6 +117,10 @@ from app.claims.lifecycle import (
 from app.claims.pinning import clear_claim_pins, representative_event_for_claim
 from app.claims.target_resolution import ClaimTarget, bulk_resolve_publisher_events
 from app.db import AsyncSessionLocal, run_in_session
+from app.email.promotion_notice import (
+    send_promotion_ended_email,
+    send_promotion_void_email,
+)
 from app.email.claim_resolution import send_claim_declined_email, send_claim_granted_email
 from app.email.digest import send_daily_digests
 from app.ingestion.jobs import (
@@ -133,10 +141,20 @@ from app.promotions.grant import (
     grant_promotion,
     validate_grant,
 )
+from app.promotions.lifecycle import (
+    PromotionNotFound,
+    edit_promotion,
+    end_early,
+    mark_paid,
+    record_refund,
+    repoint_promotion,
+    void_promotion,
+)
 from app.promotions.views import (
     grant_context,
     daily_stats_table,
     list_promotions,
+    promotion_detail,
     load_daily_stats,
     serialize_promotion,
     validation_payload,
@@ -1601,6 +1619,22 @@ async def admin_stats(request: Request) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _promotion_refusal(refused: PromotionRefused) -> HTTPException:
+    """409 when the state of things forbids the command, 422 for bad input;
+    `detail.errors` lists every rule broken."""
+    conflict = any(v.code in PROMOTION_CONFLICT_ERROR_CODES for v in refused.violations)
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT
+        if conflict
+        else status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail={
+            "code": refused.violations[0].code,
+            "message": refused.violations[0].message,
+            "errors": [v.as_dict() for v in refused.violations],
+        },
+    )
+
+
 class _PromotionGrantBody(BaseModel):
     start_date: date
     end_date: date
@@ -1753,22 +1787,7 @@ async def admin_grant_promotion(
                 promotion = await grant_promotion(db, event, grant_request, now)
             except PromotionRefused as refused:
                 await db.rollback()
-                codes = {v.code for v in refused.violations}
-                conflict = codes & {
-                    PROMOTION_ERROR_NO_OWNER,
-                    PROMOTION_ERROR_OVERLAP,
-                    PROMOTION_ERROR_CAP_EXCEEDED,
-                }
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT
-                    if conflict
-                    else status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail={
-                        "code": refused.violations[0].code,
-                        "message": refused.violations[0].message,
-                        "errors": [v.as_dict() for v in refused.violations],
-                    },
-                ) from None
+                raise _promotion_refusal(refused) from None
             result = {
                 "id": promotion.id,
                 "event_id": promotion.event_id,
@@ -1800,3 +1819,239 @@ async def admin_grant_promotion(
             return payload
 
     return await run_admin_job("Grant promotion", _run())
+
+
+# ---------------------------------------------------------------------------
+# Promotion lifecycle (#601): detail and commands. Each command runs under the
+# cap lock, writes its audit row in the same transaction and returns the
+# refreshed detail payload.
+# ---------------------------------------------------------------------------
+
+
+class _PromotionMarkPaidBody(BaseModel):
+    invoice_reference: str | None = Field(default=None, max_length=64)
+
+
+class _PromotionEditBody(BaseModel):
+    start_date: date | None = None
+    end_date: date | None = None
+    advertiser_legal_name: str | None = Field(
+        default=None, max_length=PROMOTION_ADVERTISER_NAME_MAX_CHARS
+    )
+    advertiser_registry_code: str | None = Field(default=None, max_length=32)
+    billing_email: EmailStr | None = Field(
+        default=None, max_length=PROMOTION_BILLING_EMAIL_MAX_CHARS
+    )
+    invoice_reference: str | None = Field(default=None, max_length=64)
+
+
+class _PromotionRepointBody(BaseModel):
+    event_id: int
+
+
+class _PromotionReasonBody(BaseModel):
+    reason: str = Field(max_length=PROMOTION_NOTE_MAX_CHARS)
+
+
+class _PromotionRefundBody(BaseModel):
+    amount_cents: int
+    note: str = Field(max_length=PROMOTION_NOTE_MAX_CHARS)
+
+
+# Edit fields that may be sent as null (clearing them); every other field must
+# carry a value when present.
+_PROMOTION_CLEARABLE_FIELDS = frozenset({"billing_email", "invoice_reference"})
+
+
+def _promotion_audit_summary(promotion: Promotion) -> dict:
+    return {
+        "promotion_id": promotion.id,
+        "event_id": promotion.event_id,
+        "organizer_id": promotion.organizer_id,
+        "status": promotion.status,
+        "start_date": promotion.start_date.isoformat(),
+        "end_date": promotion.end_date.isoformat(),
+        "days": promotion.days,
+        "net_price_cents": promotion.net_price_cents,
+        "refunded_cents": promotion.refunded_cents,
+    }
+
+
+async def _notify_promotion_ended(
+    organizer: Organizer, event: Event, promotion: Promotion, reason: str, voided: bool
+) -> None:
+    """Email the Organizer the reason, in their locale. Best-effort after the
+    commit: a failed send is logged, never undoes the command."""
+    send = send_promotion_void_email if voided else send_promotion_ended_email
+    try:
+        await send(
+            organizer.email,
+            resolve_title(event, organizer.locale),
+            promotion.start_date,
+            promotion.end_date,
+            reason,
+            organizer.locale,
+        )
+    except Exception:
+        log.error(
+            "Failed to send promotion %s email (promotion_id=%s)",
+            "void" if voided else "ended",
+            promotion.id,
+            exc_info=True,
+            extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+        )
+
+
+async def _run_promotion_command(
+    promotion_id: int,
+    action: str,
+    command: Callable[[AsyncSession, datetime], Awaitable[Promotion]],
+    audit_extra: dict,
+    notify_reason: str | None = None,
+    voided: bool = False,
+) -> dict:
+    async def _run() -> dict:
+        now = now_tallinn()
+        async with AsyncSessionLocal() as db:
+            try:
+                promotion = await command(db, now)
+            except PromotionNotFound:
+                await db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_PROMOTION_NOT_FOUND
+                ) from None
+            except PromotionRefused as refused:
+                await db.rollback()
+                raise _promotion_refusal(refused) from None
+            emit_admin_log = log_admin_action(
+                db, action, promotion.id, {**_promotion_audit_summary(promotion), **audit_extra}
+            )
+            payload = await promotion_detail(db, promotion, now)
+            organizer = await db.get(Organizer, promotion.organizer_id)
+            event = await db.get(Event, promotion.event_id)
+            await db.commit()
+            emit_admin_log()
+            if notify_reason is not None and organizer is not None and event is not None:
+                await _notify_promotion_ended(organizer, event, promotion, notify_reason, voided)
+            return payload
+
+    return await run_admin_job(f"Promotion {action}", _run())
+
+
+@router.get("/promotions/{promotion_id}", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
+async def admin_promotion_detail(promotion_id: int, request: Request) -> dict:
+    """One Promotion with its event, content snapshots (newest first), audit
+    trail, available commands and re-point candidates."""
+    async with AsyncSessionLocal() as db:
+        promotion = await db.get(Promotion, promotion_id)
+        if promotion is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_PROMOTION_NOT_FOUND
+            )
+        return await promotion_detail(db, promotion, now_tallinn())
+
+
+@router.post("/promotions/{promotion_id}/mark-paid", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_mark_promotion_paid(
+    promotion_id: int, body: _PromotionMarkPaidBody, request: Request
+) -> dict:
+    """`unpaid -> paid`, any time before the start date (Tallinn). Optionally
+    records the invoice reference (`ER-M-` series)."""
+    return await _run_promotion_command(
+        promotion_id,
+        ADMIN_ACTION_PROMOTION_MARK_PAID,
+        lambda db, now: mark_paid(db, promotion_id, now, body.invoice_reference),
+        {"invoice_reference": (body.invoice_reference or "").strip() or None},
+    )
+
+
+@router.patch("/promotions/{promotion_id}", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_edit_promotion(
+    promotion_id: int, body: _PromotionEditBody, request: Request
+) -> dict:
+    """Edit the fields sent. Before the start date: dates (cap rechecked,
+    price recomputed), advertiser details and invoice reference. While live:
+    only an earlier `end_date`. Send `billing_email` / `invoice_reference` as
+    null to clear them."""
+    changes = body.model_dump(exclude_unset=True)
+    for key, value in changes.items():
+        if value is None and key not in _PROMOTION_CLEARABLE_FIELDS:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=f"{key} cannot be null",
+            )
+    logged = {k: (v.isoformat() if isinstance(v, date) else v) for k, v in changes.items()}
+    return await _run_promotion_command(
+        promotion_id,
+        ADMIN_ACTION_PROMOTION_EDIT,
+        lambda db, now: edit_promotion(db, promotion_id, changes, now),
+        {"changes": logged},
+    )
+
+
+@router.post("/promotions/{promotion_id}/repoint", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_repoint_promotion(
+    promotion_id: int, body: _PromotionRepointBody, request: Request
+) -> dict:
+    """Move the Promotion to another event the same Organizer owns in the same
+    dedup group."""
+    return await _run_promotion_command(
+        promotion_id,
+        ADMIN_ACTION_PROMOTION_REPOINT,
+        lambda db, now: repoint_promotion(db, promotion_id, body.event_id, now),
+        {"to_event_id": body.event_id},
+    )
+
+
+@router.post("/promotions/{promotion_id}/end", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_end_promotion(
+    promotion_id: int, body: _PromotionReasonBody, request: Request
+) -> dict:
+    """`paid -> ended_early` with a required reason, which is emailed to the
+    Organizer in their locale. Releases every cap day."""
+    reason = body.reason.strip()
+    return await _run_promotion_command(
+        promotion_id,
+        ADMIN_ACTION_PROMOTION_END,
+        lambda db, now: end_early(db, promotion_id, reason, now),
+        {"reason": reason},
+        notify_reason=reason,
+    )
+
+
+@router.post("/promotions/{promotion_id}/void", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_void_promotion(
+    promotion_id: int, body: _PromotionReasonBody, request: Request
+) -> dict:
+    """`unpaid -> void` with a required reason, which is emailed to the
+    Organizer in their locale. Releases every cap day."""
+    reason = body.reason.strip()
+    return await _run_promotion_command(
+        promotion_id,
+        ADMIN_ACTION_PROMOTION_VOID,
+        lambda db, now: void_promotion(db, promotion_id, reason, now),
+        {"reason": reason},
+        notify_reason=reason,
+        voided=True,
+    )
+
+
+@router.post("/promotions/{promotion_id}/refund", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_record_promotion_refund(
+    promotion_id: int, body: _PromotionRefundBody, request: Request
+) -> dict:
+    """Record an off-platform refund: gross `amount_cents` and a required
+    note. Cumulative, capped at what was charged."""
+    return await _run_promotion_command(
+        promotion_id,
+        ADMIN_ACTION_PROMOTION_REFUND,
+        lambda db, now: record_refund(db, promotion_id, body.amount_cents, body.note, now),
+        {"amount_cents": body.amount_cents, "note": body.note.strip()},
+    )
