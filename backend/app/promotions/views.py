@@ -208,7 +208,11 @@ def available_actions(promotion: Promotion, today: date) -> dict:
         and promotion.refunded_cents < price["gross_cents"]
     )
     return {
-        "mark_paid": promotion.status == PROMOTION_STATUS_UNPAID and today < promotion.start_date,
+        "mark_paid": (
+            promotion.status == PROMOTION_STATUS_UNPAID
+            and today < promotion.start_date
+            and promotion.stripe_checkout_session_id is None
+        ),
         "edit": holding,
         "edit_scope": (("full" if today < promotion.start_date else "end_date") if holding else None),
         "repoint": holding,

@@ -100,6 +100,14 @@ async def test_mark_paid_only_from_unpaid(db, make) -> None:
 
 
 @pytest.mark.asyncio
+async def test_mark_paid_refused_while_a_card_checkout_is_open(db, make) -> None:
+    _, promo = await unpaid(db, make)
+    promo.stripe_checkout_session_id = "cs_test_open"
+    await db.flush()
+    assert await codes_of(mark_paid(db, promo.id, NOW)) == [PROMOTION_ERROR_INVALID_TRANSITION]
+
+
+@pytest.mark.asyncio
 async def test_complimentary_grant_takes_a_grant_snapshot(db, make) -> None:
     org = await make.organizer()
     ev = await make.event(submitted_by=org)

@@ -129,6 +129,9 @@ async def mark_paid(
     promotion = await _load_locked(db, promotion_id)
     if promotion.status != PROMOTION_STATUS_UNPAID:
         raise _refuse(PROMOTION_ERROR_INVALID_TRANSITION)
+    # An open card checkout is paid by its webhook, never by hand.
+    if promotion.stripe_checkout_session_id is not None:
+        raise _refuse(PROMOTION_ERROR_INVALID_TRANSITION)
     if tallinn_today(now) >= promotion.start_date:
         raise _refuse(PROMOTION_ERROR_ALREADY_STARTED)
     reference = (invoice_reference or "").strip() or None
