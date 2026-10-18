@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     # pipeline in production. Manual POST /admin/* triggers are unaffected.
     ENABLE_SCHEDULER: bool = True
 
+    # Promotions launch flags (spec #597), all off until each launch step.
+    # SLOTS is the master gate on every Sponsored-slot fill path; OFFER gates the
+    # organizer-portal offer and request path; CHECKOUT gates card checkout.
+    PROMOTIONS_SLOTS_ENABLED: bool = False
+    PROMOTIONS_OFFER_ENABLED: bool = False
+    PROMOTIONS_CHECKOUT_ENABLED: bool = False
+
     FIENTA_BASE_URL: str = "https://fienta.com/api/v1/public/events"
     KULTUURIKATEL_URL: str = "https://kultuurikatel.ee/en/events/"
     FOTOGRAFISKA_URL: str = "https://tallinn.fotografiska.com/en/events"

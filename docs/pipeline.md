@@ -277,6 +277,24 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 - **`q` is capped at `BROWSE_QUERY_MAX_LEN`.** `_keyword_filter` matches `%...%` against two trigram GIN indexes, so an unbounded string is cheap to send and expensive to scan.
 - **Both paths page on `limit`/`offset` and return an exact `total` on every request.** There is no cursor. Each SQL sort ends in an `id` tie-breaker, so tied rows keep one order across pages. The frontend shows a numbered pager at `BROWSE_PAGE_SIZE`.
 
+### Explore Sponsored slot
+
+- **The slot sits beside the organic results and never inside the ranking.** `GET /explore?sponsored_slot=true` opts in; the client never sends it under the prerender. Without the param the response is exactly the organic response, with no slot keys.
+- **The fill gate lives in `app/promotions/fill.py` and nowhere else.** A Promotion may fill a slot only when all of these hold, each failing clause with a named `PROMOTION_NOT_SHOWING_*` reason:
+  1. `PROMOTIONS_SLOTS_ENABLED` is on (`slots_disabled`).
+  2. The user agent isn't a self-declared bot, matched by `PROMOTION_BOT_USER_AGENT_RE` (`bot_user_agent`).
+  3. Status is `paid` and the Tallinn date is inside the window (`not_paid`, `outside_window`).
+  4. The event is public, canonical and not ended (`event_not_public`, `event_not_canonical`, `event_ended`), using the shared `public_event_filter()`, `canonical_event_filter()` and `event_not_ended_filter()`.
+  5. The Organizer still owns the event, through `resolve_owner_ids()`, so a dormant or revoked claim pauses it (`organizer_not_owner`).
+  6. `promotion_restriction` is `none` (`restriction_unassessed` for `null`, `restriction_flagged` otherwise).
+- **Explore adds its facets.** The event must pass every active facet and `q` through `facet_conditions()`, the builder the organic query uses, joined to the classification like the organic query (`filters_mismatch`). The sort doesn't matter, and `for_you` isn't a facet.
+- **The gate reads in bulk.** `evaluate_gate()` runs a fixed number of queries whatever the number of live Promotions.
+- **Page 1 needs at least `PROMOTION_EXPLORE_MIN_ORGANIC` (6) organic results.** A slot also never repeats what page 1 already shows: the event, its dedup group or its series key. Viewer exclusions (dislike, report, bookmark, like) are a separate ticket.
+- **Rotation is `sha256(seed:promotion_id)` order, equal share.** The seed is `user_id:tallinn_date` signed in, so a user-day is stable, and a random token per request signed out. Persona and feedback never touch it.
+- **With a slot, page 1 returns `limit - 1` organic rows plus `sponsored_slot`** (the card data, `advertiser`, `explanation` = `filters`|`none`, and `tile` = `PROMOTION_EXPLORE_SLOT_TILE`). **Later pages start one organic row earlier** (`offset - 1`) and echo the requested `offset`, so no result is skipped or repeated.
+- **`page1_has_slot` is on every opted-in response, on any page.** It depends only on the eligible set and page 1's organic ids, never on which Promotion a random signed-out pick would choose. `total` stays the organic count, and the pager uses `ceil((total + 1) / limit)` pages when the flag is true.
+- **Organic order is the same with and without Promotions.** The slot only moves the page window by one row. It never reads or writes feedback or the persona.
+
 ### Pagination
 
 - **Every paged list returns `total`, `limit` and `offset` on every request.** There are no cursors, and `total` is counted every time. The envelope rule for admin lists is in [backend-ops.md](backend-ops.md)'s Pagination section.

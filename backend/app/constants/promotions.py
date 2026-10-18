@@ -89,3 +89,36 @@ PROMOTION_ERROR_MESSAGES = {
     PROMOTION_ERROR_INVOICE_ON_COMPLIMENTARY: "A complimentary Promotion has no invoice.",
 }
 ERROR_PROMOTION_INVALID_STATE = "state must be one of scheduled, live, finished"
+
+# Explore Sponsored slot (#603).
+# Tile number (1-based) the slot renders at on page 1.
+PROMOTION_EXPLORE_SLOT_TILE = 4
+# Page 1 needs at least this many organic results before a slot may appear.
+PROMOTION_EXPLORE_MIN_ORGANIC = 6
+# The client opts in with `GET /explore?sponsored_slot=true`; the prerender never does.
+# "Miks?" explanation variants: Explore filters or `q` active, or neither.
+PROMOTION_EXPLANATION_FILTERS = "filters"
+PROMOTION_EXPLANATION_NONE = "none"
+
+# Self-declared bots never get a slot, so delivery counts stay honest.
+PROMOTION_BOT_USER_AGENT_RE = re.compile(
+    r"bot|crawl|spider|slurp|facebookexternalhit|bingpreview|mediapartners",
+    re.IGNORECASE,
+)
+
+# Named not-showing reasons, one per failing fill-gate clause (the console, the
+# portal and the daily stats row share them).
+PROMOTION_NOT_SHOWING_SLOTS_DISABLED = "slots_disabled"
+PROMOTION_NOT_SHOWING_BOT = "bot_user_agent"
+PROMOTION_NOT_SHOWING_NOT_PAID = "not_paid"
+PROMOTION_NOT_SHOWING_OUTSIDE_WINDOW = "outside_window"
+PROMOTION_NOT_SHOWING_EVENT_NOT_PUBLIC = "event_not_public"
+PROMOTION_NOT_SHOWING_EVENT_NOT_CANONICAL = "event_not_canonical"
+PROMOTION_NOT_SHOWING_EVENT_ENDED = "event_ended"
+PROMOTION_NOT_SHOWING_NOT_OWNED = "organizer_not_owner"
+PROMOTION_NOT_SHOWING_RESTRICTION_UNASSESSED = "restriction_unassessed"
+PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED = "restriction_flagged"
+PROMOTION_NOT_SHOWING_FILTERS_MISMATCH = "filters_mismatch"
+
+# `events.promotion_restriction`: `None` = unassessed, `none` = clear.
+PROMOTION_RESTRICTION_NONE = "none"

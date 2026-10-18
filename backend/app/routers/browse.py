@@ -27,7 +27,6 @@ from app._generated.shared_constants import (
     VALID_CATEGORIES,
     VALID_VIBES,
 )
-from app.constants.core import TALLINN_TZ
 from app.constants.ranking import (
     BROWSE_ANON_CACHE_SENTINEL,
     BROWSE_FORYOU_MIN_AFFINITY,
@@ -52,6 +51,12 @@ from app.constants.ranking import (
     VALID_BROWSE_SORTS,
 )
 from app.constants.log_events import LOG_EVENT_EXPLORE_CEILING_OVERFLOW
+from app.constants.promotions import (
+    PROMOTION_EXPLANATION_FILTERS,
+    PROMOTION_EXPLANATION_NONE,
+    PROMOTION_EXPLORE_MIN_ORGANIC,
+    PROMOTION_EXPLORE_SLOT_TILE,
+)
 from app.constants.rate_limits import RATE_LIMIT_BROWSE
 from app.db import get_db
 from app.models.models import Event, EventClassification, User, UserEventFeedback, UserPersona
@@ -71,6 +76,16 @@ from app.routers.utils import (
     resolve_locale_param,
     serialize_event,
 )
+from app.promotions.fill import (
+    GateResult,
+    explore_eligible,
+    explore_seed,
+    gate_closed_reason,
+    load_visible,
+    rotation_order,
+    surviving,
+)
+from app.promotions.windows import now_tallinn, tallinn_today
 from app.events.queries import (
     facet_conditions,
     public_event_filter,
@@ -108,6 +123,14 @@ async def _load_signals_and_reported(
     return sigs, reported
 
 
+def _sql_order_cols(sort: str) -> list[ColumnElement]:
+    if sort == BROWSE_SORT_DATE:
+        return [Event.starts_at.asc(), Event.id.asc()]
+    if sort == BROWSE_SORT_PRICE:
+        return [Event.price_min.asc().nulls_last(), Event.id.asc()]
+    return [EventClassification.quality_score.desc().nulls_last(), Event.id.asc()]
+
+
 async def _browse_sql_path(
     db: AsyncSession,
     conds: list[ColumnElement[bool]],
@@ -127,16 +150,7 @@ async def _browse_sql_path(
     Each order ends in ``id`` as a tie-breaker, so rows sharing a sort value
     keep one stable order across pages.
     """
-    order_cols: list[ColumnElement]
-    if sort == BROWSE_SORT_DATE:
-        order_cols = [Event.starts_at.asc(), Event.id.asc()]
-    elif sort == BROWSE_SORT_PRICE:
-        order_cols = [Event.price_min.asc().nulls_last(), Event.id.asc()]
-    else:
-        order_cols = [
-            EventClassification.quality_score.desc().nulls_last(),
-            Event.id.asc(),
-        ]
+    order_cols = _sql_order_cols(sort)
 
     total = (
         await db.scalar(
@@ -407,6 +421,34 @@ async def _score_and_rank_candidates(
     return ids, lower_bound
 
 
+async def _ranked_candidates(
+    db: AsyncSession,
+    conds: list[ColumnElement[bool]],
+    for_you: bool,
+    sort: str,
+    current_user: User | None,
+    now: datetime,
+    cache_key: tuple | None,
+) -> _RankedIds:
+    ranked = _score_cache_get(cache_key) if cache_key is not None else None
+    if ranked is None:
+        if cache_key is not None:
+            async with _score_cache_lock(cache_key):
+                # Re-check: another caller may have populated the cache while
+                # this one was waiting on the lock.
+                ranked = _score_cache_get(cache_key)
+                if ranked is None:
+                    ranked = await _score_and_rank_candidates(
+                        db, conds, for_you, sort, current_user, now
+                    )
+                    _score_cache_set(cache_key, *ranked)
+        else:
+            ranked = await _score_and_rank_candidates(
+                db, conds, for_you, sort, current_user, now
+            )
+    return ranked
+
+
 async def _browse_scored_path(
     db: AsyncSession,
     conds: list[ColumnElement[bool]],
@@ -431,22 +473,9 @@ async def _browse_scored_path(
     cache — load-bearing for anonymous traffic, which shares one cache key
     (BROWSE_ANON_CACHE_SENTINEL) across all callers.
     """
-    ranked = _score_cache_get(cache_key) if cache_key is not None else None
-    if ranked is None:
-        if cache_key is not None:
-            async with _score_cache_lock(cache_key):
-                # Re-check: another caller may have populated the cache while
-                # this one was waiting on the lock.
-                ranked = _score_cache_get(cache_key)
-                if ranked is None:
-                    ranked = await _score_and_rank_candidates(
-                        db, conds, for_you, sort, current_user, now
-                    )
-                    _score_cache_set(cache_key, *ranked)
-        else:
-            ranked = await _score_and_rank_candidates(
-                db, conds, for_you, sort, current_user, now
-            )
+    ranked = await _ranked_candidates(
+        db, conds, for_you, sort, current_user, now, cache_key
+    )
     ranked_ids, lower_bound = ranked
 
     # `total` is the reachable count: the whole matching set below
@@ -509,6 +538,7 @@ async def explore_events(
         PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
     ),
     locale: str | None = Query(None),
+    sponsored_slot: bool = Query(False),
     current_user: User | None = Depends(get_optional_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -526,23 +556,12 @@ async def explore_events(
 
     categories = _parse_slug_list(category, VALID_CATEGORIES)
     vibes = _parse_slug_list(vibe, VALID_VIBES)
-    now = datetime.now(TALLINN_TZ)
+    now = now_tallinn()
     conds = facet_conditions(categories, vibes, free, q, date_from, date_to, now)
     user_locale = current_user.locale if current_user is not None else DEFAULT_USER_LOCALE
     effective_locale = resolve_locale_param(locale, user_locale)
 
-    if not for_you and sort in BROWSE_SQL_SORTS:
-        user_id = current_user.id if current_user is not None else None
-        return await _browse_sql_path(
-            db,
-            conds,
-            sort,
-            limit,
-            offset,
-            effective_locale,
-            user_id,
-        )
-
+    user_id = current_user.id if current_user is not None else None
     cache_key = (
         current_user.id if current_user is not None else BROWSE_ANON_CACHE_SENTINEL,
         for_you,
@@ -554,15 +573,98 @@ async def explore_events(
         date_from,
         date_to,
     )
-    return await _browse_scored_path(
-        db,
-        conds,
-        for_you,
-        sort,
-        limit,
-        offset,
-        current_user,
-        now,
-        effective_locale,
-        cache_key,
+
+    async def serve(page_limit: int, page_offset: int) -> dict:
+        if not for_you and sort in BROWSE_SQL_SORTS:
+            return await _browse_sql_path(
+                db, conds, sort, page_limit, page_offset, effective_locale, user_id
+            )
+        return await _browse_scored_path(
+            db,
+            conds,
+            for_you,
+            sort,
+            page_limit,
+            page_offset,
+            current_user,
+            now,
+            effective_locale,
+            cache_key,
+        )
+
+    if not sponsored_slot:
+        return await serve(limit, offset)
+    if gate_closed_reason(request.headers.get("user-agent")):
+        response = await serve(limit, offset)
+        response["page1_has_slot"] = False
+        return response
+
+    # Sponsored slot (#603). Organic ranking is untouched: the slot only moves
+    # the page window by one, and only when a Promotion is eligible.
+    eligible = await explore_eligible(db, now, conds)
+    survivors: list[GateResult] = []
+    if eligible:
+        page_one_ids = await _page_one_ids(
+            db, conds, for_you, sort, limit, current_user, now, cache_key
+        )
+        if min(len(page_one_ids), limit - 1) >= PROMOTION_EXPLORE_MIN_ORGANIC:
+            visible = await load_visible(db, page_one_ids)
+            survivors = surviving(eligible, visible)
+    if not survivors:
+        response = await serve(limit, offset)
+        response["page1_has_slot"] = False
+        return response
+
+    # Page 1 gives up its last organic row to the slot; every later page starts
+    # one result earlier so nothing is skipped or repeated.
+    if offset == 0:
+        response = await serve(limit - 1, 0)
+        response["limit"] = limit
+        picked = rotation_order(survivors, explore_seed(user_id, tallinn_today(now)))[0]
+        sigs, reported = await _load_signals_and_reported(db, user_id, [picked.event.id])
+        response["sponsored_slot"] = {
+            **serialize_event(
+                picked.event,
+                locale=effective_locale,
+                feedback_by_event=sigs,
+                reported_event_ids=reported,
+            ),
+            "advertiser": picked.promotion.advertiser_legal_name,
+            "explanation": (
+                PROMOTION_EXPLANATION_FILTERS
+                if (categories or vibes or free or q or date_from or date_to)
+                else PROMOTION_EXPLANATION_NONE
+            ),
+            "tile": PROMOTION_EXPLORE_SLOT_TILE,
+        }
+    else:
+        response = await serve(limit, offset - 1)
+        response["offset"] = offset
+    response["page1_has_slot"] = True
+    return response
+
+
+async def _page_one_ids(
+    db: AsyncSession,
+    conds: list[ColumnElement[bool]],
+    for_you: bool,
+    sort: str,
+    limit: int,
+    current_user: User | None,
+    now: datetime,
+    cache_key: tuple | None,
+) -> list[int]:
+    """The first ``limit`` organic ids, in the order page 1 would show them."""
+    if not for_you and sort in BROWSE_SQL_SORTS:
+        stmt = (
+            select(Event.id)
+            .join(Event.classification)
+            .where(*conds)
+            .order_by(*_sql_order_cols(sort))
+            .limit(limit)
+        )
+        return list((await db.scalars(stmt)).all())
+    ranked_ids, _ = await _ranked_candidates(
+        db, conds, for_you, sort, current_user, now, cache_key
     )
+    return list(ranked_ids[:limit])
