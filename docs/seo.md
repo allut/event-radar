@@ -26,6 +26,9 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **`buildExploreItemListJsonLd` emits one `ListItem` per event on the current `/explore` page**, with `position` 1 to n in render order, the same signed in or out (the sign-up strip is not an item). Each `item` is the full `buildEventJsonLd` payload, so there is one field-mapping policy.
 - **Each list `item` adds a top-level `url` to the locale-matched detail page.** It is distinct from `offers.url`, which is the external ticket link.
 - **The `ItemList` omits `numberOfItems` and `itemListOrder`.** schema.org defines `numberOfItems` as the count for the entire list, which would be wrong on a one-page snapshot, and Google doesn't ask for either.
+- **The `ItemList` never includes the Sponsored slot.** `Explore` passes `events` (organic rows) only, so `position` stays contiguous 1 to n and a paid placement never poses as a result. The slot tile is rendered from `sponsored_slot`, outside `events`.
+- **Paid links carry `rel="sponsored"`.** The slot card's stretched link is `sponsored` and its ticket link `sponsored noopener noreferrer` (`SPONSORED_LINK_REL`, `SPONSORED_TICKET_REL`). The promoted event's own page, its JSON-LD, the sitemap and the `?page=N` canonicals are unchanged.
+- **The prerender never requests a slot.** `Explore` omits `sponsored_slot=true` while `isPrerenderRender()` (`PRERENDER_RUNTIME_FLAG`) is true, so no snapshot freezes a paid tile. `validateSnapshotStructure` is the backstop (see Structural Checks).
 - **`/faq` emits no JSON-LD.**
 
 ## Build-Time Prerender
