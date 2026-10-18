@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.constants.core import TALLINN_TZ
+from app.constants.promotions import PROMOTION_EXPLANATION_DAILY5
 from app.constants.rate_limits import RATE_LIMIT_BROWSE
 from app.db import get_db
 from app.models.models import DailyFeed, Event, User
@@ -19,6 +21,7 @@ from app.routers.utils import (
     serialize_event,
 )
 from app.events.queries import public_event_filter, select_events_with_classification
+from app.promotions.daily5 import resolve_feed_slot
 
 router = APIRouter(prefix="/feed", tags=["feed"])
 
@@ -33,7 +36,8 @@ async def get_feed(
 ) -> dict:
     """Return today's Daily 5 feed. Falls back to the most recent prior non-empty
     feed (flagged via `is_stale`) if today's has not been built yet."""
-    today = datetime.now(TALLINN_TZ).date()
+    now = datetime.now(TALLINN_TZ)
+    today = now.date()
 
     feed = await db.scalar(
         select(DailyFeed).where(
@@ -94,7 +98,7 @@ async def get_feed(
     reported = await load_user_reported_events(db, current_user.id, event_ids)
     effective_locale = resolve_locale_param(locale, current_user.locale)
 
-    return {
+    response: dict = {
         "feed_date": feed.feed_date.isoformat(),
         "events": [
             serialize_event(
@@ -108,3 +112,29 @@ async def get_feed(
         "built_at": feed.built_at.isoformat(),
         "is_stale": is_stale,
     }
+
+    # Sponsored slot (#607): a separate card after the five, from the stored
+    # pick re-gated now. The five above never depend on it.
+    if settings.PROMOTIONS_SLOTS_ENABLED and not is_stale:
+        slot = await resolve_feed_slot(
+            db, current_user.id, now, event_ids, request.headers.get("user-agent")
+        )
+        if slot.swapped:
+            await db.commit()
+        if slot.result is not None:
+            picked = slot.result
+            slot_sigs = await load_user_signals(db, current_user.id, [picked.event.id])
+            slot_reported = await load_user_reported_events(
+                db, current_user.id, [picked.event.id]
+            )
+            response["sponsored_slot"] = {
+                **serialize_event(
+                    picked.event,
+                    locale=effective_locale,
+                    feedback_by_event=slot_sigs,
+                    reported_event_ids=slot_reported,
+                ),
+                "advertiser": picked.promotion.advertiser_legal_name,
+                "explanation": PROMOTION_EXPLANATION_DAILY5,
+            }
+    return response

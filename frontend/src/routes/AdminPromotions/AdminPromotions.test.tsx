@@ -95,6 +95,13 @@ describe('AdminPromotions', () => {
     expect(within(ended).getByText('Complimentary')).toBeInTheDocument();
   });
 
+  it('links each row to its Promotion detail', async () => {
+    routeGets([promotion({ id: 12 })]);
+    renderWithProviders(<AdminPromotions />);
+    const link = await screen.findByRole('link', { name: 'Manage' });
+    expect(link).toHaveAttribute('href', '/admin/promotions/12');
+  });
+
   it('filters by state through the URL and the request', async () => {
     routeGets([]);
     renderWithProviders(

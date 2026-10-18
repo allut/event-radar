@@ -1,7 +1,9 @@
 """Unit tests for the scoring formula — no DB, all pure functions."""
 from datetime import datetime, timedelta
 from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from app.constants.core import TALLINN_TZ
 from app.constants.ranking import SCORE_HARD_EXCLUDE
@@ -20,6 +22,17 @@ from app.ranking.score import (
     recency_boost,
     score_event,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_daily5_slot(monkeypatch):
+    """These tests drive build_daily_feeds against a mocked session; the
+    Sponsored-slot pick (#607) has its own real-Postgres tests."""
+    from app.promotions.daily5 import Daily5Run
+
+    run = Daily5Run(today=datetime(2026, 5, 10).date(), now=_now(), eligible=[])
+    monkeypatch.setattr(run, "finish", AsyncMock())
+    monkeypatch.setattr("app.ranking.score.prepare_daily5", AsyncMock(return_value=run))
 
 
 def _now() -> datetime:
@@ -1196,7 +1209,7 @@ class TestBuildDailyFeedsBatching:
 
         result = await score_module.build_daily_feeds(mock_db)
 
-        assert mock_db.commit.await_count == 3  # one per page
+        assert mock_db.commit.await_count == 4  # one per page, plus the final Daily 5 slot commit
 
         # Candidate-events query ran exactly once regardless of page count —
         # the core RAM-savings claim (identified by its is_explicit marker).

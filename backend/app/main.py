@@ -116,6 +116,7 @@ from app.routers.organizer_venues import router as organizer_venues_router
 from app.routers.public import router as public_router
 from app.routers.reports import router as reports_router
 from app.routers.settings import router as settings_router
+from app.email.consent import reset_consent_for_wording_change
 from app.routers.unsubscribe import router as unsubscribe_router
 from app.db import run_in_session
 from app.constants.promotions import PROMOTION_COUNTER_FLUSH_SECONDS
@@ -608,6 +609,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await seed_sources(db)
         await seed_personas(db)
         await seed_publishers(db)
+        # A material consent-wording bump resets stale consenters to off.
+        await reset_consent_for_wording_change(db)
         await db.commit()
 
     scheduler = _start_scheduler()

@@ -356,6 +356,8 @@
   --admin-cap-swatch: 10px;             /* PromotionCapStrip legend swatch */
   --admin-cap-gap-phone: 2px;           /* PromotionCapStrip day gap on a phone */
   --admin-promotions-table-min: 640px;  /* PromotionsTable scroll width */
+  --admin-promotion-days-min: 720px;    /* Promotion detail per-day table scroll width */
+  --admin-promotion-field-min: 160px;   /* Promotion detail action panel field basis */
 
   /* Heading scale */
   --heading-2xl: 2.5rem;

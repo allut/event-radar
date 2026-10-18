@@ -249,24 +249,30 @@ def _group(event_id: int, dedup_group_id: int | None) -> int:
     return dedup_group_id if dedup_group_id is not None else event_id
 
 
-async def without_viewer_excluded(
-    db: AsyncSession, user_id: int | None, results: Sequence[GateResult]
-) -> list[GateResult]:
-    """Drop Promotions the signed-in viewer disliked (event or dedup group),
-    reported, bookmarked or liked. Two queries whatever the row count; a
-    signed-out viewer has no signals and is untouched. Signals only exclude:
-    the disliked-category soft filter is deliberately not applied."""
-    if user_id is None or not results:
-        return list(results)
+async def viewer_excluded_promotions(
+    db: AsyncSession, user_ids: Sequence[int], results: Sequence[GateResult]
+) -> dict[int, set[int]]:
+    """Per user, the Promotion ids their own signals exclude: a dislike of the
+    event or its dedup group, a report, a bookmark or a like. Two queries
+    whatever the number of users or Promotions. Signals only exclude: the
+    disliked-category soft filter is deliberately not applied."""
+    excluded: dict[int, set[int]] = {uid: set() for uid in user_ids}
+    if not user_ids or not results:
+        return excluded
     event_ids = sorted({r.event.id for r in results})
     groups = sorted({_group(r.event.id, r.event.dedup_group_id) for r in results})
     group_col = func.coalesce(Event.dedup_group_id, Event.id)
     feedback = (
         await db.execute(
-            select(UserEventFeedback.signal, UserEventFeedback.event_id, group_col)
+            select(
+                UserEventFeedback.user_id,
+                UserEventFeedback.signal,
+                UserEventFeedback.event_id,
+                group_col,
+            )
             .join(Event, Event.id == UserEventFeedback.event_id)
             .where(
-                UserEventFeedback.user_id == user_id,
+                UserEventFeedback.user_id.in_(list(user_ids)),
                 UserEventFeedback.signal.in_((SIGNAL_LIKE, SIGNAL_DISLIKE, SIGNAL_BOOKMARK)),
                 or_(
                     UserEventFeedback.event_id.in_(event_ids),
@@ -275,21 +281,37 @@ async def without_viewer_excluded(
             )
         )
     ).all()
-    reported = set(
-        (
-            await db.scalars(
-                select(EventReport.event_id).where(
-                    EventReport.user_id == user_id, EventReport.event_id.in_(event_ids)
-                )
+    reports = (
+        await db.execute(
+            select(EventReport.user_id, EventReport.event_id).where(
+                EventReport.user_id.in_(list(user_ids)), EventReport.event_id.in_(event_ids)
             )
-        ).all()
-    )
-    excluded_events = {row[1] for row in feedback} | reported
-    disliked_groups = {row[2] for row in feedback if row[0] == SIGNAL_DISLIKE}
-    return [
-        r
-        for r in results
-        if r.event.id not in excluded_events
-        and _group(r.event.id, r.event.dedup_group_id) not in disliked_groups
-    ]
+        )
+    ).all()
+    user_events: dict[int, set[int]] = {uid: set() for uid in user_ids}
+    user_groups: dict[int, set[int]] = {uid: set() for uid in user_ids}
+    for uid, signal, event_id, group in feedback:
+        user_events[uid].add(event_id)
+        if signal == SIGNAL_DISLIKE:
+            user_groups[uid].add(group)
+    for uid, event_id in reports:
+        user_events[uid].add(event_id)
+    for uid in user_ids:
+        for r in results:
+            if (
+                r.event.id in user_events[uid]
+                or _group(r.event.id, r.event.dedup_group_id) in user_groups[uid]
+            ):
+                excluded[uid].add(r.promotion.id)
+    return excluded
 
+
+async def without_viewer_excluded(
+    db: AsyncSession, user_id: int | None, results: Sequence[GateResult]
+) -> list[GateResult]:
+    """Drop Promotions the signed-in viewer's signals exclude (see
+    ``viewer_excluded_promotions``). A signed-out viewer has no signals."""
+    if user_id is None or not results:
+        return list(results)
+    excluded = (await viewer_excluded_promotions(db, [user_id], results))[user_id]
+    return [r for r in results if r.promotion.id not in excluded]

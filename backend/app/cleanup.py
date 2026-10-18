@@ -24,6 +24,7 @@ from app.models.models import (
     IngestionRun,
     LlmCall,
     Claim,
+    DailySponsoredSlot,
     Organizer,
     OrganizerIdentity,
     OrganizerMagicLink,
@@ -105,6 +106,14 @@ async def cleanup_stale_data(db: AsyncSession, *, dry_run: bool = False) -> dict
         db,
         DailyFeed,
         DailyFeed.feed_date
+        < (now - timedelta(days=DAILY_FEEDS_RETENTION_DAYS)).date(),
+        dry_run=dry_run,
+    )
+    # The Daily 5 Sponsored-slot store (#607) is pruned on the same retention.
+    summary["daily_sponsored_slots"] = await _count_or_delete(
+        db,
+        DailySponsoredSlot,
+        DailySponsoredSlot.slot_date
         < (now - timedelta(days=DAILY_FEEDS_RETENTION_DAYS)).date(),
         dry_run=dry_run,
     )

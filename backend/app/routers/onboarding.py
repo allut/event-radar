@@ -90,7 +90,7 @@ async def set_persona(
         result.append({"slug": slug, "weight": weight})
 
     if body.email_digest_opt_in is not None:
-        set_digest_subscription(current_user, body.email_digest_opt_in)
+        set_digest_subscription(current_user, body.email_digest_opt_in, db)
 
     await db.commit()
 

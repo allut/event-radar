@@ -21,6 +21,24 @@ function makeWrapper() {
 }
 
 describe('useFeedback', () => {
+  it('sends the ref marker with a dislike when given one', async () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1, { ref: 'ad' }), { wrapper });
+    await act(async () => {
+      await result.current.sendFeedback('dislike');
+    });
+    expect(mockPost).toHaveBeenLastCalledWith('/feedback', { event_id: 1, signal: 'dislike', ref: 'ad' });
+  });
+
+  it('omits ref on a dislike without one, and on non-dislike signals', async () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1, { ref: 'ad' }), { wrapper });
+    await act(async () => {
+      await result.current.sendFeedback('like');
+    });
+    expect(mockPost).toHaveBeenLastCalledWith('/feedback', { event_id: 1, signal: 'like' });
+  });
+
   it('happy path: sets activeSignal and calls onChange', async () => {
     const onChange = vi.fn();
     const { wrapper } = makeWrapper();

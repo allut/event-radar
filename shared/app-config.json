@@ -38,6 +38,8 @@
   "claim_admin_review_expiry_days": 30,
   "email_brand_mark_path": "/email-mark.png",
   "sponsored_slot_attr": "data-sponsored-slot",
+  "promotion_ref_ad": "ad",
+  "promotion_ref_digest_ad": "digest-ad",
   "safe_url_schemes": ["http", "https"],
   "image_upload_allowed_mime": ["image/jpeg", "image/png", "image/webp"],
   "html_sanitize": {

@@ -59,3 +59,7 @@
   font-size: var(--fs-2xs);
   margin-top: var(--space-0-3);
 }
+
+.srOnly {
+  composes: srOnly from '../shared/Visually.module.css';
+}

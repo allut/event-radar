@@ -1,0 +1,285 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.back {
+  composes: accentLink from '../../components/shared/Link.module.css';
+  margin-top: 0;
+  font-size: var(--fs-2xs);
+}
+
+.link {
+  composes: accentLink from '../../components/shared/Link.module.css';
+  margin-top: 0;
+  font-size: var(--fs-2xs);
+}
+
+.head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  flex-wrap: wrap;
+  border-bottom: var(--border-w-hair) solid var(--border);
+  padding-bottom: var(--space-3);
+}
+
+.title {
+  composes: adminPageTitle from '../../components/shared/Page.module.css';
+  margin: 0;
+}
+
+.pill {
+  composes: pill from '../../components/PromotionsTable/PromotionsTable.module.css';
+}
+.pillLive { color: var(--success); }
+.pillScheduled { color: var(--accent-ink); }
+.pillFinished { color: var(--text-muted); }
+.pillAttention { color: var(--accent-ink); }
+
+.window {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.reason {
+  width: 100%;
+  color: var(--accent-ink);
+  font-size: var(--fs-2xs);
+}
+
+.sub {
+  width: 100%;
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+}
+
+.section { min-width: 0; }
+
+.sectionTitle {
+  font-family: var(--font-system);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  color: var(--text-muted);
+  margin: 0 0 var(--space-3);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.muted { color: var(--text-muted); }
+
+.note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+/* Actions and inline panels */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.plainButton {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  cursor: pointer;
+}
+.plainButton:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+
+.primaryButton {
+  composes: btnPrimary from '../../components/shared/Button.module.css';
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.dangerButton {
+  composes: btnOutline from '../../components/shared/Button.module.css';
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--danger);
+  border-color: var(--danger-border);
+  cursor: pointer;
+}
+.dangerButton:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.dangerButton:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+
+.panel {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-raised);
+  border: var(--border-w-hair) solid var(--accent-border);
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+
+.panelFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.panelButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 var(--admin-promotion-field-min);
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-soft);
+}
+
+.input {
+  composes: fieldInput from '../../components/shared/Field.module.css';
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  padding: var(--space-2) var(--space-3);
+  min-width: 0;
+  width: 100%;
+}
+textarea.input { resize: vertical; }
+
+.error {
+  margin: 0;
+  min-height: var(--space-4);
+  color: var(--danger);
+  font-size: var(--fs-2xs);
+}
+
+/* Commercial record */
+.record {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-5);
+  margin: 0;
+  border-top: var(--border-w-hair) solid var(--border);
+  font-size: var(--fs-sm);
+}
+
+.recordRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: var(--border-w-hair) solid var(--border);
+  min-width: 0;
+}
+
+.recordTerm { color: var(--text-muted); }
+
+.recordValue {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Per-day table */
+.tableScroll {
+  overflow-x: auto;
+  border-top: var(--border-w-hair) solid var(--border);
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: var(--admin-promotion-days-min);
+  font-size: var(--fs-sm);
+}
+
+.table th {
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  color: var(--text-muted);
+  font-weight: var(--fw-semibold);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border-w-hair) solid var(--border);
+  text-align: right;
+}
+
+.table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border-w-hair) solid var(--border);
+  text-align: right;
+}
+
+.table th.left,
+.table td.left { text-align: left; }
+
+.table td.nowrap { white-space: nowrap; }
+
+.paused td { color: var(--text-muted); }
+
+.total td {
+  font-weight: var(--fw-bold);
+  border-top: var(--border-w-hair) solid var(--text-muted);
+}
+
+/* Snapshots and audit */
+.snapshots {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.snapshot {
+  display: grid;
+  gap: var(--space-0-125);
+  padding: var(--space-3);
+  background: var(--bg-card);
+  border: var(--border-w-hair) solid var(--border);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.audit {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: var(--border-w-hair) solid var(--border);
+  font-size: var(--fs-sm);
+}
+
+.auditRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: var(--border-w-hair) solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .record { grid-template-columns: 1fr; }
+}

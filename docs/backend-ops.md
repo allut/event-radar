@@ -197,6 +197,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 | `ingestion_runs` | `INGESTION_RUNS_RETENTION_DAYS` (90) |
 | `raw_inbound_emails` | `RAW_INBOUND_EMAILS_RETENTION_DAYS` (90) |
 | `daily_feeds` | `DAILY_FEEDS_RETENTION_DAYS` (30) |
+| `daily_sponsored_slots` | `DAILY_FEEDS_RETENTION_DAYS` (30) |
 | `users`, unverified only | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) |
 | `organizers`, unverified only | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) |
 

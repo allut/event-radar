@@ -48,6 +48,9 @@ SESSION_COOKIE_SAMESITE: Literal["strict"] = "strict"
 # server_default/model default.
 DEFAULT_SESSION_TOKEN_VERSION = 1
 AUTH_UNSUBSCRIBE_SALT = "unsubscribe-v1"
+# The "Stop ads in this email" link (routers/unsubscribe.py): purpose-bound, so an
+# unsubscribe token can never withdraw Email ad consent or the reverse.
+AUTH_ADS_OFF_SALT = "ads-off-v1"
 # Organizer auth — distinct salts from the user stack above so a user's magic-link
 # or session token can never verify as an organizer token (and vice versa), even
 # though both use the same URLSafeTimedSerializer(settings.SECRET_KEY).

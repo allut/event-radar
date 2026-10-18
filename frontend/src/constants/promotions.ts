@@ -63,3 +63,94 @@ export const PROMOTION_COPY = {
   complimentary: 'Complimentary',
   complimentaryPrice: 'Complimentary · €0.00',
 } as const;
+
+// Promotion detail (#601, #606): action panels, per-day table, snapshots.
+export const PROMOTION_REASON_ROWS = 2;
+export const PROMOTION_GATE_SHOWN = 'shown';
+
+// Backend PROMOTION_NOT_SHOWING_* codes, worded for the per-day table.
+export const PROMOTION_GATE_REASON_LABELS: Readonly<Record<string, string>> = {
+  slots_disabled: 'slots off',
+  bot_user_agent: 'bot request',
+  not_paid: 'not paid',
+  outside_window: 'outside window',
+  event_not_public: 'event not public',
+  event_not_canonical: 'lost duplicate',
+  event_ended: 'event ended',
+  organizer_not_owner: 'claim inactive',
+  restriction_unassessed: 'restriction unassessed',
+  restriction_flagged: 'restricted',
+  filters_mismatch: 'filters mismatch',
+};
+
+// Backend PROMOTION_SNAPSHOT_TRIGGER_*.
+export const PROMOTION_SNAPSHOT_TRIGGER_LABELS: Readonly<Record<string, string>> = {
+  grant: 'grant',
+  mark_paid: 'mark paid',
+  edit: 'edit',
+  repoint: 're-point',
+};
+
+export const PROMOTION_ACTION = {
+  markPaid: 'mark_paid',
+  edit: 'edit',
+  repoint: 'repoint',
+  end: 'end',
+  void: 'void',
+  refund: 'refund',
+} as const;
+export type PromotionActionKey = (typeof PROMOTION_ACTION)[keyof typeof PROMOTION_ACTION];
+
+export const PROMOTION_EDIT_SCOPE = { full: 'full', endDate: 'end_date' } as const;
+
+export const PROMOTION_ACTION_LABELS: Readonly<Record<PromotionActionKey, string>> = {
+  mark_paid: 'Mark paid',
+  edit: 'Edit',
+  repoint: 'Re-point',
+  end: 'End early',
+  void: 'Void',
+  refund: 'Record refund',
+};
+
+export const PROMOTION_DETAIL_COPY = {
+  loadFailed: 'Couldn’t load this Promotion.',
+  back: '← Promotions',
+  actionsHeading: 'Actions',
+  recordHeading: 'Commercial record',
+  deliveryHeading: 'Delivery · per day',
+  snapshotsHeading: 'Content snapshots · newest first',
+  auditHeading: 'Audit',
+  actionsHint: 'Buttons follow what the server allows for this Promotion’s state.',
+  noActions: 'No actions left except refunds: this Promotion has ended.',
+  noActionsAtAll: 'No actions are available for this Promotion.',
+  cancel: 'Cancel',
+  invoiceOptional: 'Invoice reference (optional)',
+  invoiceInvalid: `Invoice reference must start with ${PROMOTION_INVOICE_PREFIX}.`,
+  editFullHeading: 'Edit Promotion',
+  editShortenHeading: 'Shorten live window',
+  editFullNote:
+    'Before the start date: dates (cap rechecked, price recomputed), advertiser details and invoice reference.',
+  editShortenNote:
+    'Live: only an earlier end date, never before today. The price paid stays; refund unused days separately.',
+  noChanges: 'Change something first.',
+  repointHeading: 'Re-point to another event',
+  repointLabel: 'Same Organizer, same duplicate group',
+  repointNone: 'No other event of this Organizer in the same duplicate group.',
+  repointPick: 'Pick an event.',
+  endHeading: 'End early',
+  endNote: 'Releases every remaining cap day now and stops the slot immediately.',
+  voidHeading: 'Void',
+  reasonLabel: 'Reason (emailed to the Organizer)',
+  reasonRequired: 'Give a reason. It is emailed to the Organizer.',
+  refundHeading: 'Record refund',
+  refundAmountLabel: 'Amount (gross, €)',
+  refundNoteLabel: 'Note (required)',
+  refundNoteRequired: 'A note is required.',
+  deliveryNote:
+    '“Served” is not “seen”. Complete days only, updated daily. Known bots are excluded. Anonymous totals; no viewer data. Today is not shown until it ends.',
+  noDays: 'No complete days yet. The first row appears the morning after the start date.',
+  noSnapshots: 'No snapshots yet. One is taken when the Promotion is paid.',
+  noAudit: 'No audit entries.',
+  pausedPrefix: 'Paused',
+  notRecorded: '—',
+} as const;

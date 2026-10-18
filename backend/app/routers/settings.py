@@ -15,11 +15,17 @@ from app.constants.auth import (
     SESSION_COOKIE_NAME,
     SESSION_COOKIE_PATH,
 )
+from app.constants.email import (
+    CONSENT_SOURCE_SETTINGS,
+    EMAIL_AD_CONSENT_WORDING_VERSION,
+    ERROR_AD_CONSENT_UNAVAILABLE,
+)
 from app.constants.core import ERROR_NO_UPDATE_FIELDS, SECONDS_PER_DAY
 from app.constants.log_events import LOG_EVENT_IDENTITY_UNLINKED
 from app.constants.rate_limits import RATE_LIMIT_AUTHENTICATED_WRITE
 from app.config import settings
 from app.db import get_db
+from app.email.consent import grant_ad_consent, withdraw_ad_consent
 from app.email.subscription import set_digest_subscription
 from app.models.models import Persona, User, UserIdentity, UserPersona
 from app.rate_limit import limiter
@@ -39,6 +45,7 @@ router = APIRouter(prefix="/users/me", tags=["settings"])
 class PatchSettingsBody(BaseModel):
     locale: str | None = None
     email_digest_opt_in: bool | None = None
+    email_ad_consent: bool | None = None
 
     @field_validator("locale")
     @classmethod
@@ -46,6 +53,20 @@ class PatchSettingsBody(BaseModel):
         if v is not None and v not in VALID_LOCALES:
             raise ValueError(f"locale must be one of {sorted(VALID_LOCALES)}")
         return v
+
+
+def _consent_fields(user: User) -> dict:
+    """Email ad consent state for the Settings toggle. `available` is when the
+    toggle may show and be turned on: digest on and the slots flag on."""
+    return {
+        "email_ad_consent": user.email_ad_consent,
+        "email_ad_consent_available": _consent_available(user),
+        "email_ad_consent_wording_version": EMAIL_AD_CONSENT_WORDING_VERSION,
+    }
+
+
+def _consent_available(user: User) -> bool:
+    return bool(user.email_digest_opt_in and settings.PROMOTIONS_SLOTS_ENABLED)
 
 
 async def _load_persona_data(
@@ -92,6 +113,7 @@ async def get_settings(
     return serialize_user(
         current_user,
         email_digest_opt_in=current_user.email_digest_opt_in,
+        **_consent_fields(current_user),
         personas=personas,
         preferred_categories=preferred_categories,
         preferred_vibes=preferred_vibes,
@@ -163,7 +185,11 @@ async def patch_settings(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Update locale and/or email digest preference."""
-    if body.locale is None and body.email_digest_opt_in is None:
+    if (
+        body.locale is None
+        and body.email_digest_opt_in is None
+        and body.email_ad_consent is None
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ERROR_NO_UPDATE_FIELDS,
@@ -172,7 +198,17 @@ async def patch_settings(
     if body.locale is not None:
         current_user.locale = body.locale
     if body.email_digest_opt_in is not None:
-        set_digest_subscription(current_user, body.email_digest_opt_in)
+        set_digest_subscription(current_user, body.email_digest_opt_in, db)
+    if body.email_ad_consent is True:
+        if not _consent_available(current_user):
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=ERROR_AD_CONSENT_UNAVAILABLE,
+            )
+        grant_ad_consent(current_user, db, CONSENT_SOURCE_SETTINGS)
+    elif body.email_ad_consent is False:
+        withdraw_ad_consent(current_user, db, CONSENT_SOURCE_SETTINGS)
 
     await db.commit()
     await db.refresh(current_user)
@@ -185,6 +221,7 @@ async def patch_settings(
     return serialize_user(
         current_user,
         email_digest_opt_in=current_user.email_digest_opt_in,
+        **_consent_fields(current_user),
         personas=personas,
         preferred_categories=preferred_categories,
         preferred_vibes=preferred_vibes,

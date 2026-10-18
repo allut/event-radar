@@ -1,4 +1,8 @@
+import { TALLINN_TZ } from '../_generated/sharedConstants';
 import {
+  PROMOTION_DETAIL_COPY,
+  PROMOTION_GATE_REASON_LABELS,
+  PROMOTION_GATE_SHOWN,
   PROMOTION_STATE,
   PROMOTION_STATUS,
   type PromotionPillTone,
@@ -132,4 +136,150 @@ export function promotionPill(p: PromotionRow): { label: string; tone: Promotion
   }
   if (p.state === PROMOTION_STATE.live) return { label: 'Live', tone: 'live', reason: null };
   return { label: 'Scheduled', tone: 'scheduled', reason: null };
+}
+
+export interface PromotionActions {
+  mark_paid: boolean;
+  edit: boolean;
+  edit_scope: 'full' | 'end_date' | null;
+  repoint: boolean;
+  end: boolean;
+  void: boolean;
+  refund: boolean;
+  refundable_cents: number;
+}
+
+export interface RepointCandidate {
+  event_id: number;
+  title: string;
+  last_day: string;
+}
+
+export interface PromotionSnapshot {
+  id: number;
+  taken_at: string;
+  trigger: string;
+  event_id: number;
+  title: { et: string | null; en: string | null; ru: string | null };
+  description_excerpt: string | null;
+  image_url: string | null;
+  venue_name: string | null;
+  event_starts_at: string | null;
+  event_ends_at: string | null;
+  start_date: string;
+  end_date: string;
+  net_price_cents: number;
+  vat_rate_percent: string;
+  label_text: string;
+}
+
+export interface PromotionAuditEntry {
+  action: string;
+  result: string;
+  created_at: string;
+}
+
+export interface PromotionDetail extends PromotionRow {
+  organizer_id: number;
+  invoice_source: string | null;
+  advertiser_registry_code: string;
+  billing_email: string | null;
+  granted_by: string | null;
+  paid_at: string | null;
+  ended_at: string | null;
+  end_reason: string | null;
+  end_note: string | null;
+  refunded_cents: number;
+  refund_note: string | null;
+  created_at: string | null;
+  event: {
+    id: number;
+    title: string;
+    starts_at: string;
+    ends_at: string | null;
+    last_day: string;
+    venue_name: string | null;
+  };
+  actions: PromotionActions;
+  repoint_candidates: RepointCandidate[];
+  snapshots: PromotionSnapshot[];
+  audit: PromotionAuditEntry[];
+}
+
+export interface PromotionDailyStat {
+  day: string;
+  gate_outcome: string | null;
+  gate_reason: string | null;
+  explore_served: number;
+  daily5_placed: number;
+  digest_sent: number;
+  web_opens: number;
+  digest_opens: number;
+  slot_dislikes: number;
+}
+
+export interface PromotionDailyStatsResponse {
+  promotion_id: number;
+  today: string;
+  days: PromotionDailyStat[];
+}
+
+// The numeric columns of the per-day table, in display order.
+export const DAILY_STAT_COLUMNS = [
+  { key: 'explore_served', label: 'Explore served' },
+  { key: 'daily5_placed', label: 'Daily 5 placed' },
+  { key: 'digest_sent', label: 'Digest sent' },
+  { key: 'web_opens', label: 'Web opens' },
+  { key: 'digest_opens', label: 'Digest opens' },
+  { key: 'slot_dislikes', label: 'Slot dislikes' },
+] as const;
+
+export function dailyStatTotals(days: PromotionDailyStat[]): number[] {
+  return DAILY_STAT_COLUMNS.map((c) => days.reduce((sum, d) => sum + d[c.key], 0));
+}
+
+/** "Shown", "Paused · claim inactive", or "—" when no gate outcome was recorded. */
+export function gateLabel(stat: PromotionDailyStat): string {
+  if (stat.gate_outcome === null) return PROMOTION_DETAIL_COPY.notRecorded;
+  if (stat.gate_outcome === PROMOTION_GATE_SHOWN) return 'Shown';
+  const reason = stat.gate_reason ? (PROMOTION_GATE_REASON_LABELS[stat.gate_reason] ?? stat.gate_reason) : null;
+  return reason ? `${PROMOTION_DETAIL_COPY.pausedPrefix} · ${reason}` : PROMOTION_DETAIL_COPY.pausedPrefix;
+}
+
+/** The not-showing line under the header pill: the unpaid countdown, the
+ * stated end reason, or the latest recorded pause while live. */
+export function detailReason(p: PromotionDetail, days: PromotionDailyStat[]): string | null {
+  const pill = promotionPill(p);
+  if (pill.reason) return pill.reason;
+  if ((p.status === PROMOTION_STATUS.endedEarly || p.status === PROMOTION_STATUS.void) && p.end_note) {
+    return `${p.status === PROMOTION_STATUS.void ? 'Voided' : 'Ended'}: ${p.end_note}`;
+  }
+  const latest = days.length > 0 ? days[days.length - 1] : null;
+  if (p.state === PROMOTION_STATE.live && latest && latest.gate_outcome !== null && latest.gate_outcome !== PROMOTION_GATE_SHOWN) {
+    return gateLabel(latest);
+  }
+  return null;
+}
+
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: TALLINN_TZ,
+});
+
+/** "13 Oct 2026, 11:20" in Tallinn time. */
+export function formatDateTime(iso: string): string {
+  return DATE_TIME_FORMAT.format(new Date(iso));
+}
+
+/** Euros typed as "12.50" (or "12,5") to whole cents; null when not a positive amount. */
+export function parseEuroToCents(text: string): number | null {
+  const normalised = text.trim().replace(',', '.');
+  if (!/^\d+(\.\d{1,2})?$/.test(normalised)) return null;
+  const cents = Math.round(Number(normalised) * 100);
+  return cents > 0 ? cents : null;
 }

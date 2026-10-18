@@ -23,6 +23,7 @@ export default function PromotionsTable({ rows, ariaBusy }: { rows: PromotionRow
             <th>Window</th>
             <th>Price</th>
             <th>Status</th>
+            <th><span className={styles.srOnly}>Details</span></th>
           </tr>
         </thead>
         <tbody>
@@ -41,6 +42,11 @@ export default function PromotionsTable({ rows, ariaBusy }: { rows: PromotionRow
                 <td>
                   <span className={`${styles.pill} ${TONE_CLASS[pill.tone]}`}>{pill.label}</span>
                   {pill.reason && <div className={styles.reason}>{pill.reason}</div>}
+                </td>
+                <td>
+                  <Link to={ROUTES.adminPromotionDetail(p.id)} className={styles.eventLink}>
+                    Manage
+                  </Link>
                 </td>
               </tr>
             );

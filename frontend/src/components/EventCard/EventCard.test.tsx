@@ -3,6 +3,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ComponentProps } from 'react';
 import EventCardBase from './EventCard';
+import { useFeedback } from '../../hooks/useFeedback';
 import { useEventCardNav } from '../../hooks/useEventCardNav';
 import { renderWithProviders, makeEvent } from '../../test/utils';
 import { SPONSORED_SLOT_ATTR } from '../../_generated/sharedConstants';
@@ -230,6 +231,21 @@ describe('EventCard', () => {
       expect(screen.getByRole('link', { name: 'Test Event' })).not.toHaveAttribute('rel');
     });
 
+    it('adds ?ref=ad to the stretched link of a sponsored card only', () => {
+      const { unmount } = renderWithProviders(<EventCard event={makeEvent({ id: 7 })} index={0} locale="en" sponsored={sponsored} />);
+      expect(screen.getByRole('link', { name: 'Test Event' })).toHaveAttribute('href', '/events/7?ref=ad');
+      unmount();
+      renderWithProviders(<EventCard event={makeEvent({ id: 7 })} index={0} locale="en" />);
+      expect(screen.getByRole('link', { name: 'Test Event' })).toHaveAttribute('href', '/events/7');
+    });
+
+    it('passes ref ad to useFeedback on a sponsored card only', () => {
+      renderWithProviders(<EventCard event={makeEvent({ id: 7 })} index={0} locale="en" sponsored={sponsored} />);
+      expect(vi.mocked(useFeedback)).toHaveBeenLastCalledWith(7, expect.objectContaining({ ref: 'ad' }));
+      renderWithProviders(<EventCard event={makeEvent({ id: 8 })} index={0} locale="en" />);
+      expect(vi.mocked(useFeedback)).toHaveBeenLastCalledWith(8, expect.objectContaining({ ref: undefined }));
+    });
+
     it.each([
       ['et', 'Reklaam', 'Miks?'],
       ['en', 'Ad', 'Why?'],
@@ -244,6 +260,13 @@ describe('EventCard', () => {
     it('carries the slot DOM marker on the card', () => {
       const { container } = renderWithProviders(<EventCard event={makeEvent()} index={0} locale="en" sponsored={sponsored} />);
       expect(container.querySelector(`article[${SPONSORED_SLOT_ATTR}]`)).toBeInTheDocument();
+    });
+
+    it('shows no position numeral on an imageless sponsored card, so it never reads as a pick', () => {
+      renderWithProviders(<EventCard event={makeEvent({ image_url: null })} index={5} locale="en" sponsored={sponsored} />);
+      expect(screen.queryByText('06')).not.toBeInTheDocument();
+      renderWithProviders(<EventCard event={makeEvent({ id: 2, image_url: null })} index={5} locale="en" />);
+      expect(screen.getByText('06')).toBeInTheDocument();
     });
 
     it('marks the stretched link rel="sponsored" and the ticket link sponsored noopener noreferrer', () => {

@@ -217,6 +217,12 @@ Accepted residual risks, all bounded because the token only toggles a reversible
 - **The token is a query parameter on both POST routes.** It can appear in edge logs, though never in Axiom: `app/logging_config.py::_AccessPathStripFilter` strips access-log query strings. The magic-link token moved into a body because it grants a session; this one doesn't.
 - **The same token authorizes `POST /email/resubscribe`**, so a leaked token can re-opt-in someone who unsubscribed.
 
+### Email Ad Consent Withdrawal
+
+- **`POST /email/ads-off?token=` withdraws Email ad consent without a login.** The digest keeps coming. The token has its own salt (`AUTH_ADS_OFF_SALT`) and `UNSUBSCRIBE_TOKEN_TTL_DAYS`, so it can't unsubscribe the digest or be replayed the other way. Errors match `/email/unsubscribe`.
+- **`POST /email/ads-on?token=` is the undo.** It grants again at the current wording version, and returns 409 while the digest or `PROMOTIONS_SLOTS_ENABLED` is off.
+- **Both routes use `RATE_LIMIT_UNSUBSCRIBE` and the normal Origin check.** The token stays a query parameter, like unsubscribe's.
+
 ### Google Sign-In
 
 Both tracks offer Google sign-in alongside magic links, through a server-side OAuth 2.0 authorization-code flow with PKCE (S256). There's no Google JavaScript or widget, only a top-level redirect. [ADR 0002](adr/0002-google-sign-in-oauth-pkce.md) has the rationale and rejected alternatives.

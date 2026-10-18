@@ -1,4 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
+import { useLocation } from 'react-router-dom';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import EventDetail from './EventDetail';
@@ -53,6 +54,11 @@ import { isAuthenticated } from '../../lib/auth';
 const mockGet = vi.mocked(api.get);
 const mockIsAuthenticated = vi.mocked(isAuthenticated);
 
+function LocationProbe() {
+  const { pathname, search } = useLocation();
+  return <div data-testid="loc">{pathname + search}</div>;
+}
+
 const eventData = {
   ...makeEvent({
     id: 1,
@@ -75,6 +81,33 @@ const eventData = {
 };
 
 describe('EventDetail', () => {
+  describe('promotion ref (#597)', () => {
+    function renderAt(route: string) {
+      mockGet.mockResolvedValue(eventData);
+      return renderWithProviders(
+        <>
+          <EventDetail />
+          <LocationProbe />
+        </>,
+        { route, pathPattern: '/:locale/events/:id' },
+      );
+    }
+
+    it.each(['ad', 'digest-ad'])('passes ?ref=%s to the event request once, then strips it from the URL', async (ref) => {
+      renderAt(`/en/events/1?ref=${ref}`);
+      await screen.findByText('Test Concert');
+      expect(mockGet).toHaveBeenCalledWith(`/events/1?locale=en&ref=${ref}`);
+      await waitFor(() => expect(screen.getByTestId('loc')).toHaveTextContent('/en/events/1'));
+      expect(screen.getByTestId('loc')).not.toHaveTextContent('ref=');
+    });
+
+    it('sends no ref when the URL has none or an unknown one', async () => {
+      renderAt('/en/events/1?ref=bogus');
+      await screen.findByText('Test Concert');
+      expect(mockGet).toHaveBeenCalledWith('/events/1?locale=en');
+    });
+  });
+
   it('shows loading state initially', () => {
     mockGet.mockReturnValue(new Promise(() => undefined));
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });

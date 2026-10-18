@@ -10,6 +10,8 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 
 - **`users.email_verified` flips true on the first successful magic-link verification.** It gates `build_daily_feeds` and `send_daily_digests`. See [security.md](security.md)'s Email Verification Gate section.
 - **`users.email_digest_opt_in` gates the daily digest send, and new users start `false`.** The onboarding checkbox sends the choice with `POST /onboarding/persona`. Rows from before migration 0059 kept `true`. `users.locale` is one of `et`, `en` and `ru`.
+- **`users.email_ad_consent` is the send-time gate for the digest's Sponsored slot, and starts `false`.** `email_ad_consent_version` holds the wording version agreed to. Only `app/email/consent.py` writes them, and every unsubscribe route withdraws consent through `set_digest_subscription`.
+- **`email_ad_consent_log` is append-only, one row per grant or withdrawal.** It stores the source and locale. Its `user_id` FK cascades, so `log_account_deletion` logs before the account goes. Startup resets older wording versions to off, logged as `wording_change`.
 - **`session_token_version` is bumped to revoke every session** of a user, or of an organizer on `organizers`. See [security.md](security.md)'s Session Revocation section.
 - **`auth_magic_links` rows are one-use and store only a sha256 `token_hash`.** A non-null `pending_google_sub` marks a link that confirms a pending Google link instead of starting a session ([ADR 0002](adr/0002-google-sign-in-oauth-pkce.md)). There is no second token type.
 
@@ -125,7 +127,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **Preference signals keep current state, one row per (user, event).** These are like, dislike and bookmark (`PREFERENCE_SIGNALS`), enforced by a partial unique index (migration 0019). `POST /feedback` upserts and `DELETE /feedback/{event_id}` removes. `GET /feedback/events?signal=` reads them for the Saved Events page.
 - **Passive signals append, at most one row per (user, event, signal, UTC day).** These are `view` and `click_external`, the rest of `VALID_SIGNALS`, kept for page-view and ticket-click analytics. A partial unique index on the UTC date enforces the cap (`uq_user_event_feedback_passive_signal_day`, migration 0055).
 - **`POST /feedback` inserts passive rows `ON CONFLICT DO NOTHING`**, so a client spamming the endpoint can't grow the table. Ranking reads only like and dislike rows, so the cap changes no score.
-- **`daily_feeds` stores each user's Daily 5** as `user_id`, `feed_date` and a `BigInteger[]` of `event_ids`.
+- **`daily_feeds` stores each user's Daily 5** as `user_id`, `feed_date` and a `BigInteger[]` of `event_ids`. The Sponsored slot is stored separately in `daily_sponsored_slots`.
 - **There is no score cache.** Migration 0053 dropped `user_event_scores`, and `build_daily_feeds` recomputes scores every run. So a feedback or persona change needs no invalidation. See [pipeline.md](pipeline.md)'s Ranking section.
 
 ### Saved Venues
@@ -176,6 +178,8 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **Every grant first takes `pg_advisory_xact_lock` (`PROMOTION_CAP_LOCK_KEY`) in `app/promotions/cap.py::lock_cap()`.** The cap check and insert then run in one transaction, so two concurrent grants can't both take the last day. The lock releases on commit.
 - **`promotion_daily_stats` holds one row per Promotion per Tallinn day,** unique on `(promotion_id, day)` and never pruned (migration 0061). Columns: `gate_outcome`, `gate_reason`, and the counts `explore_served`, `daily5_placed`, `digest_sent`, `web_opens`, `digest_opens`, `slot_dislikes`. Counts only, no viewer identifiers. See [pipeline.md](pipeline.md) for the writers.
 - **Starting or ending a Promotion never touches `events.updated_at`.** `events.promotion_restriction` is deliberately outside the `updated_at` trigger's column list.
+- **`promotions.daily5_reach` is the Daily 5 reach** (migration 0063): NULL until the nightly build computes it, then frozen after the window ends.
+- **`daily_sponsored_slots` holds one row per user per Tallinn day** (migration 0063), unique on `(user_id, slot_date)`. It stores the Daily 5 Sponsored slot apart from `daily_feeds`. Columns: `promotion_id` (NULL when a swap found nothing left), `is_swap` and `replaced_promotion_id`. It cascades with the user and is pruned on `DAILY_FEEDS_RETENTION_DAYS`.
 - **Lifecycle commands live in `app/promotions/lifecycle.py`.** Each takes the cap lock, then a `FOR UPDATE` lock on the row, so it serializes against grants and other commands. Only `unpaid -> paid`, `unpaid -> void` and `paid -> ended_early` change `status`.
 - **Mark paid is allowed while today (Tallinn) is before `start_date`.**
 - **Edit before the start date rechecks window, overlap and cap against the other Promotions** (the row never collides with itself) and recomputes `days` and `net_price_cents`.
@@ -183,7 +187,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **Re-point needs the same owner and the same dedup group** (`dedup_group_id`, or the event's own id when it has none). The window must still end on or before the target's last day and not overlap its Promotions.
 - **End early and void store the admin's reason in `end_note`** (`end_reason = admin`) and stamp `ended_at`. Leaving the holding statuses releases every cap day at once, and the fill gate stops serving the row. The Organizer is emailed the reason in their locale by `app/email/promotion_notice.py` after commit, best-effort.
 - **A refund is cumulative in `refunded_cents` (gross) with its notes in `refund_note`.** It needs a paid, non-complimentary row (live or ended early) and cannot exceed net plus VAT.
-- **A Restriction clearance is four columns on `promotions`:** `restriction_cleared`, `restriction_clearance_by`, `restriction_clearance_note`, `restriction_cleared_at` (migration 0063). It covers only the restriction it names. A grant of a restricted event needs the checkbox and a note, and `POST .../{id}/clear-restriction` clears a newly flagged one.
+- **A Restriction clearance is four columns on `promotions`:** `restriction_cleared`, `restriction_clearance_by`, `restriction_clearance_note`, `restriction_cleared_at` (migration 0065). It covers only the restriction it names. A grant of a restricted event needs the checkbox and a note, and `POST .../{id}/clear-restriction` clears a newly flagged one.
 - **`promotion_snapshots` is append-only and never pruned.** `app/promotions/snapshots.py::take_snapshot()` stores the title in et/en/ru, a 300-character description excerpt, image URL, venue, event dates, the Promotion's dates and net price, and the caption text (`REKLAAM · {advertiser}`).
 - **A snapshot's `trigger` is `grant`, `mark_paid`, `edit` or `repoint`.** `grant` is a complimentary grant, which is born paid. A priced grant takes none until it is paid, and every edit takes one, scheduled or live.
 - **Later tickets add the Stripe, clearance, attestation and reach columns,** and the request and daily-stats tables.

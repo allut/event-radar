@@ -3,6 +3,8 @@
 import re
 from decimal import Decimal
 
+from app._generated.shared_constants import PROMOTION_REF_AD as PROMOTION_REF_AD
+
 # Stored statuses are commercial only. Scheduled, live and finished are
 # computed from the window and today's Tallinn date, never stored.
 PROMOTION_STATUS_UNPAID = "unpaid"
@@ -206,21 +208,31 @@ PROMOTION_LABEL_TEXT_TEMPLATE = "REKLAAM · {advertiser}"
 PROMOTION_STAT_EXPLORE_SERVED = "explore_served"
 PROMOTION_STAT_WEB_OPENS = "web_opens"
 PROMOTION_STAT_SLOT_DISLIKES = "slot_dislikes"
+PROMOTION_STAT_DAILY5_PLACED = "daily5_placed"
 PROMOTION_COUNTER_COLUMNS = (
     PROMOTION_STAT_EXPLORE_SERVED,
+    PROMOTION_STAT_DAILY5_PLACED,
     PROMOTION_STAT_WEB_OPENS,
     PROMOTION_STAT_SLOT_DISLIKES,
 )
 # Every column the per-day table reports, in display order.
 PROMOTION_STAT_REPORT_COLUMNS = (
     PROMOTION_STAT_EXPLORE_SERVED,
-    "daily5_placed",
+    PROMOTION_STAT_DAILY5_PLACED,
     "digest_sent",
     PROMOTION_STAT_WEB_OPENS,
     "digest_opens",
     PROMOTION_STAT_SLOT_DISLIKES,
 )
 PROMOTION_COUNTER_FLUSH_SECONDS = 60
-# The ref query value Explore slot card links carry.
-PROMOTION_REF_AD = "ad"
 ERROR_PROMOTION_NOT_FOUND = "promotion not found"
+
+# Daily 5 Sponsored slot (#607).
+# A Promotion shown to a user is not stored for them again for this many days.
+PROMOTION_DAILY5_COOLDOWN_DAYS = 3
+PROMOTION_EXPLANATION_DAILY5 = "daily5"
+# Gate outcome the daily build stores per Promotion per day.
+PROMOTION_GATE_OUTCOME_SHOWN = "shown"
+PROMOTION_GATE_OUTCOME_PAUSED = "paused"
+# Daily 5 context: the event starts after the builder's lookahead window.
+PROMOTION_NOT_SHOWING_OUTSIDE_DAILY5_WINDOW = "outside_daily5_window"

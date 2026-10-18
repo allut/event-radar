@@ -290,6 +290,9 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         # DOM attribute marking a Sponsored slot card (issue #603): the prerender
         # validator and the frontend EventCard both key off it.
         f"SPONSORED_SLOT_ATTR: str = {_py_str(cfg['sponsored_slot_attr'])}",
+        # `ref` query markers on promotion links (spec #597): web card and digest.
+        f"PROMOTION_REF_AD: str = {_py_str(cfg['promotion_ref_ad'])}",
+        f"PROMOTION_REF_DIGEST_AD: str = {_py_str(cfg['promotion_ref_digest_ad'])}",
         # Signal tiers named on the public /ranking page, heaviest first (issue #588).
         f"RANKING_TIERS_SIGNED_IN: tuple[tuple[str, ...], ...] = {_py_tiers(cfg['ranking_tiers']['signed_in'])}",
         f"RANKING_TIERS_SIGNED_OUT: tuple[tuple[str, ...], ...] = {_py_tiers(cfg['ranking_tiers']['signed_out'])}",
@@ -371,6 +374,9 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         # DOM attribute marking a Sponsored slot card (issue #603): the prerender
         # validator and EventCard both key off it.
         f"export const SPONSORED_SLOT_ATTR = {_ts_str(cfg['sponsored_slot_attr'])};",
+        # `ref` query markers on promotion links (spec #597): web card and digest.
+        f"export const PROMOTION_REF_AD = {_ts_str(cfg['promotion_ref_ad'])};",
+        f"export const PROMOTION_REF_DIGEST_AD = {_ts_str(cfg['promotion_ref_digest_ad'])};",
         # Signal tiers named on the public /ranking page, heaviest first (issue #588).
         f"export const RANKING_TIERS_SIGNED_IN: readonly (readonly string[])[] = {_ts_tiers(cfg['ranking_tiers']['signed_in'])};",
         f"export const RANKING_TIERS_SIGNED_OUT: readonly (readonly string[])[] = {_ts_tiers(cfg['ranking_tiers']['signed_out'])};",

@@ -58,6 +58,9 @@ export const ROUTES = {
   adminPipeline: '/admin/pipeline',
   adminDedup: '/admin/dedup',
   adminPromotions: '/admin/promotions',
+  adminPromotionDetail: (id: number | string) => `/admin/promotions/${id}`,
+  // Path-prefix form for AdminApp's manual pathname dispatch.
+  adminPromotionDetailPrefix: '/admin/promotions/',
 } as const;
 
 // The FAQ's Organizers section anchor (FaqSection.id 'organizers') —

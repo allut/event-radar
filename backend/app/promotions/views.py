@@ -85,6 +85,7 @@ def serialize_promotion(
         "paid_at": promotion.paid_at.isoformat() if promotion.paid_at else None,
         "ended_at": promotion.ended_at.isoformat() if promotion.ended_at else None,
         "end_reason": promotion.end_reason,
+        "daily5_reach": promotion.daily5_reach,
         "end_note": promotion.end_note,
         "refunded_cents": promotion.refunded_cents,
         "refund_note": promotion.refund_note,

@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, organizerApi } from '../../api/client';
 import { t, ti } from '../../i18n';
-import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, numericRouteId, safeUrl, sanitizeHtml, shareEvent, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery } from '../../utils';
+import { buildMapsUrl, categoryGradient, cx, formatEventDateTime, formatEventShortDate, formatHourMinute, formatPrice, numericRouteId, safeUrl, sanitizeHtml, shareEvent, titleWithBrand, trackExternalClick, truncateForMeta, withLocaleQuery, withQueryParam } from '../../utils';
+import { PROMOTION_REF_PARAM, PROMOTION_REFS } from '../../constants/sponsored';
 import { useAuth } from '../../hooks/useAuth';
 import { useEventReport } from '../../hooks/useEventReport';
 import { useFitsViewport } from '../../hooks/useFitsViewport';
@@ -64,9 +65,26 @@ export default function EventDetail() {
   const [railEl, setRailEl] = useState<HTMLDivElement | null>(null);
   const railFits = useFitsViewport(railEl);
 
+  // (#597) An ad link's ?ref= is forwarded to the API on the first request only
+  // (the server counts it), then stripped so a share, reload or refetch can't recount.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlRef = searchParams.get(PROMOTION_REF_PARAM);
+  const pendingRef = useRef(urlRef !== null && PROMOTION_REFS.has(urlRef) ? urlRef : null);
+  useEffect(() => {
+    if (!searchParams.has(PROMOTION_REF_PARAM)) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete(PROMOTION_REF_PARAM);
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   const { data, isLoading, isError } = useQuery({
     queryKey: [QUERY_KEYS.event, id, locale],
-    queryFn: () => api.get<EventDetailData>(withLocaleQuery(API.event(id ?? ''), locale)),
+    queryFn: () => {
+      const path = withLocaleQuery(API.event(id ?? ''), locale);
+      const ref = pendingRef.current;
+      pendingRef.current = null;
+      return api.get<EventDetailData>(ref ? withQueryParam(path, PROMOTION_REF_PARAM, ref) : path);
+    },
     enabled: Boolean(id),
     retry: false,
   });

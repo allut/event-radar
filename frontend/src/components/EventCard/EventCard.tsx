@@ -3,10 +3,10 @@ import { Link } from 'react-router-dom';
 import { UI_STATE } from '../../constants/core';
 import type { Signal } from '../../constants/feedback';
 import { ROUTES } from '../../constants/routes';
-import { SPONSORED_LINK_REL, SPONSORED_TICKET_REL } from '../../constants/sponsored';
-import { SPONSORED_SLOT_ATTR } from '../../_generated/sharedConstants';
+import { PROMOTION_REF_PARAM, SPONSORED_LINK_REL, SPONSORED_TICKET_REL } from '../../constants/sponsored';
+import { PROMOTION_REF_AD, SPONSORED_SLOT_ATTR } from '../../_generated/sharedConstants';
 import { t } from '../../i18n';
-import { cardAnimationDelayMs, categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, shareEvent, trackExternalClick } from '../../utils';
+import { cardAnimationDelayMs, categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, shareEvent, trackExternalClick, withQueryParam } from '../../utils';
 import { useEventReport } from '../../hooks/useEventReport';
 import { useFeedback } from '../../hooks/useFeedback';
 import type { EventCardNav } from '../../hooks/useEventCardNav';
@@ -78,6 +78,7 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, {
     initialSignal: event.my_signal,
     onChange: onFeedbackSent,
+    ref: sponsored ? PROMOTION_REF_AD : undefined,
   });
 
   function handleFeedbackPress(signal: Signal) {
@@ -92,6 +93,9 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
   const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(event.reported, event.id, authed, onLoginRequired);
   const isFeatured = variant === 'featured';
 
+  const detailPath = sponsored
+    ? withQueryParam(localePath(ROUTES.eventDetail(event.id)), PROMOTION_REF_PARAM, PROMOTION_REF_AD)
+    : localePath(ROUTES.eventDetail(event.id));
   const price = formatPrice(event.price_min, event.price_max, event.currency, locale, event.has_free_tier);
   const imageSrc = safeUrl(event.image_url);
   const ticketUrl = safeUrl(event.url);
@@ -145,7 +149,7 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
               style={{ background: categoryGradient(event.categories) }}
               aria-hidden
             >
-              {!isFeatured && (
+              {!isFeatured && !sponsored && (
                 <span className={styles.placeholderNum}>{padIndex(index + 1)}</span>
               )}
             </div>
@@ -178,7 +182,7 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
 
           <h2 className={cx(styles.title, isFeatured && styles.featuredTitle)}>
             <Link
-              to={localePath(ROUTES.eventDetail(event.id))}
+              to={detailPath}
               className={cx(styles.titleLink, styles.stretched)}
               rel={sponsored ? SPONSORED_LINK_REL : undefined}
             >

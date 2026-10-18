@@ -269,6 +269,22 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 ### Daily 5 Feed
 
 - **`GET /feed` serves the pre-built `daily_feeds` snapshot.** It requires a session. See Daily 5 Builder.
+- **With `PROMOTIONS_SLOTS_ENABLED` on, a non-stale response may carry `sponsored_slot`** after `events`: the card data, `advertiser` and `explanation = "daily5"`. The key is absent when there is no slot. The five in `events` are identical with or without it.
+
+### Daily 5 Sponsored slot
+
+- **The slot is one separate card after a full five, never one of the five.** `build_daily_feeds` picks it only for users who got `DAILY_5_COUNT` events, after persisting the five, so the five can't depend on it. `app/promotions/daily5.py` owns the whole flow.
+- **The pick stores a row in `daily_sponsored_slots`** (one per user per Tallinn day), apart from `daily_feeds` so no consent-free path can pick it up. It is pruned on `DAILY_FEEDS_RETENTION_DAYS`. A rebuild keeps today's row.
+- **Eligibility is the shared fill gate plus the Daily 5 context.** The event starts within `DAILY_5_LOOKAHEAD_DAYS` (14), the builder's window, and is never matched to the five's categories.
+- **Per user, the pick skips** the five's events, dedup groups and series, anything the viewer's own signals exclude (`fill.viewer_excluded_promotions`), and any Promotion stored for them in the last `PROMOTION_DAILY5_COOLDOWN_DAYS` (3) days. The order is the `rotation_order` hash seeded with user id and Tallinn date.
+- **The cooldown never relaxes.** When nothing survives, the slot collapses and no row is written.
+- **The read path re-runs the gate on the stored pick.** If it fails, the next eligible Promotion in the same user-day order replaces it: `is_swap` is set and `replaced_promotion_id` records the old one. The replacement sticks for the day. The same bans apply to it.
+- **The swap happens once.** If nothing is left, or the replacement later fails too, `promotion_id` becomes NULL and the collapse sticks. The write is a compare-and-set on the stored Promotion, so two requests can't both swap. A digest already sent is unaffected.
+- **Bots get no slot, and a stale feed (a prior day's) never carries one.**
+- **The daily build writes each live Promotion's gate outcome** (`shown` or `paused`, with the `PROMOTION_NOT_SHOWING_*` reason) to `promotion_daily_stats` for today. With the flag off the rows say `slots_disabled` and nothing is picked.
+- **`daily5_placed` counts nightly picks and swaps** through `counters.bump()`. The build flushes the dict at its end.
+- **Daily 5 reach is `promotions.daily5_reach`,** the distinct users stored for the window. One `UPDATE` recomputes it nightly for every window that has started and ended no earlier than yesterday. A window's value is frozen once it is two nights past its end.
+- **The build keeps a fixed query count:** the live Promotions and their gate load once per run, and each user page adds a fixed number of queries (cooldown, exclusions, the five's events, one insert). `tests/promotions/test_daily5_slot.py` asserts it as users and Promotions grow.
 
 ### Explore
 
@@ -303,7 +319,8 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 - **Organic order is the same with and without Promotions.** The slot only moves the page window by one row. It never reads or writes feedback or the persona.
 - **Delivery counters are anonymous per-day totals in `promotion_daily_stats`** (`app/promotions/counters.py`). `bump()` adds to a module-level dict, so a request never waits on the database.
 - **`flush()` writes the dict as one bulk upsert that adds to the stored totals.** It runs every `PROMOTION_COUNTER_FLUSH_SECONDS` (60) from the `flush_promotion_counters` job and once on shutdown. A crash loses at most a minute, and a failed flush puts the counts back.
-- **Three counters are live:** `explore_served` when page 1 fills a slot, `web_opens` when `GET /events/{id}?ref=ad` hits an event whose paid Promotion covers today, and `slot_dislikes` when `POST /feedback` sends `signal=dislike` with `ref=ad` (the feedback row is still written). The gate, `daily5_placed`, `digest_sent` and `digest_opens` columns exist but have no writer yet.
+- **Four counters go through the in-process dict:** `explore_served` when page 1 fills a slot, `daily5_placed` when a Daily 5 slot is placed, `web_opens` when `GET /events/{id}?ref=ad` hits an event whose paid Promotion covers today, and `slot_dislikes` when `POST /feedback` sends `signal=dislike` with `ref=ad` (the feedback row is still written).
+- **The gate columns are written by the daily build** (see Daily 5 Sponsored slot). `digest_sent` and `digest_opens` have no writer yet.
 - **Counters never feed ranking, the persona or `user_event_feedback`.** No viewer identifier is recorded; not counted: ticket clicks, total page views, viewable impressions.
 - **`GET /admin/promotions/{id}/daily-stats` returns one row per complete window day** (today is left out), with zeros where nothing was counted. It reads with one `WHERE promotion_id IN (...)` (`views.load_daily_stats`).
 

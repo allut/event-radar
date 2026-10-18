@@ -84,6 +84,7 @@ from app.events.queries import (
     select_events_with_classification,
 )
 from app.events.venue import resolve_venue_coords, resolve_venue_name
+from app.promotions.daily5 import prepare_daily5
 
 # ---------------------------------------------------------------------------
 # Feedback context (precomputed for one user, reused across event scoring)
@@ -1054,8 +1055,14 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
     now = datetime.now(TALLINN_TZ)
     today = now.date()
 
+    # Sponsored slot (#607): gate outcome rows for today, then one pick per
+    # user with a full five. The five itself is never touched.
+    daily5 = await prepare_daily5(db, now)
+
     user_ids = await _verified_user_ids(db)
     if not user_ids:
+        await daily5.finish(db)
+        await db.commit()
         return {
             "built": 0,
             "empty": 0,
@@ -1095,9 +1102,12 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             else:
                 empty += 1
         await _persist_daily_feeds(db, daily_feed_rows)
+        await daily5.assign(db, {row["user_id"]: row["event_ids"] for row in daily_feed_rows})
         await db.commit()
         total_users += len(build_ctx.users)
 
+    await daily5.finish(db)
+    await db.commit()
     return {
         "built": built,
         "empty": empty,

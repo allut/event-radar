@@ -14,6 +14,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -85,6 +86,14 @@ class User(Base):
     # consent needs an affirmative act). Rows created before 0059 keep "true".
     email_digest_opt_in: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
+    )
+    # Email ad consent (app/email/consent.py): the fast gate at send time, plus
+    # the wording version consented to. Starts off; subscribing is never consent.
+    email_ad_consent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    email_ad_consent_version: Mapped[int | None] = mapped_column(
+        SmallInteger, nullable=True
     )
     # Bumped by /auth/logout-all to invalidate every previously-issued session
     # token at once ("log out everywhere") — compared against the "v" claim in
@@ -1208,6 +1217,9 @@ class Promotion(Base):
     restriction_cleared_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Distinct users the Daily 5 slot was stored for over the window. Recomputed
+    # nightly by build_daily_feeds and frozen once the window has ended (#607).
+    daily5_reach: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -1243,6 +1255,40 @@ class PromotionDailyStat(Base):
     web_opens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     digest_opens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     slot_dislikes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+
+class DailySponsoredSlot(Base):
+    """One user's Daily 5 Sponsored slot for one Tallinn day (#607). Kept apart
+    from `daily_feeds` so no consent-free path can pick it up, and pruned on
+    the same retention. `promotion_id` is NULL when a mid-day swap found
+    nothing left, so the collapse sticks for the day. Feeds the Daily 5 slot,
+    the digest slot, the 3-day cooldown and Daily 5 reach. See
+    docs/pipeline.md."""
+
+    __tablename__ = "daily_sponsored_slots"
+    __table_args__ = (
+        UniqueConstraint("user_id", "slot_date", name="uq_daily_sponsored_slots_user_date"),
+        Index("ix_daily_sponsored_slots_slot_date", "slot_date"),
+        Index("ix_daily_sponsored_slots_promotion_id", "promotion_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    slot_date: Mapped[date] = mapped_column(Date, nullable=False)
+    promotion_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("promotions.id", ondelete="RESTRICT"), nullable=True
+    )
+    is_swap: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false(), default=False
+    )
+    replaced_promotion_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("promotions.id", ondelete="RESTRICT"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
 
 
 class PromotionSnapshot(Base):
@@ -1310,3 +1356,23 @@ class AdminAction(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+
+
+class EmailAdConsentLog(Base):
+    """Email ad consent record, append-only: one row per grant or withdrawal.
+    Deleted with the account (FK cascade), after `account_deletion` is logged."""
+
+    __tablename__ = "email_ad_consent_log"
+    __table_args__ = (Index("ix_email_ad_consent_log_user_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    granted: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    wording_version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    source: Mapped[str] = mapped_column(String(24), nullable=False)
+    locale: Mapped[str] = mapped_column(String(2), nullable=False)

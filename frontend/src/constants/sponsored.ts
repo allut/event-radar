@@ -1,6 +1,7 @@
 // Sponsored slot (issue #603): caption, "Why?" panel and Explore placement.
 // .js extensions required: Cloudflare Pages Functions import constants as unbundled ESM.
 
+import { PROMOTION_REF_AD, PROMOTION_REF_DIGEST_AD } from '../_generated/sharedConstants.js';
 import { ROUTES } from './routes.js';
 
 // Surface variants of the "Why?" explanation (i18n keys sponsored_explain_*).
@@ -25,3 +26,8 @@ export const SPONSORED_SLOT_PARAM = 'sponsored_slot';
 
 // Zero-based grid position of the slot on Explore page 1 (tile #4).
 export const SPONSORED_EXPLORE_TILE_INDEX = 3;
+
+// Delivery-counting marker (spec #597): ad links carry `?ref=`, the event page
+// forwards a known value to the API once and strips it from the URL.
+export const PROMOTION_REF_PARAM = 'ref';
+export const PROMOTION_REFS: ReadonlySet<string> = new Set([PROMOTION_REF_AD, PROMOTION_REF_DIGEST_AD]);

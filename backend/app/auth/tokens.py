@@ -19,6 +19,7 @@ from app.constants.auth import (
     ADMIN_SESSION_EPOCH_HASH_LEN,
     ADMIN_SESSION_TTL_SECONDS,
     AUTH_ADMIN_SESSION_SALT,
+    AUTH_ADS_OFF_SALT,
     AUTH_GOOGLE_LINK_BINDING_SALT,
     AUTH_MAGIC_SALT,
     AUTH_OAUTH_STATE_SALT,
@@ -287,6 +288,22 @@ def verify_unsubscribe_token(token: str) -> int:
     payload = _serializer().loads(
         token,
         salt=AUTH_UNSUBSCRIBE_SALT,
+        max_age=UNSUBSCRIBE_TOKEN_TTL_DAYS * SECONDS_PER_DAY,
+    )
+    return int(payload["uid"])
+
+
+def generate_ads_off_token(user_id: int) -> str:
+    """No-login "Stop ads in this email" token. Own salt, so it can neither
+    unsubscribe the digest nor be replayed as a sign-in, and the reverse."""
+    return _serializer().dumps({"uid": user_id}, salt=AUTH_ADS_OFF_SALT)
+
+
+def verify_ads_off_token(token: str) -> int:
+    """Decode and return user_id (unsubscribe TTL). Raises SignatureExpired or BadSignature."""
+    payload = _serializer().loads(
+        token,
+        salt=AUTH_ADS_OFF_SALT,
         max_age=UNSUBSCRIBE_TOKEN_TTL_DAYS * SECONDS_PER_DAY,
     )
     return int(payload["uid"])

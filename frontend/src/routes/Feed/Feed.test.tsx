@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import Feed from './Feed';
 import { renderWithProviders, makeEvent } from '../../test/utils';
@@ -24,7 +24,11 @@ vi.mock('../../api/client', () => ({
 }));
 
 vi.mock('../../components/EventCard', () => ({
-  default: ({ event }: { event: { title: string } }) => <div data-testid="event-card">{event.title}</div>,
+  default: ({ event, sponsored }: { event: { title: string }; sponsored?: { advertiser: string; explanation: string } }) => (
+    <div data-testid={sponsored ? 'sponsored-card' : 'event-card'} data-explanation={sponsored?.explanation}>
+      {event.title}
+    </div>
+  ),
 }));
 
 import { api } from '../../api/client';
@@ -84,6 +88,42 @@ describe('Feed', () => {
     renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
     const link = await screen.findByRole('link', { name: 'How results are ordered' });
     expect(link).toHaveAttribute('href', '/en/ranking');
+  });
+
+  describe('Sponsored slot', () => {
+    const slot = { ...makeEvent({ id: 9, title: 'Paid Show' }), advertiser: 'Acme OÜ', explanation: 'daily5' as const };
+
+    it('renders the slot card after the list, outside it and without a numeral', async () => {
+      mockGet.mockResolvedValueOnce({ ...feedResponse, sponsored_slot: slot });
+      renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
+      const card = await screen.findByTestId('sponsored-card');
+      const list = screen.getByRole('list', { name: /daily five/i });
+      expect(card).toHaveTextContent('Paid Show');
+      expect(card).toHaveAttribute('data-explanation', 'daily5');
+      // Outside the numbered list, and after it in document order.
+      expect(list).not.toContainElement(card);
+      expect(list.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      // The list keeps exactly its two picks; the slot never takes a number.
+      expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+      expect(screen.queryByText('03')).not.toBeInTheDocument();
+      expect(screen.getByText('Separate card, not one of your five')).toBeInTheDocument();
+    });
+
+    it('keeps the ranking link after the slot', async () => {
+      mockGet.mockResolvedValueOnce({ ...feedResponse, sponsored_slot: slot });
+      renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
+      const card = await screen.findByTestId('sponsored-card');
+      const link = screen.getByRole('link', { name: 'How results are ordered' });
+      expect(card.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('renders no slot section when the response carries none', async () => {
+      mockGet.mockResolvedValueOnce(feedResponse);
+      renderWithProviders(<Feed />, { route: '/en', pathPattern: '/:locale' });
+      await waitFor(() => expect(screen.getAllByTestId('event-card').length).toBe(2));
+      expect(screen.queryByTestId('sponsored-card')).not.toBeInTheDocument();
+      expect(screen.queryByText('Separate card, not one of your five')).not.toBeInTheDocument();
+    });
   });
 
   it('disables the locale selector while a locale switch PATCH is pending, guarding against a stale-mutation rollback race', async () => {

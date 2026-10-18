@@ -330,6 +330,7 @@
     "sponsored_explain_filters": "See on tasuline reklaam. Valisime selle ainult sinu valitud filtrite ja otsingu järgi, mitte sinu huvide põhjal. Tulemuste järjekord ei muutu.",
     "sponsored_explain_none": "See on tasuline reklaam. Valisime selle päeva ja lehe järgi, mitte sinu huvide põhjal. Tulemuste järjekord ei muutu.",
     "sponsored_explain_daily5": "See on tasuline reklaam ega kuulu su viie valiku hulka. Seda ei valitud sinu huvide põhjal.",
+    "sponsored_daily5_caption": "Eraldi kaart, ei kuulu su viie valiku hulka",
     "contact_title": "Kontakt",
     "contact_intro": "Küsimused, parandused või sündmus, mille peaksime lisama? Kuuleme sinust hea meelega.",
     "contact_faq_link": "Kiire küsimus? Vaata enne KKK-d →",

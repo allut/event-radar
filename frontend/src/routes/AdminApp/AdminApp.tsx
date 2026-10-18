@@ -13,6 +13,7 @@ import AdminClaims from '../AdminClaims';
 import AdminEventDetail from '../AdminEventDetail';
 import AdminPipeline from '../AdminPipeline';
 import AdminDedup from '../AdminDedup';
+import AdminPromotionDetail from '../AdminPromotionDetail';
 import AdminPromotions from '../AdminPromotions';
 
 // Mirrors App.tsx's Protected/OrganizerProtected — a third guard on the
@@ -43,6 +44,12 @@ function screenFor(pathname: string): ReactNode | null {
   if (pathname === ROUTES.adminPipeline) return <AdminPipeline />;
   if (pathname === ROUTES.adminDedup) return <AdminDedup />;
   if (pathname === ROUTES.adminPromotions) return <AdminPromotions />;
+  if (
+    pathname.startsWith(ROUTES.adminPromotionDetailPrefix) &&
+    pathname.length > ROUTES.adminPromotionDetailPrefix.length
+  ) {
+    return <AdminPromotionDetail promotionId={pathname.slice(ROUTES.adminPromotionDetailPrefix.length)} />;
+  }
   if (
     pathname.startsWith(ROUTES.adminEventDetailPrefix) &&
     pathname.length > ROUTES.adminEventDetailPrefix.length

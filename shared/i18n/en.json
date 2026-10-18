@@ -330,6 +330,7 @@
     "sponsored_explain_filters": "This is a paid ad. We picked it only by your filters and search, never your interests. The order of results is unchanged.",
     "sponsored_explain_none": "This is a paid ad. We picked it by the day and page, never your interests. The order of results is unchanged.",
     "sponsored_explain_daily5": "This is a paid ad and not one of your five. It was not chosen from your interests.",
+    "sponsored_daily5_caption": "Separate card, not one of your five",
     "contact_title": "Contact",
     "contact_intro": "Questions, corrections, or an event we should be listing? We'd love to hear from you.",
     "contact_faq_link": "Quick question? Check the FAQ first →",
