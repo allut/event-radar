@@ -269,3 +269,29 @@ PROMOTION_GATE_OUTCOME_SHOWN = "shown"
 PROMOTION_GATE_OUTCOME_PAUSED = "paused"
 # Daily 5 context: the event starts after the builder's lookahead window.
 PROMOTION_NOT_SHOWING_OUTSIDE_DAILY5_WINDOW = "outside_daily5_window"
+
+# Trust panel, complaints and Withdraw (#620).
+PROMOTION_TRUST_WINDOW_DAYS = 28
+PROMOTION_TRUST_RECENT_COMPLAINTS = 20
+# `admin_actions.target` of every logged complaint (it is about the ads, not
+# one Promotion).
+PROMOTION_COMPLAINT_TARGET = "promotion_ads"
+PROMOTION_COMPLAINT_SOURCE_EMAIL = "email"
+PROMOTION_COMPLAINT_SOURCE_CONTACT_FORM = "contact_form"
+PROMOTION_COMPLAINT_SOURCE_OTHER = "other"
+PROMOTION_COMPLAINT_SOURCES = (
+    PROMOTION_COMPLAINT_SOURCE_EMAIL,
+    PROMOTION_COMPLAINT_SOURCE_CONTACT_FORM,
+    PROMOTION_COMPLAINT_SOURCE_OTHER,
+)
+PROMOTION_COMPLAINANT_MAX_CHARS = 200
+# `end_reason` of a Promotion ended because the Operator withdrew the feature;
+# unused whole days are refunded in full.
+PROMOTION_END_REASON_FEATURE_WITHDRAWN = "feature_withdrawn"
+PROMOTION_WITHDRAWN_NOTE = (
+    "Event Radar has withdrawn Promotions, so this one ended early. "
+    "Its unused days are refunded in full."
+)
+PROMOTION_WITHDRAWN_REFUND_NOTE = "Feature withdrawn: unused days refunded in full."
+# Withdraw is refused while the slots flag is still on.
+ERROR_PROMOTION_SLOTS_STILL_ENABLED = "slots_still_enabled"

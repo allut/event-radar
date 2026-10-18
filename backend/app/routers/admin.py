@@ -8,7 +8,7 @@ from datetime import date, datetime
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import and_, func, select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,6 +34,7 @@ from app.constants.admin import (
     ADMIN_ACTION_INGEST_SOURCE,
     ADMIN_ACTION_PIPELINE_RUN,
     ADMIN_ACTION_PROMOTION_CLEAR_RESTRICTION,
+    ADMIN_ACTION_PROMOTION_COMPLAINT,
     ADMIN_ACTION_PROMOTION_EDIT,
     ADMIN_ACTION_PROMOTION_END,
     ADMIN_ACTION_PROMOTION_GRANT,
@@ -92,8 +93,16 @@ from app.constants.promotions import (
     ADMIN_PROMOTIONS_PAGE_SIZE,
     ERROR_PROMOTION_INVALID_STATE,
     ERROR_PROMOTION_NOT_FOUND,
+    ERROR_PROMOTION_SLOTS_STILL_ENABLED,
     PROMOTION_ADVERTISER_NAME_MAX_CHARS,
     PROMOTION_BILLING_EMAIL_MAX_CHARS,
+    PROMOTION_COMPLAINANT_MAX_CHARS,
+    PROMOTION_COMPLAINT_SOURCE_OTHER,
+    PROMOTION_COMPLAINT_SOURCES,
+    PROMOTION_COMPLAINT_TARGET,
+    PROMOTION_END_REASON_FEATURE_WITHDRAWN,
+    PROMOTION_WITHDRAWN_NOTE,
+    PROMOTION_WITHDRAWN_REFUND_NOTE,
     PROMOTION_CONFLICT_ERROR_CODES,
     PROMOTION_NOTE_MAX_CHARS,
     VALID_PROMOTION_STATES,
@@ -117,6 +126,7 @@ from app.claims.lifecycle import (
 )
 from app.claims.pinning import clear_claim_pins, representative_event_for_claim
 from app.claims.target_resolution import ClaimTarget, bulk_resolve_publisher_events
+from app.config import settings
 from app.db import AsyncSessionLocal, run_in_session
 from app.email.promotion_notice import (
     send_promotion_ended_email,
@@ -162,7 +172,9 @@ from app.promotions.views import (
     serialize_promotion,
     validation_payload,
 )
+from app.promotions.trust import trust_panel
 from app.promotions.windows import now_tallinn, tallinn_today
+from app.promotions.withdraw import WithdrawResult, withdraw_all, withdraw_promotion
 from app.models.models import (
     Claim,
     DailyFeed,
@@ -1676,6 +1688,148 @@ async def admin_promotion_cap_strip(request: Request) -> dict:
     }
 
 
+@router.get("/promotions/trust", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
+async def admin_promotion_trust(request: Request) -> dict:
+    """The Trust panel (#620): reports on promoted events, Email ad consent
+    withdrawals by source, slot dislikes and logged complaints for the rolling
+    4 weeks and since launch, next to live Promotions, slots served and current
+    consenters. Read only; nothing here flips a flag."""
+    async with AsyncSessionLocal() as db:
+        return await trust_panel(db, now_tallinn())
+
+
+class _PromotionComplaintBody(BaseModel):
+    note: str = Field(min_length=1, max_length=PROMOTION_NOTE_MAX_CHARS)
+    source: str = PROMOTION_COMPLAINT_SOURCE_OTHER
+    complainant: str | None = Field(default=None, max_length=PROMOTION_COMPLAINANT_MAX_CHARS)
+
+    @field_validator("source")
+    @classmethod
+    def _known_source(cls, value: str) -> str:
+        if value not in PROMOTION_COMPLAINT_SOURCES:
+            raise ValueError(f"source must be one of {PROMOTION_COMPLAINT_SOURCES}")
+        return value
+
+
+@router.post(
+    "/promotions/complaints",
+    dependencies=[Depends(get_current_admin)],
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_log_promotion_complaint(
+    body: _PromotionComplaintBody, request: Request
+) -> dict:
+    """Log a complaint about the ads that arrived by email or the contact form.
+    Audited as `promotion_complaint` and counted in the Trust panel. `note` is
+    required; `complainant` (who, so two complaints from one person count
+    once) is optional."""
+    note = body.note.strip()
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="note required"
+        )
+    complainant = (body.complainant or "").strip() or None
+
+    async def _run() -> dict:
+        async with AsyncSessionLocal() as db:
+            result = {"note": note, "source": body.source, "complainant": complainant}
+            emit_admin_log = log_admin_action(
+                db, ADMIN_ACTION_PROMOTION_COMPLAINT, PROMOTION_COMPLAINT_TARGET, result
+            )
+            await db.commit()
+            emit_admin_log()
+            return {"logged": True, **result}
+
+    return await run_admin_job("Log promotion complaint", _run())
+
+
+def _withdraw_audit(result: WithdrawResult) -> dict:
+    return {
+        **_promotion_audit_summary(result.promotion),
+        "reason": PROMOTION_WITHDRAWN_NOTE,
+        "end_reason": PROMOTION_END_REASON_FEATURE_WITHDRAWN,
+        "unused_days": result.unused_days,
+        "refund_cents": result.refund_cents,
+    }
+
+
+def _withdraw_guard() -> None:
+    """Withdraw only runs after the slots flag is off (step two of the
+    runbook), so no ad is still being served while Promotions end."""
+    if settings.PROMOTIONS_SLOTS_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=ERROR_PROMOTION_SLOTS_STILL_ENABLED
+        )
+
+
+def _withdraw_summary(result: WithdrawResult) -> dict:
+    return {
+        "id": result.promotion.id,
+        "event_id": result.promotion.event_id,
+        "unused_days": result.unused_days,
+        "refund_cents": result.refund_cents,
+        "refunded_cents": result.promotion.refunded_cents,
+    }
+
+
+async def _audit_withdrawals(db: AsyncSession, results: list[WithdrawResult]) -> list[Callable[[], None]]:
+    emits: list[Callable[[], None]] = []
+    for item in results:
+        emits.append(
+            log_admin_action(
+                db, ADMIN_ACTION_PROMOTION_END, item.promotion.id, _withdraw_audit(item)
+            )
+        )
+        if item.refund_cents > 0:
+            emits.append(
+                log_admin_action(
+                    db,
+                    ADMIN_ACTION_PROMOTION_REFUND,
+                    item.promotion.id,
+                    {**_promotion_audit_summary(item.promotion), "amount_cents": item.refund_cents,
+                     "note": PROMOTION_WITHDRAWN_REFUND_NOTE},
+                )
+            )
+    return emits
+
+
+@router.post("/promotions/withdraw-all", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_withdraw_all_promotions(request: Request) -> dict:
+    """Withdraw (#620): end every paid, unfinished Promotion with
+    `feature_withdrawn` and record a full refund of its unused days. 409
+    `slots_still_enabled` while `PROMOTIONS_SLOTS_ENABLED` is on. A Promotion
+    that cannot be ended is listed in `skipped`; the rest still end."""
+    _withdraw_guard()
+
+    async def _run() -> dict:
+        now = now_tallinn()
+        async with AsyncSessionLocal() as db:
+            outcome = await withdraw_all(db, now)
+            emits = await _audit_withdrawals(db, outcome.withdrawn)
+            mails = [
+                (item.promotion, await db.get(Organizer, item.promotion.organizer_id),
+                 await db.get(Event, item.promotion.event_id))
+                for item in outcome.withdrawn
+            ]
+            await db.commit()
+            for emit in emits:
+                emit()
+            for promotion, organizer, event in mails:
+                if organizer is not None and event is not None:
+                    await _notify_promotion_ended(
+                        organizer, event, promotion, PROMOTION_WITHDRAWN_NOTE, False
+                    )
+            return {
+                "withdrawn": [_withdraw_summary(item) for item in outcome.withdrawn],
+                "skipped": outcome.skipped,
+            }
+
+    return await run_admin_job("Withdraw promotions", _run())
+
+
 @router.get("/promotions", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
 async def admin_list_promotions(
@@ -2059,6 +2213,44 @@ async def admin_end_promotion(
         {"reason": reason},
         notify_reason=reason,
     )
+
+
+@router.post("/promotions/{promotion_id}/withdraw", dependencies=[Depends(get_current_admin)])
+@limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
+async def admin_withdraw_promotion(promotion_id: int, request: Request) -> dict:
+    """Withdraw (#620) one paid Promotion: `ended_early` with
+    `feature_withdrawn` and a full refund of its unused days, emailed to the
+    Organizer. 409 `slots_still_enabled` while the slots flag is on. Returns
+    the refreshed detail."""
+    _withdraw_guard()
+
+    async def _run() -> dict:
+        now = now_tallinn()
+        async with AsyncSessionLocal() as db:
+            try:
+                item = await withdraw_promotion(db, promotion_id, now)
+            except PromotionNotFound:
+                await db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_PROMOTION_NOT_FOUND
+                ) from None
+            except PromotionRefused as refused:
+                await db.rollback()
+                raise _promotion_refusal(refused) from None
+            emits = await _audit_withdrawals(db, [item])
+            payload = await promotion_detail(db, item.promotion, now)
+            organizer = await db.get(Organizer, item.promotion.organizer_id)
+            event = await db.get(Event, item.promotion.event_id)
+            await db.commit()
+            for emit in emits:
+                emit()
+            if organizer is not None and event is not None:
+                await _notify_promotion_ended(
+                    organizer, event, item.promotion, PROMOTION_WITHDRAWN_NOTE, False
+                )
+            return payload
+
+    return await run_admin_job("Withdraw promotion", _run())
 
 
 @router.post("/promotions/{promotion_id}/void", dependencies=[Depends(get_current_admin)])

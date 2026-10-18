@@ -120,6 +120,7 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 - **`sweep_promotions` (`app/promotions/sweep.py`) runs every minute and acts as the system.** It voids an `unpaid` Promotion at its start date (Tallinn), and ends a `paid` one when its event is cancelled (`end_reason` is the cancellation cause) or its claim is gone (`claim_revoked`). Each change writes a `promotion_system_void` or `promotion_system_end` audit row.
 - **The sweep emails the Organizer after its commit for every automatic end, never for the void.** The notes are in `PROMOTION_AUTO_END_NOTES`. A dormant claim or a lost dedup collision never ends a Promotion. The query count stays fixed however many Promotions exist.
 - **`GET /admin/promotions/{id}` is the Promotion detail,** and `POST .../{id}/mark-paid|repoint|end|void|refund` plus `PATCH .../{id}` are its commands. Each runs under the cap lock, writes its audit row in the same transaction (409 for a state conflict, 422 for bad input, 404 for a missing row) and returns the refreshed detail.
+- **`GET /admin/promotions/trust` is the Trust panel, and `POST /admin/promotions/complaints` logs a complaint.** `POST .../{id}/withdraw` and `POST /admin/promotions/withdraw-all` run Withdraw. See Promotions: Trust Review and Withdrawal.
 - **End and void email the Organizer's reason after the commit.** A failed send is logged and never undoes the command.
 - **Every `/admin/*` route is rate-limited.** See [security.md](security.md)'s Rate Limiting section.
 
@@ -155,6 +156,23 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 - **`GET /admin/reports?report=<event_id>` locates a row** (the admin email deep link). It ignores `offset`, finds the row's position with one `ROW_NUMBER()` over the same four-key sort (`has_illegal desc, report_count desc, oldest asc, event_id`), and returns that page with its real `offset`. A row no longer in the queue gets page 1 and `report_not_found: true`.
 - **Explore's relevance path caps its ranked pool at a ceiling and flags it with `total_is_lower_bound`.** The envelope rule, keyset removal and that ceiling are described in [pipeline.md](pipeline.md)'s Pagination section.
 - **`PAGINATION_MAX_OFFSET` (5,000) is cross-stack**, in `shared/app-config.json`. A deeper offset gets a 422, or a clamp on `GET /organizer/events`. The frontend pager caps its last page at the same value, so it never links past it.
+
+### Promotions: Trust Review and Withdrawal
+
+- **Three environment flags gate Promotions, all off by default.** `PROMOTIONS_SLOTS_ENABLED` is the master gate on every fill path, the Email ad consent toggle and the `#ads` disclosure. `PROMOTIONS_OFFER_ENABLED` gates the organizer offer and request path. `PROMOTIONS_CHECKOUT_ENABLED` gates card checkout, and only counts while the offer flag is on.
+- **A flag flip is a Render dashboard edit plus a restart, with no deploy.** Nothing flips a flag automatically. The operator decides from the figures below.
+- **Review weekly for the first 4 weeks after the first sale.** After that, fold it into the 3-month price review on the same date.
+- **The Trust panel on `/admin/promotions` carries the figures.** It shows the rolling 4 weeks and since launch next to live Promotions, slots served and current consenters. Slot dislikes are admin-only and never reach an Organizer.
+- **Log every complaint about the ads by hand,** from email or the contact form, with the complainant's name or address. The logger writes a `promotion_complaint` audit row, and the panel counts it.
+- **Stop selling when any of these holds over the rolling 4 weeks.** Email ad consent withdrawals through the slot link or the toggle outnumber new consents, with at least 3 withdrawals. Slot dislikes outnumber web opens from the slot, with at least 3 dislikes.
+- **Also stop selling on complaints or reports.** At least 2 complaints about the ads from different people, or at least 2 upheld reports on promoted events, which suggests the eligibility bar is too loose.
+- **Withdraw at once on a regulator contact** (TTJA or AKI) about ad disclosure, or on a disclosure or dark-pattern problem we find ourselves. Also withdraw when a Stop-selling condition still holds 4 weeks after a fix.
+- **Stop selling:** set `PROMOTIONS_OFFER_ENABLED` and `PROMOTIONS_CHECKOUT_ENABLED` off and restart. Slots keep filling and live or scheduled Promotions run to the end of their window, so nothing is owed. Decline pending requests by hand with a reason.
+- **Withdraw, step one:** do Stop selling, then set `PROMOTIONS_SLOTS_ENABLED` off and restart. Slots stop on every surface at once, and `/ranking#ads` stays because it says what may appear.
+- **Withdraw, step two:** end each paid Promotion with `POST /admin/promotions/{id}/withdraw`, or all at once with `POST /admin/promotions/withdraw-all`. Both return 409 `slots_still_enabled` until step one is done.
+- **Withdraw ends a Promotion with `feature_withdrawn` and records a full refund of its unused whole days.** Today counts as used, a scheduled Promotion is refunded in full and a complimentary one has nothing to refund. Each Organizer gets the P2B email, and each end and refund writes an audit row.
+- **Withdraw records the refund only; it moves no money.** For a Stripe-paid Promotion, issue the card refund in Stripe. Unpaid checkouts void themselves as usual.
+- **Resume selling only after a written change that addresses the cause,** recorded on a new issue. A problem with one Promotion, such as an upheld report, is already handled by `report_takedown` ending it early.
 
 ## Scheduled Jobs
 

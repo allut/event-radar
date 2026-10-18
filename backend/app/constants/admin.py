@@ -44,6 +44,8 @@ ADMIN_ACTION_PROMOTION_END = "promotion_end"
 ADMIN_ACTION_PROMOTION_VOID = "promotion_void"
 ADMIN_ACTION_PROMOTION_REFUND = "promotion_refund"
 ADMIN_ACTION_PROMOTION_CLEAR_RESTRICTION = "promotion_clear_restriction"
+# A logged complaint about the ads (#620); its target is not a Promotion id.
+ADMIN_ACTION_PROMOTION_COMPLAINT = "promotion_complaint"
 # Written by the automatic sweep (#602), not by an admin.
 ADMIN_ACTION_PROMOTION_SYSTEM_VOID = "promotion_system_void"
 ADMIN_ACTION_PROMOTION_SYSTEM_END = "promotion_system_end"

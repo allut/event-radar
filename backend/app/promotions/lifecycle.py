@@ -289,7 +289,11 @@ def _required_reason(reason: str) -> str:
 
 
 async def end_early(
-    db: AsyncSession, promotion_id: int, reason: str, now: datetime
+    db: AsyncSession,
+    promotion_id: int,
+    reason: str,
+    now: datetime,
+    end_reason: str = PROMOTION_END_REASON_ADMIN,
 ) -> Promotion:
     """`paid -> ended_early` with a required reason. Every cap day is released
     at once (the Promotion stops being a holding status), and the fill gate
@@ -300,7 +304,7 @@ async def end_early(
         raise _refuse(PROMOTION_ERROR_INVALID_TRANSITION)
     promotion.status = PROMOTION_STATUS_ENDED_EARLY
     promotion.ended_at = now
-    promotion.end_reason = PROMOTION_END_REASON_ADMIN
+    promotion.end_reason = end_reason
     promotion.end_note = cleaned
     promotion.updated_at = now
     await db.flush()
