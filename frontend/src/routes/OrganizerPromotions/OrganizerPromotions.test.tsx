@@ -30,6 +30,7 @@ function item(overrides: Partial<OrganizerPromotionItem>): OrganizerPromotionIte
     days: 4,
     advertiser_legal_name: 'Telliskivi Tegijad OÜ',
     advertiser_registry_code: '12345678',
+    billing_email: null,
     price: { net_cents: 2000, vat_cents: 480, gross_cents: 2480 },
     can_withdraw: false,
     has_report: true,
@@ -124,6 +125,22 @@ describe('OrganizerPromotions (#614)', () => {
       expect(row.getByText(reason)).toBeInTheDocument();
     }
     expect(within(rowFor('Scheduled Show')).getByText(/24–27 Oct · 4 days · Telliskivi Tegijad OÜ/)).toBeInTheDocument();
+  });
+
+  it('names the billing email in the awaiting-payment text, and the card hold has no invoice wording', async () => {
+    serve([
+      item({ id: 21, status: 'awaiting_payment', event_title: 'Emailed Show', billing_email: 'pay@acme.ee' }),
+      item({ id: 22, status: 'awaiting_checkout', event_title: 'Checkout Show', billing_email: 'pay@acme.ee' }),
+    ]);
+    renderPage();
+    await screen.findByText('Emailed Show');
+
+    const emailed = within(rowFor('Emailed Show'));
+    expect(emailed.getByText(/We emailed an invoice to pay@acme\.ee\./)).toBeInTheDocument();
+    const checkout = within(rowFor('Checkout Show'));
+    expect(checkout.getByText('Awaiting checkout')).toBeInTheDocument();
+    expect(checkout.getByText(/Card checkout started/)).toBeInTheDocument();
+    expect(checkout.queryByText(/invoice/i)).not.toBeInTheDocument();
   });
 
   it('words a paused reason in the viewer’s language and falls back for an unknown code', async () => {

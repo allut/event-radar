@@ -15,6 +15,7 @@ from app.constants.promotions import (
     PROMOTION_GATE_OUTCOME_PAUSED,
     PROMOTION_GATE_OUTCOME_SHOWN,
     PROMOTION_HOLDING_STATUSES,
+    PROMOTION_LIST_AWAITING_CHECKOUT,
     PROMOTION_LIST_AWAITING_PAYMENT,
     PROMOTION_LIST_CANCELLED,
     PROMOTION_LIST_DECLINED,
@@ -29,6 +30,7 @@ from app.constants.promotions import (
     PROMOTION_MIN_LEAD_DAYS,
     PROMOTION_REQUEST_STATUS_DECLINED,
     PROMOTION_REQUEST_STATUS_PENDING,
+    PROMOTION_RESTRICTION_NONE,
     PROMOTION_STAT_DIGEST_OPENS,
     PROMOTION_STAT_DIGEST_SENT,
     PROMOTION_STAT_EXPLORE_SERVED,
@@ -49,6 +51,7 @@ from app.events.localize import resolve_title
 from app.models.models import Event, Organizer, Promotion, PromotionRequest
 from app.promotions.cap import full_days
 from app.promotions.fill import evaluate_gate
+from app.promotions.flags import checkout_enabled
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.requests import promotable_event_ids
 from app.promotions.views import daily_stats_table, load_daily_stats, price_breakdown
@@ -89,10 +92,13 @@ def list_status(promotion: Promotion, today: date, paused_reason: str | None) ->
     state = promotion_state(promotion.status, promotion.start_date, promotion.end_date, today)
     if promotion.status == PROMOTION_STATUS_UNPAID:
         # The sweep voids an unpaid Promotion when its start date begins.
+        if state != PROMOTION_STATE_SCHEDULED:
+            return PROMOTION_LIST_CANCELLED
+        # An open card checkout is not an invoice: no invoice wording.
         return (
-            PROMOTION_LIST_AWAITING_PAYMENT
-            if state == PROMOTION_STATE_SCHEDULED
-            else PROMOTION_LIST_CANCELLED
+            PROMOTION_LIST_AWAITING_CHECKOUT
+            if promotion.stripe_checkout_session_id is not None
+            else PROMOTION_LIST_AWAITING_PAYMENT
         )
     if state == PROMOTION_STATE_FINISHED:
         return PROMOTION_LIST_FINISHED
@@ -104,6 +110,7 @@ def list_status(promotion: Promotion, today: date, paused_reason: str | None) ->
 # Statuses that replace the "Promote" action with a badge on the event row.
 _BADGE_STATUSES = frozenset(
     {
+        PROMOTION_LIST_AWAITING_CHECKOUT,
         PROMOTION_LIST_AWAITING_PAYMENT,
         PROMOTION_LIST_SCHEDULED,
         PROMOTION_LIST_LIVE,
@@ -203,9 +210,17 @@ async def promotions_list(
         for r in requests
         if r.status in (PROMOTION_REQUEST_STATUS_PENDING, PROMOTION_REQUEST_STATUS_DECLINED)
     ]
-    promotions = (
-        await db.scalars(select(Promotion).where(Promotion.organizer_id == organizer.id))
-    ).all()
+    promotions = [
+        p
+        for p in (
+            await db.scalars(select(Promotion).where(Promotion.organizer_id == organizer.id))
+        ).all()
+        # An abandoned card checkout leaves nothing worth listing.
+        if not (
+            p.stripe_checkout_session_id is not None
+            and list_status(p, today, None) == PROMOTION_LIST_CANCELLED
+        )
+    ]
     event_ids = {r.event_id for r in requests} | {p.event_id for p in promotions}
     events = (
         {e.id: e for e in await db.scalars(select(Event).where(Event.id.in_(event_ids)))}
@@ -236,6 +251,8 @@ async def promotions_list(
                     "days": (r.end_date - r.start_date).days + 1,
                     "advertiser_legal_name": r.advertiser_legal_name,
                     "advertiser_registry_code": r.advertiser_registry_code,
+                    "billing_email": r.billing_email,
+                    "invoice_url": None,
                     "price": price_breakdown(
                         ((r.end_date - r.start_date).days + 1) * PROMOTION_DAY_PRICE_CENTS,
                         PROMOTION_VAT_RATE_PERCENT,
@@ -265,6 +282,8 @@ async def promotions_list(
                     "days": p.days,
                     "advertiser_legal_name": p.advertiser_legal_name,
                     "advertiser_registry_code": p.advertiser_registry_code,
+                    "billing_email": p.billing_email,
+                    "invoice_url": p.invoice_url if p.stripe_checkout_session_id else None,
                     "price": price_breakdown(p.net_price_cents, p.vat_rate_percent),
                     "is_complimentary": p.is_complimentary,
                     "can_withdraw": False,
@@ -321,6 +340,9 @@ async def request_context(
         "event_title": resolve_title(event, organizer.locale),
         "promotable": flags["promotable"],
         "badge": flags["badge"],
+        "checkout_available": checkout_enabled(),
+        # Card checkout needs the event assessed clear; anything else is reviewed.
+        "review_required": event.promotion_restriction != PROMOTION_RESTRICTION_NONE,
         "today": today.isoformat(),
         "earliest_start": earliest.isoformat(),
         "event_last_day": last_day.isoformat(),

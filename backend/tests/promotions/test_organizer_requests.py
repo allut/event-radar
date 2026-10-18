@@ -369,3 +369,80 @@ async def test_report_survives_lost_ownership_and_hides_from_others(oclient, db,
     Who.organizer = await make.organizer()
     assert (await oclient.get(f"/organizer/promotions/{p.id}/report")).status_code == 404
     assert (await oclient.get("/organizer/promotions")).json()["items"] == []
+
+
+def _promo(ev_id: int, org_id: int, status: str, start: int, end: int, **kw: Any) -> Promotion:
+    return Promotion(
+        event_id=ev_id, organizer_id=org_id, status=status, start_date=d(start), end_date=d(end),
+        days=end - start + 1, net_price_cents=2500, vat_rate_percent=24,
+        advertiser_legal_name="Acme OÜ", advertiser_registry_code="12345678", **kw,
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_card_checkout_holds_and_invoice_url(oclient, db, make) -> None:
+    org = Who.organizer
+    ev = await own_event(make)
+    open_hold = _promo(ev.id, org.id, "unpaid", 20, 24, stripe_checkout_session_id="cs_open")
+    abandoned = _promo(ev.id, org.id, "void", 26, 28, stripe_checkout_session_id="cs_gone")
+    manual_void = _promo(ev.id, org.id, "void", 5, 6)
+    manual_unpaid = _promo(ev.id, org.id, "unpaid", 7, 9, billing_email="pay@acme.ee")
+    paid_card = _promo(
+        ev.id, org.id, "paid", 11, 13, paid_at=NOW, stripe_checkout_session_id="cs_paid",
+        invoice_url="https://invoice.stripe.com/i/x",
+    )
+    paid_manual = _promo(ev.id, org.id, "paid", 15, 17, paid_at=NOW)
+    db.add_all([open_hold, abandoned, manual_void, manual_unpaid, paid_card, paid_manual])
+    await db.flush()
+    items = (await oclient.get("/organizer/promotions")).json()["items"]
+    by_id = {i["id"]: i for i in items if i["kind"] == "promotion"}
+    assert abandoned.id not in by_id
+    assert by_id[open_hold.id]["status"] == "awaiting_checkout"
+    assert by_id[manual_void.id]["status"] == "cancelled"
+    assert by_id[manual_unpaid.id]["status"] == "awaiting_payment"
+    assert by_id[paid_card.id]["invoice_url"] == "https://invoice.stripe.com/i/x"
+    assert by_id[paid_manual.id]["invoice_url"] is None
+    assert by_id[open_hold.id]["invoice_url"] is None
+
+
+@pytest.mark.asyncio
+async def test_list_items_carry_billing_email(oclient, db, make) -> None:
+    ev = await own_event(make)
+    rid = (
+        await oclient.post(
+            "/organizer/promotions/requests", json=req_body(ev.id, billing_email="bill@acme.ee")
+        )
+    ).json()["id"]
+    unpaid = _promo(ev.id, Who.organizer.id, "unpaid", 20, 22, billing_email="pay@acme.ee")
+    db.add(unpaid)
+    await db.flush()
+    items = (await oclient.get("/organizer/promotions")).json()["items"]
+    by = {(i["kind"], i["id"]): i for i in items}
+    assert by[("request", rid)]["billing_email"] == "bill@acme.ee"
+    assert by[("promotion", unpaid.id)]["billing_email"] == "pay@acme.ee"
+
+
+@pytest.mark.asyncio
+async def test_context_card_eligibility(oclient, make, monkeypatch) -> None:
+    clear = await own_event(make, promotion_restriction="none")
+    unassessed = await own_event(make)
+    flagged = await own_event(make, promotion_restriction="alcohol")
+    url = "/organizer/promotions/context?event_id="
+    monkeypatch.setattr(settings, "PROMOTIONS_CHECKOUT_ENABLED", True)
+    body = (await oclient.get(url + str(clear.id))).json()
+    assert (body["checkout_available"], body["review_required"]) == (True, False)
+    for ev in (unassessed, flagged):
+        body = (await oclient.get(url + str(ev.id))).json()
+        assert (body["checkout_available"], body["review_required"]) == (True, True)
+    monkeypatch.setattr(settings, "PROMOTIONS_CHECKOUT_ENABLED", False)
+    body = (await oclient.get(url + str(clear.id))).json()
+    assert (body["checkout_available"], body["review_required"]) == (False, False)
+
+
+@pytest.mark.asyncio
+async def test_event_list_badge_for_open_card_checkout(oclient, db, make) -> None:
+    ev = await own_event(make)
+    db.add(_promo(ev.id, Who.organizer.id, "unpaid", 20, 24, stripe_checkout_session_id="cs_b"))
+    await db.flush()
+    rows = {r["id"]: r["promotion"] for r in (await oclient.get("/organizer/events")).json()["events"]}
+    assert rows[ev.id]["badge"] == "awaiting_checkout"

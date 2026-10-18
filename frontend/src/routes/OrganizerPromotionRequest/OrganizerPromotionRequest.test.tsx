@@ -26,6 +26,8 @@ const context: PromotionRequestContext = {
   event_title: 'Kalamaja Open Doors',
   promotable: true,
   badge: null,
+  checkout_available: true,
+  review_required: false,
   today: '2026-10-18',
   earliest_start: '2026-10-19',
   event_last_day: '2026-11-08',
@@ -453,6 +455,25 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
 
       const button = await screen.findByRole('button', { name: 'Opening secure checkout…' });
       expect(button).toBeDisabled();
+    });
+
+    it('starts on the request path with the review copy when the context says review is required', async () => {
+      setup({ ctx: { review_required: true } });
+      await screen.findByLabelText('Start date');
+
+      expect(screen.getByText('This event needs a quick review before it can be promoted.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Send request' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Pay [€…]/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Pay by card instead' })).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/Note for us/)).toBeInTheDocument();
+    });
+
+    it('starts on the request path when the context says card checkout is unavailable', async () => {
+      setup({ ctx: { checkout_available: false } });
+      await screen.findByLabelText('Start date');
+
+      expect(screen.getByRole('button', { name: 'Send request' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Pay [€…]/ })).not.toBeInTheDocument();
     });
 
     it('falls back to the request with the review message when the event needs review', async () => {

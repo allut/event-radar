@@ -46,7 +46,14 @@ function reasonFor(item: OrganizerPromotionItem, locale: string): { text: string
         tone: 'bad',
       };
     case PROMOTION_LIST_STATUS.awaitingPayment:
-      return { text: t('promo_reason_awaiting_payment', locale), tone: 'warn' };
+      return {
+        text: item.billing_email
+          ? ti('promo_reason_awaiting_payment_to', locale, { email: item.billing_email })
+          : t('promo_reason_awaiting_payment', locale),
+        tone: 'warn',
+      };
+    case PROMOTION_LIST_STATUS.awaitingCheckout:
+      return { text: t('promo_reason_awaiting_checkout', locale), tone: 'warn' };
     case PROMOTION_LIST_STATUS.scheduled:
       return { text: ti('promo_reason_scheduled', locale, { date: formatPromoDay(item.start_date, locale) }), tone: '' };
     case PROMOTION_LIST_STATUS.live:

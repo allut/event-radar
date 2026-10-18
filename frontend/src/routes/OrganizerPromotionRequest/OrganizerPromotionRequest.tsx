@@ -116,7 +116,7 @@ export default function OrganizerPromotionRequest() {
   const [terms, setTerms] = useState(false);
   const [policy, setPolicy] = useState(false);
   const [mode, setMode] = useState<'card' | 'request'>('card');
-  const [cardBlock, setCardBlock] = useState<CardBlock>(null);
+  const [failedBlock, setCardBlock] = useState<CardBlock>(null);
   const [registryDown, setRegistryDown] = useState(false);
   const [tried, setTried] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -129,6 +129,10 @@ export default function OrganizerPromotionRequest() {
     retry: false,
   });
   const ctx = context.data;
+  // The context says up front whether card checkout is open for this event; a
+  // refusal at submit (a stale context) still lands on the same request path.
+  const ctxBlock: CardBlock = ctx?.review_required ? 'review' : ctx && !ctx.checkout_available ? 'unavailable' : null;
+  const cardBlock = ctxBlock ?? failedBlock;
 
   const eventQuery = useQuery({
     queryKey: [QUERY_KEYS.organizerPromotionEvent, eventId, locale],

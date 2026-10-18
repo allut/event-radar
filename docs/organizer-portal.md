@@ -196,7 +196,7 @@ The Organizer offer and request path (`app/routers/organizer_promotions.py`, `ap
 
 - **`GET /organizer/events` and `GET /organizer/claims/{id}/events` add `promotion: {promotable, badge}` per row** while the offer is on, from one bulk read (`promotion_flags_for()`).
 - **`promotable` needs current ownership, a public, canonical, not-ended event, room for a 3-day window and nothing open on it.** A dormant claim is not ownership.
-- **`badge` replaces the action** with `requested`, `awaiting_payment`, `scheduled`, `live` or `paused`.
+- **`badge` replaces the action** with `requested`, `awaiting_payment`, `awaiting_checkout`, `scheduled`, `live` or `paused`.
 
 ### Requests
 
@@ -208,12 +208,12 @@ The Organizer offer and request path (`app/routers/organizer_promotions.py`, `ap
 
 ### Form Helpers
 
-- **`GET /organizer/promotions/context?event_id=` feeds the form:** window rules, price, terms version, default billing email and `unavailable_dates`. The dates are sold-out days only; counts never leave the server.
+- **`GET /organizer/promotions/context?event_id=` feeds the form:** window rules, price, terms version, default billing email, `checkout_available`, `review_required` and `unavailable_dates`. The dates are sold-out days only; counts never leave the server.
 - **`GET /organizer/promotions/validate?event_id=&start_date=&end_date=` validates live** and returns the errors, the day count and the price. It writes nothing.
 
 ### The List
 
-- **`GET /organizer/promotions` returns requests and Promotions newest first.** Status is `requested`, `declined`, `awaiting_payment`, `scheduled`, `live`, `paused`, `finished`, `ended_early` or `cancelled`. Withdrawn and expired requests drop off, and a granted one is replaced by its Promotion.
+- **`GET /organizer/promotions` returns requests and Promotions newest first.** Status is `requested`, `declined`, `awaiting_payment`, `awaiting_checkout` (an open card checkout), `scheduled`, `live`, `paused`, `finished`, `ended_early` or `cancelled`. Items carry `billing_email` and, once card-paid, `invoice_url`. Withdrawn and expired requests and abandoned card checkouts drop off, and a granted request is replaced by its Promotion.
 - **A `paused` item carries `paused_reason`,** the fill gate's not-showing code. The frontend turns it into plain words.
 
 ### Per-Day Report
@@ -227,7 +227,7 @@ The Organizer offer and request path (`app/routers/organizer_promotions.py`, `ap
 - **The nav item and row actions hide while the offer is off.** `lib/organizerPromotionsOffer.ts` keeps a hint learned from the `promotion` key on event rows and from the list's 404, so the top bar needs no request. The page itself redirects to Your events on a 404.
 - **A row's `Promote` link or badge comes from `PromotionRowAction`, after `Edit`.** The badge opens `/organizer/promotions?event=<id>`, which scrolls to that event's open item. Claim event rows keep their stretched title link, and the action sits above it.
 - **The request form (`OrganizerPromotionRequest/`, `/organizer/promotions/new?event_id=`) validates dates through `GET /validate`.** Sold-out days arrive as dates from `/context` and grey out in `DatePicker`. A real `EventCard` previews the ad with the typed or registry name.
-- **Card payment is the default action, with the request as fallback.** The API carries no checkout or review signal, so the form tries `POST /checkout` and falls back to the request on a 409 `event_needs_review` or a 404. A registry outage does the same.
+- **Card payment is the default action, with the request as fallback.** The form starts on Pay only when `/context` says `checkout_available` and not `review_required`; otherwise it starts on the request with the review copy. A 409 `event_needs_review`, a 404 or a registry outage still fall back.
 - **The registry lookup runs once the 8-digit check digit passes.** A found name locks the field. Deleted and not-found codes block the form, and an outage opens a typed name and the request path.
 - **The terms and content-policy links point at placeholder routes** (`ROUTES.organizerTerms`, `organizerContentPolicy`) until the Organizer terms page exists.
 - **`OrganizerPromotionSuccess/` never trusts the redirect.** It polls the list until the Promotion is `scheduled` or later, because the Stripe webhook can land after the return. A late payment still gets the automatic refund the page describes.

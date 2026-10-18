@@ -32,6 +32,8 @@ export interface OrganizerPromotionItem {
   days: number;
   advertiser_legal_name: string;
   advertiser_registry_code: string;
+  /** Where the invoice or receipt goes; null on older rows. */
+  billing_email: string | null;
   price: PromotionPrice;
   can_withdraw: boolean;
   has_report: boolean;
@@ -56,6 +58,10 @@ export interface PromotionRequestContext {
   event_title: string;
   promotable: boolean;
   badge: PromotionListStatus | null;
+  /** Card checkout is switched on (the offer is on, or this route would 404). */
+  checkout_available: boolean;
+  /** The event is not assessed clear, so card checkout would refuse it. */
+  review_required: boolean;
   today: string;
   earliest_start: string;
   event_last_day: string;

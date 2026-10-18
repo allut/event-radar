@@ -7,6 +7,7 @@ export const PROMOTION_LIST_STATUS = {
   requested: 'requested',
   declined: 'declined',
   awaitingPayment: 'awaiting_payment',
+  awaitingCheckout: 'awaiting_checkout',
   scheduled: 'scheduled',
   live: 'live',
   paused: 'paused',
@@ -22,6 +23,7 @@ export const PROMOTION_KIND = { request: 'request', promotion: 'promotion' } as 
 // Statuses whose item still holds days (the row's badge replaces "Promote").
 export const PROMOTION_RUNNING_STATUSES: ReadonlySet<string> = new Set([
   PROMOTION_LIST_STATUS.awaitingPayment,
+  PROMOTION_LIST_STATUS.awaitingCheckout,
   PROMOTION_LIST_STATUS.scheduled,
   PROMOTION_LIST_STATUS.live,
   PROMOTION_LIST_STATUS.paused,
@@ -122,6 +124,7 @@ export type PromotionBadgeTone = 'live' | 'attention' | 'scheduled' | 'bad' | 'm
 export const PROMOTION_STATUS_TONE: Readonly<Record<string, PromotionBadgeTone>> = {
   requested: 'attention',
   awaiting_payment: 'attention',
+  awaiting_checkout: 'attention',
   paused: 'attention',
   scheduled: 'scheduled',
   live: 'live',

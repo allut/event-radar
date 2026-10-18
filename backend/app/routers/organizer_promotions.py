@@ -105,7 +105,7 @@ async def list_promotions(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Requests and Promotions in one list, newest first. Each item's `status`
-    is one of requested, declined, awaiting_payment, scheduled, live, paused,
+    is one of requested, declined, awaiting_payment, awaiting_checkout, scheduled, live, paused,
     finished, ended_early, cancelled; a paused item carries the fill gate's
     `paused_reason` code."""
     return {"items": await promotions_list(db, current_organizer, now_tallinn())}
@@ -120,7 +120,8 @@ async def promotion_request_context(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """The request form's context for one owned event: rules, price, the days
-    already sold out (dates, never counts) and whether it is promotable."""
+    already sold out (dates, never counts), whether it is promotable and
+    whether card checkout is open for it (`checkout_available`, `review_required`)."""
     event = await _own_event_or_404(db, event_id, current_organizer)
     return await request_context(db, current_organizer, event, now_tallinn())
 

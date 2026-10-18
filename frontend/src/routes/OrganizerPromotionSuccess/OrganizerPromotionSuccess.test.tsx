@@ -29,6 +29,7 @@ function promotion(status: OrganizerPromotionItem['status']): OrganizerPromotion
     days: 6,
     advertiser_legal_name: 'Kalamaja Kogukond MTÜ',
     advertiser_registry_code: '12345678',
+    billing_email: null,
     price: { net_cents: 3000, vat_cents: 720, gross_cents: 3720 },
     can_withdraw: false,
     has_report: true,
