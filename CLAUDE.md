@@ -20,6 +20,7 @@ Deep-dive docs are not auto-loaded. Open the row's doc before editing what it co
 | **Frontend** — `docs/frontend.md` | `frontend/src/{routes,components,hooks,lib,content}/`, `frontend/scripts/generate-icons.ts`, `shared/i18n/`, `app/email/` |
 | **SEO and prerender** — `docs/seo.md` | `frontend/scripts/prerender.ts`, `frontend/functions/api/{seo-audit,prerender-cadence}.ts`, `useSeoMeta`, `SeoTags/`, `frontend/src/lib/{structuredData,jsonLd,seoValidation,seoAudit*,prerender*,r2ChainState}.ts` |
 | **Design system** — `docs/design-system.md` | any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, `frontend/src/lib/theme.ts`, `app/email/styles.py`, any visual change |
+| **Promotions and payments** — no single doc | `app/promotions/`, `app/integrations/payments.py`: `docs/backend-ops.md` (Stripe Setup, sweep, kill switches), `docs/security.md` (Stripe Webhook), `docs/organizer-portal.md` (promotion form), `docs/data-model.md` |
 | **Organizer portal and claiming** — `docs/organizer-portal.md` | `app/routers/organizer_*.py`, `app/claims/`, `frontend/src/routes/{EventSubmit,OrganizerSettings,OrganizerContact}/`, `frontend/src/routes/*Claim*/`, `frontend/src/components/{VenuePicker,RichTextEditor,ClaimStrip,ClaimEventPicker}/` |
 | **Data model** — `docs/data-model.md` | a migration, a query on a new column, a serializer |
 | **Rule rationale** — `docs/conventions.md` | the reason behind a Code Quality Rule below |
@@ -82,7 +83,7 @@ The setup walkthrough is in `README.md`. Inside the container:
 
 ### Testing
 
-- **Run the backend suite with `bash backend/scripts/scratch-test.sh [pytest args]`.** It migrates a throwaway database and drops it afterwards. `backend/tests/conftest.py` refuses to run when `DATABASE_URL` names the dev `eventradar` database.
+- **Run the backend suite from the repo root with `bash backend/scripts/scratch-test.sh [pytest args]`.** It migrates a throwaway database and drops it afterwards. `backend/tests/conftest.py` refuses to run when `DATABASE_URL` names the dev `eventradar` database.
 - **UI work starts with an approved prototype built on the real `index.css`.** Recipe: `docs/design-system.md` "Prototype Shell". A change with no visual difference (data, wiring, when an existing control shows) needs none.
 - **After editing `CLAUDE.md`, `README.md` or `docs/*.md`, run `bash backend/scripts/scratch-test.sh tests/test_docs_style.py`.** It enforces the 60-word bullet cap in `docs/writing-docs.md`.
 - **There is no e2e suite.** QA runs through the Playwright MCP server, and `.playwright-mcp/` is disposable scratch. Playwright stays a build dependency for the SEO prerender.
@@ -148,7 +149,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 
 ### Issue tracker
 
-Issues live in GitHub Issues (github.com/allut/event-radar), via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live in GitHub Issues (github.com/allut/event-radar), via the `gh` CLI. Open `docs/agents/issue-tracker.md` before any `gh issue` command; `gh issue view <n> --comments` alone prints nothing for an issue without comments.
 
 ### Triage labels
 
