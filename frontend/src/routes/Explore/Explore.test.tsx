@@ -5,6 +5,7 @@ import Explore from './Explore';
 import { useNavigate } from 'react-router-dom';
 import { LocationProbe, renderWithProviders, makeEvent } from '../../test/utils';
 import type { EventData } from '../../components/EventCard';
+import { PRERENDER_RUNTIME_FLAG } from '../../constants/prerender';
 
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
@@ -25,11 +26,12 @@ vi.mock('../../api/client', () => ({
 }));
 
 vi.mock('../../components/EventCard', () => ({
-  default: ({ event, onFeedbackBlocked }: {
+  default: ({ event, onFeedbackBlocked, sponsored }: {
     event: { id: number; title: string };
     onFeedbackBlocked?: (signal: string) => void;
+    sponsored?: { advertiser: string; explanation: string };
   }) => (
-    <div data-testid="event-card">
+    <div data-testid="event-card" data-sponsored={sponsored ? `${sponsored.advertiser}|${sponsored.explanation}` : undefined}>
       {event.title}
       {onFeedbackBlocked && (
         <button onClick={() => onFeedbackBlocked('bookmark')}>block-bookmark-{event.id}</button>
@@ -602,6 +604,112 @@ describe('Explore', () => {
       expect(exploreCall).toContain('q=jazz');
       expect(exploreCall).toMatch(/category=/);
       expect(exploreCall).not.toMatch(/category=[^&]*\bmusic\b/);
+    });
+  });
+
+  describe('Sponsored slot (issue #603)', () => {
+    const SLOT = { advertiser: 'Telliskivi Selts MTÜ', explanation: 'filters', tile: 3 };
+
+    /** Serves `total` organic events the way GET /explore?sponsored_slot=true
+     * does when page 1 has a slot: page 1 holds limit - 1 organic rows plus the
+     * slot payload, later pages start one row earlier and echo the offset. */
+    function mockSlotExplore(total: number, withSlot = true) {
+      mockGet.mockImplementation(async (path: string) => {
+        if (path.startsWith('/users/me')) return currentUser;
+        const params = new URL(path, 'http://x').searchParams;
+        const limit = Number(params.get('limit'));
+        const offset = Number(params.get('offset'));
+        const optedIn = params.get('sponsored_slot') === 'true';
+        const slotted = optedIn && withSlot;
+        const start = slotted && offset > 0 ? offset - 1 : offset;
+        const count = slotted && offset === 0 ? limit - 1 : limit;
+        const events: EventData[] = [];
+        for (let id = start + 1; id <= Math.min(start + count, total); id++) {
+          events.push(makeEvent({ id, title: `Event ${id}` }));
+        }
+        const body: Record<string, unknown> = { events, total, limit, offset, has_more: start + events.length < total };
+        if (optedIn) body.page1_has_slot = slotted;
+        if (slotted && offset === 0) body.sponsored_slot = { ...makeEvent({ id: 900, title: 'Paid Event' }), ...SLOT };
+        return body;
+      });
+    }
+
+    afterEach(() => {
+      delete (window as unknown as Record<string, unknown>)[PRERENDER_RUNTIME_FLAG];
+    });
+
+    it('asks for the slot on a normal render', async () => {
+      mockSlotExplore(60);
+      renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+      expect(new URL(exploreRequests()[0], 'http://x').searchParams.get('sponsored_slot')).toBe('true');
+    });
+
+    it('never asks for the slot under the prerender', async () => {
+      (window as unknown as Record<string, unknown>)[PRERENDER_RUNTIME_FLAG] = true;
+      mockSlotExplore(60);
+      renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+      expect(exploreRequests()[0]).not.toContain('sponsored_slot');
+      expect(document.querySelector('[data-sponsored]')).toBeNull();
+    });
+
+    it('renders the slot at tile #4 of page 1 among 23 organic cards', async () => {
+      mockSlotExplore(60);
+      renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Paid Event')).toBeInTheDocument());
+      const cards = screen.getAllByTestId('event-card');
+      expect(cards).toHaveLength(24);
+      expect(cards[3]).toHaveTextContent('Paid Event');
+      expect(cards[3]).toHaveAttribute('data-sponsored', 'Telliskivi Selts MTÜ|filters');
+      expect(cards[2]).toHaveTextContent('Event 3');
+      expect(cards[4]).toHaveTextContent('Event 4');
+      expect(cards.filter((c) => c.hasAttribute('data-sponsored'))).toHaveLength(1);
+    });
+
+    it('sizes the pager as ceil((total + 1) / limit) when page 1 carries a slot', async () => {
+      mockSlotExplore(48);
+      renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+      const nav = screen.getByRole('navigation', { name: 'Pages' });
+      expect(within(nav).getByRole('link', { name: 'Page 3' })).toBeInTheDocument();
+    });
+
+    it('keeps ceil(total / limit) pages when no slot fills', async () => {
+      mockSlotExplore(48, false);
+      renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+      const nav = screen.getByRole('navigation', { name: 'Pages' });
+      expect(within(nav).queryByRole('link', { name: 'Page 3' })).not.toBeInTheDocument();
+      expect(within(nav).getByRole('link', { name: 'Page 2' })).toBeInTheDocument();
+    });
+
+    it('labels page 1 over organic rows only', async () => {
+      mockSlotExplore(60);
+      const { container } = renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+      expect(container.textContent).toContain('1–23 of 60');
+    });
+
+    it('labels page 2 from the first organic row it holds', async () => {
+      mockSlotExplore(60);
+      const { container } = renderExplore('/en/explore?page=2');
+      await waitFor(() => expect(screen.getByText('Event 24')).toBeInTheDocument());
+      expect(screen.queryByText('Event 23')).not.toBeInTheDocument();
+      expect(container.textContent).toContain('24–47 of 60');
+    });
+
+    it('leaves the slot out of the ItemList and keeps positions 1..n over organic events', async () => {
+      mockSlotExplore(60);
+      renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Paid Event')).toBeInTheDocument());
+      await waitFor(() => expect(document.head.querySelector('script[type="application/ld+json"]')).not.toBeNull());
+      const raw = Array.from(document.head.querySelectorAll('script[type="application/ld+json"]'))
+        .map((el) => JSON.parse(el.textContent ?? '{}'))
+        .find((body) => body['@type'] === 'ItemList');
+      const items = raw.itemListElement as { position: number; item: { url: string } }[];
+      expect(items.map((el) => el.position)).toEqual(Array.from({ length: 23 }, (_, i) => i + 1));
+      expect(items.some((el) => el.item.url.endsWith('/events/900'))).toBe(false);
     });
   });
 

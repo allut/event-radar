@@ -12,6 +12,7 @@ import { buildSeoMeta } from '../hooks/useSeoMeta';
 import { makeEvent } from '../test/utils';
 import { serializeJsonLd } from './jsonLd';
 import { PRODUCTION_ORIGIN } from '../constants/seo';
+import { SPONSORED_SLOT_ATTR } from '../_generated/sharedConstants';
 
 /** Mirrors components/SeoTags/SeoTags.tsx's rendering (title/meta/link/
  * ld+json escaping) closely enough to exercise parseSnapshotHtml against a
@@ -326,6 +327,25 @@ describe("validateSnapshotStructure kind 'page'", () => {
     parsed.robots = 'noindex';
     const issues = validateSnapshotStructure(parsed, { kind: 'page', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
     expect(issues).toEqual(['robots meta is "noindex", expected "index, follow"']);
+  });
+});
+
+describe('validateSnapshotStructure Sponsored slot guard (issue #603)', () => {
+  const events = [makeEvent({ id: 1, title: 'A' }), makeEvent({ id: 2, title: 'B' }), makeEvent({ id: 3, title: 'C' })];
+  function listHtml(bodyHtml: string): string {
+    const meta = buildSeoMeta({ title: 'Explore | Event Radar', locale: 'et', path: '/explore', indexable: true });
+    return renderSnapshotHtml(meta, buildExploreItemListJsonLd(events, 'et'), bodyHtml);
+  }
+  const validate = (html: string) =>
+    validateSnapshotStructure(parseSnapshotHtml(html), { kind: 'list', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
+
+  it('passes a list snapshot with no slot', () => {
+    expect(validate(listHtml('<article>organic</article>'))).toEqual([]);
+  });
+
+  it('fails a list snapshot that contains the slot marker', () => {
+    const issues = validate(listHtml(`<article ${SPONSORED_SLOT_ATTR}>ad</article>`));
+    expect(issues.some((i) => i.includes('Sponsored slot'))).toBe(true);
   });
 });
 

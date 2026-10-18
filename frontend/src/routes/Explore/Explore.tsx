@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
@@ -43,6 +43,9 @@ import {
 import type { Signal } from '../../constants/feedback';
 import { PRERENDER_ERROR_ATTR, PRERENDER_READY_ATTR } from '../../constants/prerender';
 import { ROUTES } from '../../constants/routes';
+import { SPONSORED_EXPLORE_TILE_INDEX, SPONSORED_SLOT_PARAM } from '../../constants/sponsored';
+import { isPrerenderRender } from '../../lib/prerenderRuntime';
+import { type SponsoredInfo } from '../../components/SponsoredSlot';
 import {
   activeFacetCount,
   buildExploreApiQuery,
@@ -66,6 +69,11 @@ interface ExploreResponse {
   has_more: boolean;
   // Set when the relevance pool was cut at the backend ceiling; absent means false.
   total_is_lower_bound?: boolean;
+  // Present only when the request opted in with sponsored_slot=true (issue #603).
+  // True on every page when page 1 carries a Sponsored slot; `total` stays organic.
+  page1_has_slot?: boolean;
+  // Page 1 only: the paid card, rendered beside the organic results.
+  sponsored_slot?: (EventData & SponsoredInfo & { tile: number }) | null;
 }
 
 interface CurrentUser {
@@ -164,10 +172,14 @@ export default function Explore() {
   // between two page loads when the clock or its classification moves on.
   // Accepted at MVP ingestion cadence (hourly/6-hourly jobs).
   const { resultsHeadingRef, onPageSettled } = usePageSettledFocus();
+  // The build-time render never asks for a Sponsored slot: a crawler snapshot
+  // would freeze one advertiser into the static HTML (issue #603).
+  const sponsoredParam = isPrerenderRender() ? '' : `&${SPONSORED_SLOT_PARAM}=true`;
   const {
+    data: pageData,
     items: events,
     total,
-    offset,
+    firstRowOffset,
     isLoading,
     isError,
     isSuccess,
@@ -180,13 +192,14 @@ export default function Explore() {
     pageSize: BROWSE_PAGE_SIZE,
     fetchPage: ({ offset: pageOffset }) =>
       api.get<ExploreResponse>(
-        withLocaleQuery(`${API.explore}?${buildExploreApiQuery(filters, pageOffset)}`, locale),
+        withLocaleQuery(`${API.explore}?${buildExploreApiQuery(filters, pageOffset)}${sponsoredParam}`, locale),
       ),
     select: (data) => ({
       items: data.events,
       total: data.total,
       offset: data.offset,
       totalIsLowerBound: data.total_is_lower_bound ?? false,
+      slotRows: data.page1_has_slot ? 1 : 0,
     }),
     onPageSettled,
     // A facet emptied down to zero chips means "match nothing" — skip the
@@ -308,7 +321,10 @@ export default function Explore() {
     // filtered, sorted or searched view canonicalises to /explore throughout.
     page: hasActiveFilters ? undefined : page,
   });
-  // The ItemList covers the current page's events, positions 1..n.
+  // The paid card exists on page 1 only; it is never part of `events`, so the
+  // ItemList below and the pager's range label only ever see organic rows.
+  const sponsoredSlot = page === 1 ? (pageData?.sponsored_slot ?? null) : null;
+  // The ItemList covers the current page's organic events, positions 1..n.
   const jsonLd = useMemo(() => {
     if (!isSuccess) return undefined;
     return buildExploreItemListJsonLd(events, locale);
@@ -454,16 +470,29 @@ export default function Explore() {
             <div className={cx(styles.grid, isPlaceholderData && styles.gridDimmed)}>
               {!authed && <UpsellCard locale={locale} onCtaClick={handleUpsellCtaClick} />}
               {events.map((event, i) => (
-                <EventCard
-                  key={event.id}
-                  event={event}
-                  // The event's position in the whole result set, not the page.
-                  index={offset + i}
-                  locale={locale}
-                  nav={nav}
-                  variant="standard"
-                  onFeedbackBlocked={authed ? undefined : handleFeedbackBlocked}
-                />
+                <Fragment key={event.id}>
+                  {sponsoredSlot && i === (sponsoredSlot.tile ?? SPONSORED_EXPLORE_TILE_INDEX) && (
+                    <EventCard
+                      key={`slot-${sponsoredSlot.id}`}
+                      event={sponsoredSlot}
+                      index={i}
+                      locale={locale}
+                      nav={nav}
+                      variant="standard"
+                      sponsored={sponsoredSlot}
+                      onFeedbackBlocked={authed ? undefined : handleFeedbackBlocked}
+                    />
+                  )}
+                  <EventCard
+                    event={event}
+                    // The event's position in the whole result set, not the page.
+                    index={firstRowOffset + i}
+                    locale={locale}
+                    nav={nav}
+                    variant="standard"
+                    onFeedbackBlocked={authed ? undefined : handleFeedbackBlocked}
+                  />
+                </Fragment>
               ))}
             </div>
           )}

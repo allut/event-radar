@@ -1,8 +1,10 @@
-import { memo } from 'react';
+import { memo, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { UI_STATE } from '../../constants/core';
 import type { Signal } from '../../constants/feedback';
 import { ROUTES } from '../../constants/routes';
+import { SPONSORED_LINK_REL, SPONSORED_TICKET_REL } from '../../constants/sponsored';
+import { SPONSORED_SLOT_ATTR } from '../../_generated/sharedConstants';
 import { t } from '../../i18n';
 import { cardAnimationDelayMs, categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, shareEvent, trackExternalClick } from '../../utils';
 import { useEventReport } from '../../hooks/useEventReport';
@@ -12,6 +14,7 @@ import { useToast } from '../../hooks/useToast';
 import EventOverflowMenu from '../EventOverflowMenu';
 import FeedbackButtonRow from '../FeedbackButtonRow';
 import ReportModal from '../ReportModal';
+import { SponsoredCaption, SponsoredPanel, type SponsoredInfo } from '../SponsoredSlot';
 import Toast from '../Toast';
 import styles from './EventCard.module.css';
 
@@ -64,9 +67,14 @@ interface EventCardProps {
   // is never invoked — and this is called with the pressed signal instead,
   // so the caller can open the sign-in modal.
   onFeedbackBlocked?: (signal: Signal) => void;
+  // Sponsored slot (issue #603): turns the card into a labelled paid placement
+  // with a caption, a "Why?" panel and rel="sponsored" paid links.
+  sponsored?: SponsoredInfo;
 }
 
-function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'standard', readOnly = false, alignTitle = true, onFeedbackBlocked }: EventCardProps) {
+function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'standard', readOnly = false, alignTitle = true, onFeedbackBlocked, sponsored }: EventCardProps) {
+  const [panelOpen, setPanelOpen] = useState(false);
+  const panelId = useId();
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, {
     initialSignal: event.my_signal,
     onChange: onFeedbackSent,
@@ -107,10 +115,12 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
         />
       )}
       {ticketUrl && (
+        // SPONSORED_TICKET_REL is 'sponsored noopener noreferrer'; the rule can't see through the constant.
+        // eslint-disable-next-line react/jsx-no-target-blank
         <a
           href={ticketUrl}
           target="_blank"
-          rel="noopener noreferrer"
+          rel={sponsored ? SPONSORED_TICKET_REL : 'noopener noreferrer'}
           className={styles.ticketsLink}
           onClick={readOnly ? undefined : () => trackExternalClick(event.id)}
         >
@@ -120,11 +130,8 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
     </div>
   );
 
-  return (
-    <article
-      className={cx(styles.card, isFeatured && styles.featured)}
-      style={{ animationDelay: `${cardAnimationDelayMs(index)}ms` }}
-    >
+  const cardBody = (
+    <>
       <div className={styles.clickable}>
         <div className={cx(styles.imageWrap, isFeatured && styles.featuredImageWrap)}>
           {imageSrc ? (
@@ -173,6 +180,7 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
             <Link
               to={localePath(ROUTES.eventDetail(event.id))}
               className={cx(styles.titleLink, styles.stretched)}
+              rel={sponsored ? SPONSORED_LINK_REL : undefined}
             >
               <span className={cx(styles.titleClamp, isFeatured && styles.featuredTitleClamp, !isFeatured && !alignTitle && styles.titleClampFlush)}>
                 {event.title}
@@ -191,6 +199,39 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
       </div>
 
       {actionsRow}
+    </>
+  );
+
+  return (
+    <article
+      className={cx(styles.card, isFeatured && styles.featured)}
+      style={{ animationDelay: `${cardAnimationDelayMs(index)}ms` }}
+      {...(sponsored ? { [SPONSORED_SLOT_ATTR]: '' } : {})}
+    >
+      {sponsored ? (
+        <>
+          <SponsoredCaption
+            advertiser={sponsored.advertiser}
+            locale={locale}
+            open={panelOpen}
+            panelId={panelId}
+            onToggle={() => setPanelOpen((open) => !open)}
+          />
+          <div className={styles.slotBody}>
+            {cardBody}
+            {panelOpen && (
+              <SponsoredPanel
+                explanation={sponsored.explanation}
+                locale={locale}
+                id={panelId}
+                onClose={() => setPanelOpen(false)}
+              />
+            )}
+          </div>
+        </>
+      ) : (
+        cardBody
+      )}
 
       {!readOnly && toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
       {!readOnly && reportOpen && (

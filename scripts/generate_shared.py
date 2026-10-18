@@ -287,6 +287,9 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         f"CLAIM_EXPIRY_DAYS: int = {cfg['claim_expiry_days']}",
         f"CLAIM_ADMIN_REVIEW_EXPIRY_DAYS: int = {cfg['claim_admin_review_expiry_days']}",
         f"EMAIL_BRAND_MARK_PATH: str = {cfg['email_brand_mark_path']!r}".replace("'", '"'),
+        # DOM attribute marking a Sponsored slot card (issue #603): the prerender
+        # validator and the frontend EventCard both key off it.
+        f"SPONSORED_SLOT_ATTR: str = {_py_str(cfg['sponsored_slot_attr'])}",
         # Signal tiers named on the public /ranking page, heaviest first (issue #588).
         f"RANKING_TIERS_SIGNED_IN: tuple[tuple[str, ...], ...] = {_py_tiers(cfg['ranking_tiers']['signed_in'])}",
         f"RANKING_TIERS_SIGNED_OUT: tuple[tuple[str, ...], ...] = {_py_tiers(cfg['ranking_tiers']['signed_out'])}",
@@ -365,6 +368,9 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         f"export const CLAIM_EXPIRY_DAYS = {cfg['claim_expiry_days']};",
         f"export const CLAIM_ADMIN_REVIEW_EXPIRY_DAYS = {cfg['claim_admin_review_expiry_days']};",
         f"export const EMAIL_BRAND_MARK_PATH = '{cfg['email_brand_mark_path']}';",
+        # DOM attribute marking a Sponsored slot card (issue #603): the prerender
+        # validator and EventCard both key off it.
+        f"export const SPONSORED_SLOT_ATTR = {_ts_str(cfg['sponsored_slot_attr'])};",
         # Signal tiers named on the public /ranking page, heaviest first (issue #588).
         f"export const RANKING_TIERS_SIGNED_IN: readonly (readonly string[])[] = {_ts_tiers(cfg['ranking_tiers']['signed_in'])};",
         f"export const RANKING_TIERS_SIGNED_OUT: readonly (readonly string[])[] = {_ts_tiers(cfg['ranking_tiers']['signed_out'])};",

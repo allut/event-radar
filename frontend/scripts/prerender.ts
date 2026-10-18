@@ -45,6 +45,7 @@ import {
   PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH,
   PRERENDER_ERROR_SELECTOR,
   PRERENDER_READY_SELECTOR,
+  PRERENDER_RUNTIME_FLAG,
   ROUND_STATUS,
   CHANGE_DETECTION_CONCURRENCY,
   R2_PERSIST_CONCURRENCY,
@@ -1390,6 +1391,10 @@ export async function main(): Promise<void> {
       const cursor = createBudgetedCursor(renderQueue.length, deadline);
       async function worker(): Promise<void> {
         const page = await browser.newPage({ timezoneId: TALLINN_TZ });
+        // Explore never requests a Sponsored slot while this flag is set (issue #603).
+        await page.addInitScript((flag) => {
+          (window as unknown as Record<string, unknown>)[flag] = true;
+        }, PRERENDER_RUNTIME_FLAG);
         const recentEvents = attachPageDiagnostics(page);
         try {
           for (;;) {

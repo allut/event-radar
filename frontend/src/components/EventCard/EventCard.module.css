@@ -24,6 +24,16 @@
   box-shadow: var(--shadow-lead);
 }
 
+/* Sponsored slot card: wraps everything under the caption so the "Why?" panel
+   can cover the body and actions but never the caption. */
+.slotBody {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
 .imageWrap {
   position: relative;
   overflow: hidden;

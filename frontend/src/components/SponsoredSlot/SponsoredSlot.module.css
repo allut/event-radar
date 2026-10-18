@@ -1,0 +1,75 @@
+/* Caption row of a Sponsored slot card: label, advertiser, "Why?" button. It
+   sits above the image, outside .clickable, so the stretched link never covers it. */
+.caption {
+  position: relative;
+  z-index: var(--z-card-control);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-1-25);
+  border-bottom: var(--border-w-hair) solid var(--border-subtle);
+  font-size: var(--fs-xs);
+}
+
+.label {
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-black);
+  font-variant-caps: all-small-caps;
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.advertiser {
+  color: var(--text-muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.why {
+  composes: textButton from '../shared/Button.module.css';
+  margin: 0 0 0 auto;
+  padding: 0;
+  font-size: inherit;
+  color: var(--text-soft);
+}
+
+.why:hover,
+.why:focus-visible {
+  color: var(--accent-ink);
+}
+
+/* Fills the card's slot wrapper under the caption: --bg-raised with a gold top rule. */
+.panel {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-card-control);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-1-25);
+  background: var(--bg-raised);
+  border-top: var(--border-w-accent) solid var(--accent);
+  font-size: var(--fs-md);
+}
+
+.explanation {
+  color: var(--text);
+}
+
+.rankingLink {
+  color: var(--accent-ink);
+  font-size: var(--fs-sm);
+  text-decoration: underline;
+  text-underline-offset: var(--underline-offset);
+}
+
+.close {
+  composes: btnOutline from '../shared/Button.module.css';
+  margin-top: auto;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--fs-sm);
+}

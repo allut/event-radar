@@ -33,6 +33,11 @@ export const PRERENDER_READY_SELECTOR = `[${PRERENDER_READY_ATTR}="true"]`;
 export const PRERENDER_ERROR_ATTR = 'data-prerender-error';
 export const PRERENDER_ERROR_SELECTOR = `[${PRERENDER_ERROR_ATTR}="true"]`;
 
+// Window flag scripts/prerender.ts sets (addInitScript) before the app boots, so
+// the app can tell the build-time render from a real visit. Explore reads it to
+// never request a Sponsored slot a crawler snapshot would freeze (issue #603).
+export const PRERENDER_RUNTIME_FLAG = '__EVENT_RADAR_PRERENDER__';
+
 // dist-relative filename of the pristine (never overwritten by prerender)
 // Vite build output — `npm run build` copies dist/index.html here *before*
 // invoking prerender.ts (frontend/package.json's build script), so this is

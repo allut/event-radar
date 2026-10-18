@@ -12,6 +12,11 @@ export interface PagedSlice<TItem> {
   total: number;
   offset: number;
   totalIsLowerBound?: boolean;
+  /** Rows page 1 holds beside the counted items (Explore's Sponsored slot,
+   * issue #603): `total` stays the organic count, so the last page is
+   * ceil((total + slotRows) / pageSize) and pages after the first start
+   * `slotRows` earlier. 0 when absent. */
+  slotRows?: number;
 }
 
 export interface UsePagedQueryOptions<TData, TItem> {
@@ -81,7 +86,10 @@ export function usePagedQuery<TData, TItem>({
   const offset = slice?.offset ?? 0;
   const totalIsLowerBound = (slice?.totalIsLowerBound ?? false) || cappedAtCeiling;
   const itemCount = items.length;
-  const lastPage = Math.max(1, Math.ceil(total / pageSize));
+  const slotRows = slice?.slotRows ?? 0;
+  const lastPage = Math.max(1, Math.ceil((total + slotRows) / pageSize));
+  // Where this page's counted items begin: later pages start slotRows earlier.
+  const firstRowOffset = offset > 0 ? Math.max(0, offset - slotRows) : 0;
 
   // An announcement belongs to the history entry it was made on: any later
   // navigation (page change, filter push, silent replace) retires it.
@@ -180,7 +188,7 @@ export function usePagedQuery<TData, TItem>({
       key: location.key,
       announcement:
         itemCount > 0
-          ? { page, lastPage, from: offset + 1, to: offset + itemCount, total, totalIsLowerBound }
+          ? { page, lastPage, from: firstRowOffset + 1, to: firstRowOffset + itemCount, total, totalIsLowerBound }
           : null,
     });
     onPageSettledRef.current?.();
@@ -196,6 +204,7 @@ export function usePagedQuery<TData, TItem>({
     total,
     totalIsLowerBound,
     lastPage,
+    firstRowOffset,
     holdEmptyPage,
     location.key,
     replacePage,
@@ -205,7 +214,7 @@ export function usePagedQuery<TData, TItem>({
   const pagerProps: PagedPagerProps = {
     page,
     lastPage,
-    offset,
+    offset: firstRowOffset,
     itemCount,
     total,
     totalIsLowerBound,
@@ -219,6 +228,7 @@ export function usePagedQuery<TData, TItem>({
     total,
     totalIsLowerBound,
     offset,
+    firstRowOffset,
     page,
     lastPage,
     isLoading: query.isLoading,
