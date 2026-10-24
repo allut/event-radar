@@ -191,6 +191,12 @@
   padding: var(--space-4);
 }
 
+/* Same box as the SelectField trigger beside it, so the two controls match in height. */
+.field .loggerInput {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-base);
+}
+
 .loggerBar {
   display: flex;
   flex-wrap: wrap;

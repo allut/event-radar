@@ -16,10 +16,7 @@
   composes: sectionTitle from '../shared/AdminCommerce.module.css';
 }
 
-.sectionTitleInline {
-  composes: sectionTitle from '../shared/AdminCommerce.module.css';
-  margin: 0;
-}
+.sectionTitleInline { composes: sectionTitleInline from '../shared/AdminCommerce.module.css'; }
 
 .hintBlock {
   composes: hint from '../shared/AdminCommerce.module.css';

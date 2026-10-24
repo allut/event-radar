@@ -69,7 +69,7 @@ export default function ComplaintLogger({ complaints }: { complaints: PromotionC
           <label className={styles.label} htmlFor={`${id}-who`}>{COPY.complaintWho}</label>
           <input
             id={`${id}-who`}
-            className={styles.input}
+            className={`${styles.input} ${styles.loggerInput}`}
             placeholder={COPY.complaintWhoPlaceholder}
             value={who}
             onChange={(e) => setWho(e.target.value)}

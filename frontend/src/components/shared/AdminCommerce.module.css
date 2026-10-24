@@ -18,6 +18,11 @@
   margin: 0 0 var(--space-3);
 }
 
+.sectionTitleInline {
+  composes: sectionTitle;
+  margin: 0;
+}
+
 .hint {
   color: var(--text-muted);
   font-size: var(--fs-2xs);
