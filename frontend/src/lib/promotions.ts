@@ -227,8 +227,22 @@ export interface PromotionSnapshot {
 
 export interface PromotionAuditEntry {
   action: string;
-  result: string;
+  /** The audit row's JSON `result`: a status snapshot plus the command's own fields. */
+  result: Record<string, unknown>;
   created_at: string;
+}
+
+const AUDIT_DETAIL_KEYS = ['actor', 'reason', 'note', 'invoice_reference', 'end_reason', 'to_event_id', 'changes'] as const;
+
+/** One line of what a command recorded ("reason: …, invoice_reference: ER-M-1"). The
+ * status snapshot every row carries is left out. */
+export function auditSummary(result: PromotionAuditEntry['result']): string {
+  if (typeof result !== 'object' || result === null) return String(result ?? '');
+  return AUDIT_DETAIL_KEYS.flatMap((key) => {
+    const value = result[key];
+    if (value === undefined || value === null || value === '') return [];
+    return [`${key}: ${typeof value === 'object' ? JSON.stringify(value) : String(value)}`];
+  }).join(', ');
 }
 
 export interface RefundPrefill {

@@ -85,8 +85,8 @@ function detail(overrides: Record<string, unknown> = {}, actions: Record<string,
       },
     ],
     audit: [
-      { action: 'promotion_mark_paid', result: 'ok', created_at: '2026-10-13T11:20:00+03:00' },
-      { action: 'promotion_grant', result: 'ok', created_at: '2026-10-13T11:00:00+03:00' },
+      { action: 'promotion_mark_paid', result: { status: 'paid', invoice_reference: 'ER-M-0007' }, created_at: '2026-10-13T11:20:00+03:00' },
+      { action: 'promotion_grant', result: { status: 'unpaid' }, created_at: '2026-10-13T11:00:00+03:00' },
     ],
     ...overrides,
   };
@@ -144,6 +144,8 @@ describe('AdminPromotionDetail', () => {
     const audit = screen.getByRole('region', { name: 'Audit' });
     expect(within(audit).getAllByRole('listitem')).toHaveLength(2);
     expect(within(audit).getByText('promotion_mark_paid')).toBeInTheDocument();
+    // The API sends `result` as a JSON object; it renders as a one-line summary, not as a React child.
+    expect(within(audit).getByText('invoice_reference: ER-M-0007')).toBeInTheDocument();
   });
 
   it('enables each action from the API flags', async () => {

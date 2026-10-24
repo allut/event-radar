@@ -23,6 +23,7 @@ import {
   detailReason,
   formatDateTime,
   formatEuro,
+  auditSummary,
   formatWindow,
   gateLabel,
   isStripePaid,
@@ -383,7 +384,7 @@ export default function AdminPromotionDetail({ promotionId }: { promotionId: str
               <li key={`${a.created_at}-${a.action}`} className={styles.auditRow}>
                 <span className={`${styles.mono} ${styles.muted}`}>{formatDateTime(a.created_at)}</span>
                 <span>{a.action}</span>
-                <span className={styles.muted}>{a.result}</span>
+                <span className={styles.muted}>{auditSummary(a.result)}</span>
               </li>
             ))}
           </ul>
