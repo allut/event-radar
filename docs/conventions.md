@@ -13,6 +13,7 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 - **`app/constants/__init__.py` stays empty, so every import names the defining file.** A re-export facade adds a hop to go-to-definition and lets constants pile back into one place. Generated cross-stack values are imported from `app._generated.shared_constants` directly.
 - **The frontend mirrors it in `frontend/src/constants/<domain>.ts`, with no `index.ts` barrel.** Each file imports with `.js` extensions because Pages Functions load it as unbundled ESM. Generated values come from `frontend/src/_generated/sharedConstants.ts` directly.
 - **LLM prompts sit apart in `app/llm/prompts.py`** so prompt-engineering diffs stay clean. Scrape selectors sit apart in `app/ingestion/selectors.py` for the same reason.
+- **A comment names a schedule constant and never restates its value or a UTC offset.** `CLEANUP_HOUR` stays true when the hour moves, but "Sun 03:30 EET" goes stale, and "EET" is the winter offset only. The `docs/backend-ops.md` cadence table is the one written copy, and `tests/test_main_scheduler.py` checks it against the registered triggers.
 - **Cross-stack values live once in `shared/` and are generated into both stacks.** The backend imports `app._generated.shared_constants` and the frontend `frontend/src/_generated/sharedConstants.ts`, so the two can't disagree. `backend/tests/test_generated_sync.py` fails when the generated files drift.
 
 ### Helpers

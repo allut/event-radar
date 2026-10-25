@@ -207,6 +207,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 | Sun 02:30 | `cleanup_stale_data` |
 
 - **The daily jobs run in a fixed order.** Refetch reconciles source detail pages, stale claims expire, then the feed build reads the result an hour before the digest sends it.
+- **Register every job in `_register_scheduled_jobs()`.** The DST guard in `tests/test_main_scheduler.py` and the cadence-table check read the scheduler from there only.
 - **No cron job runs in the 03:00 hour.** It happens twice on the October fall-back Sunday and not at all in March, so APScheduler fires the job twice or shifts it. `tests/test_main_scheduler.py` fails when one lands there.
 - **`backfill_publisher_ids` and `expire_stale_claims` are scheduler-only.** Neither has an admin trigger. The publisher backfill has a CLI instead (see Maintenance Scripts).
 - **`ENABLE_SCHEDULER` turns the scheduler off in the devcontainer.** A `--reload` server left running overnight then can't arm live scrapes, LLM spend or digest email on a timer.
