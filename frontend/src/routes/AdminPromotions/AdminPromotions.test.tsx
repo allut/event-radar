@@ -36,6 +36,7 @@ function promotion(overrides: Record<string, unknown> = {}) {
     organizer_name: 'Noblessner Events OÜ',
     status: 'paid',
     state: 'live',
+    paused_reason: null,
     start_date: '2026-10-15',
     end_date: '2026-10-21',
     days: 7,
@@ -106,6 +107,15 @@ describe('AdminPromotions', () => {
     expect(await screen.findByText('2/5')).toBeInTheDocument();
     const full = screen.getByText('5/5');
     expect(full.closest('[data-full="true"]')).not.toBeNull();
+  });
+
+  it('shows a live row the fill gate pauses as Paused with the reason', async () => {
+    routeGets([promotion({ paused_reason: 'organizer_not_owner' })]);
+    renderWithProviders(<AdminPromotions />);
+    const row = (await screen.findByText('Noblessner Food Fest')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('Paused')).toBeInTheDocument();
+    expect(within(row).getByText('Paused · claim inactive')).toBeInTheDocument();
+    expect(within(row).queryByText('Live')).toBeNull();
   });
 
   it('lists promotions with computed state pills and the unpaid reason', async () => {

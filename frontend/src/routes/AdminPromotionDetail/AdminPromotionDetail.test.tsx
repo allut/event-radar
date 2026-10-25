@@ -35,6 +35,7 @@ function detail(overrides: Record<string, unknown> = {}, actions: Record<string,
     organizer_name: 'Noblessner Events OÜ',
     status: 'paid',
     state: 'live',
+    paused_reason: null,
     start_date: '2026-10-14',
     end_date: '2026-10-20',
     days: 7,
@@ -179,6 +180,14 @@ describe('AdminPromotionDetail', () => {
     serve(detail(UNPAID));
     renderWithProviders(<AdminPromotionDetail promotionId="5" />);
     expect(await screen.findByText(/No complete days yet/)).toBeInTheDocument();
+  });
+
+  it('shows a dormant-claim pause in the header pill with its reason', async () => {
+    serve(detail({ paused_reason: 'organizer_not_owner' }));
+    renderWithProviders(<AdminPromotionDetail promotionId="5" />);
+    expect(await screen.findByText('Paused')).toBeInTheDocument();
+    expect(screen.queryByText('Live')).toBeNull();
+    expect(screen.getByText('Paused · claim inactive')).toBeInTheDocument();
   });
 
   it('shows the not-showing reason for an unpaid Promotion and an ended one', async () => {

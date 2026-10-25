@@ -1860,11 +1860,10 @@ async def admin_list_promotions(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=ERROR_PROMOTION_INVALID_STATE,
         )
-    today = tallinn_today(now_tallinn())
+    now = now_tallinn()
+    today = tallinn_today(now)
     async with AsyncSessionLocal() as db:
-        items, total = await list_promotions(
-            db, state=state, limit=limit, offset=offset, today=today
-        )
+        items, total = await list_promotions(db, state=state, limit=limit, offset=offset, now=now)
     return {
         "today": today.isoformat(),
         "promotions": items,

@@ -214,7 +214,7 @@ The Organizer offer and request path (`app/routers/organizer_promotions.py`, `ap
 ### The List
 
 - **`GET /organizer/promotions` returns requests and Promotions newest first.** Status is `requested`, `declined`, `awaiting_payment`, `awaiting_checkout` (an open card checkout), `scheduled`, `live`, `paused`, `finished`, `ended_early` or `cancelled`. Items carry `billing_email` and, once card-paid, `invoice_url`. Withdrawn and expired requests and abandoned card checkouts drop off, and a granted request is replaced by its Promotion.
-- **A `paused` item carries `paused_reason`,** the fill gate's not-showing code. The frontend turns it into plain words.
+- **A `paused` item carries `paused_reason`,** the fill gate's not-showing code. The frontend turns it into plain words. The admin list and detail carry the same `paused_reason`, computed by the one `views.paused_reasons()` (one `evaluate_gate` call per page).
 
 ### Per-Day Report
 

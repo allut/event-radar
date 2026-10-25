@@ -40,7 +40,6 @@ from app.constants.promotions import (
     PROMOTION_STATE_LIVE,
     PROMOTION_STATE_SCHEDULED,
     PROMOTION_STATUS_ENDED_EARLY,
-    PROMOTION_STATUS_PAID,
     PROMOTION_STATUS_UNPAID,
     PROMOTION_STATUS_VOID,
     PROMOTION_UNAVAILABLE_HORIZON_DAYS,
@@ -50,11 +49,10 @@ from app.constants.promotions import (
 from app.events.localize import resolve_title
 from app.models.models import Event, Organizer, Promotion, PromotionRequest
 from app.promotions.cap import full_days
-from app.promotions.fill import evaluate_gate
 from app.promotions.flags import checkout_enabled
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.requests import promotable_event_ids
-from app.promotions.views import daily_stats_table, load_daily_stats, price_breakdown
+from app.promotions.views import daily_stats_table, load_daily_stats, paused_reasons, price_breakdown
 from app.promotions.windows import event_last_day, now_tallinn, promotion_state, tallinn_today
 
 # The organizer report leaves out viewer-sentiment (slot dislikes): the ticket
@@ -66,21 +64,6 @@ REPORT_COLUMNS = (
     PROMOTION_STAT_WEB_OPENS,
     PROMOTION_STAT_DIGEST_OPENS,
 )
-
-
-async def paused_reasons(
-    db: AsyncSession, promotions: Sequence[Promotion], now: datetime
-) -> dict[int, str]:
-    """Promotion id to the fill gate's not-showing reason, for paid Promotions
-    whose window covers today. Absent means showing (or not live)."""
-    today = tallinn_today(now)
-    live = [
-        p
-        for p in promotions
-        if p.status == PROMOTION_STATUS_PAID and p.start_date <= today <= p.end_date
-    ]
-    results = await evaluate_gate(db, live, now)
-    return {r.promotion.id: r.reason for r in results if r.reason is not None}
 
 
 def list_status(promotion: Promotion, today: date, paused_reason: str | None) -> str:

@@ -28,6 +28,8 @@ export interface PromotionRow {
   organizer_name: string | null;
   status: string;
   state: string;
+  /** The fill gate's current not-showing reason for a live paid Promotion; null when showing. */
+  paused_reason: string | null;
   start_date: string;
   end_date: string;
   days: number;
@@ -176,6 +178,10 @@ export function promotionPill(p: PromotionRow): { label: string; tone: Promotion
       tone: 'attention',
       reason: `Unpaid · voids when ${formatDay(p.start_date)} begins`,
     };
+  }
+  if (p.state === PROMOTION_STATE.live && p.paused_reason !== null) {
+    const label = PROMOTION_GATE_REASON_LABELS[p.paused_reason] ?? p.paused_reason;
+    return { label: PROMOTION_DETAIL_COPY.pausedPrefix, tone: 'attention', reason: `${PROMOTION_DETAIL_COPY.pausedPrefix} · ${label}` };
   }
   if (p.state === PROMOTION_STATE.live) return { label: 'Live', tone: 'live', reason: null };
   return { label: 'Scheduled', tone: 'scheduled', reason: null };
@@ -329,8 +335,8 @@ export function newlyFlaggedTag(p: PromotionDetail): string | null {
   return restrictionTag(p.event.promotion_restriction)?.toLowerCase() ?? null;
 }
 
-/** The header pill: a live Promotion that the restriction gate pauses reads
- * "Paused" in the attention tone. */
+/** The header pill: a live Promotion the fill gate pauses reads "Paused" in
+ * the attention tone, the restriction case included. */
 export function detailPill(p: PromotionDetail): ReturnType<typeof promotionPill> {
   const pill = promotionPill(p);
   if (p.state === PROMOTION_STATE.live && newlyFlaggedTag(p) !== null) {

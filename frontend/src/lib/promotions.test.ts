@@ -9,6 +9,7 @@ function row(overrides: Partial<PromotionRow> = {}): PromotionRow {
     organizer_name: 'Jazzklubi MTÜ',
     status: 'paid',
     state: 'live',
+    paused_reason: null,
     start_date: '2026-10-17',
     end_date: '2026-10-23',
     days: 7,
@@ -33,6 +34,16 @@ describe('promotionPill', () => {
   it('shows computed live and scheduled for paid rows', () => {
     expect(promotionPill(row()).label).toBe('Live');
     expect(promotionPill(row({ state: 'scheduled' })).label).toBe('Scheduled');
+  });
+
+  it('shows a live row the fill gate pauses as Paused with its reason', () => {
+    const pill = promotionPill(row({ paused_reason: 'organizer_not_owner' }));
+    expect(pill).toEqual({ label: 'Paused', tone: 'attention', reason: 'Paused · claim inactive' });
+  });
+
+  it('ignores a pause reason on a scheduled or finished row', () => {
+    expect(promotionPill(row({ state: 'scheduled', paused_reason: 'event_ended' })).label).toBe('Scheduled');
+    expect(promotionPill(row({ state: 'finished', paused_reason: 'event_ended' })).label).toBe('Finished');
   });
 
   it('flags an unpaid row as awaiting payment with the void-at-start reason', () => {

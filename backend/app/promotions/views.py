@@ -1,5 +1,6 @@
 """Read side of Promotions: list, serialization and the grant form's context."""
 
+from collections.abc import Sequence
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
@@ -25,6 +26,7 @@ from app.constants.promotions import (
     PROMOTION_VAT_RATE_PERCENT,
 )
 from app.models.models import AdminAction, Event, Organizer, Promotion, PromotionDailyStat
+from app.promotions.fill import evaluate_gate
 from app.promotions.grant import net_price_cents, vat_cents
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.refunds import refund_prefill
@@ -36,6 +38,21 @@ from app.promotions.windows import (
     tallinn_today,
     window_dates,
 )
+
+
+async def paused_reasons(
+    db: AsyncSession, promotions: Sequence[Promotion], now: datetime
+) -> dict[int, str]:
+    """Promotion id to the fill gate's not-showing reason, for paid Promotions
+    whose window covers today. Absent means showing (or not live)."""
+    today = tallinn_today(now)
+    live = [
+        p
+        for p in promotions
+        if p.status == PROMOTION_STATUS_PAID and p.start_date <= today <= p.end_date
+    ]
+    results = await evaluate_gate(db, live, now)
+    return {r.promotion.id: r.reason for r in results if r.reason is not None}
 
 
 def state_filter(state: str, today: date) -> ColumnElement[bool]:
@@ -55,7 +72,11 @@ def price_breakdown(net_cents: int, vat_rate_percent: Decimal) -> dict:
 
 
 def serialize_promotion(
-    promotion: Promotion, event_title: str, organizer_name: str | None, today: date
+    promotion: Promotion,
+    event_title: str,
+    organizer_name: str | None,
+    today: date,
+    paused_reason: str | None = None,
 ) -> dict:
     price = price_breakdown(promotion.net_price_cents, promotion.vat_rate_percent)
     return {
@@ -68,6 +89,7 @@ def serialize_promotion(
         "state": promotion_state(
             promotion.status, promotion.start_date, promotion.end_date, today
         ),
+        "paused_reason": paused_reason,
         "start_date": promotion.start_date.isoformat(),
         "end_date": promotion.end_date.isoformat(),
         "days": promotion.days,
@@ -115,10 +137,11 @@ def serialize_promotion(
 
 
 async def list_promotions(
-    db: AsyncSession, *, state: str | None, limit: int, offset: int, today: date
+    db: AsyncSession, *, state: str | None, limit: int, offset: int, now: datetime
 ) -> tuple[list[dict], int]:
     """One page of Promotions (newest window first) and the total for the
     filter. Event title and Organizer name come from the same join."""
+    today = tallinn_today(now)
     where = [state_filter(state, today)] if state else []
     total = (
         await db.scalar(select(func.count()).select_from(Promotion).where(*where))
@@ -134,7 +157,10 @@ async def list_promotions(
             .offset(offset)
         )
     ).all()
-    return [serialize_promotion(p, title, name, today) for p, title, name in rows], total
+    paused = await paused_reasons(db, [p for p, _, _ in rows], now)
+    return [
+        serialize_promotion(p, title, name, today, paused.get(p.id)) for p, title, name in rows
+    ], total
 
 
 async def grant_context(db: AsyncSession, event: Event, now: datetime) -> dict:
@@ -151,6 +177,7 @@ async def grant_context(db: AsyncSession, event: Event, now: datetime) -> dict:
             .order_by(Promotion.start_date.desc(), Promotion.id.desc())
         )
     ).all()
+    paused = await paused_reasons(db, existing, now)
     return {
         "event_id": event.id,
         "event_title": event.title_orig,
@@ -178,7 +205,9 @@ async def grant_context(db: AsyncSession, event: Event, now: datetime) -> dict:
             "vat_rate_percent": str(PROMOTION_VAT_RATE_PERCENT),
         },
         "promotions": [
-            serialize_promotion(p, event.title_orig, owner.name if owner else None, today)
+            serialize_promotion(
+                p, event.title_orig, owner.name if owner else None, today, paused.get(p.id)
+            )
             for p in existing
         ],
     }
@@ -259,8 +288,13 @@ async def promotion_detail(db: AsyncSession, promotion: Promotion, now: datetime
             .order_by(AdminAction.id.desc())
         )
     ).all()
+    paused = await paused_reasons(db, [promotion], now)
     payload = serialize_promotion(
-        promotion, event.title_orig, organizer.name if organizer else None, today
+        promotion,
+        event.title_orig,
+        organizer.name if organizer else None,
+        today,
+        paused.get(promotion.id),
     )
     payload["event"] = {
         "id": event.id,
