@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { EXPLORE_PARAM, SEARCH_MAX_LEN } from '../../constants/explore';
+import { BROWSE_QUERY_MAX_LEN } from '../../_generated/sharedConstants';
+import { EXPLORE_PARAM } from '../../constants/explore';
 import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
 import { cx } from '../../utils';
@@ -45,7 +46,7 @@ export function SearchField({ locale, className, onDone }: SearchFieldProps) {
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        maxLength={SEARCH_MAX_LEN}
+        maxLength={BROWSE_QUERY_MAX_LEN}
         placeholder={t('explore_search_placeholder', locale)}
         aria-label={t('explore_search_placeholder', locale)}
       />

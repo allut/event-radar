@@ -40,6 +40,17 @@ export const ORGANIZER_OWN_CLAIMS_PAGE_SIZE = 20;
 export const PROMOTION_MAX_DAYS = 14;
 export const PROMOTION_DAY_PRICE_CENTS = 500;
 export const PROMOTION_CHECKOUT_SESSION_MINUTES = 30;
+export const BROWSE_QUERY_MAX_LEN = 200;
+export const ORGANIZER_NAME_MAX_LEN = 255;
+export const ORGANIZER_VENUE_NAME_MAX_LEN = 255;
+export const ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500;
+export const REPORT_DETAIL_MAX_CHARS = 500;
+export const PROMOTION_DECLINE_REASON_MAX_CHARS = 1000;
+export const OAUTH_ERROR_QUERY_PARAM = 'google_error';
+export const OAUTH_ERROR_DENIED = 'access_denied';
+export const GOOGLE_SIGNIN_RESULT_QUERY_PARAM = 'google_signin';
+export const AUTH_TRACK_USER = 'user';
+export const AUTH_TRACK_ORGANIZER = 'organizer';
 export const PROMOTION_VAT_RATE_PERCENT = 24;
 
 export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];

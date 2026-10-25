@@ -1,11 +1,11 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
+import { PROMOTION_DECLINE_REASON_MAX_CHARS } from '../../_generated/sharedConstants';
 import { ADMIN_GENERIC_ERROR } from '../../constants/admin';
 import { API, QUERY_KEYS } from '../../constants/api';
 import { LOCALE_EN } from '../../constants/core';
 import {
-  PROMOTION_DECLINE_REASON_MAX,
   PROMOTION_DECLINE_ROWS,
   PROMOTION_REQUEST_COPY as COPY,
 } from '../../constants/promotions';
@@ -59,12 +59,12 @@ export default function DeclineRequestModal({ request, onClose, onDeclined }: De
             id={`${id}-reason`}
             className={styles.input}
             rows={PROMOTION_DECLINE_ROWS}
-            maxLength={PROMOTION_DECLINE_REASON_MAX}
+            maxLength={PROMOTION_DECLINE_REASON_MAX_CHARS}
             value={reason}
             aria-invalid={error === COPY.declineReasonRequired ? true : undefined}
             onChange={(e) => setReason(e.target.value)}
           />
-          <span className={styles.hint}>{reason.length} / {PROMOTION_DECLINE_REASON_MAX}</span>
+          <span className={styles.hint}>{reason.length} / {PROMOTION_DECLINE_REASON_MAX_CHARS}</span>
         </div>
         <p className={styles.error} role="alert">{error}</p>
         <div className={styles.panelButtons}>

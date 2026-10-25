@@ -12,12 +12,10 @@ const MIRROR_COMMENT = /\bmirror(s|ing)?\b.*\bbackend\b/i;
 // Files left out of the map have a baseline of 0. What remains here is
 // frontend-only by nature or waiting on its own domain commit.
 const BASELINE: Readonly<Record<string, number>> = {
-  'auth.ts': 2,
   'claims.ts': 5,
-  'explore.ts': 1,
-  'feedback.ts': 2,
-  'organizer.ts': 3,
-  'promotions.ts': 2,
+  'feedback.ts': 1,
+  'organizer.ts': 1,
+  'promotions.ts': 1,
   'sponsored.ts': 1,
 };
 

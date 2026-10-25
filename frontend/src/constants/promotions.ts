@@ -191,8 +191,6 @@ export const PROMOTION_REQUEST_STATUS_OPTIONS = [
   { value: PROMOTION_REQUEST_STATUS.declined, label: 'Declined' },
   { value: PROMOTION_REQUEST_STATUS.expired, label: 'Expired' },
 ] as const;
-// Mirrors backend PROMOTION_DECLINE_REASON_MAX_CHARS.
-export const PROMOTION_DECLINE_REASON_MAX = 1000;
 export const PROMOTION_DECLINE_ROWS = 4;
 // Backend PROMOTION_NOT_SHOWING_NOT_OWNED: a dormant claim, which can recover.
 export const PROMOTION_REQUEST_DORMANT_CODE = 'organizer_not_owner';

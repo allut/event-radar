@@ -1,6 +1,7 @@
 """Ranking and browse: Daily 5, score weights, signals, time slots, browse sorting and pagination, onboarding personas."""
 
 from app._generated.shared_constants import (
+    BROWSE_QUERY_MAX_LEN as BROWSE_QUERY_MAX_LEN,
     PERSONA_MAX_SELECTABLE,
     PERSONA_PRIMARY_WEIGHT,
     PERSONA_SECONDARY_WEIGHT,
@@ -86,7 +87,6 @@ BROWSE_MAX_PAGE_SIZE: int = 60
 # ?q= keyword search — keyword_filter builds a %...% pattern against two
 # trigram GIN indexes; an unbounded string is cheap to send and expensive to
 # scan, and RATE_LIMIT_BROWSE alone doesn't bound the per-request cost.
-BROWSE_QUERY_MAX_LEN: int = 200
 
 # Shared pagination validation floors — every `limit`/`offset` Query() across
 # admin.py/browse.py/feedback.py enforces the same lower bound; centralized so

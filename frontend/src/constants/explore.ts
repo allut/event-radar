@@ -91,5 +91,3 @@ export const EXPLORE_URL_FLAG_TRUE = '1';
 export const EXPLORE_API_FLAG_TRUE = 'true';
 
 // ─── Top bar ─────────────────────────────────────────────────────────────────
-// Mirrors the backend's BROWSE_QUERY_MAX_LEN.
-export const SEARCH_MAX_LEN = 200;

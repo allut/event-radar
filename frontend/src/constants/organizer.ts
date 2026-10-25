@@ -8,11 +8,6 @@ import { type ContentLang, LOCALE_ET } from './core.js';
 // field for this, so a stale/cleared browser just re-shows it once.
 export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_dismissed';
 
-// Mirrors backend ORGANIZER_NAME_MAX_LEN (app/constants/organizer.py).
-export const ORGANIZER_NAME_MAX_LEN = 255;
-// Mirrors backend ORGANIZER_VENUE_NAME_MAX_LEN/ORGANIZER_VENUE_ADDRESS_MAX_LEN (app/constants/organizer.py).
-export const ORGANIZER_VENUE_NAME_MAX_LEN = 255;
-export const ORGANIZER_VENUE_ADDRESS_MAX_LEN = 500;
 
 // ─── Organizer submission ────────────────────────────────────────────────────
 // ORGANIZER_IMAGE_ALLOWED_MIME (_generated/sharedConstants.ts) is sourced from

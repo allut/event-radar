@@ -17,18 +17,6 @@ export const SIGNED_IN_HINT_KEY = 'session_token';
 // backend) that must never be confused for one another. See lib/organizerAuth.ts.
 export const ORGANIZER_SIGNED_IN_HINT_KEY = 'organizer_session_token';
 
-// Mirrors backend OAUTH_ERROR_QUERY_PARAM/OAUTH_ERROR_DENIED (app/constants/auth.py) —
-// the callback redirect's error query param + the one outcome mapped to the
-// "cancelled" copy; every other OAUTH_ERROR_* code renders the generic failed copy.
-export const GOOGLE_SIGNIN_ERROR_PARAM = 'google_error';
-export const GOOGLE_SIGNIN_ERROR_DENIED = 'access_denied';
-// Mirrors backend GOOGLE_SIGNIN_RESULT_QUERY_PARAM/AUTH_TRACK_USER/
-// AUTH_TRACK_ORGANIZER (app/constants/auth.py) — the Google callback's success
-// redirect carries this so main.tsx can set the right track's signed-in
-// hint before the router's first render. See lib/googleSignInLanding.ts.
-export const GOOGLE_SIGNIN_RESULT_PARAM = 'google_signin';
-export const GOOGLE_SIGNIN_RESULT_TRACK_USER = 'user';
-export const GOOGLE_SIGNIN_RESULT_TRACK_ORGANIZER = 'organizer';
 // Resolved VITE_GOOGLE_SIGNIN_*_ENABLED build gates — one place so Login/
 // OrganizerLogin can't drift on how the env string is parsed. Functions, not
 // frozen booleans: each test file's vi.stubEnv() sets the var per-test, and

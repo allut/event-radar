@@ -1,5 +1,9 @@
 """Event reports: reasons, statuses, detail limits, resolution notes, and report errors."""
 
+from app._generated.shared_constants import (
+    REPORT_DETAIL_MAX_CHARS as REPORT_DETAIL_MAX_CHARS,
+)
+
 # Report-an-inappropriate-event feature (event_reports table).
 REPORT_REASON_SPAM_OR_SCAM = "spam_or_scam"
 REPORT_REASON_SEXUAL_OR_EXPLICIT = "sexual_or_explicit"
@@ -24,7 +28,6 @@ VALID_REPORT_REASONS = frozenset(
 REPORT_STATUS_OPEN = "open"
 REPORT_STATUS_RESOLVED = "resolved"
 VALID_REPORT_STATUSES = frozenset({REPORT_STATUS_OPEN, REPORT_STATUS_RESOLVED})
-REPORT_DETAIL_MAX_CHARS = 500
 
 # Admin-authenticated but persisted to a Text column and emailed verbatim to
 # every reporter (see app/email/report_reporter.py) — bounded so validation

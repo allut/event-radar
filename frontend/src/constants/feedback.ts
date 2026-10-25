@@ -20,9 +20,6 @@ export const REPORT_REASONS: { value: string; labelKey: string; descriptionKey: 
 export const REPORT_REASONS_BY_VALUE: Map<string, (typeof REPORT_REASONS)[number]> = new Map(
   REPORT_REASONS.map((r) => [r.value, r]),
 );
-// Mirrors the backend's REPORT_DETAIL_MAX_CHARS (app/constants/reports.py) — client-side
-// validation only, the server re-validates and is the real boundary.
-export const REPORT_DETAIL_MAX_CHARS = 500;
 export const REPORT_DETAIL_TEXTAREA_ROWS = 4;
 
 // ─── Events / feedback ───────────────────────────────────────────────────────

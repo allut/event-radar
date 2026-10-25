@@ -3,7 +3,12 @@
 from typing import Literal
 
 from app._generated.shared_constants import (
+    AUTH_TRACK_ORGANIZER as AUTH_TRACK_ORGANIZER,
+    AUTH_TRACK_USER as AUTH_TRACK_USER,
+    GOOGLE_SIGNIN_RESULT_QUERY_PARAM as GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
     MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_MINUTES_SHARED,
+    OAUTH_ERROR_DENIED as OAUTH_ERROR_DENIED,
+    OAUTH_ERROR_QUERY_PARAM as OAUTH_ERROR_QUERY_PARAM,
     SESSION_TTL_DAYS as _SESSION_TTL_DAYS_SHARED,
 )
 
@@ -71,8 +76,6 @@ OAUTH_STATE_TTL_MINUTES = 10
 # (app/auth/tokens.py) — the cross-track replay guard; a typo at any of the
 # four call sites (auth.py x2, organizer_auth.py x2) would silently break the
 # mint/verify pairing, so both are named constants rather than inline strings.
-AUTH_TRACK_USER = "user"
-AUTH_TRACK_ORGANIZER = "organizer"
 # PyJWKClient's own cache_jwk_set lifespan (app/auth/google_oauth.py) — how
 # long the fetched Google JWKS keyset is cached before a re-fetch.
 GOOGLE_JWKS_CACHE_LIFESPAN_SECONDS = 300
@@ -133,14 +136,11 @@ GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL = "unverified_email"
 # main.tsx which track's hint to set before the router's first render (see
 # frontend/src/lib/googleSignInLanding.ts). Values reuse AUTH_TRACK_USER/
 # AUTH_TRACK_ORGANIZER above — no separate value constants.
-GOOGLE_SIGNIN_RESULT_QUERY_PARAM = "google_signin"
 # Callback redirect-with-error query param + failure reason codes — internal,
 # not i18n keys (mirrors the ERROR_* constants' English-only convention).
-OAUTH_ERROR_QUERY_PARAM = "google_error"
 OAUTH_ERROR_STATE_INVALID = "state_invalid"
 OAUTH_ERROR_TOKEN_EXCHANGE_FAILED = "token_exchange_failed"
 OAUTH_ERROR_VERIFICATION_FAILED = "verification_failed"
-OAUTH_ERROR_DENIED = "access_denied"
 
 # Admin console auth (issue #154) — third auth track alongside the consumer and
 # organizer ones above. No magic link (password + TOTP instead) and no admins
