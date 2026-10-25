@@ -19,6 +19,8 @@ from app.constants.http import (
     HEADER_CONTENT_TYPE,
     MIME_APPLICATION_JSON,
 )
+from app.constants.jobs import LOG_SHIP_SUPPRESS_OK_JOBS
+from app.constants.log_events import LOG_EVENT_JOB_RUN, LOG_STATUS_OK
 from app.constants.ops import (
     UVICORN_ACCESS_LOGGER,
     LOG_DATE_FORMAT,
@@ -216,6 +218,24 @@ class _AccessPathSuppressFilter(logging.Filter):
         return True
 
 
+class _JobRunSuppressFilter(logging.Filter):
+    """Drops successful job_run records of high-frequency jobs before they
+    ship to Axiom.
+
+    Matches LOG_SHIP_SUPPRESS_OK_JOBS. Only status "ok" is suppressed — an
+    error run still ships so the scheduled-job-failed monitor sees it.
+    Attached only to the shipping QueueHandler, so suppressed lines still
+    reach the console handler (Render logs).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not (
+            getattr(record, "event", None) == LOG_EVENT_JOB_RUN
+            and getattr(record, "status", None) == LOG_STATUS_OK
+            and getattr(record, "job", None) in LOG_SHIP_SUPPRESS_OK_JOBS
+        )
+
+
 class _DevTextFormatter(logging.Formatter):
     """Text formatter for local dev console output.
 
@@ -284,6 +304,7 @@ def configure_logging() -> None:
         ship_queue: queue.Queue = queue.Queue(LOG_SHIP_QUEUE_MAXSIZE)
         queue_handler = logging.handlers.QueueHandler(ship_queue)
         queue_handler.addFilter(_AccessPathSuppressFilter())
+        queue_handler.addFilter(_JobRunSuppressFilter())
         root.addHandler(queue_handler)
         global _queue_listener
         _queue_listener = logging.handlers.QueueListener(

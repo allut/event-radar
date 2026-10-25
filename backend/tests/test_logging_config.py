@@ -9,6 +9,16 @@ import pytest
 
 from app import logging_config
 from app.config import settings
+from app.constants.jobs import (
+    JOB_ID_EXPIRE_STALE_CLAIMS,
+    JOB_ID_FLUSH_PROMOTION_COUNTERS,
+    JOB_ID_SWEEP_PROMOTIONS,
+)
+from app.constants.log_events import (
+    LOG_EVENT_JOB_RUN,
+    LOG_STATUS_ERROR,
+    LOG_STATUS_OK,
+)
 from app.constants.ops import (
     LOG_FILE_NAME,
     LOG_FRAMEWORK_LOGGER_NAMES,
@@ -19,6 +29,7 @@ from app.logging_config import (
     JsonLogFormatter,
     _AccessPathStripFilter,
     _AccessPathSuppressFilter,
+    _JobRunSuppressFilter,
     _text_formatter,
     configure_logging,
     shutdown_log_shipping,
@@ -523,3 +534,60 @@ def test_prod_ship_queue_handler_has_suppress_filter(monkeypatch) -> None:
     assert any(
         isinstance(f, _AccessPathSuppressFilter) for f in queue_handlers[0].filters
     )
+
+
+def _make_job_run_record(job: str, status: str) -> logging.LogRecord:
+    record = _make_record(f"{job} completed")
+    record.event = LOG_EVENT_JOB_RUN
+    record.job = job
+    record.status = status
+    return record
+
+
+@pytest.mark.parametrize(
+    "job", [JOB_ID_FLUSH_PROMOTION_COUNTERS, JOB_ID_SWEEP_PROMOTIONS]
+)
+def test_job_run_suppress_filter_drops_ok_run_of_suppressed_job(job) -> None:
+    record = _make_job_run_record(job, LOG_STATUS_OK)
+    assert _JobRunSuppressFilter().filter(record) is False
+
+
+def test_job_run_suppress_filter_keeps_error_run_of_suppressed_job() -> None:
+    record = _make_job_run_record(JOB_ID_SWEEP_PROMOTIONS, LOG_STATUS_ERROR)
+    assert _JobRunSuppressFilter().filter(record) is True
+
+
+def test_job_run_suppress_filter_keeps_ok_run_of_other_job() -> None:
+    record = _make_job_run_record(JOB_ID_EXPIRE_STALE_CLAIMS, LOG_STATUS_OK)
+    assert _JobRunSuppressFilter().filter(record) is True
+
+
+def test_job_run_suppress_filter_keeps_records_without_job_fields() -> None:
+    assert _JobRunSuppressFilter().filter(_make_record()) is True
+
+
+def test_prod_ship_queue_handler_has_job_run_suppress_filter(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "LOG_SHIP_URL", "https://logs.example.com/ingest")
+    monkeypatch.setattr(settings, "LOG_SHIP_TOKEN", "secret-token")
+
+    configure_logging()
+
+    queue_handlers = [
+        h
+        for h in logging.getLogger().handlers
+        if isinstance(h, logging.handlers.QueueHandler)
+    ]
+    assert any(isinstance(f, _JobRunSuppressFilter) for f in queue_handlers[0].filters)
+
+
+def test_apscheduler_executor_info_not_enabled_but_error_is(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "LOG_SHIP_URL", "https://logs.example.com/ingest")
+    monkeypatch.setattr(settings, "LOG_SHIP_TOKEN", "secret-token")
+
+    configure_logging()
+
+    executor = logging.getLogger("apscheduler.executors.default")
+    assert not executor.isEnabledFor(logging.INFO)
+    assert executor.isEnabledFor(logging.ERROR)

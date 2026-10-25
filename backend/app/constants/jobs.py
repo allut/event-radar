@@ -54,6 +54,13 @@ JOB_ID_EXPIRE_STALE_CLAIMS = "expire_stale_claims"
 JOB_ID_FLUSH_PROMOTION_COUNTERS = "flush_promotion_counters"
 JOB_ID_SWEEP_PROMOTIONS = "sweep_promotions"
 
+# Per-minute jobs whose successful job_run lines are not shipped to the log
+# drain (73% of volume, ~1 ms per run, issue #637). Error runs still ship, so
+# the "Scheduled job failed" monitor is unaffected. Console logs keep them.
+LOG_SHIP_SUPPRESS_OK_JOBS: frozenset[str] = frozenset(
+    {JOB_ID_FLUSH_PROMOTION_COUNTERS, JOB_ID_SWEEP_PROMOTIONS}
+)
+
 # Scheduler job labels whose runtime string is load-bearing: the "hourly
 # ingest" value is matched verbatim by an Axiom monitor (docs/observability.md
 # #3b), so these keep their historical spelling rather than reusing JOB_ID_*.

@@ -63,7 +63,14 @@ LOG_FRAMEWORK_LOGGER_NAMES: tuple[str, ...] = (
 # HTTP client loggers pinned to WARNING: their per-request INFO/DEBUG lines are
 # noise, and — critically — shipping one would make the ship POST itself emit a
 # log that gets shipped, a self-amplifying loop. WARNING severs it at any root level.
-LOG_QUIET_LOGGER_NAMES: tuple[str, ...] = ("httpx", "httpcore")
+LOG_QUIET_LOGGER_NAMES: tuple[str, ...] = (
+    "httpx",
+    "httpcore",
+    # Two INFO lines per job run that duplicate the structured job_run line
+    # from app/main.py::_scheduled. Its ERROR "Job ... raised an exception"
+    # still ships.
+    "apscheduler.executors.default",
+)
 # uvicorn.access paths never worth shipping to the log drain. Render's platform
 # health check hits GET /health every few seconds; shipping each is pure noise.
 # Suppressed on the shipping QueueHandler only — these lines still reach Render's

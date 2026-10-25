@@ -22,7 +22,7 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `msg` | yes | rendered message text |
 | `exc` | on exceptions | full traceback string |
 | `event` | on tagged sites | structured anomaly tag — **prefer filtering on this** |
-| `job` / `status` / `duration_ms` | on `event="job_run"` | per scheduled-job telemetry |
+| `job` / `status` / `duration_ms` | on `event="job_run"` | per scheduled-job telemetry; successful runs of `flush_promotion_counters` and `sweep_promotions` (per-minute, `LOG_SHIP_SUPPRESS_OK_JOBS`) are not shipped, their errors are |
 | `path` | on `event="rate_limit_block"` | request path that was throttled |
 
 `event` values (defined in `app/constants/log_events.py`, `LOG_EVENT_*`):
