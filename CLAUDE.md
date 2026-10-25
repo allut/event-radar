@@ -83,9 +83,9 @@ The setup walkthrough is in `README.md`. Inside the container:
 
 ### Testing
 
-- **Run the backend suite from the repo root with `bash backend/scripts/scratch-test.sh [pytest args]`.** It migrates a throwaway database and drops it afterwards. `backend/tests/conftest.py` refuses to run when `DATABASE_URL` names the dev `eventradar` database.
+- **Run the backend suite from the repo root with `bash backend/scripts/scratch-test.sh [pytest args]`.** It migrates, then drops, a throwaway database. The full suite takes ~4 min: run it with `run_in_background`. `backend/tests/conftest.py` refuses to run when `DATABASE_URL` names the dev `eventradar` database.
 - **UI work starts with an approved prototype built on the real `index.css`.** Recipe: `docs/design-system.md` "Prototype Shell". A change with no visual difference (data, wiring, when an existing control shows) needs none.
-- **After editing `CLAUDE.md`, `README.md` or `docs/*.md`, run `bash backend/scripts/scratch-test.sh --no-db tests/test_docs_style.py`.** It enforces the 60-word bullet cap in `docs/writing-docs.md`.
+- **After editing `CLAUDE.md`, `README.md` or `docs/*.md`, run `bash backend/scripts/scratch-test.sh --no-db tests/test_docs_style.py`.**
 - **There is no e2e suite.** QA runs through the Playwright MCP server, and `.playwright-mcp/` is disposable scratch. Playwright stays a build dependency for the SEO prerender.
 
 ## Architecture

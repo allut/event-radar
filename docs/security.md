@@ -96,6 +96,10 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 - **A client that follows redirects must pin every hop with `host_guard_hook`** (`http_client.py`). httpx's `follow_redirects=True` has no same-origin rule, and a pre-fetch check only sees the first URL.
 - **The hook runs on each redirect hop**, checking `(scheme, hostname, port)` and re-running `resolves_to_private_ip()`. `fienta.py`, `html_base.py`, `refetch.py` and the publisher backfill client use it. Add it to any new adapter that follows redirects.
 
+### Paginated Next URLs
+
+- **A next-page URL from a response body is checked against the configured base host before it is fetched.** `FientaAdapter.fetch_organizer()` does this for `links.next`, and `organizer_sync.py::_fetch_city_scan()` for `pagination.next_page_url`. Both stop on a mismatch and keep what they have read. Copy the check into any new paginated adapter.
+
 ### Frontend URL Checks
 
 - **`frontend/src/utils.ts::safeUrl()` repeats the scheme check as defense in depth.** Route every untrusted URL through it before an `href` or `src`.
