@@ -59,5 +59,6 @@ What's in here: the house style for `CLAUDE.md`, `README.md` and `docs/*.md`, th
 ## The guard
 
 - **`backend/tests/test_docs_style.py` enforces the mechanical rules in CI:** the 60-word cap (skipping fences, headings, HTML comments and table rows), the banner, no `path:line` cites, the 1,500-word limits, and code→doc pointer resolution.
+- **It also resolves doc→code cites.** Every backticked repo path must be tracked, and every `path::symbol` must name a symbol in that file. A path a doc names on purpose but no commit tracks, such as `backend/.env`, goes in `UNTRACKED_CITES` with its reason.
 - **The rest is judgement:** sentence length, what to cut, one home per fact, and positive phrasing.
 - **Every governed doc is checked, with no exemptions.** A new `docs/*.md` passes the style checks from its first commit.
