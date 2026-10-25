@@ -1,6 +1,8 @@
 import http
 import logging
 from datetime import datetime, timedelta
+from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from sqlalchemy import select
@@ -15,7 +17,7 @@ from app.constants.ingestion import (
     FIENTA_CITY_FILTER,
     FIENTA_MIN_REQUEST_INTERVAL_SECONDS,
     FIENTA_ORGANIZER_CHECK_LIMIT,
-    FIENTA_ORGANIZER_SCAN_LIMIT,
+    FIENTA_ORGANIZER_SCAN_MAX_PAGES,
     ORGANIZER_SYNC_DB_WRITE_ATTEMPTS,
     ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD,
     PUBLISHER_NAME_MAX_LEN,
@@ -74,6 +76,44 @@ async def _check_existing_organizers(
     return stale_this_run, revived
 
 
+async def _fetch_city_scan(
+    client: httpx.AsyncClient, limiter: AsyncRateLimiter
+) -> list[dict[str, Any]]:
+    """Fetch every page of the city-filtered listing (#634).
+
+    Follows ``pagination.next_page_url``, rejecting a host other than
+    ``FIENTA_BASE_URL``'s (SSRF guard, as in ``FientaAdapter.fetch_organizer``).
+    Each page goes through ``limiter``; at most FIENTA_ORGANIZER_SCAN_MAX_PAGES
+    requests are made, with a WARNING if pages remain.
+    """
+    base_host = urlparse(settings.FIENTA_BASE_URL).hostname
+    events: list[dict[str, Any]] = []
+    url = settings.FIENTA_BASE_URL
+    params: dict[str, Any] | None = {"city": FIENTA_CITY_FILTER}
+    for _ in range(FIENTA_ORGANIZER_SCAN_MAX_PAGES):
+        await limiter.acquire()
+        resp = await http_get(client, url, params=params)
+        data = resp.json()
+        events.extend(data.get("events", []))
+        next_url = (data.get("pagination") or {}).get("next_page_url")
+        if not next_url:
+            return events
+        url = next_url
+        if urlparse(url).hostname != base_host:
+            log.error(
+                "organizer_sync: pagination.next_page_url host mismatch "
+                "(SSRF guard), stopping scan"
+            )
+            return events
+        params = None  # next_page_url already encodes every param
+    log.warning(
+        "organizer_sync: city=%s scan hit page budget=%d — results truncated",
+        FIENTA_CITY_FILTER,
+        FIENTA_ORGANIZER_SCAN_MAX_PAGES,
+    )
+    return events
+
+
 async def _discover_new_organizers(
     client: httpx.AsyncClient,
     limiter: AsyncRateLimiter,
@@ -89,23 +129,8 @@ async def _discover_new_organizers(
     Returns the (oid, name) pairs added.
     """
     added: list[tuple[int, str]] = []
-    await limiter.acquire()
     try:
-        resp = await http_get(
-            client,
-            settings.FIENTA_BASE_URL,
-            params={
-                "city": FIENTA_CITY_FILTER,
-                "limit": FIENTA_ORGANIZER_SCAN_LIMIT,
-            },
-        )
-        events = resp.json().get("events", [])
-        if len(events) == FIENTA_ORGANIZER_SCAN_LIMIT:
-            log.warning(
-                "organizer_sync: city=%s scan hit limit=%d — results may be truncated",
-                FIENTA_CITY_FILTER,
-                FIENTA_ORGANIZER_SCAN_LIMIT,
-            )
+        events = await _fetch_city_scan(client, limiter)
         org_counts: dict[int, tuple[int, str]] = {}
         for event in events:
             raw_oid = event.get("organizer_id")

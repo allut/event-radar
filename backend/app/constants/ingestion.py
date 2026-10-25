@@ -150,7 +150,8 @@ ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD = 3
 ORGANIZER_SYNC_DB_WRITE_ATTEMPTS = 2
 # Publisher.name (models/models.py) column width.
 PUBLISHER_NAME_MAX_LEN = 255
-FIENTA_ORGANIZER_SCAN_LIMIT = 1000
+# Page budget for the weekly city-filtered discovery scan; ~14 pages of 100 at today's volume (#634).
+FIENTA_ORGANIZER_SCAN_MAX_PAGES = 50
 FIENTA_ORGANIZER_CHECK_LIMIT = (
     5  # max events fetched when probing a single organizer for staleness
 )
