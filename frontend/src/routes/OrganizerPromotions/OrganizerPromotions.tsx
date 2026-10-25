@@ -23,7 +23,7 @@ import { useOrganizerPromotions } from '../../hooks/useOrganizerPromotions';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import { useToast } from '../../hooks/useToast';
 import { t, ti } from '../../i18n';
-import { formatMoney, type OrganizerPromotionItem } from '../../lib/organizerPromotions';
+import { formatMoney, grossCents, type OrganizerPromotionItem } from '../../lib/organizerPromotions';
 import PromotionRow from './PromotionRow';
 import styles from './OrganizerPromotions.module.css';
 
@@ -83,7 +83,7 @@ export default function OrganizerPromotions() {
   }, [targetId]);
 
   const dayNet = formatMoney(PROMOTION_DAY_NET_CENTS, locale);
-  const dayGross = formatMoney(Math.round((PROMOTION_DAY_NET_CENTS * (100 + PROMOTION_VAT_PERCENT)) / 100), locale);
+  const dayGross = formatMoney(grossCents(PROMOTION_DAY_NET_CENTS, PROMOTION_VAT_PERCENT), locale);
 
   return (
     <div className={styles.page}>

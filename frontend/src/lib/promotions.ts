@@ -1,11 +1,14 @@
 import { StatusCodes } from 'http-status-codes';
+import { grossCents } from './organizerPromotions';
 import { TALLINN_TZ } from '../_generated/sharedConstants';
 import { ApiError } from '../api/client';
 import { MS_PER_DAY } from '../constants/core';
 import { apiErrorMessage } from '../utils';
 import {
   PROMOTION_DETAIL_COPY,
+  PROMOTION_DAILY_STAT_LABELS,
   PROMOTION_GATE_REASON_LABELS,
+  PROMOTION_PILL_LABEL,
   PROMOTION_INVOICE_SOURCE_STRIPE,
   PROMOTION_RESTRICTION_NONE,
   PROMOTION_SLOT_WITHDRAWAL_SOURCES,
@@ -163,9 +166,9 @@ export function promotionPriceLabel(p: PromotionRow): string {
  * status (awaiting payment, ended early, void). `reason` is the not-showing
  * line under it, when there is one. */
 export function promotionPill(p: PromotionRow): { label: string; tone: PromotionPillTone; reason: string | null } {
-  if (p.status === PROMOTION_STATUS.void) return { label: 'Void', tone: 'finished', reason: null };
-  if (p.status === PROMOTION_STATUS.endedEarly) return { label: 'Ended early', tone: 'finished', reason: null };
-  if (p.state === PROMOTION_STATE.finished) return { label: 'Finished', tone: 'finished', reason: null };
+  if (p.status === PROMOTION_STATUS.void) return { label: PROMOTION_PILL_LABEL.void, tone: 'finished', reason: null };
+  if (p.status === PROMOTION_STATUS.endedEarly) return { label: PROMOTION_PILL_LABEL.endedEarly, tone: 'finished', reason: null };
+  if (p.state === PROMOTION_STATE.finished) return { label: PROMOTION_PILL_LABEL.finished, tone: 'finished', reason: null };
   if (p.status === PROMOTION_STATUS.unpaid && p.awaiting_checkout) {
     return {
       label: PROMOTION_STRIPE_COPY.awaitingCheckout,
@@ -175,7 +178,7 @@ export function promotionPill(p: PromotionRow): { label: string; tone: Promotion
   }
   if (p.status === PROMOTION_STATUS.unpaid) {
     return {
-      label: 'Awaiting payment',
+      label: PROMOTION_PILL_LABEL.awaitingPayment,
       tone: 'attention',
       reason: `Unpaid · voids when ${formatDay(p.start_date)} begins`,
     };
@@ -184,8 +187,8 @@ export function promotionPill(p: PromotionRow): { label: string; tone: Promotion
     const label = PROMOTION_GATE_REASON_LABELS[p.paused_reason] ?? p.paused_reason;
     return { label: PROMOTION_DETAIL_COPY.pausedPrefix, tone: 'attention', reason: `${PROMOTION_DETAIL_COPY.pausedPrefix} · ${label}` };
   }
-  if (p.state === PROMOTION_STATE.live) return { label: 'Live', tone: 'live', reason: null };
-  return { label: 'Scheduled', tone: 'scheduled', reason: null };
+  if (p.state === PROMOTION_STATE.live) return { label: PROMOTION_PILL_LABEL.live, tone: 'live', reason: null };
+  return { label: PROMOTION_PILL_LABEL.scheduled, tone: 'scheduled', reason: null };
 }
 
 export interface PromotionRestrictionClearance {
@@ -309,12 +312,12 @@ export interface PromotionDailyStatsResponse {
 
 // The numeric columns of the per-day table, in display order.
 export const DAILY_STAT_COLUMNS = [
-  { key: 'explore_served', label: 'Explore served' },
-  { key: 'daily5_placed', label: 'Daily 5 placed' },
-  { key: 'digest_sent', label: 'Digest sent' },
-  { key: 'web_opens', label: 'Web opens' },
-  { key: 'digest_opens', label: 'Digest opens' },
-  { key: 'slot_dislikes', label: 'Slot dislikes' },
+  { key: 'explore_served', label: PROMOTION_DAILY_STAT_LABELS.explore_served },
+  { key: 'daily5_placed', label: PROMOTION_DAILY_STAT_LABELS.daily5_placed },
+  { key: 'digest_sent', label: PROMOTION_DAILY_STAT_LABELS.digest_sent },
+  { key: 'web_opens', label: PROMOTION_DAILY_STAT_LABELS.web_opens },
+  { key: 'digest_opens', label: PROMOTION_DAILY_STAT_LABELS.digest_opens },
+  { key: 'slot_dislikes', label: PROMOTION_DAILY_STAT_LABELS.slot_dislikes },
 ] as const;
 
 export function dailyStatTotals(days: PromotionDailyStat[]): number[] {
@@ -324,7 +327,7 @@ export function dailyStatTotals(days: PromotionDailyStat[]): number[] {
 /** "Shown", "Paused · claim inactive", or "—" when no gate outcome was recorded. */
 export function gateLabel(stat: PromotionDailyStat): string {
   if (stat.gate_outcome === null) return PROMOTION_DETAIL_COPY.notRecorded;
-  if (stat.gate_outcome === PROMOTION_GATE_SHOWN) return 'Shown';
+  if (stat.gate_outcome === PROMOTION_GATE_SHOWN) return PROMOTION_PILL_LABEL.shown;
   const reason = stat.gate_reason ? (PROMOTION_GATE_REASON_LABELS[stat.gate_reason] ?? stat.gate_reason) : null;
   return reason ? `${PROMOTION_DETAIL_COPY.pausedPrefix} · ${reason}` : PROMOTION_DETAIL_COPY.pausedPrefix;
 }
@@ -519,12 +522,11 @@ export function unusedDays(p: Pick<PromotionRow, 'start_date' | 'end_date' | 'da
 export function withdrawRefundCents(p: PromotionRow, unused: number): number {
   if (p.is_complimentary || unused <= 0) return 0;
   const rate = Number(p.vat_rate_percent);
-  const vat = (net: number) => Math.round((net * rate) / 100);
-  const gross = p.net_price_cents + vat(p.net_price_cents);
+  const gross = grossCents(p.net_price_cents, rate);
   let owed = gross;
   if (unused < p.days) {
     const net = Math.floor((p.net_price_cents * unused) / p.days);
-    owed = net + vat(net);
+    owed = grossCents(net, rate);
   }
   return Math.max(Math.min(owed, gross - p.refunded_cents), 0);
 }

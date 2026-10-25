@@ -33,6 +33,7 @@ export function isPromotionsSlotsEnabled(): boolean {
 // A paid link never passes link equity: the stretched card link and the ticket link.
 export const SPONSORED_LINK_REL = 'sponsored';
 export const SPONSORED_TICKET_REL = 'sponsored noopener noreferrer';
+export const TICKET_REL = 'noopener noreferrer';
 
 // Explore opt-in query param; the client omits it entirely under the prerender.
 export const SPONSORED_SLOT_PARAM = 'sponsored_slot';

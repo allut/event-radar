@@ -25,6 +25,7 @@ import {
   PROMOTION_NOTE_ROWS,
   PROMOTION_REGISTRY_CODE,
   PROMOTION_REGISTRY_CODE_LENGTH,
+  PROMOTION_REGISTRY_CODE_PLACEHOLDER,
 } from '../../constants/organizerPromotions';
 import { ROUTES } from '../../constants/routes';
 import { useEventCardNav } from '../../hooks/useEventCardNav';
@@ -39,6 +40,7 @@ import {
   formatPromoDays,
   formatPromoRange,
   isIsoDay,
+  grossCents,
   isRegistryCodeValid,
   splitAround,
   type CheckoutStarted,
@@ -357,7 +359,7 @@ export default function OrganizerPromotionRequest() {
   }
 
   const price = result?.valid ? result.price : null;
-  const dayGross = Math.round((ctx.pricing.day_price_cents * (100 + Number(ctx.pricing.vat_rate_percent))) / 100);
+  const dayGross = grossCents(ctx.pricing.day_price_cents, Number(ctx.pricing.vat_rate_percent));
   const [termsBefore, termsAfter] = splitAround(
     ti('promo_terms_label', locale, { version: String(ctx.terms_version), link: '{link}' }),
     'link',
@@ -365,7 +367,7 @@ export default function OrganizerPromotionRequest() {
   const [policyBefore, policyAfter] = splitAround(t('promo_policy_label', locale), 'link');
   const eventData = eventQuery.data;
   const advertiser = legalValue.trim() || t('promo_your_business', locale);
-  const payAmount = price ? formatMoney(price.gross_cents, locale).slice(1) : '…';
+  const payAmount = price ? formatMoney(price.gross_cents, locale, { symbol: false }) : '…';
   const primaryLabel = wantsCard
     ? ti('promo_pay', locale, { amount: payAmount })
     : t('promo_send_request', locale);
@@ -496,7 +498,7 @@ export default function OrganizerPromotionRequest() {
                   inputMode="numeric"
                   maxLength={PROMOTION_REGISTRY_CODE_LENGTH}
                   autoComplete="off"
-                  placeholder="12345678"
+                  placeholder={PROMOTION_REGISTRY_CODE_PLACEHOLDER}
                   value={code}
                   aria-invalid={codeInvalid || undefined}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, PROMOTION_REGISTRY_CODE_LENGTH))}

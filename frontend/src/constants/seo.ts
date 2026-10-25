@@ -105,3 +105,6 @@ export const SEO_AUDIT_TOKEN_HEADER = 'x-seo-audit-token';
 
 // JSON-LD @context (structuredData.ts).
 export const SCHEMA_ORG_CONTEXT = 'https://schema.org';
+
+// GitHub API User-Agent for lib/seoAuditIssue.ts's githubRequest() call.
+export const SEO_AUDIT_USER_AGENT = 'event-radar-seo-audit';

@@ -3,8 +3,7 @@ import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ClaimPending from './ClaimPending';
 import { QueryClient } from '@tanstack/react-query';
-import { renderWithProviders, seedPromotionsOfferHint } from '../../test/utils';
-import { QUERY_KEYS, QUERY_STALE_TIME } from '../../constants/api';
+import { CACHED_CLAIMS_KEY, clientWithCachedClaimsList, renderWithProviders, seedPromotionsOfferHint } from '../../test/utils';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -27,16 +26,6 @@ function renderPending(queryClient?: QueryClient) {
   });
 }
 
-/** A query client holding a cached organizer-claims list page, to observe
- * whether a claim mutation marks the list (and dashboard summary) stale. */
-function clientWithCachedClaimsList() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, staleTime: QUERY_STALE_TIME }, mutations: { retry: false } },
-  });
-  queryClient.setQueryData(CACHED_CLAIMS_KEY, { claims: [], total: 0, offset: 0 });
-  return queryClient;
-}
-const CACHED_CLAIMS_KEY = [QUERY_KEYS.organizerClaims, 'en', 1];
 
 beforeEach(() => {
   mockGet.mockReset();

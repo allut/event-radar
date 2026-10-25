@@ -1,7 +1,7 @@
 // Organizer Promotions (#614, #616, #617, #618): response shapes and the pure
 // helpers the list, the form and the success page share. Dates are Tallinn
 // calendar days (`YYYY-MM-DD`), formatted in UTC so the browser zone can't move them.
-import { toLocaleCode } from '../constants/core';
+import { LOCALE_EN, toLocaleCode } from '../constants/core';
 import {
   PROMOTION_PAUSE_REASON_FALLBACK,
   PROMOTION_PAUSE_REASONS,
@@ -164,11 +164,18 @@ export function formatPromoDays(count: number, locale: string): string {
   return tn('promo_days', locale, count, { count: formatCount(count, locale) });
 }
 
-/** "€5", "€6.20" (en) or "€6,20" (et, ru): whole euros drop the cents. */
-export function formatMoney(cents: number, locale: string): string {
+/** "€5", "€6.20" (en) or "€6,20" (et, ru): whole euros drop the cents.
+ * `symbol: false` returns the bare number, for callers that place the € themselves. */
+export function formatMoney(cents: number, locale: string, { symbol = true }: { symbol?: boolean } = {}): string {
   const whole = cents % 100 === 0;
   const digits = whole ? String(cents / 100) : (cents / 100).toFixed(2);
-  return `€${locale === 'en' ? digits : digits.replace('.', ',')}`;
+  const amount = locale === LOCALE_EN ? digits : digits.replace('.', ',');
+  return symbol ? `€${amount}` : amount;
+}
+
+/** Net plus VAT, rounded to the cent. Mirrors the backend's gross-price math. */
+export function grossCents(netCents: number, vatPercent: number): number {
+  return Math.round((netCents * (100 + vatPercent)) / 100);
 }
 
 /** Estonian business-register code check digit. The server stays the authority;

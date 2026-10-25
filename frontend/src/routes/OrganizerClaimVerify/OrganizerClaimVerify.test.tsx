@@ -3,9 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
 import OrganizerClaimVerify from './OrganizerClaimVerify';
-import { QueryClient } from '@tanstack/react-query';
-import { renderWithProviders } from '../../test/utils';
-import { QUERY_KEYS, QUERY_STALE_TIME } from '../../constants/api';
+import { CACHED_CLAIMS_KEY, clientWithCachedClaimsList, renderWithProviders } from '../../test/utils';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -33,16 +31,6 @@ import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
 const mockPost = vi.mocked(organizerApi.post);
 const mockSetOrganizerSignedInHint = vi.mocked(setOrganizerSignedInHint);
 
-/** A query client holding a cached organizer-claims list page, to observe
- * whether a claim mutation marks the list (and dashboard summary) stale. */
-function clientWithCachedClaimsList() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, staleTime: QUERY_STALE_TIME }, mutations: { retry: false } },
-  });
-  queryClient.setQueryData(CACHED_CLAIMS_KEY, { claims: [], total: 0, offset: 0 });
-  return queryClient;
-}
-const CACHED_CLAIMS_KEY = [QUERY_KEYS.organizerClaims, 'en', 1];
 
 describe('OrganizerClaimVerify (#415)', () => {
   afterEach(() => {

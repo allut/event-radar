@@ -9,28 +9,10 @@ import {
 } from './seoValidation';
 import { buildEventJsonLd, buildExploreItemListJsonLd, buildWebsiteJsonLd } from './structuredData';
 import { buildSeoMeta } from '../hooks/useSeoMeta';
+import { renderSnapshotHtml } from '../test/seoSnapshots';
 import { makeEvent } from '../test/utils';
-import { serializeJsonLd } from './jsonLd';
 import { PRODUCTION_ORIGIN } from '../constants/seo';
 import { SPONSORED_SLOT_ATTR } from '../_generated/sharedConstants';
-
-/** Mirrors components/SeoTags/SeoTags.tsx's rendering (title/meta/link/
- * ld+json escaping) closely enough to exercise parseSnapshotHtml against a
- * realistic snapshot, without pulling react-helmet-async/jsdom-render into
- * this test file. */
-function renderSnapshotHtml(
-  meta: ReturnType<typeof buildSeoMeta>,
-  jsonLd: object | null,
-  extraBodyHtml = '',
-): string {
-  const metaTags = meta.metaTags
-    .map((tag) => `<meta ${tag.name ? `name="${tag.name}"` : `property="${tag.property}"`} content="${tag.content}">`)
-    .join('\n');
-  const links = meta.links
-    .map((link) => `<link rel="${link.rel}" href="${link.href}"${link.hrefLang ? ` hreflang="${link.hrefLang}"` : ''}>`)
-    .join('\n');
-  return `<!doctype html><html lang="${meta.htmlLang}"><head><title>${meta.title}</title>${metaTags}${links}<link rel="icon" href="/favicon.svg">${jsonLd === null ? '' : `<script type="application/ld+json">${serializeJsonLd(jsonLd)}</script>`}</head><body>${extraBodyHtml}</body></html>`;
-}
 
 describe('parseSnapshotHtml', () => {
   it('extracts title/canonical/hreflang/robots/jsonLd/price from a well-formed snapshot', () => {

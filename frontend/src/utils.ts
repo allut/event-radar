@@ -44,6 +44,7 @@ import {
   type SortOption,
   DATE_PRESET_DAYS,
   DATE_PRESET_DAYS_FALLBACK,
+  DATE_PRESET_CUSTOM,
   DATE_PRESET_DEFAULT,
   DATE_PRESET_TODAY,
   DATE_PRESET_WEEKEND,
@@ -775,7 +776,7 @@ export function datePresetRange(preset: DatePreset): { from: string | null; to: 
   // keeps datePresetRange total/correct so 'custom' can never fall through
   // to the DATE_PRESET_DAYS fallback below and get silently misread as a
   // 30-day window.
-  if (preset === 'custom') return { from: null, to: null };
+  if (preset === DATE_PRESET_CUSTOM) return { from: null, to: null };
   const today = tallinnToday();
 
   if (preset === DATE_PRESET_TODAY) {
@@ -863,7 +864,7 @@ export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearch
   if (!isFullSet(filters.category, CATEGORIES)) params.set(EXPLORE_PARAM.category, filters.category.join(','));
   if (!isFullSet(filters.vibe, VIBES)) params.set(EXPLORE_PARAM.vibe, filters.vibe.join(','));
   if (filters.datePreset !== DATE_PRESET_DEFAULT) params.set(EXPLORE_PARAM.date, filters.datePreset);
-  if (filters.datePreset === 'custom' && filters.customFrom && filters.customTo) {
+  if (filters.datePreset === DATE_PRESET_CUSTOM && filters.customFrom && filters.customTo) {
     params.set(EXPLORE_PARAM.dateFrom, filters.customFrom);
     params.set(EXPLORE_PARAM.dateTo, filters.customTo);
   }
@@ -883,7 +884,7 @@ export function buildExploreApiQuery(filters: ExploreFilters, offset: number): s
   if (filters.vibe.length && !isFullSet(filters.vibe, VIBES)) {
     params.set(EXPLORE_PARAM.vibe, filters.vibe.join(','));
   }
-  if (filters.datePreset === 'custom') {
+  if (filters.datePreset === DATE_PRESET_CUSTOM) {
     if (filters.customFrom) params.set(EXPLORE_PARAM.dateFrom, filters.customFrom);
     if (filters.customTo) params.set(EXPLORE_PARAM.dateTo, filters.customTo);
   } else {

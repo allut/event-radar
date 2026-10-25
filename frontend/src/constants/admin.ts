@@ -9,6 +9,9 @@ export const ADMIN_DESKTOP_BREAKPOINT_PX = 1024;
 
 export const ADMIN_NOTE_TEXTAREA_ROWS = 3;
 
+// PageState message while an admin list or detail loads.
+export const ADMIN_LOADING_LABEL = 'Loading…';
+
 // ─── Admin: dedup groups (mirrors backend's ADMIN_DEDUP_GROUPS_PAGE_SIZE) ───
 export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
 

@@ -428,3 +428,58 @@ export const PROMOTION_TRUST_COPY = {
 
 export const PROMOTION_TRUST_HEADING = 'Trust review';
 export const PROMOTION_TRUST_CADENCE = 'weekly for the first 4 weeks after the first sale, then with the price review';
+
+// ActionPanels.tsx: the inline panels' headings, buttons and field labels.
+export const PROMOTION_ACTION_PANEL_COPY = {
+  markPaidHeading: 'Mark paid',
+  markPaidConfirm: 'Confirm mark paid',
+  saveChanges: 'Save changes',
+  startDate: 'Start date',
+  endDate: 'End date',
+  advertiserName: 'Advertiser legal name',
+  registryCode: 'Registry code',
+  billingEmail: 'Billing email',
+  invoiceReference: 'Invoice reference',
+  repointConfirm: 'Confirm re-point',
+  endEarlyConfirm: 'Confirm end early',
+  voidConfirm: 'Confirm void',
+  refundConfirm: 'Confirm refund',
+} as const;
+
+// AdminPromotionDetail.tsx: the commercial record's row labels.
+export const PROMOTION_RECORD_LABEL = {
+  advertiser: 'Advertiser',
+  registryCode: 'Registry code',
+  billingEmail: 'Billing email',
+  organizer: 'Organizer',
+  grantedBy: 'Granted by',
+  netPrice: 'Net price',
+  netPriceComplimentary: '€0.00 (complimentary)',
+  gross: 'Gross',
+  invoice: 'Invoice',
+  paidAt: 'Paid at',
+  refunded: 'Refunded',
+  complimentaryNote: 'Complimentary note',
+  refundNote: 'Refund note',
+} as const;
+
+// Pill labels (promotionPill) and the per-day table's "Shown" outcome.
+export const PROMOTION_PILL_LABEL = {
+  void: 'Void',
+  endedEarly: 'Ended early',
+  finished: 'Finished',
+  awaitingPayment: 'Awaiting payment',
+  live: 'Live',
+  scheduled: 'Scheduled',
+  shown: 'Shown',
+} as const;
+
+// Column headers of the per-day table, keyed by PromotionDailyStat field.
+export const PROMOTION_DAILY_STAT_LABELS = {
+  explore_served: 'Explore served',
+  daily5_placed: 'Daily 5 placed',
+  digest_sent: 'Digest sent',
+  web_opens: 'Web opens',
+  digest_opens: 'Digest opens',
+  slot_dislikes: 'Slot dislikes',
+} as const;

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
-import { focusManager, QueryClient } from '@tanstack/react-query';
+import { focusManager } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import AdminSubmissions from './AdminSubmissions';
-import { LocationProbe, renderWithProviders } from '../../test/utils';
+import { LocationProbe, makeTestQueryClient, renderWithProviders } from '../../test/utils';
 import { QUERY_KEYS } from '../../constants/api';
 
 vi.mock('../../api/client', async (importOriginal) => ({
@@ -230,7 +230,7 @@ describe('AdminSubmissions', () => {
       live.splice(live.indexOf(1), 1);
       throw new ApiError(404, 'Submission not found.');
     });
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const queryClient = makeTestQueryClient();
     queryClient.setQueryData([QUERY_KEYS.adminCounts], { submissions: 3 });
     renderWithProviders(<AdminSubmissions />, { queryClient });
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Submission 1' })).toBeInTheDocument());

@@ -24,6 +24,7 @@ import PromotionRequests from '../../components/PromotionRequests';
 import PromotionTrust from '../../components/PromotionTrust';
 import PromotionsTable from '../../components/PromotionsTable';
 import queueStyles from '../../components/shared/AdminQueue.module.css';
+import { ADMIN_LOADING_LABEL } from '../../constants/admin';
 import styles from './AdminPromotions.module.css';
 
 interface PromotionsResponse {
@@ -81,7 +82,7 @@ export default function AdminPromotions() {
       <section aria-labelledby="cap-heading" className={styles.section}>
         <h2 id="cap-heading" className={styles.sectionTitle}>{PROMOTION_COPY.capStripHeading}</h2>
         {strip.isLoading ? (
-          <PageState kind={UI_STATE.loading} message="Loading…" inline />
+          <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
         ) : strip.isError || !strip.data ? (
           <PageState kind={UI_STATE.error} message="Couldn’t load the cap strip." inline />
         ) : (
@@ -108,12 +109,12 @@ export default function AdminPromotions() {
           ))}
         </div>
         {list.isLoading ? (
-          <PageState kind={UI_STATE.loading} message="Loading…" inline />
+          <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
         ) : list.isError ? (
           <PageState kind={UI_STATE.error} message={PROMOTION_COPY.loadFailed} inline />
         ) : list.items.length === 0 && list.total > 0 ? (
           // A past-end page about to clamp to the real last page.
-          <PageState kind={UI_STATE.loading} message="Loading…" inline />
+          <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
         ) : list.items.length === 0 ? (
           <EmptyState admin title={PROMOTION_COPY.noPromotions} message={PROMOTION_COPY.noPromotionsHint} />
         ) : (

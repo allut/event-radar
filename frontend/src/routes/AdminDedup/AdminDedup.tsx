@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { adminApi } from '../../api/client';
-import { ADMIN_DEDUP_GROUPS_PAGE_SIZE } from '../../constants/admin';
+import { ADMIN_DEDUP_GROUPS_PAGE_SIZE, ADMIN_LOADING_LABEL } from '../../constants/admin';
 import { API, QUERY_KEYS, PAGE_PARAM } from '../../constants/api';
 import { LOCALE_EN, UI_STATE } from '../../constants/core';
 import { EVENT_STATUS } from '../../constants/prerender';
@@ -78,12 +78,12 @@ export default function AdminDedup() {
 
       <div className={styles.real}>
         {isLoading ? (
-          <PageState kind={UI_STATE.loading} message="Loading…" inline />
+          <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
         ) : isError ? (
           <PageState kind={UI_STATE.error} message="Couldn't load dedup groups." inline />
         ) : groups.length === 0 && total > 0 ? (
           // A past-end page about to clamp to the real last page.
-          <PageState kind={UI_STATE.loading} message="Loading…" inline />
+          <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
         ) : groups.length === 0 ? (
           <EmptyState admin title="No dedup groups" message="Nothing flagged as a duplicate right now." />
         ) : (

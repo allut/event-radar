@@ -7,6 +7,7 @@ import {
   ADMIN_CLAIMS_TAB_PARAM,
   ADMIN_GENERIC_ERROR,
   ADMIN_QUEUE_DETAIL_LINK_LABEL,
+  ADMIN_LOADING_LABEL,
 } from '../../constants/admin';
 import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
 import {
@@ -263,12 +264,12 @@ function ClaimsQueue({
   return (
     <>
       {isLoading ? (
-        <PageState kind={UI_STATE.loading} message="Loading…" inline />
+        <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
       ) : isError ? (
         <PageState kind={UI_STATE.error} message="Couldn't load the claims queue." inline />
       ) : items.length === 0 && total > 0 ? (
         // A past-end page about to clamp to the real last page.
-        <PageState kind={UI_STATE.loading} message="Loading…" inline />
+        <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
       ) : (
         <div aria-busy={isPlaceholderData}>
           <AdminQueueSplitView

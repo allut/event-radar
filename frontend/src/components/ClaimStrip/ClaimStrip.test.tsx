@@ -2,9 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ClaimPanel, ClaimPill } from './ClaimStrip';
-import { QueryClient } from '@tanstack/react-query';
-import { renderWithProviders } from '../../test/utils';
-import { QUERY_KEYS, QUERY_STALE_TIME } from '../../constants/api';
+import { CACHED_CLAIMS_KEY, clientWithCachedClaimsList, renderWithProviders } from '../../test/utils';
 import { ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants/auth';
 import { CLAIM_JUSTIFICATION_REQUIRED_ERROR } from '../../constants/claims';
 
@@ -20,16 +18,6 @@ vi.mock('../../api/client', async (importOriginal) => {
 import { ApiError, organizerApi } from '../../api/client';
 const mockOrganizerPost = vi.mocked(organizerApi.post);
 
-/** A query client holding a cached organizer-claims list page, to observe
- * whether a claim mutation marks the list (and dashboard summary) stale. */
-function clientWithCachedClaimsList() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, staleTime: QUERY_STALE_TIME }, mutations: { retry: false } },
-  });
-  queryClient.setQueryData(CACHED_CLAIMS_KEY, { claims: [], total: 0, offset: 0 });
-  return queryClient;
-}
-const CACHED_CLAIMS_KEY = [QUERY_KEYS.organizerClaims, 'en', 1];
 
 describe('ClaimPill', () => {
   it('renders the pending label', () => {

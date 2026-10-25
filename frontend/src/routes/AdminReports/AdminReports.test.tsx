@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
-import { focusManager, QueryClient } from '@tanstack/react-query';
+import { focusManager } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import { useNavigate } from 'react-router-dom';
 import AdminReports from './AdminReports';
-import { LocationProbe, renderWithProviders } from '../../test/utils';
+import { LocationProbe, makeTestQueryClient, renderWithProviders } from '../../test/utils';
 import { QUERY_KEYS } from '../../constants/api';
 import splitViewStyles from '../../components/AdminQueueSplitView/AdminQueueSplitView.module.css';
 
@@ -363,9 +363,7 @@ describe('AdminReports', () => {
         const navigate = useNavigate();
         return <button type="button" onClick={() => navigate(-1)}>Go back</button>;
       }
-      const queryClient = new QueryClient({
-        defaultOptions: { queries: { retry: false, staleTime }, mutations: { retry: false } },
-      });
+      const queryClient = makeTestQueryClient({ staleTime });
       renderWithProviders(null, {
         route: '/admin/reports?report=7',
         queryClient,
@@ -396,9 +394,7 @@ describe('AdminReports', () => {
         const navigate = useNavigate();
         return <button type="button" onClick={() => navigate(-1)}>Go back</button>;
       }
-      const queryClient = new QueryClient({
-        defaultOptions: { queries: { retry: false, staleTime: 30_000, gcTime: 50 }, mutations: { retry: false } },
-      });
+      const queryClient = makeTestQueryClient({ staleTime: 30_000, gcTime: 50 });
       renderWithProviders(null, {
         route: '/admin/reports?report=7',
         queryClient,
@@ -465,7 +461,7 @@ describe('AdminReports', () => {
         open.splice(open.indexOf(1), 1);
         throw new ApiError(404, 'Event not found.');
       });
-      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const queryClient = makeTestQueryClient();
       queryClient.setQueryData([QUERY_KEYS.adminCounts], { reports: 3 });
       queryClient.setQueryData([QUERY_KEYS.adminReports, 2], { total: 3, offset: 50, events: [] });
       // A deep link: the page is served from the locate key.

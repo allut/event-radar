@@ -5,9 +5,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { QueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useNavigationType, useSearchParams } from 'react-router-dom';
-import { LocationProbe, renderWithProviders } from '../../test/utils';
+import { LocationProbe, makeTestQueryClient, renderWithProviders } from '../../test/utils';
 import { usePageParam } from '../../hooks/usePageParam';
 import { usePagedQuery } from '../../hooks/usePagedQuery';
 import Pager, { type PagerProps } from './Pager';
@@ -444,7 +443,7 @@ describe('usePagedQuery', () => {
   it('settles a clamp target only on fresh data, not a stale cached copy of it', async () => {
     serve(35);
     const onPageSettled = vi.fn();
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } });
+    const queryClient = makeTestQueryClient({ staleTime: 30_000 });
     renderWithProviders(<Harness onPageSettled={onPageSettled} />, { route: '/list?page=3', queryClient });
     await waitFor(() => expect(screen.getByText('Row 21')).toBeInTheDocument());
     serve(25);

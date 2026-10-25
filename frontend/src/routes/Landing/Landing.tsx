@@ -250,7 +250,7 @@ export default function Landing() {
     retry: false,
   });
   const tonightEvents = counts?.tonight_events ?? [];
-  const furthestYear = counts?.furthest_date ? new Date(counts.furthest_date).getFullYear() : null;
+  const furthestYear = counts?.furthest_date ? Number(counts.furthest_date.slice(0, 4)) : null;
 
   const brand = t('brand', locale);
   const brandSplitIdx = brand.lastIndexOf(' ');

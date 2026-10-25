@@ -14,8 +14,9 @@ import {
   PROMOTION_REQUEST_COPY as REQUEST,
   type PromotionActionKey,
 } from '../../constants/promotions';
+import { PROMOTION_RECORD_LABEL as RECORD } from '../../constants/promotions';
 import { ROUTES } from '../../constants/routes';
-import { ADMIN_GENERIC_ERROR } from '../../constants/admin';
+import { ADMIN_GENERIC_ERROR, ADMIN_LOADING_LABEL } from '../../constants/admin';
 import {
   DAILY_STAT_COLUMNS,
   dailyStatTotals,
@@ -125,22 +126,22 @@ function recordRows(p: PromotionDetail): [string, ReactNode][] {
   const clearance = p.restriction_clearance;
   const showClearance = clearance !== null || restrictionTag(restriction) !== null;
   return [
-    ['Advertiser', p.advertiser_legal_name],
-    ['Registry code', mono(p.advertiser_registry_code)],
-    ['Billing email', p.billing_email ?? '—'],
-    ['Organizer', p.organizer_name ?? '—'],
-    ['Granted by', p.granted_by ?? '—'],
-    ['Net price', p.is_complimentary ? '€0.00 (complimentary)' : formatEuro(p.net_price_cents)],
+    [RECORD.advertiser, p.advertiser_legal_name],
+    [RECORD.registryCode, mono(p.advertiser_registry_code)],
+    [RECORD.billingEmail, p.billing_email ?? '—'],
+    [RECORD.organizer, p.organizer_name ?? '—'],
+    [RECORD.grantedBy, p.granted_by ?? '—'],
+    [RECORD.netPrice, p.is_complimentary ? RECORD.netPriceComplimentary : formatEuro(p.net_price_cents)],
     [`VAT ${Number(p.vat_rate_percent)}%`, formatEuro(p.vat_cents)],
-    ['Gross', formatEuro(p.gross_price_cents)],
+    [RECORD.gross, formatEuro(p.gross_price_cents)],
     ...(stripe || p.paid_at
       ? ([[STRIPE.paymentLabel, stripe ? <span className={`${styles.chip} ${styles.chipStripe}`}>{STRIPE.stripeCard}</span> : STRIPE.bankTransfer]] as [string, ReactNode][])
       : []),
-    ['Invoice', invoice],
+    [RECORD.invoice, invoice],
     ...(p.awaiting_checkout && p.checkout_expires_at
       ? ([[STRIPE.checkoutExpires, mono(formatDateTime(p.checkout_expires_at))]] as [string, ReactNode][])
       : []),
-    ['Paid at', p.paid_at ? formatDateTime(p.paid_at) : '—'],
+    [RECORD.paidAt, p.paid_at ? formatDateTime(p.paid_at) : '—'],
     ...(prefill
       ? ([
           [STRIPE.pricePerDay, formatEuro(prefill.gross_per_day_cents)],
@@ -168,9 +169,9 @@ function recordRows(p: PromotionDetail): [string, ReactNode][] {
           [COPY.clearanceNoteRowLabel, clearance?.note ?? '—'],
         ] as [string, ReactNode][])
       : []),
-    ['Refunded', formatEuro(p.refunded_cents)],
-    ...(p.complimentary_note ? ([['Complimentary note', p.complimentary_note]] as [string, ReactNode][]) : []),
-    ...(p.refund_note ? ([['Refund note', p.refund_note]] as [string, ReactNode][]) : []),
+    [RECORD.refunded, formatEuro(p.refunded_cents)],
+    ...(p.complimentary_note ? ([[RECORD.complimentaryNote, p.complimentary_note]] as [string, ReactNode][]) : []),
+    ...(p.refund_note ? ([[RECORD.refundNote, p.refund_note]] as [string, ReactNode][]) : []),
   ];
 }
 
@@ -210,7 +211,7 @@ export default function AdminPromotionDetail({ promotionId }: { promotionId: str
     },
   });
 
-  if (detailQuery.isLoading) return <PageState kind={UI_STATE.loading} message="Loading…" inline />;
+  if (detailQuery.isLoading) return <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />;
   if (detailQuery.isError || !detailQuery.data) {
     return <PageState kind={UI_STATE.error} message={COPY.loadFailed} inline />;
   }

@@ -10,6 +10,7 @@ import {
   ADMIN_REPORT_RESOLVED_NOTICE,
   ADMIN_REPORTS_PARAM,
   ADMIN_REPORTS_QUEUE_PAGE_SIZE,
+  ADMIN_LOADING_LABEL,
 } from '../../constants/admin';
 import { API, PAGE_PARAM, PAGE_QUERY_PARAM, QUERY_KEYS } from '../../constants/api';
 import { ADMIN_RESOLUTION_MESSAGES } from '../../constants/claims';
@@ -234,12 +235,12 @@ export default function AdminReports() {
       </div>
 
       {isLoading ? (
-        <PageState kind={UI_STATE.loading} message="Loading…" inline />
+        <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
       ) : isError ? (
         <PageState kind={UI_STATE.error} message="Couldn't load the reports queue." inline />
       ) : items.length === 0 && total > 0 ? (
         // A past-end page about to clamp to the real last page.
-        <PageState kind={UI_STATE.loading} message="Loading…" inline />
+        <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
       ) : (
         <>
         {resolvedNoticeId !== null && (

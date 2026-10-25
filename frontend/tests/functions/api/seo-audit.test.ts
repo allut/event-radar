@@ -10,9 +10,7 @@ import {
   SEO_AUDIT_TOKEN_HEADER,
   CRAWLABLE_ICON_PATHS,
 } from '../../../src/constants/seo';
-import { buildEventJsonLd, buildWebsiteJsonLd } from '../../../src/lib/structuredData';
-import { buildSeoMeta } from '../../../src/hooks/useSeoMeta';
-import { makeEvent } from '../../../src/test/utils';
+import { renderEventHtml, renderLandingHtml } from '../../../src/test/seoSnapshots';
 
 interface Env {
   SEO_AUDIT_TOKEN?: string;
@@ -33,28 +31,6 @@ vi.mock('../../../src/lib/seoAuditIssue', () => ({
   reportAuditFailure: vi.fn().mockResolvedValue(undefined),
   reportAuditRecovery: vi.fn().mockResolvedValue(undefined),
 }));
-
-/** Mirrors seoAudit.test.ts's local fixture helper. */
-function renderSnapshotHtml(meta: ReturnType<typeof buildSeoMeta>, jsonLd: object, assetTags: string): string {
-  const metaTags = meta.metaTags
-    .map((tag) => `<meta ${tag.name ? `name="${tag.name}"` : `property="${tag.property}"`} content="${tag.content}">`)
-    .join('\n');
-  const links = meta.links
-    .map((link) => `<link rel="${link.rel}" href="${link.href}"${link.hrefLang ? ` hreflang="${link.hrefLang}"` : ''}>`)
-    .join('\n');
-  return `<!doctype html><html lang="${meta.htmlLang}"><head><title>${meta.title}</title>${metaTags}${links}<link rel="icon" href="/favicon.svg">${assetTags}<script type="application/ld+json">${JSON.stringify(jsonLd)}</script></head><body></body></html>`;
-}
-
-function renderLandingHtml(assetTags: string): string {
-  const meta = buildSeoMeta({ title: 'Mis toimub Tallinnas | Event Radar', locale: 'et', path: '/', indexable: true });
-  return renderSnapshotHtml(meta, buildWebsiteJsonLd('et'), assetTags);
-}
-
-function renderEventHtml(assetTags: string): string {
-  const event = makeEvent({ id: 1, title: 'Jazz Night' });
-  const meta = buildSeoMeta({ title: 'Jazz Night – Kultuurikatel | Event Radar', locale: 'et', path: '/events/1', indexable: true });
-  return renderSnapshotHtml(meta, buildEventJsonLd(event), assetTags);
-}
 
 const VALID_ROBOTS_TXT = [
   'User-agent: *',

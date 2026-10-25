@@ -5,7 +5,7 @@ import {
 } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
 import { CALENDAR_WEEK_START } from '../../constants/core';
-import { DATE_PRESETS, type DatePreset } from '../../constants/explore';
+import { DATE_PRESET_CUSTOM, DATE_PRESETS, type DatePreset } from '../../constants/explore';
 import { t } from '../../i18n';
 import { PrevIcon, NextIcon } from '../ChevronIcons';
 import styles from './DateRangeMenu.module.css';
@@ -152,17 +152,17 @@ const DateRangeMenu = memo(function DateRangeMenu({
 
   const current = DATE_PRESETS.find((p) => p.value === value);
   const triggerLabel =
-    value === 'custom' && customFrom && customTo
+    value === DATE_PRESET_CUSTOM && customFrom && customTo
       ? formatDateRangeShort(customFrom, customTo, locale)
       : (current?.labelKey ? t(current.labelKey, locale) : value);
 
   function handleOpen() {
-    setMode(value === 'custom' ? 'calendar' : 'list');
+    setMode(value === DATE_PRESET_CUSTOM ? 'calendar' : 'list');
     setOpen((v) => !v);
   }
 
   function handleSelect(preset: DatePreset) {
-    if (preset === 'custom') {
+    if (preset === DATE_PRESET_CUSTOM) {
       setMode('calendar');
       return;
     }

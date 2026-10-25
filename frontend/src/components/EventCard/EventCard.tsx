@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { UI_STATE } from '../../constants/core';
 import type { Signal } from '../../constants/feedback';
 import { ROUTES } from '../../constants/routes';
-import { PROMOTION_REF_PARAM, SPONSORED_LINK_REL, SPONSORED_TICKET_REL } from '../../constants/sponsored';
+import { PROMOTION_REF_PARAM, SPONSORED_LINK_REL, SPONSORED_TICKET_REL, TICKET_REL } from '../../constants/sponsored';
 import { PROMOTION_REF_AD, SPONSORED_SLOT_ATTR } from '../../_generated/sharedConstants';
 import { t } from '../../i18n';
 import { cardAnimationDelayMs, categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, shareEvent, trackExternalClick, withQueryParam } from '../../utils';
@@ -124,7 +124,7 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
         <a
           href={ticketUrl}
           target="_blank"
-          rel={sponsored ? SPONSORED_TICKET_REL : 'noopener noreferrer'}
+          rel={sponsored ? SPONSORED_TICKET_REL : TICKET_REL}
           className={styles.ticketsLink}
           onClick={readOnly ? undefined : () => trackExternalClick(event.id)}
         >

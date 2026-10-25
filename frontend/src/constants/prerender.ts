@@ -108,6 +108,9 @@ export const PRERENDER_CADENCE_TOKEN_HEADER = 'x-prerender-cadence-token';
 // (GitHub rejects requests with no User-Agent).
 export const PRERENDER_CADENCE_USER_AGENT = 'event-radar-prerender-cadence';
 
+// Same, for scripts/prerender.ts's githubRequest() call.
+export const PRERENDER_CHAIN_USER_AGENT = 'event-radar-prerender-chain';
+
 // ─── Prerender (scripts/prerender.ts) ────────────────────────────────────────
 // These are 3x wider than local (90s/45s vs 30s/15s) — confirmed via local
 // repro (same Chromium binary, same real backend) that a page which renders

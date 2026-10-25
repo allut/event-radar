@@ -41,6 +41,7 @@ import {
   APP_SHELL_FILENAME,
   CHAIN_STATE_PREFIX,
   PRERENDER_CADENCE_GIT_BRANCH,
+  PRERENDER_CHAIN_USER_AGENT,
   PRERENDER_CHAIN_GITHUB_REPO,
   PRERENDER_DIAGNOSTIC_EVENT_MAX_LENGTH,
   PRERENDER_ERROR_SELECTOR,
@@ -1019,7 +1020,7 @@ async function validateTarget(
  * commit-message lookup) — one place to keep the auth/User-Agent shape
  * consistent rather than re-deriving it at each call site. */
 function chainGithubRequest(token: string, path: string, init?: RequestInit): Promise<Response> {
-  return githubRequest(PRERENDER_CHAIN_GITHUB_REPO, path, token, 'event-radar-prerender-chain', init);
+  return githubRequest(PRERENDER_CHAIN_GITHUB_REPO, path, token, PRERENDER_CHAIN_USER_AGENT, init);
 }
 
 /** Commits `marker` to the branch the Deploy Hook targets (issue #83;

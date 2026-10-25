@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
-import { focusManager, QueryClient } from '@tanstack/react-query';
+import { focusManager } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import AdminClaims from './AdminClaims';
-import { LocationProbe, renderWithProviders } from '../../test/utils';
+import { LocationProbe, makeTestQueryClient, renderWithProviders } from '../../test/utils';
 import { QUERY_KEYS, QUERY_STALE_TIME } from '../../constants/api';
 
 vi.mock('../../api/client', async (importOriginal) => ({
@@ -439,9 +439,7 @@ describe('AdminClaims', () => {
         if (path.includes('grant')) lists.approved.unshift(id);
         return result;
       });
-      const queryClient = new QueryClient({
-        defaultOptions: { queries: { retry: false, staleTime: QUERY_STALE_TIME }, mutations: { retry: false } },
-      });
+      const queryClient = makeTestQueryClient({ staleTime: QUERY_STALE_TIME });
       renderWithProviders(<AdminClaims />, { route: '/admin/claims?status=approved', queryClient });
       await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 10' })).toBeInTheDocument());
       await userEvent.click(screen.getByRole('tab', { name: 'Pending review' }));
@@ -501,7 +499,7 @@ describe('AdminClaims', () => {
         lists.pending.splice(lists.pending.indexOf(1), 1);
         throw new ApiError(409, 'This claim was already resolved.');
       });
-      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const queryClient = makeTestQueryClient();
       queryClient.setQueryData([QUERY_KEYS.adminCounts], { claims: 3 });
       renderWithProviders(<AdminClaims />, { route: '/admin/claims', queryClient });
       await waitFor(() => expect(screen.getByRole('heading', { name: 'Claimant 1' })).toBeInTheDocument());

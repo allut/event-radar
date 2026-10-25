@@ -54,6 +54,8 @@ export const SIGNAL_TO_SIGNIN_TRIGGER: Record<Signal, SignInTrigger> = {
 
 export const SORT_DEFAULT: SortOption = 'relevance';
 export const DATE_PRESET_DEFAULT: DatePreset = 'any';
+// The preset whose range comes from the user's own from/to dates.
+export const DATE_PRESET_CUSTOM: DatePreset = 'custom';
 export const DATE_PRESET_TODAY: DatePreset = 'today';
 export const DATE_PRESET_WEEKEND: DatePreset = 'weekend';
 // Day-window per short-range date preset — keys mirror DATE_PRESETS' values.

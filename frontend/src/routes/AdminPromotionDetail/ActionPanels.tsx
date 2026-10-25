@@ -10,7 +10,7 @@ import {
   PROMOTION_REGISTRY_CODE_RE,
 } from '../../constants/promotions';
 import { formatEuro, isIsoDay, isStripePaid, parseEuroToCents, restrictionTag, type PromotionDetail } from '../../lib/promotions';
-import { PROMOTION_STRIPE_COPY as STRIPE } from '../../constants/promotions';
+import { PROMOTION_ACTION_PANEL_COPY as PANEL, PROMOTION_STRIPE_COPY as STRIPE } from '../../constants/promotions';
 import { tallinnToday, toDateStr } from '../../utils';
 import styles from './AdminPromotionDetail.module.css';
 
@@ -88,9 +88,9 @@ export function MarkPaidPanel({ detail, serverError, pending, run, onCancel, pos
   }
   return (
     <PanelShell
-      heading="Mark paid"
+      heading={PANEL.markPaidHeading}
       error={error ?? serverError}
-      confirmLabel="Confirm mark paid"
+      confirmLabel={PANEL.markPaidConfirm}
       pending={pending}
       onCancel={onCancel}
       onSubmit={submit}
@@ -155,15 +155,15 @@ export function EditPanel({ detail, serverError, pending, run, onCancel, patch }
       heading={full ? COPY.editFullHeading : COPY.editShortenHeading}
       note={datesLocked ? STRIPE.datesLocked : full ? COPY.editFullNote : COPY.editShortenNote}
       error={error ?? serverError}
-      confirmLabel="Save changes"
+      confirmLabel={PANEL.saveChanges}
       pending={pending}
       onCancel={onCancel}
       onSubmit={submit}
     >
-      <Field label="Start date" htmlFor={`${id}-start`}>
+      <Field label={PANEL.startDate} htmlFor={`${id}-start`}>
         <DatePicker
           id={`${id}-start`}
-          ariaLabel="Start date"
+          ariaLabel={PANEL.startDate}
           locale={ADMIN_LOCALE}
           dateOnly
           required
@@ -173,10 +173,10 @@ export function EditPanel({ detail, serverError, pending, run, onCancel, patch }
           onChange={setStart}
         />
       </Field>
-      <Field label="End date" htmlFor={`${id}-end`}>
+      <Field label={PANEL.endDate} htmlFor={`${id}-end`}>
         <DatePicker
           id={`${id}-end`}
-          ariaLabel="End date"
+          ariaLabel={PANEL.endDate}
           locale={ADMIN_LOCALE}
           dateOnly
           required
@@ -189,10 +189,10 @@ export function EditPanel({ detail, serverError, pending, run, onCancel, patch }
       </Field>
       {full && (
         <>
-          <Field label="Advertiser legal name" htmlFor={`${id}-name`}>
+          <Field label={PANEL.advertiserName} htmlFor={`${id}-name`}>
             <input id={`${id}-name`} className={styles.input} value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field label="Registry code" htmlFor={`${id}-reg`}>
+          <Field label={PANEL.registryCode} htmlFor={`${id}-reg`}>
             <input
               id={`${id}-reg`}
               className={`${styles.input} ${styles.mono}`}
@@ -201,7 +201,7 @@ export function EditPanel({ detail, serverError, pending, run, onCancel, patch }
               onChange={(e) => setRegistry(e.target.value)}
             />
           </Field>
-          <Field label="Billing email" htmlFor={`${id}-email`}>
+          <Field label={PANEL.billingEmail} htmlFor={`${id}-email`}>
             <input
               id={`${id}-email`}
               className={styles.input}
@@ -210,7 +210,7 @@ export function EditPanel({ detail, serverError, pending, run, onCancel, patch }
               onChange={(e) => setEmail(e.target.value)}
             />
           </Field>
-          <Field label="Invoice reference" htmlFor={`${id}-inv`}>
+          <Field label={PANEL.invoiceReference} htmlFor={`${id}-inv`}>
             <input
               id={`${id}-inv`}
               className={`${styles.input} ${styles.mono}`}
@@ -239,7 +239,7 @@ export function RepointPanel({ detail, serverError, pending, run, onCancel, post
       heading={COPY.repointHeading}
       note={candidates.length === 0 ? COPY.repointNone : undefined}
       error={error ?? serverError}
-      confirmLabel="Confirm re-point"
+      confirmLabel={PANEL.repointConfirm}
       pending={pending || candidates.length === 0}
       onCancel={onCancel}
       onSubmit={submit}
@@ -343,7 +343,7 @@ export function EndPanel(props: PanelProps) {
       heading={COPY.endHeading}
       note={COPY.endNote}
       path={API.adminPromotionEnd(props.detail.id)}
-      confirmLabel="Confirm end early"
+      confirmLabel={PANEL.endEarlyConfirm}
     />
   );
 }
@@ -355,7 +355,7 @@ export function VoidPanel(props: PanelProps) {
       heading={COPY.voidHeading}
       note={props.detail.awaiting_checkout ? STRIPE.voidNote : undefined}
       path={API.adminPromotionVoid(props.detail.id)}
-      confirmLabel="Confirm void"
+      confirmLabel={PANEL.voidConfirm}
     />
   );
 }
@@ -409,7 +409,7 @@ export function RefundPanel({ detail, serverError, pending, run, onCancel, post 
           : `Up to ${formatEuro(max)} (price paid, incl. VAT). Off-platform payments only; nothing is sent to the Organizer.`
       }
       error={error ?? serverError}
-      confirmLabel={stripe ? STRIPE.issueRefund(typed === null ? null : formatEuro(typed)) : 'Confirm refund'}
+      confirmLabel={stripe ? STRIPE.issueRefund(typed === null ? null : formatEuro(typed)) : PANEL.refundConfirm}
       pending={pending}
       onCancel={onCancel}
       onSubmit={submit}
