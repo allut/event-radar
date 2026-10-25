@@ -1,8 +1,9 @@
+import { StatusCodes } from 'http-status-codes';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../api/client';
 import { ORGANIZER_MAX_CATEGORIES } from '../_generated/sharedConstants';
-import { API, HTTP_STATUS_CONFLICT, QUERY_KEYS } from '../constants/api';
+import { API, QUERY_KEYS } from '../constants/api';
 import { CLAIM_ERROR_CODE_DORMANT } from '../constants/claims';
 import { t } from '../i18n';
 import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, toggleCapped, type LocalizedTextFields } from '../utils';
@@ -243,7 +244,7 @@ export function useClaimEventEdit(
     },
   });
 
-  const isLocked = query.isError && query.error instanceof ApiError && query.error.status === HTTP_STATUS_CONFLICT;
+  const isLocked = query.isError && query.error instanceof ApiError && query.error.status === StatusCodes.CONFLICT;
   const isDormant =
     isLocked && query.error instanceof ApiError && query.error.code === CLAIM_ERROR_CODE_DORMANT;
 

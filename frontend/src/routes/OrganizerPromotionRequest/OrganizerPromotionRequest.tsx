@@ -1,3 +1,4 @@
+import { StatusCodes } from 'http-status-codes';
 import { useEffect, useId, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -220,7 +221,7 @@ export default function OrganizerPromotionRequest() {
           setSubmitError(null);
           return;
         }
-        if (err.status === 404) {
+        if (err.status === StatusCodes.NOT_FOUND) {
           // Card checkout is off: the offer is on, so a request is still open.
           setCardBlock('unavailable');
           setSubmitError(null);

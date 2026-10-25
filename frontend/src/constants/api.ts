@@ -18,9 +18,6 @@ export const VALIDATION_ERROR_CODE = 'validation_error';
 // "couldn't reach Event Radar" message instead of the generic fallback.
 export const NETWORK_ERROR_CODE = 'network_error';
 
-// HTTP status the claim-editing surface reads structurally (not-granted / dormant).
-export const HTTP_STATUS_CONFLICT = 409;
-
 // ─── React Query keys ──────────────────────────────────────────────────────────
 // Query-key root strings shared across routes and useFeedback's invalidation
 // fan-out — a typo in one spot would silently break refresh, so it's centralized.

@@ -1,3 +1,4 @@
+import { StatusCodes } from 'http-status-codes';
 import { TALLINN_TZ } from '../_generated/sharedConstants';
 import { ApiError } from '../api/client';
 import { MS_PER_DAY } from '../constants/core';
@@ -459,7 +460,7 @@ export interface TrustResponse {
 
 /** A withdraw failure worded for the admin: the slots-flag 409 gets its runbook step. */
 export function withdrawErrorMessage(err: unknown, fallback: string): string {
-  if (err instanceof ApiError && err.status === 409 && (err.code ?? err.message) === PROMOTION_SLOTS_STILL_ENABLED_CODE) {
+  if (err instanceof ApiError && err.status === StatusCodes.CONFLICT && (err.code ?? err.message) === PROMOTION_SLOTS_STILL_ENABLED_CODE) {
     return PROMOTION_TRUST_COPY.slotsStillEnabled;
   }
   return apiErrorMessage(err, fallback);

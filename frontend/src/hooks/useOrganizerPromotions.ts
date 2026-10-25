@@ -1,11 +1,10 @@
+import { StatusCodes } from 'http-status-codes';
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, organizerApi } from '../api/client';
 import { API, QUERY_KEYS } from '../constants/api';
 import { setPromotionsOffered } from '../lib/organizerPromotionsOffer';
 import type { OrganizerPromotionItem, OrganizerPromotionsResponse } from '../lib/organizerPromotions';
-
-const NOT_FOUND = 404;
 
 /** The Organizer's requests and Promotions (GET /organizer/promotions). While
  * the offer flag is off the endpoint 404s: `offered` is false then, and the
@@ -24,7 +23,7 @@ export function useOrganizerPromotions(
         ? false
         : poll.everyMs,
   });
-  const notOffered = query.error instanceof ApiError && query.error.status === NOT_FOUND;
+  const notOffered = query.error instanceof ApiError && query.error.status === StatusCodes.NOT_FOUND;
   useEffect(() => {
     if (query.isSuccess) setPromotionsOffered(true);
     else if (notOffered) setPromotionsOffered(false);

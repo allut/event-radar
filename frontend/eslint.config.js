@@ -15,6 +15,7 @@ export default tseslint.config(
       react.configs.flat['jsx-runtime'],
     ],
     files: ['**/*.{ts,tsx}'],
+    linterOptions: { reportUnusedDisableDirectives: 'error' },
     languageOptions: {
       ecmaVersion: 2021,
       globals: globals.browser,
@@ -43,6 +44,12 @@ export default tseslint.config(
             'JSXOpeningElement[name.name="input"] > JSXAttribute[name.name="type"][value.value=/^(date|datetime-local|time)$/]',
           message:
             'Native date and time inputs are banned; use the shared DatePicker (docs/design-system.md).',
+        },
+        {
+          selector:
+            "BinaryExpression[operator=/^[!=]==?$/]:has(MemberExpression[property.name='status']):has(Literal[raw=/^[1-5]\\d\\d$/])",
+          message:
+            'Compare HTTP statuses with StatusCodes.* from http-status-codes (api/client.ts does).',
         },
       ],
     },
