@@ -180,9 +180,9 @@ Every list pages with a numbered pager and a `?page` URL param. There is no Load
 3. Commit the JSON and the regenerated `_generated/` files together.
 
 - **`_generated/` belongs to the script.** `backend/tests/test_generated_sync.py` runs the generator into a temp dir and fails on any byte of drift.
-- **The frontend reads strings through `frontend/src/i18n.ts`** (`t`, `ti`, `tn`, `personaName`, `personaVibe`) over `_generated/i18nData.ts`. `constants.ts` takes `LOCALES`, `PERSONAS`, TTLs and weight thresholds from `_generated/sharedConstants.ts`.
+- **The frontend reads strings through `frontend/src/i18n.ts`** (`t`, `ti`, `tn`, `personaName`, `personaVibe`) over `_generated/i18nData.ts`. The `frontend/src/constants/` files, such as `core.ts`, import `LOCALES`, TTLs and weight thresholds from `_generated/sharedConstants.ts`, and `PERSONAS` from `_generated/i18nData.ts`.
 - **A count-dependent string uses `tn()` and one key per plural category**, `{key}_one`/`_other`, plus `_few`/`_many` in `ru.json`. `Intl.PluralRules` picks the category, so each locale needs every category its rule returns.
-- **The backend reads strings through `backend/app/i18n.py`** (`t`, `ti`, `day_name`, `month_name`) over `_generated/i18n_data.py`. `app/constants.py` takes cross-stack scalars and frozensets from `_generated/shared_constants.py`.
+- **The backend reads strings through `backend/app/i18n.py`** (`t`, `ti`, `day_name`, `month_name`) over `_generated/i18n_data.py`. The `app/constants/` files, such as `core.py`, import cross-stack scalars and frozensets from `_generated/shared_constants.py`.
 - **Legal and FAQ copy isn't in `shared/`.** Each is a per-locale TypeScript module under `frontend/src/content/legal/` or `content/faq/`.
 - **Paid-slot copy carries `gate: 'slotsOn'` or `'slotsOff'`** on a block, list item, section or FAQ item. `content/slotsGate.ts` drops the non-matching ones before render, and `LegalDoc.lastUpdatedSlots` replaces the date while on. The Ranking `paid-slots` section, the FAQ `paid-*` items and the Privacy additions use it.
 - **`isPromotionsSlotsEnabled()` reads the build-time `VITE_PROMOTIONS_SLOTS_ENABLED`.** It mirrors the backend `PROMOTIONS_SLOTS_ENABLED` and only decides whether the legal pages carry the copy. The backend flag stays authoritative for serving slots, so flip both.

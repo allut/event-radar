@@ -127,7 +127,7 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 
 ## Public Reads
 
-- **Public event endpoints filter visibility in the query, not the serializer.** `app/events/queries.py::public_event_filter()` admits only published, non-explicit, non-`event` rows. A hidden row's existence can't leak through a 200-versus-404 oracle.
+- **Public event endpoints filter visibility in the query, not the serializer.** `app/events/queries.py::public_event_filter()` admits only published rows that are neither explicit nor a non-event. A hidden row's existence can't leak through a 200-versus-404 oracle.
 - **Responses never expose internal metadata** such as `dedup_group_id`.
 
 ## Claims
@@ -303,7 +303,7 @@ The confirmation link must not attach an attacker's Google account to a victim w
 - **`app/routers/admin_auth.py` is a third track: password plus a required TOTP code (RFC 6238)** against `ADMIN_USERNAME`/`ADMIN_PASSWORD`. It's the only admin credential surface. HTTP Basic was removed because it never checked TOTP, so the password alone bypassed the second factor.
 - **Every `/admin/*` route requires the session cookie (`get_current_admin`)**, including counts and stats. A password-only route would be an oracle that the per-IP lockout can't slow across many IPs.
 - **The default `ADMIN_USERNAME` (`"admin"`) is refused outside development** (`admin_lockout.py::admin_username_disabled`). A well-known username halves the pair an attacker has to guess.
-- **`app/auth/totp.py::verify_totp_code` rejects any time step at or before the last accepted one.** An observed code can't mint a second session inside its `ADMIN_TOTP_VALID_WINDOW` drift window.
+- **`app/auth/totp.py::check_totp_code` rejects any time step at or before the last accepted one.** `record_totp_step()` records a step only after the whole login succeeds. An observed code can't mint a second session inside its `ADMIN_TOTP_VALID_WINDOW` drift window.
 - **The cookie is httpOnly, Secure, `SameSite=Strict`** (`ADMIN_SESSION_COOKIE_NAME`, `Path=/api/admin`), minted by `tokens.py::generate_admin_session_token` with its own salt `AUTH_ADMIN_SESSION_SALT`.
 - **It carries no id or version claim, because there's no admins table.** So there's no per-session revocation, and `ADMIN_SESSION_TTL_SECONDS` (12h) is shorter than the consumer TTL to compensate.
 - **The token's `e` (epoch) claim is a SHA-256 of `ADMIN_SESSION_EPOCH`, `ADMIN_PASSWORD` and `ADMIN_TOTP_SECRET`** (`tokens.py::_admin_session_epoch`). Rotating any of them invalidates every admin session, with no separate step.

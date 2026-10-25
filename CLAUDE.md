@@ -14,15 +14,15 @@ Deep-dive docs are not auto-loaded. Open the row's doc before editing what it co
 
 | Subject | Read before touching |
 |---|---|
-| **Pipeline** — `docs/pipeline.md` | `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/ranking/`, `app/publish.py`, `app/routers/{browse,public,feedback}.py` |
-| **Security** — `docs/security.md` | `app/main.py`, `app/rate_limit.py`, `app/auth/`, `app/routers/{auth,organizer_auth,admin_auth,utils}.py`, `app/ingestion/http_client.py`, any new endpoint |
+| **Pipeline** — `docs/pipeline.md` | `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/ranking/`, `app/events/`, `app/publish.py`, `app/routers/{browse,public,feedback,feed,events,webhooks}.py` |
+| **Security** — `docs/security.md` | `app/main.py`, `app/rate_limit.py`, `app/auth/`, `app/routers/{auth,organizer_auth,admin_auth,unsubscribe,utils}.py`, `app/ingestion/http_client.py`, any new endpoint |
 | **Backend ops** — `docs/backend-ops.md` | `render.yaml`, `frontend/wrangler.toml`, `frontend/public/_headers`, `frontend/functions/`, `app/routers/{admin,admin_auth,reports}.py`, `app/cleanup.py`, `backend/scripts/`, scheduled jobs, CI |
 | **Frontend** — `docs/frontend.md` | `frontend/src/{routes,components,hooks,lib,content}/`, `frontend/scripts/generate-icons.ts`, `shared/i18n/`, `app/email/` |
 | **SEO and prerender** — `docs/seo.md` | `frontend/scripts/prerender.ts`, `frontend/functions/api/{seo-audit,prerender-cadence}.ts`, `useSeoMeta`, `SeoTags/`, `frontend/src/lib/{structuredData,jsonLd,seoValidation,seoAudit*,prerender*,r2ChainState}.ts` |
 | **Design system** — `docs/design-system.md` | any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, `frontend/src/lib/theme.ts`, `app/email/styles.py`, any visual change |
-| **Promotions and payments** — no single doc | `app/promotions/`, `app/integrations/payments.py`: `docs/backend-ops.md` (Stripe Setup, sweep, kill switches), `docs/security.md` (Stripe Webhook), `docs/organizer-portal.md` (promotion form), `docs/data-model.md` |
+| **Promotions and payments** — no single doc | `app/promotions/`, `app/integrations/`, `app/routers/stripe_webhook.py`: `docs/backend-ops.md` (Stripe Setup, sweep, kill switches), `docs/security.md` (Stripe Webhook), `docs/organizer-portal.md` (promotion form), `docs/data-model.md` |
 | **Organizer portal and claiming** — `docs/organizer-portal.md` | `app/routers/organizer_*.py`, `app/claims/`, `frontend/src/routes/{EventSubmit,OrganizerSettings,OrganizerContact}/`, `frontend/src/routes/*Claim*/`, `frontend/src/components/{VenuePicker,RichTextEditor,ClaimStrip,ClaimEventPicker}/` |
-| **Data model** — `docs/data-model.md` | a migration, a query on a new column, a serializer |
+| **Data model** — `docs/data-model.md` | `app/models/`, a migration, a query on a new column, a serializer |
 | **Rule rationale** — `docs/conventions.md` | the reason behind a Code Quality Rule below |
 | **Writing docs** — `docs/writing-docs.md` | `CLAUDE.md`, `README.md`, any `docs/*.md` |
 | **Observability** — `docs/observability.md` | `app/logging_config.py`, `LOG_*` constants in `app/constants/ops.py`, Axiom monitors, the log-record shape, log triage |
@@ -35,7 +35,7 @@ Deep-dive docs are not auto-loaded. Open the row's doc before editing what it co
 ```bash
 # Backend (Python 3.12, FastAPI)
 cd backend
-python -m venv venv          # create virtualenv (venv is gitignored)
+python -m venv venv          # create virtualenv (gitignored)
 # Activate it — pick the line for your shell:
 venv\Scripts\Activate.ps1    # Windows PowerShell
 venv\Scripts\activate.bat    # Windows cmd
@@ -43,9 +43,9 @@ source venv/bin/activate     # macOS / Linux
 pip install -r requirements.txt
 alembic upgrade head          # apply migrations
 uvicorn app.main:app --reload # dev server (port 8000)
-pytest                        # run all tests
-pytest tests/path/test_foo.py::TestClass::test_name  # single test
-pytest --cov --cov-report=term-missing   # tests + coverage report (config: backend/.coveragerc)
+bash scripts/scratch-test.sh  # all tests, throwaway DB
+bash scripts/scratch-test.sh tests/path/test_foo.py::TestClass::test_name  # single test
+bash scripts/scratch-test.sh --cov --cov-report=term-missing  # coverage (backend/.coveragerc)
 
 # Dev tooling (pip install -r requirements-dev.txt)
 python -m mypy app             # type-check
@@ -76,14 +76,14 @@ npm run test:coverage # coverage report (v8, html + text)
 The setup walkthrough is in `README.md`. Inside the container:
 
 - **The interpreter is `/opt/venv/bin/python`, already on `PATH`.** Skip the venv lines. `DATABASE_URL` and Postgres come with the container.
-- **Run `python -m ruff` and `python -m mypy`.** Neither is on `PATH`, in or out of the container.
+- **Run `python -m ruff` and `python -m mypy`,** the form CI and the pre-commit hook use.
 - **Dev servers auto-start; restart them with `bash .devcontainer/dev-server.sh restart`.** An ad-hoc `npm run dev` on the mounted workspace gets a Vite watcher that silently goes stale. Use `dev-server.sh run <backend|frontend>` for a foreground instance.
 - **The scheduler is off (`ENABLE_SCHEDULER=false`).** No timed scrapes, LLM spend or digest email. The README shows how to turn it on for one session.
 - **Logs are in `/tmp/event-radar-dev/`.** Tail them with `bash .devcontainer/dev-server.sh logs backend|frontend`.
 
 ### Testing
 
-- **Run the backend suite from the repo root with `bash backend/scripts/scratch-test.sh [pytest args]`.** It migrates, then drops, a throwaway database. The full suite takes ~2.5 min: run it with `run_in_background`. `backend/tests/conftest.py` refuses to run when `DATABASE_URL` names the dev `eventradar` database.
+- **Run the backend suite from the repo root with `bash backend/scripts/scratch-test.sh [pytest args]`.** It migrates, then drops, a throwaway database. The full suite takes ~4 min: run it with `run_in_background`. `backend/tests/conftest.py` refuses to run when `DATABASE_URL` names the dev `eventradar` database.
 - **UI work starts with an approved prototype built on the real `index.css`.** Recipe: `docs/design-system.md` "Prototype Shell". A change with no visual difference (data, wiring, when an existing control shows) needs none.
 - **After editing `CLAUDE.md`, `README.md` or `docs/*.md`, run `bash backend/scripts/scratch-test.sh --no-db tests/test_docs_style.py`.**
 - **There is no e2e suite.** QA runs through the Playwright MCP server, and `.playwright-mcp/` is disposable scratch. Playwright stays a build dependency for the SEO prerender.
@@ -107,7 +107,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 
 ### Where things live
 
-- **Backend constants live in `app/constants/<domain>.py`**, one file per docs-map domain, imported from the file that defines them. LLM prompts go in `app/llm/prompts.py`, scrape selectors in `app/ingestion/selectors.py`, and cross-stack values in `shared/`. Add the constant there first, then import it.
+- **Backend constants live in `app/constants/<domain>.py`**, one file per domain, imported from the file that defines them. LLM prompts go in `app/llm/prompts.py`, scrape selectors in `app/ingestion/selectors.py`, and cross-stack values in `shared/`. Add the constant there first, then import it.
 - **Frontend constants live in `frontend/src/constants/<domain>.ts`**, imported from the file that defines them, and cross-stack ones in `shared/`. Add the literal there before using it in a component.
 - **Each backend helper has one home.** Router-shared helpers go in `app/routers/utils.py`. Domain packages (`app/auth/`, `app/email/`, `app/claims/`, `app/ingestion/`, `app/events/`, `app/promotions/`) own theirs and never import from `routers/utils.py`. Check both before writing one.
 - **Cross-router auth dependencies live in `app/auth/dependencies.py`**, so routers never import from each other's modules.
@@ -129,7 +129,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 ### Style and checks
 
 - **Quotes:** double in Python (Ruff `Q`); single for TS strings and double for JSX attributes (ESLint). Run `ruff check --fix` and `eslint --fix` before committing.
-- **`python -m ruff check backend` and `python -m mypy app` (from `backend/`) pass clean.** Ruff config is `backend/ruff.toml`; there is no `backend/pyproject.toml`. Give a reused loop variable of an incompatible type its own name.
+- **`python -m ruff check .` and `python -m mypy app` (from `backend/`) pass clean.** Ruff config is `backend/ruff.toml`; there is no `backend/pyproject.toml`. Give a reused loop variable of an incompatible type its own name.
 - **Use PEP 604/585 annotations** (`X | None`, `list[T]`), and annotate every public return type.
 - **Reuse the shared test fixtures** in `backend/tests/conftest.py`, the package conftests and `frontend/src/test/utils.tsx`. Frontend tests mock the `api` module, not `fetch`.
 

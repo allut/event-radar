@@ -193,7 +193,7 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 ## 10. Layout and breakpoints
 
 - **640px is the one shared breakpoint**, written as a literal and named by `--bp-narrow` (§3). `Landing`'s 641px is its `min-width` complement, not a new breakpoint.
-- **Three one-off breakpoints each have a single consumer and a doc token:** 560px for Onboarding, 900px for Landing's stat row and 1024px for the admin desktop gate.
+- **Three one-off breakpoints each have a doc token:** 560px for Onboarding, 900px for Landing's stat row and 1024px for the admin desktop gate. The Organizer promotion request form also collapses at 900px.
 - **`Pager.module.css` holds the only container queries**, on the pager's own width. At `--bp-pager-stack` the label stacks over the buttons; at `--bp-pager-collapse` it keeps first, current and last. That fits a 340px admin column at any viewport. Like `@media`, `composes:` can't sit inside `@container`.
 - **The top bar switches at 1280px, with no token.** Below it, `Bar.module.css` hides `.wideOnly` (pulse chip, inline search) and shows `.narrowOnly` (search icon and popover).
 - **Page widths are `--page-max-*` tokens per surface.** Pick an existing one before adding another.
@@ -213,7 +213,7 @@ The wide band is **pure reflow**: one `@media (min-width: 2000px)` band, a fixed
 
 - **The floor sits between a laptop and a monitor.** It started at 1280px, but a 1920px-CSS laptop (2880×1620 at 150%) read better on the original layout. Re-check that laptop before lowering the floor below 1920.
 - **One wide `:root` block at the end of `index.css`** sets `--page-max-wide` to 1760px and points `--page-max-medium` and `-grid` at it. Every wide token is theme-neutral.
-- **The band has six grid columns.** `frontend/src/cardGridColumns.test.ts` asserts each fixed count divides the 24-event page size, so every page and load-more ends on a full row.
+- **The band has six grid columns.** `frontend/src/cardGridColumns.test.ts` asserts each fixed count divides the 24-event page size, so every full page ends on a full row.
 - **Bar content aligns to the 1760 wrap through `--wrap-inset`;** the bar background stays full-bleed. The token's `100%` resolves at each use site, so any full-bleed strip can reuse it.
 
 #### Landing in the Band
@@ -289,7 +289,7 @@ Each of these was built or prototyped, reviewed and decided. Reopen one only wit
 4. Test the layout against the **Estonian and Russian** strings, not English.
 5. Check with imagery stripped and under `prefers-reduced-motion: reduce`. For display type, also zoom to 300% and raise the default font size (§4's Browser Zoom).
 6. Verify visually before landing. A CSS retrofit that reads correctly in the diff can still look wrong on screen.
-7. Run `npm run lint` and `npm run type-check`; CI runs neither.
+7. Run `npm run lint` and `npm run type-check` before committing; CI's `lint` job runs both.
 8. Start a new surface from an approved prototype built on the shell below.
 
 ### Prototype Shell

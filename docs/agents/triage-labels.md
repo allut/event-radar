@@ -14,4 +14,4 @@ When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the 
 
 Edit the right-hand column to match whatever vocabulary you actually use.
 
-**Not yet created in GitHub:** `needs-triage` and `needs-info` (checked 2026-10-09 — `ready-for-agent`, `ready-for-human` and `wontfix` exist). `gh issue edit --add-label` fails on a missing label, so run `gh label create <name>` before first use.
+All five labels exist in GitHub (checked 2026-10-25). `gh issue edit --add-label` fails on a missing label, so run `gh label create <name>` before using a new one.

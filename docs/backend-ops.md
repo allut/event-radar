@@ -276,8 +276,8 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 
 - **`reset_events.py` wipes all event and pipeline data and resets IDs to 1.** It runs `TRUNCATE ... RESTART IDENTITY CASCADE` over `events`, `raw_events`, `event_sources`, `event_classifications`, `user_event_feedback`, `daily_feeds`, `ingestion_runs`, `llm_calls` and `raw_inbound_emails`.
 - **It then resets `sources.last_run_at` and `last_status` to `NULL`**, so ingestion re-fetches from scratch.
-- **Users, organizers, personas, sources, publishers and claims are preserved.** Only the sources' run state is cleared.
-- **`CASCADE` also empties `event_reports`**, and claim edits pinned onto the wiped events go with them.
+- **Users, organizers, personas, sources, publishers and claims are preserved.** Promotions are not; see the `CASCADE` bullet. Only the sources' run state is cleared.
+- **`CASCADE` also empties every table that references a wiped one:** `event_reports`, `promotions`, `promotion_requests`, `promotion_daily_stats`, `promotion_snapshots` and `daily_sponsored_slots`. Claim edits pinned onto the wiped events go with them.
 - **It's a dry run by default**, printing the masked `DATABASE_URL` and per-table counts. `--yes` truncates, then warns on any table that isn't empty afterwards.
 - **The truncate can't be undone.** It's for resetting a dev or staging DB or clearing bad ingested data, not routine use.
 

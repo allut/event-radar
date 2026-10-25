@@ -229,7 +229,7 @@ The Organizer offer and request path (`app/routers/organizer_promotions.py`, `ap
 - **The request form (`OrganizerPromotionRequest/`, `/organizer/promotions/new?event_id=`) validates dates through `GET /validate`.** Sold-out days arrive as dates from `/context` and grey out in `DatePicker`. A real `EventCard` previews the ad with the typed or registry name.
 - **Card payment is the default action, with the request as fallback.** The form starts on Pay only when `/context` says `checkout_available` and not `review_required`; otherwise it starts on the request with the review copy. A 409 `event_needs_review`, a 404 or a registry outage still fall back.
 - **The registry lookup runs once the 8-digit check digit passes.** A found name locks the field. Deleted and not-found codes block the form, and an outage opens a typed name and the request path.
-- **The terms and content-policy links point at placeholder routes** (`ROUTES.organizerTerms`, `organizerContentPolicy`) until the Organizer terms page exists.
+- **The terms and content-policy links open `/organizer-terms` and its `#content-policy` section** (`ROUTES.organizerTerms`, `ROUTES.organizerContentPolicy`). That page carries a DRAFT notice; see [frontend.md](frontend.md)'s i18n section.
 - **`OrganizerPromotionSuccess/` never trusts the redirect.** It polls the list until the Promotion is `scheduled` or later, because the Stripe webhook can land after the return. A late payment still gets the automatic refund the page describes.
 - **The per-day table sums `web_opens` and `digest_opens` into one Opens column.** A paused day shows the gate reason in short words; the long sentence appears under the row's badge. Copy lives in `promo_*` keys, with `promo_why_<code>` per gate code.
 

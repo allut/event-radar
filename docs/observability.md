@@ -35,8 +35,8 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `auth_failed` | magic-link / admin-console login / claim-intent-link auth rejected | `app/routers/auth.py`, `organizer_auth.py`, `organizer_claims.py`, `app/auth/admin_lockout.py` |
 | `webhook_rejected` | inbound-mail bad signature / bad body | `app/routers/webhooks.py` |
 | `report_submitted` | `POST /reports` succeeded | `app/routers/reports.py` |
-| `email_send_failed` | a Resend send failed (magic link, digest, contact, report notify/reporter, claim resolution) | `app/email/resend.py::send_resend_email` (every request-path send), `app/email/digest.py`, `app/claims/lifecycle.py`, `app/routers/admin.py`, `app/routers/utils.py` |
-| `admin_action` | console-initiated admin action — audit trail; carries `action`, one of 19 `ADMIN_ACTION_*` values (`app/constants/admin.py`) | `app/routers/admin_auth.py`, `app/routers/utils.py` |
+| `email_send_failed` | a Resend send failed (magic link, digest, contact, report notify/reporter, claim resolution, cancellation, Promotion notices) | `app/email/resend.py::send_resend_email` (every request-path send), `app/email/digest.py`, `app/claims/lifecycle.py`, `app/events/cancellation.py`, `app/promotions/sweep.py`, `app/routers/admin.py`, `app/routers/organizer_promotions.py`, `app/routers/stripe_webhook.py` |
+| `admin_action` | console-initiated or system Promotion action — audit trail; carries `action`, one of the `ADMIN_ACTION_*` values (`app/constants/admin.py`) | `app/routers/admin_auth.py`, `app/routers/utils.py`, `app/promotions/audit.py` |
 | `contact_honeypot_block` | contact-form honeypot field tripped (bot signal) | `app/routers/contact.py` |
 | `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/main.py` |
 | `unverified_account_budget_exceeded` | global daily new-unverified-account budget crossed (mail-bomb early warning, OWASP audit F10) | `app/routers/utils.py::record_unverified_account_creation` |
@@ -118,7 +118,7 @@ thresholds after observing a few days of baseline volume.
 | 7 | Log-stream silence | Threshold (below) | `['event-radar-logs'] \| summarize count()` over 30 min | count < 1 |
 | 8 | Job-duration anomaly *(optional)* | AnomalyDetection | `['event-radar-logs'] \| where event == "job_run" \| summarize avg(duration_ms) by job, bin_auto(_time)` | auto-baselined drift |
 | 9 | Report abuse spike | Threshold | `['event-radar-logs'] \| where event == "report_submitted" \| summarize count()` over 10 min | placeholder — tune after baseline volume observed |
-| 10 | Admin action audit ⭐ | Match | `['event-radar-logs'] \| where event == "admin_action"` | any match — the audit trail (19 `ADMIN_ACTION_*` values) exists but had no monitor watching it (OWASP audit F11); this makes every console-initiated admin action visible, not alert-worthy on its own |
+| 10 | Admin action audit ⭐ | Match | `['event-radar-logs'] \| where event == "admin_action"` | any match — the audit trail (`ADMIN_ACTION_*` values) exists but had no monitor watching it (OWASP audit F11); this makes every console-initiated admin action visible, not alert-worthy on its own |
 | 11 | Host-header probing | Threshold | `['event-radar-logs'] \| where event == "host_rejected" \| summarize count()` over 15 min | count > 5 — signals cache-poisoning/host-spoofing probes (OWASP audit F11) |
 | 12 | Google sign-in degraded | Threshold | `['event-radar-logs'] \| where event == "google_signin_degraded" \| summarize count()` over 15 min | count > 3 — sustained failures talking to Google (token exchange or JWKS fetch), not just an occasional blip |
 

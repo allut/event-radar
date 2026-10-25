@@ -13,7 +13,7 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **The canonical follows the URL after a past-end clamp.** Explore holds `indexable` off while a page is empty but `total` is positive, and while a previous page shows as placeholder data. There is no JS `noindex` and no empty state for a past-end page.
 - **`buildSeoMeta` is the pure builder behind the hook.** Tests assert on plain tag and link data instead of `react-helmet-async`'s DOM side effects.
 - **`frontend/src/components/SeoTags/` is a thin, untested `react-helmet-async` render shell.** The unit tests for `buildSeoMeta` and the structured-data builders cover the data it renders.
-- **Every JSON-LD body goes through `frontend/src/lib/jsonLd.ts::serializeJsonLd()`**, which escapes each `<` to `<`. `SeoTags` and the prerender's change-marker re-save both use it. A bare `JSON.stringify` would let event text containing `</script` break out of the tag.
+- **Every JSON-LD body goes through `frontend/src/lib/jsonLd.ts::serializeJsonLd()`**, which escapes each `<` to `\u003c`. `SeoTags` and the prerender's change-marker re-save both use it. A bare `JSON.stringify` would let event text containing `</script` break out of the tag.
 
 ## Structured Data
 

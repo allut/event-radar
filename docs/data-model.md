@@ -194,7 +194,6 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **A snapshot's `trigger` is `grant`, `mark_paid`, `edit` or `repoint`.** `grant` is a complimentary grant, which is born paid. A priced grant takes none until it is paid, and every edit takes one, scheduled or live.
 - **`promotion_requests` holds an Organizer's request** (migration 0066): event, Organizer, window, advertiser name and registry code, billing email, note, `status`, `decline_reason`, `resolved_by`, the terms version and time. A partial unique index allows one `pending` row per event.
 - **`status` is `pending`, `granted`, `declined`, `withdrawn` or `expired`.** Granting sets `promotions.source_request_id` in the same transaction.
-- **Later tickets add the Stripe, attestation and checkout columns.**
 
 ### Moderation and Audit
 
