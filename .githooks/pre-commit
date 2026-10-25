@@ -6,6 +6,11 @@ cd "$(git rev-parse --show-toplevel)"
 
 staged() { git diff --cached --name-only --diff-filter=ACMR | grep -qE "$1"; }
 
+if staged '^(shared/|backend/app/_generated/|frontend/src/_generated/)'; then
+  echo "pre-commit: generated files"
+  python scripts/generate_shared.py --check
+fi
+
 if staged '^(backend/|shared/)'; then
   echo "pre-commit: ruff"
   (cd backend && python -m ruff check .)

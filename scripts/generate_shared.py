@@ -8,6 +8,7 @@ Re-running with unchanged JSON produces byte-identical output (idempotent).
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -396,6 +397,14 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Regenerate the _generated/ files from shared/.")
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="write nothing; exit 1 and name each generated file that differs from what shared/ produces",
+    )
+    args = parser.parse_args()
+
     cfg = _load("app-config.json")
     version = _version()
     # Locale codes flow from shared/app-config.json — the single source of truth —
@@ -408,9 +417,6 @@ def main() -> None:
     calendar = _load("calendar.json")
     personas = _load("personas.json")
 
-    BACKEND_GEN.mkdir(parents=True, exist_ok=True)
-    FRONTEND_GEN.mkdir(parents=True, exist_ok=True)
-
     files: list[tuple[Path, str]] = [
         (BACKEND_GEN / "__init__.py", HEADER_PY),
         (BACKEND_GEN / "i18n_data.py", write_backend_i18n_data(locale_data, calendar, personas, locales)),
@@ -419,13 +425,32 @@ def main() -> None:
         (FRONTEND_GEN / "sharedConstants.ts", write_frontend_shared_constants(cfg, version)),
     ]
 
+    def label_of(path: Path) -> Path:
+        try:
+            return path.relative_to(REPO)
+        except ValueError:
+            return path
+
+    if args.check:
+        stale = [
+            label_of(path)
+            for path, content in files
+            if not path.exists() or path.read_text(encoding="utf-8") != content
+        ]
+        if stale:
+            print("generated files are stale; run python scripts/generate_shared.py:", file=sys.stderr)
+            for label in stale:
+                print(f"  {label}", file=sys.stderr)
+            sys.exit(1)
+        print("generated files are up to date.")
+        return
+
+    BACKEND_GEN.mkdir(parents=True, exist_ok=True)
+    FRONTEND_GEN.mkdir(parents=True, exist_ok=True)
+
     for path, content in files:
         path.write_text(content, encoding="utf-8")
-        try:
-            label = path.relative_to(REPO)
-        except ValueError:
-            label = path
-        print(f"  wrote {label}")
+        print(f"  wrote {label_of(path)}")
 
     print("done.")
 
