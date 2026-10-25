@@ -16,7 +16,7 @@ Deep-dive docs are not auto-loaded. Open the row's doc before editing what it co
 |---|---|
 | **Pipeline** — `docs/pipeline.md` | `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/ranking/`, `app/publish.py`, `app/routers/{browse,public,feedback}.py` |
 | **Security** — `docs/security.md` | `app/main.py`, `app/rate_limit.py`, `app/auth/`, `app/routers/{auth,organizer_auth,admin_auth,utils}.py`, `app/ingestion/http_client.py`, any new endpoint |
-| **Backend ops** — `docs/backend-ops.md` | `render.yaml`, `frontend/wrangler.toml`, `frontend/public/_headers`, `frontend/functions/`, `app/routers/{admin,admin_auth,reports}.py`, `app/cleanup.py`, `app/logging_config.py`, `backend/scripts/`, scheduled jobs, CI |
+| **Backend ops** — `docs/backend-ops.md` | `render.yaml`, `frontend/wrangler.toml`, `frontend/public/_headers`, `frontend/functions/`, `app/routers/{admin,admin_auth,reports}.py`, `app/cleanup.py`, `backend/scripts/`, scheduled jobs, CI |
 | **Frontend** — `docs/frontend.md` | `frontend/src/{routes,components,hooks,lib,content}/`, `frontend/scripts/generate-icons.ts`, `shared/i18n/`, `app/email/` |
 | **SEO and prerender** — `docs/seo.md` | `frontend/scripts/prerender.ts`, `frontend/functions/api/{seo-audit,prerender-cadence}.ts`, `useSeoMeta`, `SeoTags/`, `frontend/src/lib/{structuredData,jsonLd,seoValidation,seoAudit*,prerender*,r2ChainState}.ts` |
 | **Design system** — `docs/design-system.md` | any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, `frontend/src/lib/theme.ts`, `app/email/styles.py`, any visual change |
@@ -25,7 +25,7 @@ Deep-dive docs are not auto-loaded. Open the row's doc before editing what it co
 | **Data model** — `docs/data-model.md` | a migration, a query on a new column, a serializer |
 | **Rule rationale** — `docs/conventions.md` | the reason behind a Code Quality Rule below |
 | **Writing docs** — `docs/writing-docs.md` | `CLAUDE.md`, `README.md`, any `docs/*.md` |
-| **Observability** — `docs/observability.md` | the Axiom monitoring spec, the shipped log-record shape, log triage |
+| **Observability** — `docs/observability.md` | `app/logging_config.py`, `LOG_*` constants in `app/constants/ops.py`, Axiom monitors, the log-record shape, log triage |
 | **Domain glossary** — `CONTEXT.md` | naming a new domain concept |
 | **Decisions** — `docs/adr/` | an architectural decision |
 | **Agent workflow** — `docs/agents/` | the issue tracker, triage labels and domain docs |

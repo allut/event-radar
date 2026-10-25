@@ -1,11 +1,17 @@
 line-length = 88
 extend-exclude = ["app/_generated"]
+preview = true
 
 [lint]
-select = ["E", "F", "W", "Q"]
+explicit-preview-rules = true
+select = ["E", "F", "W", "Q", "PLC2701"]
 ignore = ["E501"]
 
 [lint.flake8-quotes]
 inline-quotes = "double"
 multiline-quotes = "double"
 docstring-quotes = "double"
+
+[lint.per-file-ignores]
+"tests/**" = ["PLC2701"]
+"alembic/versions/*" = ["PLC2701"]
