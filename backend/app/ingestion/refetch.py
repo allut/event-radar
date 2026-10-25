@@ -101,7 +101,7 @@ from app.claims.lifecycle import bulk_dormant_pinned_event_ids
 from app.claims.pinning import pin_key
 from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
 from app.ingestion.sanitize import sanitize_html
-from app.ingestion.adapter import coords_in_estonia
+from app.ingestion.adapter import coords_in_estonia, coords_in_tallinn
 from app.ingestion.geocode import is_suspect_venue_name
 from app.ingestion.sources.estonia_concert_hall import (
     estonia_concert_hall_localized_text,
@@ -426,12 +426,14 @@ async def _process_one(
 
     detail_lat = location.get("lat") if location else None
     detail_lng = location.get("lng") if location else None
-    if detail_lat is None or detail_lng is None or not coords_in_estonia(
+    # An in-area event uses the Tallinn gate geocode's self-heal applies; a looser
+    # Estonia gate would re-write a coord the next geocode pass NULLs (#635).
+    coord_gate = coords_in_estonia if event.is_out_of_area else coords_in_tallinn
+    if detail_lat is None or detail_lng is None or not coord_gate(
         detail_lat, detail_lng
     ):
-        # Same Estonia-bbox gate the ingest path applies (fienta._merge_location):
-        # an off-country or non-finite detail coordinate must not overwrite a
-        # good stored one (OWASP audit M-6). NaN fails the comparisons too.
+        # Bbox gate: an off-region or non-finite detail coordinate must not
+        # overwrite a good stored one (OWASP audit M-6). NaN fails the comparisons too.
         detail_lat = detail_lng = None
 
     changed = _reconcile(

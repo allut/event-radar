@@ -107,6 +107,7 @@ def _future_event(**overrides) -> MagicMock:
     e.status = "published"
     e.is_explicit = False
     e.is_non_event = False
+    e.is_out_of_area = False
     e.detail_refetched_at = None
     e.detail_refetch_count = 0
     e.source_gone_since = None
@@ -277,6 +278,33 @@ class TestPriceReconcile:
         ):
             await refetch_event_details(mock_db)
         store_get.assert_not_called()
+
+
+# --- Tallinn-bbox gate vs geocode self-heal (#635) --------------------------
+
+
+class TestTallinnBboxGate:
+    @pytest.mark.asyncio
+    async def test_in_area_event_ignores_estonia_only_coords(self, mock_db):
+        # Tartu: inside Estonia, outside TALLINN_REGION_BBOX. Self-heal would NULL it.
+        event = _future_event(venue_address="Same Street 1, Tallinn", lat=None, lng=None)
+        summary = await _run(
+            mock_db, event, _event_html(street="Same Street 1", lat=58.378, lng=26.729)
+        )
+        assert event.lat is None
+        assert event.lng is None
+        assert summary["coords_changed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_out_of_area_event_keeps_estonia_gate(self, mock_db):
+        event = _future_event(
+            venue_address="Same Street 1, Tallinn", lat=None, lng=None, is_out_of_area=True
+        )
+        summary = await _run(
+            mock_db, event, _event_html(street="Same Street 1", lat=58.378, lng=26.729)
+        )
+        assert event.lat == 58.378
+        assert summary["coords_changed"] == 1
 
 
 # --- address <-> coords coupling --------------------------------------------

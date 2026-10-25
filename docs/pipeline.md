@@ -35,7 +35,7 @@ For each new Fienta event, one not yet in `event_sources`, the adapter also fetc
 |---|---|
 | `venue_name` | Listing wins; detail fills when missing |
 | `venue_address` | The side carrying a 5-digit postal code; else listing wins, detail fills when empty |
-| `lat` / `lng` | Detail JSON-LD only, gated to Estonia by `coords_in_estonia` |
+| `lat` / `lng` | Detail JSON-LD only, gated to `TALLINN_REGION_BBOX` by `coords_in_tallinn` (refetch keeps the `coords_in_estonia` gate for `is_out_of_area` events), so geocode self-heal never undoes a write (#635) |
 | `price_min` / `price_max` | Listing's `app/ingestion/pricing.py::parse_price_from_string` baseline; a present detail offer price overrides each bound |
 
 - **A missing `_detail` degrades to listing-only.** The merge never blocks ingest on a failed detail fetch.
