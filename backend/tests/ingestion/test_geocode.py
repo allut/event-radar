@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from app.constants.core import TALLINN_TZ
+from app.constants.ingestion import TALLINN_REGION_BBOX
 from app.ingestion.geocode import (
     _self_heal_out_of_bbox_coords,
     _sync_venue_linked_coords,
@@ -1229,6 +1230,16 @@ class TestSelfHealOutOfBboxCoords:
         await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
         compiled = str(mock_db.execute.call_args.args[0])
         assert "coalesce(events.ends_at, events.starts_at)" in compiled
+
+
+    @pytest.mark.asyncio
+    async def test_statement_bounds_match_ingest_gate(self, mock_db):
+        """Self-heal and ``coords_in_event_area(out_of_area=False)`` must share one
+        bbox, or refetch/ingest and self-heal fight over a coord daily (#635)."""
+        mock_db.execute.return_value = MagicMock(rowcount=0)
+        await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
+        params = set(mock_db.execute.call_args.args[0].compile().params.values())
+        assert set(TALLINN_REGION_BBOX) <= params
 
 
 class TestGeocodePendingVenues:

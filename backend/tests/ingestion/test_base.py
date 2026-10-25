@@ -19,6 +19,7 @@ from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
     coords_in_estonia,
+    coords_in_event_area,
     coords_in_tallinn,
     existing_external_ids,
     insert_normalized_event,
@@ -1502,3 +1503,18 @@ class TestExistingExternalIds:
         stmt = mock_db.scalars.call_args.args[0]
         where = str(stmt.whereclause.compile(dialect=postgresql.dialect()))
         assert "coalesce(events.ends_at, events.starts_at)" in where
+
+
+class TestCoordsInEventArea:
+    TARTU = (58.378, 26.729)  # inside Estonia, outside TALLINN_REGION_BBOX
+    TALLINN = (59.437, 24.753)
+
+    def test_in_area_event_rejects_estonia_only_coord(self):
+        assert coords_in_event_area(*self.TARTU, out_of_area=False) is False
+
+    def test_out_of_area_event_accepts_estonia_coord(self):
+        assert coords_in_event_area(*self.TARTU, out_of_area=True) is True
+
+    def test_both_accept_tallinn_coord(self):
+        assert coords_in_event_area(*self.TALLINN, out_of_area=False) is True
+        assert coords_in_event_area(*self.TALLINN, out_of_area=True) is True
