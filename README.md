@@ -16,9 +16,10 @@ How the pieces fit is in [CLAUDE.md's Architecture](CLAUDE.md#architecture) and 
 - **Passwordless sign-in:** a magic link by email, or Google.
 - **Organizer portal:** venues and promoters submit and edit their own events, with images, saved venues and rich text.
 - **Event claiming:** an organizer proves they are an event's Publisher, then edits the ingested event directly.
+- **Promotions:** an organizer buys labelled Sponsored slots for an event they own, paid by card through Stripe. Organic ranking never changes.
 - **Reports:** flag an event's content. An admin reviews it and emails you the outcome.
 - **One-click unsubscribe:** stop the digest from the email itself, without signing in.
-- **Admin console:** operators run the pipeline and work the dedup, submission, claim and report queues.
+- **Admin console:** operators run the pipeline and work the dedup, submission, claim, report and promotion queues.
 - **Light and dark themes:** follows your device theme, with a per-browser override.
 
 ## Tech stack
@@ -30,8 +31,10 @@ How the pieces fit is in [CLAUDE.md's Architecture](CLAUDE.md#architecture) and 
 | Database | Neon Postgres (asyncpg) |
 | LLM | Groq, Cloudflare Workers AI, Mistral |
 | Email | Resend |
+| Payments | Stripe |
 | Images | Cloudinary |
 | SEO | Playwright prerender, Cloudflare Pages Functions, Cloudflare R2 |
+| Logs | Axiom |
 | Tests | pytest, Vitest, Testing Library |
 | Hosting | Render (backend, Frankfurt) · Cloudflare Pages (frontend) · cron-job.org (SEO pings) |
 
@@ -59,7 +62,7 @@ Things to know inside the container:
 - **`DATABASE_URL` comes from the container environment** and overrides `backend/.env`. The container's Postgres is a separate volume from the host's Compose `db`, so data doesn't carry over.
 - **The scheduler is off (`ENABLE_SCHEDULER=false`).** A `--reload` server left running overnight can't arm scrapes, LLM spend or digest email. To run it for one session, `bash .devcontainer/dev-server.sh stop backend`, then run `ENABLE_SCHEDULER=true uvicorn app.main:app --reload` from `backend/`.
 - **`gh` authenticates on start and attach** from the host's forwarded git credentials (`.devcontainer/gh-auth.sh`). If `gh auth status` is red, rerun that script or `gh auth login`.
-- **The `claude` CLI signs in once, into a persistent named volume** separate from the host's `~/.claude`. `post-start.sh` refreshes it on each start, and `.devcontainer/sync-claude-config.sh` mirrors in the host's settings, hooks, commands and skills. The image installs RTK, so the host's RTK hook works too.
+- **The `claude` CLI signs in once, into a persistent named volume** separate from the host's `~/.claude`. `post-start.sh` refreshes it on each start, and `.devcontainer/sync-claude-config.sh` mirrors in the host's settings, hooks, commands, plugins and status line. Skills come in through a read-only bind mount. The image installs RTK, so the host's RTK hook works too.
 - **`.devcontainer/claude-plugins.json` lists container-only Claude Code plugins.** `sync-claude-config.sh` merges it into the container's `~/.claude/settings.json` on each start and never touches the host's config.
 - **`.devcontainer/mem-watchdog.sh` is a manual diagnostic** for the intermittent "reload the VS Code window" hang. It isn't part of the normal dev loop.
 
@@ -82,7 +85,7 @@ You need Python 3.12, Node.js 24 (`NODE_VERSION` in `frontend/wrangler.toml`) an
    cd backend
    python -m venv venv
    source venv/bin/activate        # Windows: venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
+   pip install -r requirements-dev.txt   # includes requirements.txt
    alembic upgrade head
    uvicorn app.main:app --reload   # http://localhost:8000
    ```
@@ -92,7 +95,7 @@ You need Python 3.12, Node.js 24 (`NODE_VERSION` in `frontend/wrangler.toml`) an
 > [!IMPORTANT]
 > An older `backend/.env` may still point `DATABASE_URL` at a shared Neon database. Switch it to the local form in `.env.example`, or you'll keep working against the remote DB.
 
-- **Migrate before the first `uvicorn` start.** Startup seeds personas and sources but never migrates, so it crashes on missing tables.
+- **Migrate before the first `uvicorn` start.** Startup seeds sources, personas and publishers but never migrates, so it crashes on missing tables.
 - **A native Postgres needs contrib, and migrations need a superuser.** `alembic upgrade head` runs `CREATE EXTENSION` for `citext` and `pg_trgm`. Drop `?ssl=require` from a local `DATABASE_URL`. The Compose `postgres:16` image already covers all of this.
 - **The backend serves `/health`, and `/docs` in development only.**
 
@@ -107,10 +110,10 @@ event-radar/
 ├── backend/            FastAPI app, Alembic migrations, pytest suite, ops scripts
 ├── frontend/           Vite + React SPA, Pages Functions, prerender scripts
 ├── shared/             cross-stack i18n, personas and config
-├── scripts/            generate_shared.py, which regenerates _generated/ files
+├── scripts/            generate_shared.py (regenerates _generated/ files), linearize-branch.py
 ├── docs/               deep-dive docs, ADRs, agent workflow docs
 ├── .devcontainer/      devcontainer image and lifecycle scripts
-├── .github/workflows/  CI tests and the dependency CVE audit
+├── .github/workflows/  CI (lint, tests, migrations) and the dependency CVE audit
 ├── CLAUDE.md           engineering rules and the Documentation Map
 ├── CONTEXT.md          domain glossary
 ├── docker-compose.yml  local Postgres 16
