@@ -4,7 +4,7 @@ the backfill and the "Promoted" report tagging."""
 
 from collections.abc import AsyncIterator
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
@@ -237,6 +237,43 @@ class TestClearNewlyFlagged:
         assert payload["to"] == ["owner@radar.ee"]
         assert f"https://radar.ee/admin/promotions/{promo.id}" in payload["text"]
         assert "political" in payload["subject"]
+
+
+class TestAssessAgainstRealTable:
+    @pytest.mark.asyncio
+    async def test_llm_call_row_persists_and_second_assess_hits_cache(self, db, make) -> None:
+        from sqlalchemy import func, select
+
+        from app.models.models import LlmCall
+        from app.promotions.restriction import assess_events
+
+        ev = await make.event(submitted_by=await make.organizer())
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = {
+            "choices": [{"message": {"content": '{"promotion_restriction": "alcohol"}'}}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+        }
+        post = AsyncMock(return_value=resp)
+        with (
+            patch("app.llm.router.settings") as cfg,
+            patch("httpx.AsyncClient.post", post),
+        ):
+            cfg.GROQ_API_KEY = "gsk_test"
+            cfg.CLOUDFLARE_WORKERS_AI_API_KEY = ""
+            cfg.CLOUDFLARE_WORKERS_AI_BASE_URL = ""
+            cfg.MISTRAL_API_KEY = ""
+            await assess_events(db, [ev])
+            await db.flush()
+            assert ev.promotion_restriction == "alcohol"
+            ev.promotion_restriction = None
+            await assess_events(db, [ev])
+            await db.flush()
+        assert ev.promotion_restriction == "alcohol"
+        assert post.await_count == 1
+        rows = await db.scalar(select(func.count()).select_from(LlmCall).where(LlmCall.event_id == ev.id))
+        assert rows == 1
 
 
 class TestBackfill:

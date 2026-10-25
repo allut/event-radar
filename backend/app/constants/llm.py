@@ -53,7 +53,7 @@ LLM_CLASSIFY_PRICE_CONTEXT_FALLBACK = "(none)"
 LLM_CLASSIFY_EXPLICIT_DEFAULT = False
 # llm_calls.task label for the stand-alone Promotion restriction assessment
 # (organizer edits and the launch backfill).
-LLM_TASK_PROMOTION_RESTRICTION = "promotion_restriction"
+LLM_TASK_PROMOTION_RESTRICTION = "promo_restriction"
 LLM_CLASSIFY_NON_EVENT_DEFAULT = False
 LLM_CLASSIFY_IN_TARGET_CITY_DEFAULT = True
 LLM_CLASSIFY_HAS_FREE_TIER_DEFAULT = False
