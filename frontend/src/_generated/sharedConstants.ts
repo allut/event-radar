@@ -37,6 +37,10 @@ export const ADMIN_REVIEW_QUEUE_PAGE_SIZE = 50;
 export const ADMIN_CLAIMS_QUEUE_PAGE_SIZE = 50;
 export const CLAIM_EVENTS_PAGE_SIZE = 20;
 export const ORGANIZER_OWN_CLAIMS_PAGE_SIZE = 20;
+export const PROMOTION_MAX_DAYS = 14;
+export const PROMOTION_DAY_PRICE_CENTS = 500;
+export const PROMOTION_CHECKOUT_SESSION_MINUTES = 30;
+export const PROMOTION_VAT_RATE_PERCENT = 24;
 
 export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
 

@@ -9,18 +9,17 @@ import OrganizerTopBar from '../../components/OrganizerTopBar';
 import PageState from '../../components/PageState';
 import PromotionResultCard from '../../components/PromotionResultCard';
 import SeoTags from '../../components/SeoTags';
+import { PROMOTION_CHECKOUT_SESSION_MINUTES, PROMOTION_MAX_DAYS } from '../../_generated/sharedConstants';
 import { API, QUERY_KEYS } from '../../constants/api';
 import { UI_STATE } from '../../constants/core';
 import {
   PROMOTION_CHECKOUT_CODE,
-  PROMOTION_CHECKOUT_HOLD_MINUTES,
   PROMOTION_ERROR_CAP_EXCEEDED,
   PROMOTION_ERROR_TOO_LONG,
   PROMOTION_ERROR_TOO_SHORT,
   PROMOTION_FORM_ERROR_KEYS,
   PROMOTION_FORM_EVENT_PARAM,
   PROMOTION_LEGAL_NAME_MAX_LEN,
-  PROMOTION_MAX_DAYS,
   PROMOTION_NOTE_MAX_LEN,
   PROMOTION_NOTE_ROWS,
   PROMOTION_REGISTRY_CODE,
@@ -678,7 +677,7 @@ export default function OrganizerPromotionRequest() {
             )}
             <p className={styles.small}>
               {wantsCard
-                ? ti('promo_hold_note', locale, { minutes: String(PROMOTION_CHECKOUT_HOLD_MINUTES) })
+                ? ti('promo_hold_note', locale, { minutes: String(PROMOTION_CHECKOUT_SESSION_MINUTES) })
                 : t('promo_request_note', locale)}
             </p>
           </div>

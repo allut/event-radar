@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 
 APP_VERSION: str = "0.1.34"
 MAGIC_LINK_TTL_MINUTES: int = 15
@@ -30,6 +32,10 @@ ADMIN_REVIEW_QUEUE_PAGE_SIZE: int = 50
 ADMIN_CLAIMS_QUEUE_PAGE_SIZE: int = 50
 CLAIM_EVENTS_PAGE_SIZE: int = 20
 ORGANIZER_OWN_CLAIMS_PAGE_SIZE: int = 20
+PROMOTION_MAX_DAYS: int = 14
+PROMOTION_DAY_PRICE_CENTS: int = 500
+PROMOTION_CHECKOUT_SESSION_MINUTES: int = 30
+PROMOTION_VAT_RATE_PERCENT: Decimal = Decimal("24.00")
 IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = frozenset({"image/jpeg", "image/png", "image/webp"})
 ORGANIZER_MAX_CATEGORIES: int = 3
 CLAIM_EXPIRY_DAYS: int = 7

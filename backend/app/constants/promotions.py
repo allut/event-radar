@@ -1,12 +1,15 @@
 """Promotions: stored statuses, window and cap rules, pricing, grant validation, error codes."""
 
 import re
-from decimal import Decimal
 
 from app._generated.shared_constants import (
     ORGANIZER_TERMS_VERSION as ORGANIZER_TERMS_VERSION,
+    PROMOTION_CHECKOUT_SESSION_MINUTES as PROMOTION_CHECKOUT_SESSION_MINUTES,
+    PROMOTION_DAY_PRICE_CENTS as PROMOTION_DAY_PRICE_CENTS,
+    PROMOTION_MAX_DAYS as PROMOTION_MAX_DAYS,
     PROMOTION_REF_AD as PROMOTION_REF_AD,
     PROMOTION_REF_DIGEST_AD as PROMOTION_REF_DIGEST_AD,
+    PROMOTION_VAT_RATE_PERCENT as PROMOTION_VAT_RATE_PERCENT,
 )
 
 # Stored statuses are commercial only. Scheduled, live and finished are
@@ -43,14 +46,13 @@ PROMOTION_GRANTED_BY_ADMIN = "admin"
 # Window and cap rules.
 PROMOTION_LIVE_CAP = 5
 PROMOTION_MIN_DAYS = 3
-PROMOTION_MAX_DAYS = 14
 PROMOTION_CAP_STRIP_DAYS = 14
 # The earliest start is this many Tallinn days after today (tomorrow).
 PROMOTION_MIN_LEAD_DAYS = 1
 
-# Pricing: flat per day, net, plus the VAT rate stored on the row at sale.
-PROMOTION_DAY_PRICE_CENTS = 500
-PROMOTION_VAT_RATE_PERCENT = Decimal("24.00")
+# Pricing is flat per day, net, plus the VAT rate stored on the row at sale. The day price,
+# VAT rate, longest window and checkout hold are cross-stack (imported above from
+# shared/app-config.json).
 
 # One transaction-scoped Postgres advisory lock serializes every cap
 # check-and-insert (the cap is global, so one key covers it).
@@ -372,7 +374,6 @@ ERROR_PROMOTION_REQUEST_INVALID_STATUS = (
 PROMOTION_INVOICE_SOURCE_STRIPE = "stripe"
 # `end_reason` of an `unpaid` hold voided because Stripe could not open a session.
 PROMOTION_END_REASON_CHECKOUT_FAILED = "checkout_failed"
-PROMOTION_CHECKOUT_SESSION_MINUTES = 30
 # Stripe rejects an expiry under 30 minutes from the moment it receives the
 # call, so the request carries a little extra to survive our own latency.
 PROMOTION_CHECKOUT_EXPIRY_MARGIN_SECONDS = 60

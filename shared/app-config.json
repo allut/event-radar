@@ -39,8 +39,12 @@
     "ADMIN_REVIEW_QUEUE_PAGE_SIZE": 50,
     "ADMIN_CLAIMS_QUEUE_PAGE_SIZE": 50,
     "CLAIM_EVENTS_PAGE_SIZE": 20,
-    "ORGANIZER_OWN_CLAIMS_PAGE_SIZE": 20
+    "ORGANIZER_OWN_CLAIMS_PAGE_SIZE": 20,
+    "PROMOTION_MAX_DAYS": 14,
+    "PROMOTION_DAY_PRICE_CENTS": 500,
+    "PROMOTION_CHECKOUT_SESSION_MINUTES": 30
   },
+  "promotion_vat_rate_percent": "24.00",
   "organizer_max_categories": 3,
   "claim_expiry_days": 7,
   "claim_admin_review_expiry_days": 30,

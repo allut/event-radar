@@ -7,13 +7,12 @@ import OrganizerTopBar from '../../components/OrganizerTopBar';
 import PageState from '../../components/PageState';
 import SeoTags from '../../components/SeoTags';
 import Toast from '../../components/Toast';
+import { PROMOTION_DAY_PRICE_CENTS, PROMOTION_VAT_RATE_PERCENT } from '../../_generated/sharedConstants';
 import { API, QUERY_KEYS } from '../../constants/api';
 import { UI_STATE } from '../../constants/core';
 import {
-  PROMOTION_DAY_NET_CENTS,
   PROMOTION_EVENT_PARAM,
   PROMOTION_RUNNING_STATUSES,
-  PROMOTION_VAT_PERCENT,
 } from '../../constants/organizerPromotions';
 import { ROUTES } from '../../constants/routes';
 import { useLocalLocale } from '../../hooks/useLocalLocale';
@@ -82,8 +81,8 @@ export default function OrganizerPromotions() {
     node?.focus({ preventScroll: true });
   }, [targetId]);
 
-  const dayNet = formatMoney(PROMOTION_DAY_NET_CENTS, locale);
-  const dayGross = formatMoney(grossCents(PROMOTION_DAY_NET_CENTS, PROMOTION_VAT_PERCENT), locale);
+  const dayNet = formatMoney(PROMOTION_DAY_PRICE_CENTS, locale);
+  const dayGross = formatMoney(grossCents(PROMOTION_DAY_PRICE_CENTS, PROMOTION_VAT_RATE_PERCENT), locale);
 
   return (
     <div className={styles.page}>

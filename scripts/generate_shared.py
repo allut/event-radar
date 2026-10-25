@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 REPO = Path(__file__).parent.parent
@@ -256,6 +257,7 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
     parts = [
         HEADER_PY,
         "from __future__ import annotations\n",
+        "from decimal import Decimal\n",
         "",
         f"APP_VERSION: str = {_py_str(version)}",
         f"MAGIC_LINK_TTL_MINUTES: int = {cfg['magic_link_ttl_minutes']}",
@@ -284,6 +286,8 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         # The frontend's usePagedQuery caps its last reachable page at it.
         f"PAGINATION_MAX_OFFSET: int = {cfg['pagination_max_offset']}",
         *_scalar_lines(cfg, py=True),
+        # Kept a string in the JSON so Python gets an exact Decimal (money math), TS a number.
+        f"PROMOTION_VAT_RATE_PERCENT: Decimal = Decimal({_py_str(cfg['promotion_vat_rate_percent'])})",
         f"IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = {image_upload_mime}",
         f"ORGANIZER_MAX_CATEGORIES: int = {cfg['organizer_max_categories']}",
         f"CLAIM_EXPIRY_DAYS: int = {cfg['claim_expiry_days']}",
@@ -369,6 +373,7 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         # last reachable page at the deepest offset the backend accepts.
         f"export const PAGINATION_MAX_OFFSET = {cfg['pagination_max_offset']};",
         *_scalar_lines(cfg, py=False),
+        f"export const PROMOTION_VAT_RATE_PERCENT = {Decimal(cfg['promotion_vat_rate_percent']).normalize():f};",
         "",
         # Mirrors backend IMAGE_UPLOAD_ALLOWED_MIME — see shared/app-config.json.
         f"export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = {_ts_str_list(cfg['image_upload_allowed_mime'])};",

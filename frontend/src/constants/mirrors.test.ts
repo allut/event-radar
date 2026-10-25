@@ -17,7 +17,6 @@ const BASELINE: Readonly<Record<string, number>> = {
   'explore.ts': 1,
   'feedback.ts': 2,
   'organizer.ts': 3,
-  'organizerPromotions.ts': 2,
   'promotions.ts': 2,
   'sponsored.ts': 1,
 };

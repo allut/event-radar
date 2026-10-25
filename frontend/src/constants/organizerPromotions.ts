@@ -55,17 +55,10 @@ export const PROMOTION_PAUSE_REASONS: ReadonlySet<string> = new Set([
 ]);
 export const PROMOTION_PAUSE_REASON_FALLBACK = 'unknown';
 
-// Mirrors backend PROMOTION_DAY_PRICE_CENTS / PROMOTION_VAT_RATE_PERCENT: the
-// explainer on the Promotions page has no event, so no /context answer, to read
-// them from. The form takes the live values from /context.
-export const PROMOTION_DAY_NET_CENTS = 500;
-export const PROMOTION_VAT_PERCENT = 24;
-
-// Backend PROMOTION_CHECKOUT_SESSION_MINUTES: how long card checkout holds the days.
-export const PROMOTION_CHECKOUT_HOLD_MINUTES = 30;
-
-// Mirrors backend PROMOTION_MAX_DAYS: the end picker's furthest day from the start.
-export const PROMOTION_MAX_DAYS = 14;
+// The day price, VAT rate, checkout hold and longest window (PROMOTION_DAY_PRICE_CENTS,
+// PROMOTION_VAT_RATE_PERCENT, PROMOTION_CHECKOUT_SESSION_MINUTES, PROMOTION_MAX_DAYS) are
+// cross-stack: _generated/sharedConstants.ts. The Promotions page explainer has no event,
+// so no /context answer, to read the price from; the form takes the live values from /context.
 
 export const PROMOTION_REGISTRY_CODE_LENGTH = 8;
 export const PROMOTION_REGISTRY_CODE_PLACEHOLDER = '1'.repeat(PROMOTION_REGISTRY_CODE_LENGTH);
