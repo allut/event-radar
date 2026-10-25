@@ -9,6 +9,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.claims.lifecycle import ClaimError
+from app._generated.shared_constants import ORGANIZER_OWN_CLAIMS_PAGE_SIZE
 from app.constants.auth import DETAIL_MAGIC_LINK_SENT
 from app.constants.claims import (
     CLAIM_KIND_PUBLISHER,
@@ -20,7 +21,6 @@ from app.constants.claims import (
     ERROR_CLAIM_NOT_FOUND,
     ERROR_CLAIM_OWN_SUBMISSION,
     ERROR_DAILY_CLAIM_LIMIT,
-    ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
 )
 from app.constants.events import ERROR_EVENT_NOT_FOUND
 

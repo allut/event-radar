@@ -2,8 +2,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
+import { ADMIN_CLAIMS_QUEUE_PAGE_SIZE } from '../../_generated/sharedConstants';
 import {
-  ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
   ADMIN_CLAIMS_TAB_PARAM,
   ADMIN_GENERIC_ERROR,
   ADMIN_QUEUE_DETAIL_LINK_LABEL,

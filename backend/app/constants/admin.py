@@ -1,8 +1,7 @@
 """Admin console: queue page sizes, inspector limits, audited admin action names, admin job errors."""
 
-# Admin report review-queue pagination (routers/admin.py GET /admin/reports) —
-# mirrors ADMIN_REVIEW_QUEUE_PAGE_SIZE's sizing rationale.
-ADMIN_REPORTS_QUEUE_PAGE_SIZE: int = 50
+# Admin queue pagination caps. The default page sizes (ADMIN_REPORTS_QUEUE_PAGE_SIZE and
+# siblings) are cross-stack: shared/app-config.json → app._generated.shared_constants.
 ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE: int = 500
 
 # Event inspector (routers/admin.py GET /admin/events/{id}, issue #157) caps
@@ -13,18 +12,14 @@ ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE: int = 500
 # for an event with a long refetch/dedup-merge history.
 ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT: int = 20
 
-# Admin endpoint pagination
-ADMIN_DEDUP_GROUPS_PAGE_SIZE: int = 50
+# Admin dedup-groups pagination cap (routers/admin.py GET /admin/dedup/groups).
 ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE: int = 500
 
-# Admin review-queue pagination (routers/admin.py GET /admin/submissions) — mirrors
-# ADMIN_DEDUP_GROUPS_PAGE_SIZE's sizing rationale (small default page, generous cap).
-ADMIN_REVIEW_QUEUE_PAGE_SIZE: int = 50
+# Admin review-queue pagination cap (routers/admin.py GET /admin/submissions): small
+# default page, generous cap.
 ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE: int = 500
 
-# Admin claims-queue pagination (routers/admin.py GET /admin/claims, issue #420) —
-# same sizing rationale as ADMIN_REVIEW_QUEUE_PAGE_SIZE.
-ADMIN_CLAIMS_QUEUE_PAGE_SIZE: int = 50
+# Admin claims-queue pagination cap (routers/admin.py GET /admin/claims, issue #420).
 ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE: int = 500
 
 # `action` field values for LOG_EVENT_ADMIN_ACTION (issue #155).

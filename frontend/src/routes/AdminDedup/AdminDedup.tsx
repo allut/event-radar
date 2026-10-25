@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { adminApi } from '../../api/client';
-import { ADMIN_DEDUP_GROUPS_PAGE_SIZE, ADMIN_LOADING_LABEL } from '../../constants/admin';
+import { ADMIN_DEDUP_GROUPS_PAGE_SIZE } from '../../_generated/sharedConstants';
+import { ADMIN_LOADING_LABEL } from '../../constants/admin';
 import { API, QUERY_KEYS, PAGE_PARAM } from '../../constants/api';
 import { LOCALE_EN, UI_STATE } from '../../constants/core';
 import { EVENT_STATUS } from '../../constants/prerender';

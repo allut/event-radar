@@ -38,7 +38,12 @@ from app.claims.lifecycle import (
 )
 from app.claims.pinning import bulk_resolve_series_events
 from app.ingestion.http_client import host_matches_domain
-from app._generated.shared_constants import PAGINATION_MAX_OFFSET, VALID_LOCALES
+from app._generated.shared_constants import (
+    CLAIM_EVENTS_PAGE_SIZE,
+    ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
+    PAGINATION_MAX_OFFSET,
+    VALID_LOCALES,
+)
 from app.constants.admin import ADMIN_ACTION_REVOKE_CLAIM
 from app.constants.auth import (
     AUTH_TOKEN_MAX_LEN,
@@ -53,7 +58,6 @@ from app.constants.auth import (
 from app.constants.claims import (
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
     CLAIM_EVENTS_MAX_PAGE_SIZE,
-    CLAIM_EVENTS_PAGE_SIZE,
     CLAIM_JUSTIFICATION_MAX_CHARS,
     CLAIM_KIND_PUBLISHER,
     CLAIM_SEARCH_CANDIDATE_MULTIPLIER,
@@ -70,7 +74,6 @@ from app.constants.claims import (
     FREE_EMAIL_PROVIDER_DOMAINS,
     ORGANIZER_CLAIM_VERIFY_PATH,
     ORGANIZER_OWN_CLAIMS_MAX_PAGE_SIZE,
-    ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
 )
 from app.constants.core import SECONDS_PER_DAY, TALLINN_TZ
 from app.constants.events import EVENT_SEARCH_TEXT_SQL, ERROR_EVENT_NOT_FOUND

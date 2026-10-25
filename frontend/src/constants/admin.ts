@@ -12,14 +12,7 @@ export const ADMIN_NOTE_TEXTAREA_ROWS = 3;
 // PageState message while an admin list or detail loads.
 export const ADMIN_LOADING_LABEL = 'Loading…';
 
-// ─── Admin: dedup groups (mirrors backend's ADMIN_DEDUP_GROUPS_PAGE_SIZE) ───
-export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
-
-// ─── Admin: reports / submissions queues (mirrors backend's
-// ADMIN_REPORTS_QUEUE_PAGE_SIZE / ADMIN_REVIEW_QUEUE_PAGE_SIZE) ────────────
-export const ADMIN_REPORTS_QUEUE_PAGE_SIZE = 50;
-export const ADMIN_REVIEW_QUEUE_PAGE_SIZE = 50;
-export const ADMIN_CLAIMS_QUEUE_PAGE_SIZE = 50;
+// Queue page sizes (ADMIN_*_PAGE_SIZE) are cross-stack: _generated/sharedConstants.ts.
 // URL (and API) param carrying the Claims tab: `approved` for Granted, omitted for pending.
 export const ADMIN_CLAIMS_TAB_PARAM = 'status';
 

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
+import { ADMIN_REPORTS_QUEUE_PAGE_SIZE } from '../../_generated/sharedConstants';
 import {
   ADMIN_GENERIC_ERROR,
   ADMIN_QUEUE_DETAIL_LINK_LABEL,
@@ -9,7 +10,6 @@ import {
   ADMIN_REPORT_PROMOTED_LABEL,
   ADMIN_REPORT_RESOLVED_NOTICE,
   ADMIN_REPORTS_PARAM,
-  ADMIN_REPORTS_QUEUE_PAGE_SIZE,
   ADMIN_LOADING_LABEL,
 } from '../../constants/admin';
 import { API, PAGE_PARAM, PAGE_QUERY_PARAM, QUERY_KEYS } from '../../constants/api';

@@ -17,6 +17,10 @@ from sqlalchemy.orm import selectinload
 from app.auth.dependencies import get_current_admin
 from app.cleanup import cleanup_stale_data
 from app._generated.shared_constants import (
+    ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
+    ADMIN_DEDUP_GROUPS_PAGE_SIZE,
+    ADMIN_REPORTS_QUEUE_PAGE_SIZE,
+    ADMIN_REVIEW_QUEUE_PAGE_SIZE,
     DEFAULT_USER_LOCALE,
     PAGINATION_MAX_OFFSET,
     VALID_LOCALES,
@@ -53,14 +57,10 @@ from app.constants.admin import (
     ADMIN_ACTION_SYNC_ORGANIZERS,
     ADMIN_ACTION_TAKEDOWN_REPORTED_EVENT,
     ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE,
-    ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE,
-    ADMIN_DEDUP_GROUPS_PAGE_SIZE,
     ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT,
     ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE,
-    ADMIN_REVIEW_QUEUE_PAGE_SIZE,
     ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE,
-    ADMIN_REPORTS_QUEUE_PAGE_SIZE,
 )
 from app.constants.claims import (
     CLAIM_KIND_PUBLISHER,

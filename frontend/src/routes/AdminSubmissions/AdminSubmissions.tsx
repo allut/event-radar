@@ -2,10 +2,10 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
+import { ADMIN_REVIEW_QUEUE_PAGE_SIZE } from '../../_generated/sharedConstants';
 import {
   ADMIN_GENERIC_ERROR,
   ADMIN_QUEUE_DETAIL_LINK_LABEL,
-  ADMIN_REVIEW_QUEUE_PAGE_SIZE,
   ADMIN_LOADING_LABEL,
 } from '../../constants/admin';
 import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';

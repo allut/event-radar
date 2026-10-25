@@ -33,6 +33,14 @@
   },
   "browse_page_size": 24,
   "pagination_max_offset": 5000,
+  "scalars": {
+    "ADMIN_REPORTS_QUEUE_PAGE_SIZE": 50,
+    "ADMIN_DEDUP_GROUPS_PAGE_SIZE": 50,
+    "ADMIN_REVIEW_QUEUE_PAGE_SIZE": 50,
+    "ADMIN_CLAIMS_QUEUE_PAGE_SIZE": 50,
+    "CLAIM_EVENTS_PAGE_SIZE": 20,
+    "ORGANIZER_OWN_CLAIMS_PAGE_SIZE": 20
+  },
   "organizer_max_categories": 3,
   "claim_expiry_days": 7,
   "claim_admin_review_expiry_days": 30,

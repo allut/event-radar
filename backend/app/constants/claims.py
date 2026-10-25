@@ -178,11 +178,11 @@ ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT = 2
 # very large institutional Publisher claim.
 ORGANIZER_CLAIM_EDIT_CAP_CEILING = 100
 
-# Publisher-claim event-list pagination (routers/organizer_claims.py GET
-# /organizer/claims/{claim_id}/events, issue #436) — smaller default/cap than
-# the admin queues (constants/admin.py) since this is one organizer's own claimed events,
-# not an operator-wide queue.
-CLAIM_EVENTS_PAGE_SIZE: int = 20
+# Publisher-claim event-list pagination cap (routers/organizer_claims.py GET
+# /organizer/claims/{claim_id}/events, issue #436) — smaller than the admin queues
+# (constants/admin.py) since this is one organizer's own claimed events, not an
+# operator-wide queue. The default, CLAIM_EVENTS_PAGE_SIZE, is cross-stack
+# (shared/app-config.json).
 CLAIM_EVENTS_MAX_PAGE_SIZE: int = 100
 
 # Claim-link magic links (#415) land on a distinct frontend route from a plain
@@ -193,9 +193,9 @@ CLAIM_EVENTS_MAX_PAGE_SIZE: int = 100
 ORGANIZER_CLAIM_VERIFY_PATH = "/organizer/claims/verify"
 
 # The organizer's own-claims list (routers/organizer_claims.py GET
-# /organizer/claims, the Your claims page) pages at this size (spec #551).
-# Changing it moves every page boundary and breaks shared ?page=N links.
-ORGANIZER_OWN_CLAIMS_PAGE_SIZE: int = 20
+# /organizer/claims, the Your claims page, spec #551) caps at this size. Its default,
+# ORGANIZER_OWN_CLAIMS_PAGE_SIZE, is cross-stack (shared/app-config.json): changing it
+# moves every page boundary and breaks shared ?page=N links.
 ORGANIZER_OWN_CLAIMS_MAX_PAGE_SIZE: int = 100
 
 # Claim-edit `unpin` list bounds (pin_key() shapes are short; OWASP audit L-6).

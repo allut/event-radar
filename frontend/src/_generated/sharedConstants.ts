@@ -31,6 +31,12 @@ export const THEME_PREFERENCES = ['light', 'dark'] as const;
 
 export const BROWSE_PAGE_SIZE = 24;
 export const PAGINATION_MAX_OFFSET = 5000;
+export const ADMIN_REPORTS_QUEUE_PAGE_SIZE = 50;
+export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
+export const ADMIN_REVIEW_QUEUE_PAGE_SIZE = 50;
+export const ADMIN_CLAIMS_QUEUE_PAGE_SIZE = 50;
+export const CLAIM_EVENTS_PAGE_SIZE = 20;
+export const ORGANIZER_OWN_CLAIMS_PAGE_SIZE = 20;
 
 export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];
 

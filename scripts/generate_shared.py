@@ -283,6 +283,7 @@ def write_backend_shared_constants(cfg: dict, version: str) -> str:
         # via Query(le=)): bounds the LIMIT/OFFSET seq-scan-and-discard cost.
         # The frontend's usePagedQuery caps its last reachable page at it.
         f"PAGINATION_MAX_OFFSET: int = {cfg['pagination_max_offset']}",
+        *_scalar_lines(cfg, py=True),
         f"IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = {image_upload_mime}",
         f"ORGANIZER_MAX_CATEGORIES: int = {cfg['organizer_max_categories']}",
         f"CLAIM_EXPIRY_DAYS: int = {cfg['claim_expiry_days']}",
@@ -367,6 +368,7 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
         # Mirrors backend PAGINATION_MAX_OFFSET: usePagedQuery caps a list's
         # last reachable page at the deepest offset the backend accepts.
         f"export const PAGINATION_MAX_OFFSET = {cfg['pagination_max_offset']};",
+        *_scalar_lines(cfg, py=False),
         "",
         # Mirrors backend IMAGE_UPLOAD_ALLOWED_MIME — see shared/app-config.json.
         f"export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = {_ts_str_list(cfg['image_upload_allowed_mime'])};",
@@ -394,6 +396,23 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
+
+def _scalar_lines(cfg: dict, py: bool) -> list[str]:
+    """One `NAME = value` line per entry of `cfg["scalars"]` (int or str values).
+
+    The grouped home for single cross-stack values whose name is the same in
+    both stacks; a value needing its own type or a comment gets a named key.
+    """
+    lines = []
+    for name, value in cfg["scalars"].items():
+        if isinstance(value, bool) or not isinstance(value, (int, str)):
+            raise ValueError(f"scalars.{name}: only int and str values are supported")
+        if py:
+            lines.append(f"{name}: {'int' if isinstance(value, int) else 'str'} = {value if isinstance(value, int) else _py_str(value)}")
+        else:
+            lines.append(f"export const {name} = {value if isinstance(value, int) else _ts_str(value)};")
+    return lines
 
 
 def main() -> None:

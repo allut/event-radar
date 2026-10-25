@@ -180,6 +180,8 @@ Every list pages with a numbered pager and a `?page` URL param. There is no Load
 3. Commit the JSON and the regenerated `_generated/` files together.
 
 - **`_generated/` belongs to the script.** `backend/tests/test_generated_sync.py` runs the generator into a temp dir and fails on any byte of drift.
+- **`python scripts/generate_shared.py --check` writes nothing** and exits 1 naming each stale file. The pre-commit hook runs it when `shared/` or an `_generated/` directory is staged.
+- **A single int or string with the same name in both stacks goes under `scalars` in `app-config.json`.** The generator emits it to both `_generated/` files, and the backend and frontend import it from there. `constants/mirrors.test.ts` pins how many "mirrors backend" comments each `constants/*.ts` file has, so a new copy fails and a moved one forces the baseline down.
 - **The frontend reads strings through `frontend/src/i18n.ts`** (`t`, `ti`, `tn`, `personaName`, `personaVibe`) over `_generated/i18nData.ts`. The `frontend/src/constants/` files, such as `core.ts`, import `LOCALES`, TTLs and weight thresholds from `_generated/sharedConstants.ts`, and `PERSONAS` from `_generated/i18nData.ts`.
 - **A count-dependent string uses `tn()` and one key per plural category**, `{key}_one`/`_other`, plus `_few`/`_many` in `ru.json`. `Intl.PluralRules` picks the category, so each locale needs every category its rule returns.
 - **The backend reads strings through `backend/app/i18n.py`** (`t`, `ti`, `day_name`, `month_name`) over `_generated/i18n_data.py`. The `app/constants/` files, such as `core.py`, import cross-stack scalars and frozensets from `_generated/shared_constants.py`.
