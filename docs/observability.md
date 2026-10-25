@@ -1,6 +1,6 @@
 # Observability & Monitoring (Axiom)
 
-What's in here: the Axiom logging/monitoring spec — log shipping, dashboards, alerts, and the fields every structured log line carries.
+What's in here: the Axiom logging/monitoring spec — log shipping, dashboards, alerts, the fields every structured log line carries, and the log-triage recipe.
 
 Version-controlled spec for the Axiom monitors that watch the production log
 stream. The backend ships prod logs to Axiom (`app/logging_config.py` →
@@ -47,14 +47,50 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `identity_unlinked` | `DELETE /users/me/identities/{provider}` or `DELETE /organizer/profile/identities/{provider}` succeeded | `app/routers/settings.py`, `app/routers/organizer_profile.py::unlink_own_identity` |
 | `schema_drift` | boot-time alembic revision ≠ migration head (carries `db_revision`, `head_revision`) — raises in production, warns in development | `app/db.py::assert_schema_at_head` |
 
+## Log triage
+
+A sweep of the production stream for bugs, such as a weekly check. Run the four queries below over the window. Search existing issues (`docs/agents/issue-tracker.md`) before filing one.
+
+### Query gotchas
+
+- **The dataset is `event-radar-logs`.** The monitor APL below uses the same name.
+- **`_time` is the batch-flush time, not the record time.** `HttpLogShipHandler` ships in batches, so a batch's lines share one timestamp to within microseconds. Within a batch, order is still emission order.
+- **`ts` is a string in Axiom.** Aggregate and bin on `_time`; `min(ts)` fails with a type error.
+- **APL has no `any()` or `take_any()`.** Use `arg_max(_time, msg)` for a sample line per group.
+- **Write a regex containing a quote as a normal string.** A verbatim `@"…"` string ends at its first `"`, so `@"\" ([0-9]{3})"` fails to parse.
+
+### Queries
+
+1. **Warning and error templates.** Digits collapse to `N`, so per-page and per-ID lines group into one row.
+   ```
+   ['event-radar-logs'] | where level in ("WARNING", "ERROR")
+   | extend tmpl = replace_regex(@"[0-9]+", "N", substring(msg, 0, 100))
+   | summarize n = count(), last = max(_time) by level, logger, tmpl | order by n desc
+   ```
+2. **Job cadence.** Compare runs per UTC day against `docs/backend-ops.md` "Scheduled Jobs". A doubled or missing run is the bug signal, and an all-`ok` status hides it.
+   ```
+   ['event-radar-logs'] | where event == "job_run"
+   | summarize runs = count(), failed = countif(status != "ok"), max_ms = max(duration_ms) by job, day = bin(_time, 1d)
+   ```
+3. **HTTP errors.** Look at 5xx first. 404s on `/events/<id>` and scanner paths like `/.env` are noise.
+   ```
+   ['event-radar-logs'] | where logger == "uvicorn.access"
+   | extend status = toint(extract("\" ([0-9]{3})", 1, msg)) | where status >= 400
+   | summarize n = count() by status, path = extract("[A-Z]+ ([^ ?]+)", 1, msg) | order by status desc, n desc
+   ```
+4. **Anomaly tags.** Every `event` value except `job_run`, with its latest line.
+   ```
+   ['event-radar-logs'] | where isnotempty(event) and event != "job_run"
+   | summarize n = count(), arg_max(_time, msg) by event | order by n desc
+   ```
+
 ## Setup
 
 1. **Notifier** — Axiom → Monitors → Notifiers → **New → Email**, name
    `event-radar-email`, recipient = your address. Every monitor below attaches
    this one notifier.
-2. **Dataset** — the dataset named in `LOG_SHIP_URL`
-   (`.../v1/datasets/<dataset>/ingest`). Substitute it for `['event-radar']`
-   in the APL below if different.
+2. **Dataset** — `event-radar-logs`, the dataset named in `LOG_SHIP_URL`
+   (`.../v1/datasets/<dataset>/ingest`). The APL below uses it.
 3. Create each monitor from the table, pasting its APL and setting
    type/threshold/window/frequency.
 
@@ -65,20 +101,20 @@ thresholds after observing a few days of baseline volume.
 
 | # | Monitor | Type | APL / condition | Alert when |
 |---|---|---|---|---|
-| 1 | Error spike | Threshold | `['event-radar'] \| where level == "ERROR" \| summarize count()` | count > 5 in 5 min |
-| 2 | Scheduled job failed | Match | `['event-radar'] \| where event == "job_run" and status == "error"` | any match (msg carries `job` + `exc`) |
-| 3 | Dead scheduler / stale feed ⭐ | Threshold (below) | `['event-radar'] \| where event == "job_run" and job == "build_daily_feeds" and status == "ok" \| summarize count()` over 25h | count < 1 |
+| 1 | Error spike | Threshold | `['event-radar-logs'] \| where level == "ERROR" \| summarize count()` | count > 5 in 5 min |
+| 2 | Scheduled job failed | Match | `['event-radar-logs'] \| where event == "job_run" and status == "error"` | any match (msg carries `job` + `exc`) |
+| 3 | Dead scheduler / stale feed ⭐ | Threshold (below) | `['event-radar-logs'] \| where event == "job_run" and job == "build_daily_feeds" and status == "ok" \| summarize count()` over 25h | count < 1 |
 | 3b | Stale ingest ⭐ | Threshold (below) | as #3, `job == "hourly ingest"`, window 120 min | count < 1 |
 | 3c | Digest not sent | Threshold (below) | as #3, `job == "send_daily_digests"`, window 25h | count < 1 |
-| 4 | LLM degradation | Threshold | `['event-radar'] \| where event == "llm_degraded" \| summarize count()` over 30 min | count > 3 |
-| 5 | Auth / abuse spike | Threshold | `['event-radar'] \| where event in ("auth_failed", "rate_limit_block") \| summarize count()` over 10 min | count > 20 |
-| 6 | Webhook probing | Threshold | `['event-radar'] \| where event == "webhook_rejected" \| summarize count()` over 15 min | count > 5 |
-| 7 | Log-stream silence | Threshold (below) | `['event-radar'] \| summarize count()` over 30 min | count < 1 |
-| 8 | Job-duration anomaly *(optional)* | AnomalyDetection | `['event-radar'] \| where event == "job_run" \| summarize avg(duration_ms) by job, bin_auto(_time)` | auto-baselined drift |
-| 9 | Report abuse spike | Threshold | `['event-radar'] \| where event == "report_submitted" \| summarize count()` over 10 min | placeholder — tune after baseline volume observed |
-| 10 | Admin action audit ⭐ | Match | `['event-radar'] \| where event == "admin_action"` | any match — the audit trail (19 `ADMIN_ACTION_*` values) exists but had no monitor watching it (OWASP audit F11); this makes every console-initiated admin action visible, not alert-worthy on its own |
-| 11 | Host-header probing | Threshold | `['event-radar'] \| where event == "host_rejected" \| summarize count()` over 15 min | count > 5 — signals cache-poisoning/host-spoofing probes (OWASP audit F11) |
-| 12 | Google sign-in degraded | Threshold | `['event-radar'] \| where event == "google_signin_degraded" \| summarize count()` over 15 min | count > 3 — sustained failures talking to Google (token exchange or JWKS fetch), not just an occasional blip |
+| 4 | LLM degradation | Threshold | `['event-radar-logs'] \| where event == "llm_degraded" \| summarize count()` over 30 min | count > 3 |
+| 5 | Auth / abuse spike | Threshold | `['event-radar-logs'] \| where event in ("auth_failed", "rate_limit_block") \| summarize count()` over 10 min | count > 20 |
+| 6 | Webhook probing | Threshold | `['event-radar-logs'] \| where event == "webhook_rejected" \| summarize count()` over 15 min | count > 5 |
+| 7 | Log-stream silence | Threshold (below) | `['event-radar-logs'] \| summarize count()` over 30 min | count < 1 |
+| 8 | Job-duration anomaly *(optional)* | AnomalyDetection | `['event-radar-logs'] \| where event == "job_run" \| summarize avg(duration_ms) by job, bin_auto(_time)` | auto-baselined drift |
+| 9 | Report abuse spike | Threshold | `['event-radar-logs'] \| where event == "report_submitted" \| summarize count()` over 10 min | placeholder — tune after baseline volume observed |
+| 10 | Admin action audit ⭐ | Match | `['event-radar-logs'] \| where event == "admin_action"` | any match — the audit trail (19 `ADMIN_ACTION_*` values) exists but had no monitor watching it (OWASP audit F11); this makes every console-initiated admin action visible, not alert-worthy on its own |
+| 11 | Host-header probing | Threshold | `['event-radar-logs'] \| where event == "host_rejected" \| summarize count()` over 15 min | count > 5 — signals cache-poisoning/host-spoofing probes (OWASP audit F11) |
+| 12 | Google sign-in degraded | Threshold | `['event-radar-logs'] \| where event == "google_signin_degraded" \| summarize count()` over 15 min | count > 3 — sustained failures talking to Google (token exchange or JWKS fetch), not just an occasional blip |
 
 **Priority if the free tier caps monitor count:** #2 (job failed), #3/#3b (dead
 scheduler), #7 (silence) are the must-haves — they catch the real operational

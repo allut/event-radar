@@ -25,7 +25,7 @@ Deep-dive docs are not auto-loaded. Open the row's doc before editing what it co
 | **Data model** — `docs/data-model.md` | a migration, a query on a new column, a serializer |
 | **Rule rationale** — `docs/conventions.md` | the reason behind a Code Quality Rule below |
 | **Writing docs** — `docs/writing-docs.md` | `CLAUDE.md`, `README.md`, any `docs/*.md` |
-| **Observability** — `docs/observability.md` | the Axiom monitoring spec and the shipped log-record shape |
+| **Observability** — `docs/observability.md` | the Axiom monitoring spec, the shipped log-record shape, log triage |
 | **Domain glossary** — `CONTEXT.md` | naming a new domain concept |
 | **Decisions** — `docs/adr/` | an architectural decision |
 | **Agent workflow** — `docs/agents/` | the issue tracker, triage labels and domain docs |
