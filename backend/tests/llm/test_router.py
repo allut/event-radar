@@ -380,3 +380,15 @@ class TestLlmJsonProviderPacing:
         from app.llm.router import _provider_limiter
 
         assert _provider_limiter({"name": "groq"}) is None
+
+
+def test_mistral_pacing_fits_the_tier_token_limit():
+    """One worst-case classify call per interval must stay under the tokens/min tier limit."""
+    from app.constants.llm import (
+        LLM_CLASSIFY_CALL_MAX_TOKENS,
+        LLM_MISTRAL_MIN_INTERVAL_SECONDS,
+        LLM_MISTRAL_TOKENS_PER_MINUTE,
+    )
+
+    calls_per_minute = 60 / LLM_MISTRAL_MIN_INTERVAL_SECONDS
+    assert calls_per_minute * LLM_CLASSIFY_CALL_MAX_TOKENS <= LLM_MISTRAL_TOKENS_PER_MINUTE

@@ -1,9 +1,11 @@
-"""Read-only stats over llm_calls: completion_tokens percentiles per provider and
-task (successful rows) and failure_reason counts per provider.
+"""Read-only stats over llm_calls: prompt and completion token percentiles per
+provider and task (successful rows), the busiest minutes per provider (calls and
+total tokens, for sizing against per-minute provider limits), and failure_reason
+counts per provider.
 
 Reads the read-only Neon role URL from LLM_STATS_DATABASE_URL, set in the
 environment or in backend/.env (never DATABASE_URL, so it cannot hit the wrong DB
-by accident). Two aggregate queries, no writes.
+by accident). A few aggregate queries, no writes.
 
 Run from backend/ with the venv active:
     python scripts/llm_calls_stats.py            # last 7 days
@@ -23,7 +25,11 @@ from dotenv import dotenv_values
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.constants.llm import LLM_STATS_DATABASE_URL_ENV, LLM_STATS_DEFAULT_DAYS
+from app.constants.llm import (
+    LLM_STATS_DATABASE_URL_ENV,
+    LLM_STATS_DEFAULT_DAYS,
+    LLM_STATS_PEAK_MINUTES_SHOWN as PEAK_MINUTES_SHOWN,
+)
 from app.db import mask_db_url
 
 BACKEND_DIR = Path(__file__).parent.parent
@@ -34,13 +40,29 @@ TOKENS_SQL = text(
     SELECT provider, task, count(*) AS n,
            percentile_cont(0.5) WITHIN GROUP (ORDER BY completion_tokens) AS p50,
            percentile_cont(0.95) WITHIN GROUP (ORDER BY completion_tokens) AS p95,
-           max(completion_tokens) AS max_tokens
+           max(completion_tokens) AS max_tokens,
+           percentile_cont(0.5) WITHIN GROUP (ORDER BY prompt_tokens) AS prompt_p50,
+           percentile_cont(0.95) WITHIN GROUP (ORDER BY prompt_tokens) AS prompt_p95,
+           max(prompt_tokens) AS prompt_max
     FROM llm_calls
     WHERE created_at >= now() - make_interval(days => :days)
       AND failure_reason IS NULL
       AND completion_tokens IS NOT NULL
+      AND prompt_tokens IS NOT NULL
     GROUP BY provider, task
     ORDER BY provider, task
+    """
+)
+
+PEAK_MINUTES_SQL = text(
+    """
+    SELECT provider, date_trunc('minute', created_at) AS minute, count(*) AS calls,
+           sum(coalesce(prompt_tokens, 0) + coalesce(completion_tokens, 0)) AS tokens
+    FROM llm_calls
+    WHERE created_at >= now() - make_interval(days => :days)
+    GROUP BY provider, minute
+    ORDER BY tokens DESC
+    LIMIT :limit
     """
 )
 
@@ -97,14 +119,28 @@ async def main(days: int) -> int:
     try:
         async with engine.connect() as conn:
             tokens = (await conn.execute(TOKENS_SQL, {"days": days})).all()
+            peaks = (
+                await conn.execute(PEAK_MINUTES_SQL, {"days": days, "limit": PEAK_MINUTES_SHOWN})
+            ).all()
             failures = (await conn.execute(FAILURES_SQL, {"days": days})).all()
     finally:
         await engine.dispose()
 
     print_table(
-        "completion_tokens, successful calls",
-        ["provider", "task", "count", "p50", "p95", "max"],
-        [[r.provider, r.task, r.n, round(r.p50), round(r.p95), r.max_tokens] for r in tokens],
+        "completion_tokens and prompt_tokens, successful calls",
+        ["provider", "task", "count", "p50", "p95", "max", "prompt p50", "prompt p95", "prompt max"],
+        [
+            [
+                r.provider, r.task, r.n, round(r.p50), round(r.p95), r.max_tokens,
+                round(r.prompt_p50), round(r.prompt_p95), r.prompt_max,
+            ]
+            for r in tokens
+        ],
+    )
+    print_table(
+        f"busiest minutes (top {PEAK_MINUTES_SHOWN} by total tokens, all attempts)",
+        ["provider", "minute", "calls", "tokens"],
+        [[r.provider, r.minute.strftime("%Y-%m-%d %H:%M"), r.calls, r.tokens] for r in peaks],
     )
     print_table(
         "failures by reason",

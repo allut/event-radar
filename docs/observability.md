@@ -86,7 +86,8 @@ A sweep of the production stream for bugs, such as a weekly check. Run the four 
 
 ### LLM call stats
 
-- **`backend/scripts/llm_calls_stats.py [--days N]` prints prod `llm_calls` stats.** It reads the read-only Neon role URL from `LLM_STATS_DATABASE_URL` (devcontainer env or the gitignored `backend/.env`), and prints `completion_tokens` p50/p95/max per provider and task on successful rows, plus `failure_reason` counts per provider.
+- **`backend/scripts/llm_calls_stats.py [--days N]` prints prod `llm_calls` stats.** It reads the read-only Neon role URL from `LLM_STATS_DATABASE_URL` (devcontainer env or the gitignored `backend/.env`), and prints `completion_tokens` and `prompt_tokens` p50/p95/max per provider and task on successful rows, the five busiest minutes per provider (calls and total tokens, for sizing against a per-minute provider limit), and `failure_reason` counts per provider.
+- **`failure_reason` first shipped on 2026-10-25.** Earlier rate-limited attempts are not in it.
 - **The log-side source is the `event-radar-logs` dataset.** The `llm response truncated` WARNING logs `completion_tokens`, but only for truncated calls; success-row token counts come from the script.
 
 ## Setup

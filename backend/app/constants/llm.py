@@ -31,6 +31,7 @@ LLM_FAILURE_BAD_SHAPE = "bad_shape"
 # scripts/llm_calls_stats.py: env var holding the read-only prod DB URL, and default window.
 LLM_STATS_DATABASE_URL_ENV = "LLM_STATS_DATABASE_URL"
 LLM_STATS_DEFAULT_DAYS = 7
+LLM_STATS_PEAK_MINUTES_SHOWN = 5  # busiest-minute rows printed by the stats script
 # Leading chars of an unparseable response kept in the failure log.
 LLM_LOG_CONTENT_SNIPPET_CHARS = 120
 # Min gap between Mistral fallback calls: the 5-wide fan-out lands all its
@@ -38,6 +39,8 @@ LLM_LOG_CONTENT_SNIPPET_CHARS = 120
 # The tier allows 20k tokens/min and 1 req/s; a classify call costs ~2.2k tokens
 # (max 2.5k, llm_calls 14d, #638), so 8s keeps it under ~19k tokens/min.
 LLM_MISTRAL_MIN_INTERVAL_SECONDS = 8.0
+LLM_MISTRAL_TOKENS_PER_MINUTE = 20_000  # account tier limit, read from the console 2026-10-25
+LLM_CLASSIFY_CALL_MAX_TOKENS = 2_500  # worst prompt+completion seen in llm_calls (14d, #638)
 LLM_BATCH_FANOUT_CONCURRENCY = 5  # bounded in-flight LLM calls for classify/dedup/venue-extract batches
 
 LLM_DEDUP_TITLE_MAX_LEN = 200

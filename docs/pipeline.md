@@ -409,7 +409,7 @@ A Fienta organizer here is a ticketing-source id that gets polled. It is not an 
 |---|---|---|---|
 | 1 | Groq | `openai/gpt-oss-120b` | 30 requests/min burst |
 | 2 | Cloudflare Workers AI | `@cf/openai/gpt-oss-120b` | 10,000 free Neurons/day |
-| 3 | Mistral | `mistral-small-latest` | 1B tokens/month, overnight batch |
+| 3 | Mistral | `mistral-small-latest` | 20,000 tokens/min and 1 request/s (tier read 2026-10-25), overnight batch |
 
 - **Calls are capped at `LLM_MAX_TOKENS` (400)** to avoid quota exhaustion.
 - **The two `gpt-oss-120b` entries use `reasoning_effort=low` and `LLM_REASONING_MAX_TOKENS` (900).** Reasoning tokens count against the cap, and prod classify answers reached 598 tokens at the old 600 (#636). `scripts/llm_calls_stats.py` shows the live percentiles.
