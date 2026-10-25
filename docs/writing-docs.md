@@ -34,9 +34,9 @@ What's in here: the house style for `CLAUDE.md`, `README.md` and `docs/*.md`, th
 ## What to keep and cut
 
 - **Keep what reading the code won't tell you:** the why, the gotchas, the trade-offs, and silent-failure warnings with the steps to verify.
-- **Cut what one file or command reveals:** component, route, prop and nav-item lists, file counts and folder inventories.
+- **Cut what one file or command reveals:** component, route, prop and nav-item lists, folder inventories, and any count of code items. "One of the `ADMIN_ACTION_*` values" stays true; "one of 19" went stale at the twentieth.
 - **Cut issue numbers and audit IDs, keep the lesson.** Keep an ID only when it justifies a rule that would otherwise look arbitrary, as one parenthetical.
-- **Each fact has one home.** Another doc links to it with a one-clause gist: `See [organizer-portal.md](organizer-portal.md)'s Event Claiming section`.
+- **Each fact has one home.** Another doc links to it with a one-clause gist: `See [organizer-portal.md](organizer-portal.md)'s Event Claiming section`. Facts about CI, the scheduler and deploys live in `backend-ops.md`; a restated copy elsewhere drifts.
 
 ## Wording
 

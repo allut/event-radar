@@ -32,24 +32,18 @@ Deep-dive docs are not auto-loaded. Open the row's doc before editing what it co
 
 ## Commands
 
+Setup (venv, installs, `backend/.env`) is in `README.md`.
+
 ```bash
 # Backend (Python 3.12, FastAPI)
 cd backend
-python -m venv venv          # create virtualenv (gitignored)
-# Activate it — pick the line for your shell:
-venv\Scripts\Activate.ps1    # Windows PowerShell
-venv\Scripts\activate.bat    # Windows cmd
-source venv/bin/activate     # macOS / Linux
-pip install -r requirements.txt
 alembic upgrade head          # apply migrations
 uvicorn app.main:app --reload # dev server (port 8000)
 bash scripts/scratch-test.sh  # all tests, throwaway DB
 bash scripts/scratch-test.sh tests/path/test_foo.py::TestClass::test_name  # single test
 bash scripts/scratch-test.sh --cov --cov-report=term-missing  # coverage (backend/.coveragerc)
-
-# Dev tooling (pip install -r requirements-dev.txt)
-python -m mypy app             # type-check
-python -m ruff check .         # lint
+python -m mypy app            # type-check (requirements-dev.txt)
+python -m ruff check .        # lint
 ```
 
 ```bash
@@ -58,25 +52,13 @@ docker compose up -d db      # start local Postgres
 docker compose ps            # wait for the db healthcheck to report "healthy"
 ```
 
-```bash
-# Frontend (Vite + React SPA)
-cd frontend
-npm install
-npm run dev        # dev server (port 5173)
-npm run build      # type-check + production build
-npm run type-check # TypeScript check only
-npm run lint       # ESLint (flat config in eslint.config.js)
-npm test           # run all tests (vitest)
-npm run test:watch # vitest watch mode
-npm run test:coverage # coverage report (v8, html + text)
-```
+The frontend's commands are the `frontend/package.json` scripts: `dev` (port 5173), `build`, `type-check`, `lint`, `test` and `test:coverage`.
 
 ### Devcontainer
 
 The setup walkthrough is in `README.md`. Inside the container:
 
-- **The interpreter is `/opt/venv/bin/python`, already on `PATH`.** Skip the venv lines. `DATABASE_URL` and Postgres come with the container.
-- **Run `python -m ruff` and `python -m mypy`,** the form CI and the pre-commit hook use.
+- **The interpreter is `/opt/venv/bin/python`, already on `PATH`.** There is no venv to activate. `DATABASE_URL` and Postgres come with the container.
 - **Dev servers auto-start; restart them with `bash .devcontainer/dev-server.sh restart`.** An ad-hoc `npm run dev` on the mounted workspace gets a Vite watcher that silently goes stale. Use `dev-server.sh run <backend|frontend>` for a foreground instance.
 - **The scheduler is off (`ENABLE_SCHEDULER=false`).** No timed scrapes, LLM spend or digest email. The README shows how to turn it on for one session.
 - **Logs are in `/tmp/event-radar-dev/`.** Tail them with `bash .devcontainer/dev-server.sh logs backend|frontend`.
