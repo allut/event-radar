@@ -48,6 +48,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 
 - **A unique index on `event_sources(source_id, external_id)` makes ingestion idempotent** at the DB level (migration 0007).
 - **`ingestion_runs.error` comes from the propagated adapter exception.** See [pipeline.md](pipeline.md)'s Pipeline Code Rules section.
+- **`llm_calls.failure_reason` names why an attempt failed** (`rate_limited`, `truncated`, `parse_error`, `http_error`, `network_error`, `bad_shape`). Successful attempts leave it NULL.
 - **The dedup, classification and venue-extract caches key off `llm_calls.content_hash`.** Rows are pruned after `LLM_CALLS_RETENTION_DAYS`; see [backend-ops.md](backend-ops.md)'s Data Retention & Cleanup section.
 - **`raw_inbound_emails` backs a dormant path.** See [pipeline.md](pipeline.md)'s Newsletter Inbound section.
 

@@ -23,6 +23,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.constants.http import AUTHORIZATION_HEADER, BEARER_PREFIX
 from app.constants.llm import (
+    LLM_FAILURE_BAD_SHAPE,
+    LLM_FAILURE_HTTP_ERROR,
+    LLM_FAILURE_NETWORK_ERROR,
+    LLM_FAILURE_PARSE_ERROR,
+    LLM_FAILURE_RATE_LIMITED,
+    LLM_FAILURE_TRUNCATED,
     LLM_FINISH_REASON_LENGTH,
     LLM_LOG_CONTENT_SNIPPET_CHARS,
     LLM_MAX_TOKENS,
@@ -184,7 +190,8 @@ async def llm_json(
 
     errors: list[str] = []
 
-    def _record_attempt_failure(record: LlmCall, msg: str) -> None:
+    def _record_attempt_failure(record: LlmCall, reason: str, msg: str) -> None:
+        record.failure_reason = reason
         db.add(record)
         errors.append(msg)
 
@@ -234,7 +241,9 @@ async def llm_json(
                 log.warning(
                     "llm rate-limited: provider=%s task=%s", provider["name"], task
                 )
-                _record_attempt_failure(record, f"{provider['name']}: 429 rate-limited")
+                _record_attempt_failure(
+                    record, LLM_FAILURE_RATE_LIMITED, f"{provider['name']}: 429 rate-limited"
+                )
                 continue
 
             resp.raise_for_status()
@@ -265,7 +274,9 @@ async def llm_json(
                 if truncated:
                     raise _TruncatedResponse(str(exc)) from exc
                 _record_attempt_failure(
-                    record, f"{provider['name']}: JSON parse error — {exc}"
+                    record,
+                    LLM_FAILURE_PARSE_ERROR,
+                    f"{provider['name']}: JSON parse error — {exc}",
                 )
                 continue
 
@@ -288,7 +299,9 @@ async def llm_json(
                 task,
                 record.completion_tokens,
             )
-            _record_attempt_failure(record, f"{provider['name']}: truncated — {exc}")
+            _record_attempt_failure(
+                record, LLM_FAILURE_TRUNCATED, f"{provider['name']}: truncated — {exc}"
+            )
         except httpx.HTTPStatusError as exc:
             log.warning(
                 "llm HTTP error: provider=%s status=%s",
@@ -296,19 +309,25 @@ async def llm_json(
                 exc.response.status_code,
             )
             _record_attempt_failure(
-                record, f"{provider['name']}: HTTP {exc.response.status_code}"
+                record,
+                LLM_FAILURE_HTTP_ERROR,
+                f"{provider['name']}: HTTP {exc.response.status_code}",
             )
         except httpx.HTTPError as exc:
             log.warning(
                 "llm network error: provider=%s error=%s", provider["name"], exc
             )
-            _record_attempt_failure(record, f"{provider['name']}: network error — {exc}")
+            _record_attempt_failure(
+                record, LLM_FAILURE_NETWORK_ERROR, f"{provider['name']}: network error — {exc}"
+            )
         except (KeyError, IndexError) as exc:
             log.warning(
                 "llm response shape error: provider=%s error=%s", provider["name"], exc
             )
             _record_attempt_failure(
-                record, f"{provider['name']}: unexpected response shape — {exc}"
+                record,
+                LLM_FAILURE_BAD_SHAPE,
+                f"{provider['name']}: unexpected response shape — {exc}",
             )
 
     raise LLMError(

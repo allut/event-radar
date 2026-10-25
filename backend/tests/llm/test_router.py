@@ -326,6 +326,7 @@ class TestLlmJsonTolerantParsing:
         failed = mock_db.add.call_args.args[0]
         assert failed.completion_tokens == 600
         assert failed.response_json is None
+        assert failed.failure_reason == "truncated"
 
     async def test_empty_content_with_length_labelled_truncated(self, mock_db):
         with pytest.raises(LLMError, match="truncated"):
@@ -336,6 +337,7 @@ class TestLlmJsonTolerantParsing:
         with caplog.at_level("WARNING", logger="app.llm.router"):
             with pytest.raises(LLMError, match="JSON parse error"):
                 await _call_groq_only(mock_db, resp)
+        assert mock_db.add.call_args.args[0].failure_reason == "parse_error"
         text = caplog.text
         assert "finish_reason=stop" in text
         assert "I cannot comply" in text

@@ -1138,6 +1138,8 @@ class LlmCall(Base):
     prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     response_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Why the attempt failed (LLM_FAILURE_* in constants/llm.py); NULL on success.
+    failure_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

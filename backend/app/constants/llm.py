@@ -19,6 +19,13 @@ LLM_CLASSIFY_BATCH_SIZE = 30  # max events processed per classify_pending run
 LLM_REQUEST_TIMEOUT_SECONDS: float = 30.0
 # OpenAI-compatible ``finish_reason`` for a completion cut off at max_tokens.
 LLM_FINISH_REASON_LENGTH = "length"
+# llm_calls.failure_reason values.
+LLM_FAILURE_RATE_LIMITED = "rate_limited"
+LLM_FAILURE_TRUNCATED = "truncated"
+LLM_FAILURE_PARSE_ERROR = "parse_error"
+LLM_FAILURE_HTTP_ERROR = "http_error"
+LLM_FAILURE_NETWORK_ERROR = "network_error"
+LLM_FAILURE_BAD_SHAPE = "bad_shape"
 # Leading chars of an unparseable response kept in the failure log.
 LLM_LOG_CONTENT_SNIPPET_CHARS = 120
 LLM_BATCH_FANOUT_CONCURRENCY = 5  # bounded in-flight LLM calls for classify/dedup/venue-extract batches
