@@ -290,6 +290,7 @@ python scripts/reset_events.py --yes    # actually truncate (irreversible)
 ### scratch-test.sh
 
 - **`scratch-test.sh` runs pytest against a throwaway Postgres database.** It creates the database, exports `DATABASE_URL` and a `SECRET_KEY`, runs `alembic upgrade head` and `pytest "$@"`, then always drops the database.
+- **`--no-db` skips the database and the migration.** Use it for tests that never query, such as `tests/test_docs_style.py`. It works with Postgres down and saves only a second or two, because pytest's app import dominates the run.
 - **The shell `DATABASE_URL` beats `backend/.env`.** That is why the script exports it, and why `tests/conftest.py` aborts the run when it still names the dev `eventradar` database.
 
 ### Other Scripts
