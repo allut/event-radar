@@ -172,7 +172,6 @@ class StripeGateway:
     async def create_checkout_session(self, request: CheckoutSessionRequest) -> CheckoutSession:
         params: dict[str, Any] = {
             "mode": "payment",
-            "payment_method_types": ["card"],
             "customer": request.customer_id,
             "locale": request.locale,
             "expires_at": int(request.expires_at.timestamp()),
