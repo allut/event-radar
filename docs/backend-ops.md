@@ -203,10 +203,11 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 | Daily 05:00 | `expire_stale_claims` |
 | Daily 06:00 | `build_daily_feeds` |
 | Daily 07:00 | `send_daily_digests` |
-| Sun 03:00 | `sync_fienta_organizers` |
-| Sun 03:30 | `cleanup_stale_data` |
+| Sun 02:00 | `sync_fienta_organizers` |
+| Sun 02:30 | `cleanup_stale_data` |
 
 - **The daily jobs run in a fixed order.** Refetch reconciles source detail pages, stale claims expire, then the feed build reads the result an hour before the digest sends it.
+- **No cron job runs in the 03:00 hour.** It happens twice on the October fall-back Sunday and not at all in March, so APScheduler fires the job twice or shifts it. `tests/test_main_scheduler.py` fails when one lands there.
 - **`backfill_publisher_ids` and `expire_stale_claims` are scheduler-only.** Neither has an admin trigger. The publisher backfill has a CLI instead (see Maintenance Scripts).
 - **`ENABLE_SCHEDULER` turns the scheduler off in the devcontainer.** A `--reload` server left running overnight then can't arm live scrapes, LLM spend or digest email on a timer.
 - **`app/main.py::_start_scheduler()` honours `ENABLE_SCHEDULER=false` only when `APP_ENV=development`.** The var is absent from `render.yaml`, so production always runs the scheduler.
@@ -220,7 +221,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 
 ## Data Retention & Cleanup
 
-`app/cleanup.py::cleanup_stale_data()` runs weekly, Sunday 03:30, right after the organizer sync. It prunes aged rows with one bulk `DELETE` per table.
+`app/cleanup.py::cleanup_stale_data()` runs weekly, Sunday 02:30, right after the organizer sync. It prunes aged rows with one bulk `DELETE` per table.
 
 - **`events` rows are never deleted.** Only satellite data goes, which preserves event history and the `user_event_feedback` signal indefinitely.
 

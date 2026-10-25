@@ -90,7 +90,7 @@ LOG_RECORD_RESERVED_ATTRS: frozenset[str] = frozenset(
 # backend/, pinned absolute so the alembic-head guard doesn't depend on cwd.
 ALEMBIC_DIR_NAME = "alembic"
 
-# Data retention — app/cleanup.py::cleanup_stale_data(), weekly Sun 03:30 EET.
+# Data retention — app/cleanup.py::cleanup_stale_data(), weekly Sun 02:30 Tallinn.
 # These prune satellite/audit tables only; `events` rows are never deleted.
 MAGIC_LINK_RETENTION_DAYS = 7  # expired/used auth_magic_links rows
 LLM_CALLS_RETENTION_DAYS = 90  # also the dedup/classification cache window

@@ -7,9 +7,9 @@ from app.constants.admin import (
 )
 
 # Scheduler cadence (see docs/backend-ops.md "Scheduled Jobs" for the full cron schedule)
-ORGANIZER_SYNC_HOUR = 3  # weekly Sunday 03:00 Europe/Tallinn
+ORGANIZER_SYNC_HOUR = 2  # weekly Sunday 02:00 Europe/Tallinn; never hour 3 (DST, #633)
 ORGANIZER_SYNC_MINUTE = 0
-CLEANUP_HOUR = 3  # weekly Sunday 03:30 Europe/Tallinn, after organizer sync
+CLEANUP_HOUR = 2  # weekly Sunday 02:30 Europe/Tallinn, after organizer sync
 CLEANUP_MINUTE = 30
 INGEST_INTERVAL_HOURS = 1
 LLM_PASS_INTERVAL_HOURS = 6  # dedup/classify/publish/geocode
