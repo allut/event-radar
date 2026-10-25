@@ -426,8 +426,8 @@ async def _process_one(
 
     detail_lat = location.get("lat") if location else None
     detail_lng = location.get("lng") if location else None
-    # An in-area event uses the Tallinn gate geocode's self-heal applies; a looser
-    # Estonia gate would re-write a coord the next geocode pass NULLs (#635).
+    # An in-area event uses the same Tallinn gate geocode's self-heal applies; the
+    # looser Estonia gate would write a coord the next geocode pass NULLs (#635).
     coord_gate = coords_in_estonia if event.is_out_of_area else coords_in_tallinn
     if detail_lat is None or detail_lng is None or not coord_gate(
         detail_lat, detail_lng
