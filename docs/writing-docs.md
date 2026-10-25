@@ -4,7 +4,7 @@ What's in here: the house style for `CLAUDE.md`, `README.md` and `docs/*.md`, th
 
 ## Scope
 
-- **Governs `CLAUDE.md`, `README.md` and the top-level `docs/*.md`.** Docs are agent-first and still readable by humans: agents open them before editing code, so exact pointers matter more than polish.
+- **Governs `CLAUDE.md`, `README.md`, `CODING_STANDARDS.md` and the top-level `docs/*.md`.** Docs are agent-first and still readable by humans: agents open them before editing code, so exact pointers matter more than polish.
 - **`docs/adr/*`, `CONTEXT.md` and `docs/agents/*` keep their own formats.** The domain-modeling skill owns the ADR and glossary shapes.
 
 ## Shape
@@ -54,11 +54,13 @@ What's in here: the house style for `CLAUDE.md`, `README.md` and `docs/*.md`, th
 
 - **No banner.** The pitch blockquote stands in for `What's in here:`.
 - **GitHub admonitions (`> [!NOTE]` etc.) are allowed for real guardrails.** Each counts as one paragraph under the 60-word cap.
+- **The Project structure tree lists top-level entries, each by its role.** A file name inside a folder's description goes stale unchecked, while the guard checks every entry itself.
 - **Every other rule applies**, `path::symbol` cites and tables for lookup data included.
 
 ## The guard
 
 - **`backend/tests/test_docs_style.py` enforces the mechanical rules in CI:** the 60-word cap (skipping fences, headings, HTML comments and table rows), the banner, no `path:line` cites, the 1,500-word limits, and code→doc pointer resolution.
 - **It also resolves doc→code cites.** Every backticked repo path must be tracked, and every `path::symbol` must name a symbol in that file. A path a doc names on purpose but no commit tracks, such as `backend/.env`, goes in `UNTRACKED_CITES` with its reason.
+- **It checks the README's Project structure tree.** The fence hides the tree from the cite check, so a separate test requires every entry to be tracked.
 - **The rest is judgement:** sentence length, what to cut, one home per fact, and positive phrasing.
 - **Every governed doc is checked, with no exemptions.** A new `docs/*.md` passes the style checks from its first commit.

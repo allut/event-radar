@@ -62,7 +62,7 @@ Things to know inside the container:
 - **`DATABASE_URL` comes from the container environment** and overrides `backend/.env`. The container's Postgres is a separate volume from the host's Compose `db`, so data doesn't carry over.
 - **The scheduler is off (`ENABLE_SCHEDULER=false`).** A `--reload` server left running overnight can't arm scrapes, LLM spend or digest email. To run it for one session, `bash .devcontainer/dev-server.sh stop backend`, then run `ENABLE_SCHEDULER=true uvicorn app.main:app --reload` from `backend/`.
 - **`gh` authenticates on start and attach** from the host's forwarded git credentials (`.devcontainer/gh-auth.sh`). If `gh auth status` is red, rerun that script or `gh auth login`.
-- **The `claude` CLI signs in once, into a persistent named volume** separate from the host's `~/.claude`. `post-start.sh` refreshes it on each start, and `.devcontainer/sync-claude-config.sh` mirrors in the host's settings, hooks, commands, plugins and status line. Skills come in through a read-only bind mount. The image installs RTK, so the host's RTK hook works too.
+- **The `claude` CLI signs in once, into a persistent named volume** separate from the host's `~/.claude`. `post-start.sh` refreshes it on each start, and `.devcontainer/sync-claude-config.sh` mirrors the host's Claude Code config in. The image installs RTK, so the host's RTK hook works too.
 - **`.devcontainer/claude-plugins.json` lists container-only Claude Code plugins.** `sync-claude-config.sh` merges it into the container's `~/.claude/settings.json` on each start and never touches the host's config.
 - **`.devcontainer/mem-watchdog.sh` is a manual diagnostic** for the intermittent "reload the VS Code window" hang. It isn't part of the normal dev loop.
 
@@ -92,9 +92,6 @@ You need Python 3.12, Node.js 24 (`NODE_VERSION` in `frontend/wrangler.toml`) an
 
 4. **Start the frontend** in a second terminal: `cd frontend && npm install && npm run dev`, then open http://localhost:5173.
 
-> [!IMPORTANT]
-> An older `backend/.env` may still point `DATABASE_URL` at a shared Neon database. Switch it to the local form in `.env.example`, or you'll keep working against the remote DB.
-
 - **Migrate before the first `uvicorn` start.** Startup seeds sources, personas and publishers but never migrates, so it crashes on missing tables.
 - **A native Postgres needs contrib, and migrations need a superuser.** `alembic upgrade head` runs `CREATE EXTENSION` for `citext` and `pg_trgm`. Drop `?ssl=require` from a local `DATABASE_URL`. The Compose `postgres:16` image already covers all of this.
 - **The backend serves `/health`, and `/docs` in development only.**
@@ -110,11 +107,12 @@ event-radar/
 ├── backend/            FastAPI app, Alembic migrations, pytest suite, ops scripts
 ├── frontend/           Vite + React SPA, Pages Functions, prerender scripts
 ├── shared/             cross-stack i18n, personas and config
-├── scripts/            generate_shared.py (regenerates _generated/ files), linearize-branch.py
+├── scripts/            repo-wide dev scripts, including the shared/ codegen
 ├── docs/               deep-dive docs, ADRs, agent workflow docs
 ├── .devcontainer/      devcontainer image and lifecycle scripts
-├── .github/workflows/  CI (lint, tests, migrations) and the dependency CVE audit
+├── .github/workflows/  CI and the dependency CVE audit
 ├── CLAUDE.md           engineering rules and the Documentation Map
+├── CODING_STANDARDS.md review-only rules and where every standard lives
 ├── CONTEXT.md          domain glossary
 ├── docker-compose.yml  local Postgres 16
 ├── render.yaml         Render backend service

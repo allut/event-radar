@@ -5,7 +5,8 @@ checks the ones a regex can judge without false positives;
 `test_code_doc_pointers_resolve` checks that every pointer from code into a doc
 still names a file, `§N` section and heading that exist;
 `test_doc_code_cites_resolve` checks that every backticked repo path and
-`path::symbol` cite in a governed doc still names a tracked file and a symbol in it.
+`path::symbol` cite in a governed doc still names a tracked file and a symbol in it;
+`test_readme_tree_entries_are_tracked` checks the README's Project structure tree.
 """
 
 from __future__ import annotations
@@ -75,9 +76,13 @@ UNTRACKED_CITES = {
 UNTRACKED_PREFIXES = ("dist/",)
 
 
+README_TREE_HEADING = "Project structure"
+TREE_ENTRY = re.compile(r"^[├└]── (\S+)")
+
+
 def _governed_docs() -> list[str]:
     docs = sorted(f"docs/{p.name}" for p in (REPO / "docs").glob("*.md"))
-    return ["CLAUDE.md", "README.md", *docs]
+    return ["CLAUDE.md", "README.md", "CODING_STANDARDS.md", *docs]
 
 
 def _prose_lines(text: str) -> list[tuple[int, str]]:
@@ -321,4 +326,41 @@ def test_doc_code_cites_resolve() -> None:
         "Doc→code cites that no longer resolve (fix the cite in the same commit as "
         "the rename; a deliberately untracked path goes in UNTRACKED_CITES):\n"
         + "\n".join(failures)
+    )
+
+
+def _readme_tree_failures(text: str) -> list[str]:
+    """Every `├──`/`└──` entry in the fenced tree under the Project structure
+    heading must be a tracked file, or a directory holding one when it ends in `/`.
+    The fence hides the tree from the cite check, so this is its only guard."""
+    files, dirs = _tracked()
+    failures: list[str] = []
+    entries = 0
+    in_section = in_fence = False
+    for no, line in enumerate(text.splitlines(), start=1):
+        if FENCE.match(line):
+            in_fence = not in_fence
+            continue
+        heading = None if in_fence else HEADING.match(line)
+        if heading:
+            in_section = heading.group(1) == README_TREE_HEADING
+            continue
+        m = TREE_ENTRY.match(line) if in_section and in_fence else None
+        if not m:
+            continue
+        entries += 1
+        entry = m.group(1)
+        tracked = entry.rstrip("/") in dirs if entry.endswith("/") else entry in files
+        if not tracked:
+            failures.append(f"README.md:{no}: tree entry {entry!r} isn't tracked")
+    if not entries:
+        failures.append(f"README.md: no tree under the {README_TREE_HEADING!r} heading")
+    return failures
+
+
+def test_readme_tree_entries_are_tracked() -> None:
+    failures = _readme_tree_failures((REPO / "README.md").read_text(encoding="utf-8"))
+    assert not failures, (
+        "README Project structure entries that no longer exist (update the tree in "
+        "the same commit as the move):\n" + "\n".join(failures)
     )
