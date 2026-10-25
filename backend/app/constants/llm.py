@@ -35,7 +35,9 @@ LLM_STATS_DEFAULT_DAYS = 7
 LLM_LOG_CONTENT_SNIPPET_CHARS = 120
 # Min gap between Mistral fallback calls: the 5-wide fan-out lands all its
 # fallbacks at once, and Mistral answered 429 to every one last week (#636).
-LLM_MISTRAL_MIN_INTERVAL_SECONDS = 1.0
+# The tier allows 20k tokens/min and 1 req/s; a classify call costs ~2.2k tokens
+# (max 2.5k, llm_calls 14d, #638), so 8s keeps it under ~19k tokens/min.
+LLM_MISTRAL_MIN_INTERVAL_SECONDS = 8.0
 LLM_BATCH_FANOUT_CONCURRENCY = 5  # bounded in-flight LLM calls for classify/dedup/venue-extract batches
 
 LLM_DEDUP_TITLE_MAX_LEN = 200
