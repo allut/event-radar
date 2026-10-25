@@ -26,6 +26,9 @@ LLM_FAILURE_PARSE_ERROR = "parse_error"
 LLM_FAILURE_HTTP_ERROR = "http_error"
 LLM_FAILURE_NETWORK_ERROR = "network_error"
 LLM_FAILURE_BAD_SHAPE = "bad_shape"
+# scripts/llm_calls_stats.py: env var holding the read-only prod DB URL, and default window.
+LLM_STATS_DATABASE_URL_ENV = "LLM_STATS_DATABASE_URL"
+LLM_STATS_DEFAULT_DAYS = 7
 # Leading chars of an unparseable response kept in the failure log.
 LLM_LOG_CONTENT_SNIPPET_CHARS = 120
 LLM_BATCH_FANOUT_CONCURRENCY = 5  # bounded in-flight LLM calls for classify/dedup/venue-extract batches
