@@ -5,16 +5,16 @@
  * narrow form. Consumers `composes` .gate onto their own message element and
  * .content onto their real-content wrapper. */
 .gate {
+  composes: card from './Card.module.css';
   display: none;
+  padding: var(--space-5);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
 }
 /* --bp-desktop-gate in index.css (documentation only — see --bp-narrow's comment there). */
 @media (max-width: 1024px) {
   .gate {
-    composes: card from './Card.module.css';
     display: block;
-    padding: var(--space-5);
-    color: var(--text-muted);
-    font-size: var(--fs-sm);
   }
   .content {
     display: none;

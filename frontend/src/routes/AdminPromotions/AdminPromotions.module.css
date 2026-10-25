@@ -30,15 +30,7 @@
 
 .section { min-width: 0; }
 
-.sectionTitle {
-  font-family: var(--font-system);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-bold);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wider);
-  color: var(--text-muted);
-  margin: 0 0 var(--space-3);
-}
+.sectionTitle { composes: sectionTitle from '../../components/shared/AdminCommerce.module.css'; }
 
 .sectionTitleInline {
   composes: sectionTitle;

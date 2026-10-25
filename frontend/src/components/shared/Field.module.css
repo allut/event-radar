@@ -61,3 +61,14 @@
   border-radius: 0;
   transition: border-color var(--transition), box-shadow var(--transition);
 }
+
+/* Checkmark glyph inside a custom checkbox box; the consumer reveals it with
+   its own :checked rule. */
+.checkMark {
+  width: var(--checkbox-mark-size);
+  height: var(--checkbox-mark-size);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  opacity: 0;
+}

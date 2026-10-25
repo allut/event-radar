@@ -31,13 +31,11 @@
   margin: 0;
 }
 
-.pill {
-  composes: pill from '../../components/PromotionsTable/PromotionsTable.module.css';
-}
-.pillLive { color: var(--success); }
-.pillScheduled { color: var(--accent-ink); }
-.pillFinished { color: var(--text-muted); }
-.pillAttention { color: var(--accent-ink); }
+.pill { composes: pill from '../../components/shared/AdminCommerce.module.css'; }
+.pillLive { composes: pillLive from '../../components/shared/AdminCommerce.module.css'; }
+.pillScheduled { composes: pillScheduled from '../../components/shared/AdminCommerce.module.css'; }
+.pillFinished { composes: pillFinished from '../../components/shared/AdminCommerce.module.css'; }
+.pillAttention { composes: pillAttention from '../../components/shared/AdminCommerce.module.css'; }
 
 .window {
   font-family: var(--font-mono);
@@ -59,15 +57,7 @@
 
 .section { min-width: 0; }
 
-.sectionTitle {
-  font-family: var(--font-system);
-  font-size: var(--fs-2xs);
-  font-weight: var(--fw-bold);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wider);
-  color: var(--text-muted);
-  margin: 0 0 var(--space-3);
-}
+.sectionTitle { composes: sectionTitle from '../../components/shared/AdminCommerce.module.css'; }
 
 .mono {
   font-family: var(--font-mono);
@@ -89,46 +79,11 @@
   gap: var(--space-2);
 }
 
-.plainButton {
-  composes: btnOutline from '../../components/shared/Button.module.css';
-  padding: var(--space-2) var(--space-3);
-  font-family: inherit;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--text);
-  cursor: pointer;
-}
-.plainButton:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+.plainButton { composes: plainButton from '../../components/shared/AdminCommerce.module.css'; }
+.primaryButton { composes: primaryButton from '../../components/shared/AdminCommerce.module.css'; }
+.dangerButton { composes: dangerButton from '../../components/shared/AdminCommerce.module.css'; }
 
-.primaryButton {
-  composes: btnPrimary from '../../components/shared/Button.module.css';
-  padding: var(--space-2) var(--space-3);
-  font-family: inherit;
-  font-size: var(--fs-sm);
-  cursor: pointer;
-}
-
-.dangerButton {
-  composes: btnOutline from '../../components/shared/Button.module.css';
-  padding: var(--space-2) var(--space-3);
-  font-family: inherit;
-  font-size: var(--fs-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--danger);
-  border-color: var(--danger-border);
-  cursor: pointer;
-}
-.dangerButton:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
-.dangerButton:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
-
-.panel {
-  display: grid;
-  gap: var(--space-3);
-  margin-top: var(--space-3);
-  padding: var(--space-4);
-  background: var(--bg-raised);
-  border: var(--border-w-hair) solid var(--accent-border);
-}
+.panel { composes: panel from '../../components/shared/AdminCommerce.module.css'; }
 
 .panelTitle {
   margin: 0;
@@ -149,11 +104,8 @@
 }
 
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  composes: field from '../../components/shared/AdminCommerce.module.css';
   flex: 1 1 var(--admin-promotion-field-min);
-  min-width: 0;
 }
 
 .label {
@@ -162,22 +114,9 @@
   color: var(--text-soft);
 }
 
-.input {
-  composes: fieldInput from '../../components/shared/Field.module.css';
-  font-family: inherit;
-  font-size: var(--fs-sm);
-  padding: var(--space-2) var(--space-3);
-  min-width: 0;
-  width: 100%;
-}
-textarea.input { resize: vertical; }
+.input { composes: input from '../../components/shared/AdminCommerce.module.css'; }
 
-.error {
-  margin: 0;
-  min-height: var(--space-4);
-  color: var(--danger);
-  font-size: var(--fs-2xs);
-}
+.error { composes: error from '../../components/shared/AdminCommerce.module.css'; }
 
 /* Commercial record */
 .record {
@@ -213,26 +152,18 @@ textarea.input { resize: vertical; }
 }
 
 .table {
-  border-collapse: collapse;
-  width: 100%;
+  composes: table from '../../components/shared/AdminCommerce.module.css';
   min-width: var(--admin-promotion-days-min);
-  font-size: var(--fs-sm);
 }
 
 .table th {
-  font-size: var(--fs-2xs);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wider);
-  color: var(--text-muted);
-  font-weight: var(--fw-semibold);
   padding: var(--space-2) var(--space-3);
-  border-bottom: var(--border-w-hair) solid var(--border);
   text-align: right;
 }
 
 .table td {
   padding: var(--space-2) var(--space-3);
-  border-bottom: var(--border-w-hair) solid var(--border);
+  vertical-align: baseline;
   text-align: right;
 }
 

@@ -138,7 +138,7 @@
   content: '';
   width: var(--bar-pulse-dot);
   height: var(--bar-pulse-dot);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--accent);
 }
 

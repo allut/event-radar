@@ -5,14 +5,9 @@
 // follows the user's browser default font size. And no stylesheet may swap a
 // display-token selector for another size inside an @media block: a zoomed
 // desktop window crosses those breakpoints and the text would shrink.
-/// <reference types="node" />
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { SRC_DIR, atRuleBlocks, cssModules, readCss, rules } from './test/cssSheets';
 
-// Read off disk: vitest doesn't run CSS through Vite, so `?raw` comes back empty.
-// Comments stripped: prose like "the max-width @media rules" would parse as a block.
-const readCss = (path: string): string => readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-const indexCss = readCss(`${import.meta.dirname}/index.css`);
+const indexCss = readCss(`${SRC_DIR}/index.css`);
 // At zoom z a token renders at least z × min, so 300% zoom reaches 2× its
 // 100% size (at most max) whenever max ÷ min ≤ 3 / 2.
 const MAX_DISPLAY_RATIO = 1.5;
@@ -25,37 +20,7 @@ function parseClamp(value: string): { min: string; max: string } | null {
   return m ? { min: m[1].trim(), max: m[2].trim() } : null;
 }
 
-function cssModules(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) return cssModules(path);
-    return entry.name.endsWith('.module.css') ? [path] : [];
-  });
-}
-
-// Every `selector-list { body }` rule, flattened (an @media prelude is dropped,
-// so rules nested inside it come out as their own entries).
-function rules(css: string): { selectors: string; body: string }[] {
-  return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(m => ({ selectors: m[1], body: m[2] }));
-}
-
 const classesIn = (selectors: string): string[] => [...selectors.matchAll(/\.([\w-]+)/g)].map(m => m[1]);
-
-// Top-level @media blocks, brace-matched (rule bodies nest one level inside).
-function mediaBlocks(css: string): string[] {
-  const blocks: string[] = [];
-  for (const m of css.matchAll(/@media[^{]*\{/g)) {
-    let depth = 1;
-    let i = m.index + m[0].length;
-    while (depth > 0 && i < css.length) {
-      if (css[i] === '{') depth++;
-      if (css[i] === '}') depth--;
-      i++;
-    }
-    blocks.push(css.slice(m.index, i));
-  }
-  return blocks;
-}
 
 describe('--font-size-display-* tokens', () => {
   it('are defined', () => {
@@ -75,14 +40,14 @@ describe('--font-size-display-* tokens', () => {
   });
 
   it('are never redefined inside an @media block', () => {
-    for (const block of mediaBlocks(indexCss)) {
+    for (const block of atRuleBlocks(indexCss, 'media')) {
       expect(block).not.toMatch(/--font-size-display-/);
     }
   });
 });
 
 describe('display-token consumers', () => {
-  const sheets = cssModules(import.meta.dirname).map(path => [path.slice(import.meta.dirname.length + 1), readCss(path)] as const);
+  const sheets = cssModules(SRC_DIR).map(path => [path.slice(SRC_DIR.length + 1), readCss(path)] as const);
   const consumers = sheets
     .map(([path, css]) => {
       const classes = rules(css).filter(r => DISPLAY_FONT_SIZE.test(r.body)).flatMap(r => classesIn(r.selectors));
@@ -95,7 +60,7 @@ describe('display-token consumers', () => {
   });
 
   it.each(consumers)('%s never resizes a display-token selector inside @media', (_path, css, classes) => {
-    for (const block of mediaBlocks(css)) {
+    for (const block of atRuleBlocks(css, 'media')) {
       for (const rule of rules(block.slice(block.indexOf('{') + 1))) {
         if (!ANY_FONT_SIZE.test(rule.body)) continue;
         const resized = classesIn(rule.selectors).filter(cls => classes.has(cls));

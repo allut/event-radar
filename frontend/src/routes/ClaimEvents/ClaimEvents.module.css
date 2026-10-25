@@ -2,16 +2,7 @@
   composes: page from '../../components/shared/Page.module.css';
 }
 
-.main {
-  flex: 1 0 auto;
-  width: 100%;
-  max-width: var(--page-max-organizer);
-  margin: 0 auto;
-  padding: var(--space-8) var(--space-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
+.main { composes: pageMainOrganizer from '../../components/shared/Page.module.css'; }
 
 .eyebrow {
   font-size: var(--fs-xs);

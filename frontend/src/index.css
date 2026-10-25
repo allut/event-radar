@@ -311,6 +311,9 @@
      1760px wrap and the card grid locks to 6 columns. Above a 1920px
      laptop viewport (2880×1620 @150%), below a 2560px monitor. */
   --bp-wide: 2000px;
+  /* One-off max-width @media breakpoints, documentation only like the rest. */
+  --bp-promotion-trust: 760px;    /* PromotionTrust.module.css */
+  --bp-bar-wide: 1280px;          /* shared/Bar.module.css (@media max-width: 1279px) */
   /* Side inset that aligns full-bleed chrome content (TopBar, Landing ticker)
      to the --page-max-wide wrap. `100%` is substituted at the use site, so it
      resolves against each consumer's own containing block. Wide band only. */
@@ -400,6 +403,8 @@
   --anim-breathe: 3s; /* Animations.module.css .breathe fallback duration */
   --anim-hero-rise: 1.15s;     /* Animations.module.css .heroRise > span */
   --anim-hairline-draw: 1.4s;  /* Animations.module.css .hairlineDraw */
+  --anim-dial-turn: 1.4s;      /* DialMark.module.css .intro .hand */
+  --anim-rim-draw: 0.9s;       /* DialMark.module.css .intro .rim */
   --anim-poster-drift: 26s;    /* Animations.module.css .posterDrift */
   --anim-ticker: 42s;          /* Animations.module.css .tickerSlide */
   --rise-distance: 8px;

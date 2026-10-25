@@ -26,6 +26,13 @@
   max-width: var(--page-max-narrow);
 }
 
+.pageMainOrganizer {
+  composes: pageMain;
+  flex: 1 0 auto;
+  max-width: var(--page-max-organizer);
+  gap: var(--space-5);
+}
+
 .pageTitle {
   font-family: var(--font-display);
   font-size: var(--heading-xl);

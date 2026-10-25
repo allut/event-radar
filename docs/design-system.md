@@ -124,6 +124,7 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 `frontend/src/components/shared/` holds pure-CSS modules for page, card, button, field, menu, bar, calendar, settings and prose chrome. `GoogleSignInButton/` is the one component folder in it.
 
 - **Consume shared modules with CSS Modules `composes:`.** Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`. Copy-pasting their rules is the drift this layer exists to stop.
+- **`cssRules.test.ts` enforces the layer's rules.** It rejects `composes:` inside `@media` or `@container`, literal durations and radii, `@media` widths with no `--bp-*` token, and a block of 6+ declarations copied across modules.
 - **Add a new shared pattern here rather than growing a second copy.** Variants follow base class plus modifier, like `.card` and `.cardAccentTop`. Restyling a base class in place for one consumer changes every other consumer.
 - **`composes:` can't be scoped inside `@media`.** It resolves to a class-name string at build time. A shared rule needed only on one side of a breakpoint is restated locally, as `Feed.module.css`'s media-scoped `.srOnly` does. Keep a restatement in sync with its source.
 - **`Pager/` composes `Button.module.css`'s `.btnOutline` for every page link**, with `--space-2-75` (44px) targets. Callers place it and add spacing or a rule through `className`; it has no audience variant.
@@ -193,9 +194,9 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 ## 10. Layout and breakpoints
 
 - **640px is the one shared breakpoint**, written as a literal and named by `--bp-narrow` (§3). `Landing`'s 641px is its `min-width` complement, not a new breakpoint.
-- **Three one-off breakpoints each have a doc token:** 560px for Onboarding, 900px for Landing's stat row and 1024px for the admin desktop gate. The Organizer promotion request form also collapses at 900px.
+- **Five one-off breakpoints each have a doc token:** 560px for Onboarding, 900px for Landing's stat row, 1024px for the admin desktop gate, 760px for `PromotionTrust` and 1280px for the top bar (`--bp-bar-wide`). The Organizer promotion request form also collapses at 900px.
 - **`Pager.module.css` holds the only container queries**, on the pager's own width. At `--bp-pager-stack` the label stacks over the buttons; at `--bp-pager-collapse` it keeps first, current and last. That fits a 340px admin column at any viewport. Like `@media`, `composes:` can't sit inside `@container`.
-- **The top bar switches at 1280px, with no token.** Below it, `Bar.module.css` hides `.wideOnly` (pulse chip, inline search) and shows `.narrowOnly` (search icon and popover).
+- **The top bar switches at 1280px (`--bp-bar-wide`).** Below it, `Bar.module.css` hides `.wideOnly` (pulse chip, inline search) and shows `.narrowOnly` (search icon and popover).
 - **Page widths are `--page-max-*` tokens per surface.** Pick an existing one before adding another.
 - **The browse grid is `Page.module.css`'s `.cardGrid`,** composed by Explore and Saved. It auto-fills below the wide band, uses fixed column counts inside it and collapses to one column at 640px.
 - **Feed doesn't use the browse grid.** Five curated picks (a lead `featured` card plus a list) are a different problem from an unbounded browse list. Converging them would flatten that distinction.
