@@ -22,7 +22,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants.http import AUTHORIZATION_HEADER, BEARER_PREFIX
-from app.constants.llm import LLM_MAX_TOKENS, LLM_PROVIDERS, LLM_REQUEST_TIMEOUT_SECONDS
+from app.constants.llm import (
+    LLM_FINISH_REASON_LENGTH,
+    LLM_LOG_CONTENT_SNIPPET_CHARS,
+    LLM_MAX_TOKENS,
+    LLM_PROVIDERS,
+    LLM_REQUEST_TIMEOUT_SECONDS,
+)
 from app.constants.log_events import LOG_EVENT_LLM_DEGRADED
 
 log = logging.getLogger(__name__)
@@ -30,6 +36,10 @@ log = logging.getLogger(__name__)
 
 class LLMError(Exception):
     """Raised when all configured LLM providers fail."""
+
+
+class _TruncatedResponse(Exception):
+    """A completion stopped at ``max_tokens`` (``finish_reason == "length"``)."""
 
 
 def _content_hash(text: str) -> str:
@@ -52,6 +62,24 @@ def strict_bool(value: Any, default: bool) -> bool:
         if lowered == "false":
             return False
     return default
+
+
+def _parse_json_content(content: str) -> dict[str, Any]:
+    """``json.loads`` tolerant of a code fence or prose around the object.
+
+    Tries the raw text first, then the outermost ``{...}`` span (which also
+    strips a surrounding fence). Raises ``json.JSONDecodeError`` if neither parses.
+    """
+    try:
+        return json.loads(content)  # type: ignore[no-any-return]
+    except json.JSONDecodeError as exc:
+        start, end = content.find("{"), content.rfind("}")
+        if start == -1 or end <= start:
+            raise
+        try:
+            return json.loads(content[start : end + 1])  # type: ignore[no-any-return]
+        except json.JSONDecodeError:
+            raise exc from None
 
 
 def content_hash(text: str) -> str:
@@ -212,13 +240,35 @@ async def llm_json(
             resp.raise_for_status()
             data = resp.json()
             usage = data.get("usage", {})
-            content = data["choices"][0]["message"].get("content")
-            if not content:
-                raise KeyError("content")
-            result: dict[str, Any] = json.loads(content)
-
+            choice = data["choices"][0]
+            finish_reason = choice.get("finish_reason")
+            content = choice["message"].get("content")
             record.prompt_tokens = usage.get("prompt_tokens")
             record.completion_tokens = usage.get("completion_tokens")
+            truncated = finish_reason == LLM_FINISH_REASON_LENGTH
+            if not content:
+                if truncated:
+                    raise _TruncatedResponse("no content before max_tokens")
+                raise KeyError("content")
+            try:
+                result: dict[str, Any] = _parse_json_content(content)
+            except json.JSONDecodeError as exc:
+                snippet = content[:LLM_LOG_CONTENT_SNIPPET_CHARS]
+                log.warning(
+                    "llm response parse failed: provider=%s finish_reason=%s "
+                    "error=%s content=%r",
+                    provider["name"],
+                    finish_reason,
+                    exc,
+                    snippet,
+                )
+                if truncated:
+                    raise _TruncatedResponse(str(exc)) from exc
+                _record_attempt_failure(
+                    record, f"{provider['name']}: JSON parse error — {exc}"
+                )
+                continue
+
             record.response_json = result
             db.add(record)
             model_label = f"{provider['name']}/{provider['model']}"
@@ -231,11 +281,14 @@ async def llm_json(
             )
             return result, model_label
 
-        except json.JSONDecodeError as exc:
+        except _TruncatedResponse as exc:
             log.warning(
-                "llm response parse failed: provider=%s error=%s", provider["name"], exc
+                "llm response truncated: provider=%s task=%s completion_tokens=%s",
+                provider["name"],
+                task,
+                record.completion_tokens,
             )
-            _record_attempt_failure(record, f"{provider['name']}: JSON parse error — {exc}")
+            _record_attempt_failure(record, f"{provider['name']}: truncated — {exc}")
         except httpx.HTTPStatusError as exc:
             log.warning(
                 "llm HTTP error: provider=%s status=%s",

@@ -413,6 +413,7 @@ A Fienta organizer here is a ticketing-source id that gets polled. It is not an 
 
 - **Calls are capped at `LLM_MAX_TOKENS` (400)** to avoid quota exhaustion.
 - **The two `gpt-oss-120b` entries use `reasoning_effort=low` and `LLM_REASONING_MAX_TOKENS` (600).** That is the project hard cap. It keeps reasoning tokens from crowding out the JSON answer.
+- **`llm_json` parses tolerantly and labels truncation.** It accepts a code fence or prose around the object. A `finish_reason` of `length` is reported as `truncated`, not as a parse error. Every parse failure logs `finish_reason` and the first 120 characters of the content.
 - **Dedup decisions are cached by content hash.** An identical pair never reaches the LLM twice.
 - **The classification batch needs no sleep loop.** Groq's burst limit absorbs it.
 
