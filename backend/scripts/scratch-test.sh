@@ -22,5 +22,8 @@ psql "$ADMIN_URL" -qc "CREATE DATABASE ${SCRATCH_DB}"
 export DATABASE_URL="${BASE_URL%/*}/${SCRATCH_DB}${QUERY}"
 export SECRET_KEY="${SECRET_KEY:-scratch-test-secret-not-for-production-32chars}"
 
-alembic upgrade head
+# Migration chatter buries the pytest summary; show it only when the upgrade fails.
+MIGRATE_LOG="$(mktemp)"
+trap 'rm -f "$MIGRATE_LOG"; cleanup' EXIT
+alembic upgrade head >"$MIGRATE_LOG" 2>&1 || { cat "$MIGRATE_LOG"; exit 1; }
 python -m pytest "$@"
