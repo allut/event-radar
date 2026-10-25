@@ -471,7 +471,7 @@ export default function Explore() {
               {!authed && <UpsellCard locale={locale} onCtaClick={handleUpsellCtaClick} />}
               {events.map((event, i) => (
                 <Fragment key={event.id}>
-                  {sponsoredSlot && i === (sponsoredSlot.tile ?? SPONSORED_EXPLORE_TILE_INDEX) && (
+                  {sponsoredSlot && i === (sponsoredSlot.tile != null ? sponsoredSlot.tile - 1 : SPONSORED_EXPLORE_TILE_INDEX) && (
                     <EventCard
                       key={`slot-${sponsoredSlot.id}`}
                       event={sponsoredSlot}

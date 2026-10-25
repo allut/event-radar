@@ -608,7 +608,7 @@ describe('Explore', () => {
   });
 
   describe('Sponsored slot (issue #603)', () => {
-    const SLOT = { advertiser: 'Telliskivi Selts MTÜ', explanation: 'filters', tile: 3 };
+    const SLOT = { advertiser: 'Telliskivi Selts MTÜ', explanation: 'filters', tile: 4 };
 
     /** Serves `total` organic events the way GET /explore?sponsored_slot=true
      * does when page 1 has a slot: page 1 holds limit - 1 organic rows plus the
@@ -665,6 +665,20 @@ describe('Explore', () => {
       expect(cards[2]).toHaveTextContent('Event 3');
       expect(cards[4]).toHaveTextContent('Event 4');
       expect(cards.filter((c) => c.hasAttribute('data-sponsored'))).toHaveLength(1);
+    });
+
+    it.each([
+      ['signed in', true],
+      ['signed out', false],
+    ])('makes the slot the 4th event card (3 organic before it), %s', async (_label, authed) => {
+      mockIsAuthenticated.mockReturnValue(authed);
+      mockSlotExplore(60);
+      renderExplore('/en/explore');
+      await waitFor(() => expect(screen.getByText('Paid Event')).toBeInTheDocument());
+      const cards = screen.getAllByTestId('event-card');
+      const slotAt = cards.findIndex((c) => c.hasAttribute('data-sponsored'));
+      expect(slotAt).toBe(3);
+      ['Event 1', 'Event 2', 'Event 3'].forEach((title, i) => expect(cards[i]).toHaveTextContent(title));
     });
 
     it('sizes the pager as ceil((total + 1) / limit) when page 1 carries a slot', async () => {

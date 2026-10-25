@@ -38,7 +38,8 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **The "Why?" link stays a plain `/ranking#paid-slots` link** (`SPONSORED_RANKING_TARGET`). Explore and Daily 5 both render the card through `EventCard`. Never name an anchor or id `ads`.
 - **Daily 5 (`routes/Feed/`) renders the `sponsored_slot` after the `<ol>`,** in its own `<section>` with a hairline `--rule`, a small `sponsored_daily5_caption` line and no numeral. The `RankingLink` follows it. The card is passed `explanation: 'daily5'` by the API.
 - **A sponsored card's links carry `?ref=ad`, and its dislike sends `ref: 'ad'`.** `EventDetail` passes a known `ref` on its first request only, then strips it from the URL, so a reload or share can't count again.
-- **Explore opts in with `sponsored_slot=true` unless `isPrerenderRender()`.** It reads the `PRERENDER_RUNTIME_FLAG` window flag that `scripts/prerender.ts` sets with `addInitScript`. Page 1 inserts the payload card at `tile` (the 4th card, after the sign-up strip). Only organic `events` feed the `ItemList` and the range label, so positions skip the slot. The pager reads `page1_has_slot` through `slotRows`.
+- **Explore opts in with `sponsored_slot=true` unless `isPrerenderRender()`.** It reads the `PRERENDER_RUNTIME_FLAG` window flag that `scripts/prerender.ts` sets with `addInitScript`.
+- **Page 1 inserts the payload card at the 1-based `tile`.** That makes it the 4th event card, with 3 organic cards before it; the sign-up strip does not count. Only organic `events` feed the `ItemList` and the range label, so positions skip the slot. The pager reads `page1_has_slot` through `slotRows`.
 - **`/ranking` is a `LegalPage` doc, and `RankingLink` is its entry point.** Explore's results header, the Daily 5 list and the `Footer` link to it in every state. A `LegalSection.id` becomes the anchor, scrolled to once the lazy doc loads.
 
 ### Admin Console

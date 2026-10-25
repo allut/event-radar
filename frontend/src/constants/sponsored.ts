@@ -37,7 +37,7 @@ export const SPONSORED_TICKET_REL = 'sponsored noopener noreferrer';
 // Explore opt-in query param; the client omits it entirely under the prerender.
 export const SPONSORED_SLOT_PARAM = 'sponsored_slot';
 
-// Zero-based grid position of the slot on Explore page 1 (tile #4).
+// Zero-based grid position of the slot on Explore page 1 (tile #4). The API's `tile` is 1-based.
 export const SPONSORED_EXPLORE_TILE_INDEX = 3;
 
 // Delivery-counting marker (spec #597): ad links carry `?ref=`, the event page
