@@ -1,8 +1,9 @@
 """Read-only stats over llm_calls: completion_tokens percentiles per provider and
 task (successful rows) and failure_reason counts per provider.
 
-Reads the read-only Neon role URL from LLM_STATS_DATABASE_URL (never DATABASE_URL,
-so it cannot hit the wrong DB by accident). Two aggregate queries, no writes.
+Reads the read-only Neon role URL from LLM_STATS_DATABASE_URL, set in the
+environment or in backend/.env (never DATABASE_URL, so it cannot hit the wrong DB
+by accident). Two aggregate queries, no writes.
 
 Run from backend/ with the venv active:
     python scripts/llm_calls_stats.py            # last 7 days
@@ -13,15 +14,20 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 # backend/ must be on sys.path so `from app.*` resolves regardless of CWD.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from dotenv import dotenv_values
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.constants.llm import LLM_STATS_DATABASE_URL_ENV, LLM_STATS_DEFAULT_DAYS
 from app.db import mask_db_url
+
+BACKEND_DIR = Path(__file__).parent.parent
+LIBPQ_ONLY_PARAMS = {"channel_binding"}
 
 TOKENS_SQL = text(
     """
@@ -51,11 +57,18 @@ FAILURES_SQL = text(
 
 
 def normalize_url(url: str) -> str:
-    """Accept a Neon-style postgres:// URL; asyncpg wants its own driver prefix and ssl=."""
+    """Accept a Neon-style postgres:// URL; asyncpg wants its own driver prefix, ssl=,
+    and rejects libpq-only params such as channel_binding."""
     for prefix in ("postgresql://", "postgres://"):
         if url.startswith(prefix):
             url = "postgresql+asyncpg://" + url[len(prefix):]
-    return url.replace("sslmode=", "ssl=")
+    parts = urlsplit(url)
+    query = [
+        ("ssl" if k == "sslmode" else k, v)
+        for k, v in parse_qsl(parts.query)
+        if k not in LIBPQ_ONLY_PARAMS
+    ]
+    return urlunsplit(parts._replace(query=urlencode(query)))
 
 
 def print_table(title: str, headers: list[str], rows: list[list[object]]) -> None:
@@ -71,7 +84,9 @@ def print_table(title: str, headers: list[str], rows: list[list[object]]) -> Non
 
 
 async def main(days: int) -> int:
-    url = os.environ.get(LLM_STATS_DATABASE_URL_ENV)
+    url = os.environ.get(LLM_STATS_DATABASE_URL_ENV) or dotenv_values(
+        BACKEND_DIR / ".env"
+    ).get(LLM_STATS_DATABASE_URL_ENV)
     if not url:
         print(f"{LLM_STATS_DATABASE_URL_ENV} is not set.", file=sys.stderr)
         return 1
