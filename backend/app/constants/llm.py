@@ -11,7 +11,9 @@ PRICE_CONTEXT_MAX_CHARS = 700  # cap on the price-lines digest passed to the pro
 PRICE_CONTEXT_INPUT_MAX_CHARS = 20_000
 
 LLM_MAX_TOKENS = 400  # max completion tokens per LLM call
-LLM_REASONING_MAX_TOKENS = 600  # ceiling (project hard cap); leaves room for reasoning + answer
+# Completion cap for the reasoning providers. Prod classify p95 was 508 and max 598
+# at the old 600 cap (llm_calls_stats.py, #636), so long answers were truncating.
+LLM_REASONING_MAX_TOKENS = 900
 LLM_DEDUP_CONFIDENCE_THRESHOLD: float = (
     0.7  # minimum confidence to accept LLM same=true verdict
 )
@@ -31,6 +33,9 @@ LLM_STATS_DATABASE_URL_ENV = "LLM_STATS_DATABASE_URL"
 LLM_STATS_DEFAULT_DAYS = 7
 # Leading chars of an unparseable response kept in the failure log.
 LLM_LOG_CONTENT_SNIPPET_CHARS = 120
+# Min gap between Mistral fallback calls: the 5-wide fan-out lands all its
+# fallbacks at once, and Mistral answered 429 to every one last week (#636).
+LLM_MISTRAL_MIN_INTERVAL_SECONDS = 1.0
 LLM_BATCH_FANOUT_CONCURRENCY = 5  # bounded in-flight LLM calls for classify/dedup/venue-extract batches
 
 LLM_DEDUP_TITLE_MAX_LEN = 200
@@ -139,6 +144,7 @@ LLM_PROVIDERS: list[dict[str, Any]] = [
         "base_url": "https://api.mistral.ai/v1",
         "model": "mistral-small-latest",
         "key_attr": "MISTRAL_API_KEY",
+        "min_interval_seconds": LLM_MISTRAL_MIN_INTERVAL_SECONDS,
     },
 ]
 

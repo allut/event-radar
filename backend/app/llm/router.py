@@ -36,8 +36,24 @@ from app.constants.llm import (
     LLM_REQUEST_TIMEOUT_SECONDS,
 )
 from app.constants.log_events import LOG_EVENT_LLM_DEGRADED
+from app.ingestion.http_client import AsyncRateLimiter
 
 log = logging.getLogger(__name__)
+
+
+# Per-provider pacing gates, created lazily for providers that set
+# ``min_interval_seconds``. Safe as module state: one process runs every job.
+_provider_limiters: dict[str, AsyncRateLimiter] = {}
+
+
+def _provider_limiter(provider: dict[str, Any]) -> AsyncRateLimiter | None:
+    interval = provider.get("min_interval_seconds")
+    if not interval:
+        return None
+    limiter = _provider_limiters.get(provider["name"])
+    if limiter is None:
+        limiter = _provider_limiters[provider["name"]] = AsyncRateLimiter(interval)
+    return limiter
 
 
 class LLMError(Exception):
@@ -216,6 +232,10 @@ async def llm_json(
             "max_tokens": provider.get("max_tokens", LLM_MAX_TOKENS),
         }
         payload.update(provider.get("params", {}))
+
+        limiter = _provider_limiter(provider)
+        if limiter is not None:
+            await limiter.acquire()
 
         try:
             # Not routed through the shared retrying http_post: the provider

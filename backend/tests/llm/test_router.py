@@ -342,3 +342,41 @@ class TestLlmJsonTolerantParsing:
         assert "finish_reason=stop" in text
         assert "I cannot comply" in text
         assert "x" * 200 not in text
+
+
+class TestLlmJsonProviderPacing:
+    @pytest.fixture(autouse=True)
+    def _cache_miss(self, mock_db):
+        mock_db.scalar.return_value = None
+
+    async def test_mistral_fallback_is_paced_and_groq_is_not(self, mock_db):
+        ok = _make_openai_response({"same": True})
+        limiter = MagicMock()
+        limiter.acquire = AsyncMock()
+
+        with (
+            patch("app.llm.router.settings") as mock_settings,
+            patch("httpx.AsyncClient") as mock_client_cls,
+            patch("app.llm.router._provider_limiters", {"mistral": limiter}),
+        ):
+            mock_settings.GROQ_API_KEY = "gsk_test"
+            mock_settings.CLOUDFLARE_WORKERS_AI_API_KEY = ""
+            mock_settings.CLOUDFLARE_WORKERS_AI_BASE_URL = ""
+            mock_settings.MISTRAL_API_KEY = "mk_test"
+
+            rate_limited = MagicMock(status_code=http.HTTPStatus.TOO_MANY_REQUESTS)
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.post = AsyncMock(side_effect=[rate_limited, ok])
+            mock_client_cls.return_value = mock_client
+
+            _, label = await llm_json("dedup", "prompt", mock_db)
+
+        assert label.startswith("mistral/")
+        limiter.acquire.assert_awaited_once()
+
+    def test_provider_without_interval_gets_no_limiter(self):
+        from app.llm.router import _provider_limiter
+
+        assert _provider_limiter({"name": "groq"}) is None
