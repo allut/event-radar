@@ -27,6 +27,8 @@ from app.constants.claims import CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES, CLAIM_
 from app.constants.core import TALLINN_TZ
 from app.rate_limit import limiter
 from app.models.models import Claim, Event, EventSource, Organizer, Publisher, Source
+from app.promotions import sweep as sweep_module
+from tests.promotions.fakes import FakePaymentGateway
 
 _counter = itertools.count(1)
 
@@ -162,6 +164,23 @@ class Factory:
 @pytest.fixture
 def make(db: AsyncSession) -> Factory:
     return Factory(db)
+
+
+@pytest.fixture
+def gateway() -> FakePaymentGateway:
+    return FakePaymentGateway()
+
+
+@pytest.fixture
+def sent(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str]]:
+    """(to_email, reason) of every ended-early email the Promotion sweep sends."""
+    calls: list[tuple[str, str]] = []
+
+    async def fake(to_email, event_title, start, end, reason, locale, http_client=None):
+        calls.append((to_email, reason))
+
+    monkeypatch.setattr(sweep_module, "send_promotion_ended_email", fake)
+    return calls
 
 
 @pytest.fixture

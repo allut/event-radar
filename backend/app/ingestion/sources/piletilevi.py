@@ -31,6 +31,7 @@ from app.ingestion.selectors import (
     PILETILEVI_HOST,
     PILETILEVI_IMAGE_HEIGHT,
     PILETILEVI_IMAGE_SELECTOR,
+    PILETILEVI_IMPORTANT_INFO_HEADING_TAG,
     PILETILEVI_IMPORTANT_INFO_HEADINGS,
     PILETILEVI_INFO_BLOCK_CLASS,
     PILETILEVI_LOGIN_EXPRESS_URL,
@@ -199,9 +200,9 @@ def _piletilevi_important_info(soup: BeautifulSoup, locale: str = "en") -> str |
     )
     heading = next(
         (
-            h2
-            for h2 in soup.find_all("h2")
-            if h2.get_text(strip=True) == heading_text
+            h
+            for h in soup.find_all(PILETILEVI_IMPORTANT_INFO_HEADING_TAG)
+            if h.get_text(strip=True) == heading_text
         ),
         None,
     )

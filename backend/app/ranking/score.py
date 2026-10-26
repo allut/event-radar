@@ -993,7 +993,7 @@ async def _persist_daily_feeds(db: AsyncSession, daily_feed_rows: list[dict]) ->
 
     An ON CONFLICT DO UPDATE — rather than a pre-loaded existing-row lookup
     plus a plain INSERT — so the synchronous onboarding-completion build
-    (`build_daily_feed_for_user`) racing the 06:00 scheduled `build_daily_feeds`
+    (`build_daily_feed_for_user`) racing the scheduled `build_daily_feeds`
     job for the same user resolves atomically at the DB level instead of
     raising a unique-violation on the `(user_id, feed_date)` constraint that
     would roll back the whole batch's single commit.
@@ -1039,7 +1039,7 @@ def _build_one_user_feed(
 async def build_daily_feeds(db: AsyncSession) -> dict:
     """
     Build personalized Daily 5 feeds for all active users.
-    Runs at 06:00 Europe/Tallinn via APScheduler.
+    Runs daily at FEED_BUILD_HOUR via APScheduler.
 
     Pages the full user loop at FEED_BUILD_USER_BATCH_SIZE so memory is
     bounded by a batch size instead of total registered users — candidate
@@ -1120,8 +1120,8 @@ async def build_daily_feed_for_user(db: AsyncSession, user_id: int) -> dict:
     """Build (or rebuild) today's Daily 5 for one user.
 
     Called synchronously at onboarding completion so a new user sees a
-    populated feed immediately instead of waiting for the 06:00 job. Reuses
-    the same candidate loading, scoring, series-cooldown, and scoring
+    populated feed immediately instead of waiting for the FEED_BUILD_HOUR job.
+    Reuses the same candidate loading, scoring, series-cooldown, and scoring
     logic as `build_daily_feeds` — no duplicated ranking logic. The upsert in
     `_persist_daily_feeds` means this can safely race the scheduled job for
     the same user without either write failing."""

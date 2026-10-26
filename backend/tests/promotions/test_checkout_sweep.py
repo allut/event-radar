@@ -6,24 +6,12 @@ from datetime import timedelta
 import pytest
 
 from app.models.models import AdminAction
-from app.promotions import sweep as sweep_module
 from app.promotions.sweep import sweep_promotions
 from sqlalchemy import select
 from tests.promotions.conftest import NOW
 from tests.promotions.test_lifecycle_commands import make_promo
 
 EXPIRY = NOW + timedelta(minutes=30)
-
-
-@pytest.fixture
-def sent(monkeypatch):
-    calls: list = []
-
-    async def fake(*args, **kwargs):
-        calls.append(args)
-
-    monkeypatch.setattr(sweep_module, "send_promotion_ended_email", fake)
-    return calls
 
 
 @pytest.mark.asyncio

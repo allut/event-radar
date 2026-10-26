@@ -20,17 +20,11 @@ from app.routers import stripe_webhook as webhook_router
 from tests.promotions.conftest import NOW, d
 from tests.promotions.fakes import (
     WEBHOOK_SECRET,
-    FakePaymentGateway,
     FakeRegistry,
     completed_session,
     sign,
     stripe_event,
 )
-
-
-@pytest.fixture
-def gateway() -> FakePaymentGateway:
-    return FakePaymentGateway()
 
 
 @pytest.fixture

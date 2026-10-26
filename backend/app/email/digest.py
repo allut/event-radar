@@ -467,7 +467,7 @@ async def send_daily_digests(
 ) -> dict[str, int]:
     """
     Send today's Daily 5 digest to all opted-in users.
-    Runs at 07:00 Europe/Tallinn (one hour after build_daily_feeds).
+    Runs daily at DIGEST_SEND_HOUR (after build_daily_feeds).
 
     Pages the opted-in population at FEED_BUILD_USER_BATCH_SIZE, mirroring
     build_daily_feeds — memory is bounded by a batch size (feeds + their

@@ -19,12 +19,7 @@ from app.promotions.checkout import CheckoutInput, CheckoutRefused, start_checko
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion
 from app.routers import organizer_promotion_checkout as checkout_router
 from tests.promotions.conftest import NOW, d
-from tests.promotions.fakes import FakePaymentGateway, FakeRegistry
-
-
-@pytest.fixture
-def gateway() -> FakePaymentGateway:
-    return FakePaymentGateway()
+from tests.promotions.fakes import FakeRegistry
 
 
 @pytest.fixture

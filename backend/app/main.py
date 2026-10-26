@@ -233,7 +233,7 @@ _run_sweep_promotions = _scheduled(
 
 def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     """Wire the full cron schedule (see docs/backend-ops.md "Scheduled Jobs" for the cadence)."""
-    # Organizer discovery — weekly Sunday 02:00 Tallinn (not hour 3: it repeats on fall-back day, #633)
+    # Organizer discovery — weekly Sunday at ORGANIZER_SYNC_HOUR (never hour 3: it repeats on fall-back day, #633)
     scheduler.add_job(
         _run_organizer_sync,
         trigger="cron",
@@ -244,7 +244,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
     )
 
-    # Data retention cleanup — weekly Sunday 02:30 Tallinn (after organizer sync, off-peak)
+    # Data retention cleanup — weekly Sunday at CLEANUP_HOUR (after organizer sync, off-peak)
     scheduler.add_job(
         _run_cleanup,
         trigger="cron",
@@ -264,7 +264,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
     )
 
-    # Every 6h: dedup pass + classify pending
+    # Every LLM_PASS_INTERVAL_HOURS: dedup pass + classify pending
     scheduler.add_job(
         _run_dedup_pass,
         trigger="interval",
@@ -300,9 +300,9 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         id=JOB_ID_BACKFILL_PUBLISHER_IDS,
         replace_existing=True,
     )
-    # Daily 04:30 Tallinn: re-fetch every future event's detail page and reconcile
+    # Daily at REFETCH_HOUR: re-fetch every future event's detail page and reconcile
     # venue/address/coords/price against the source (after hourly ingest, before
-    # the 06:00 feed build). A coord NULLed here on an address change is repaired
+    # the feed build). A coord NULLed here on an address change is repaired
     # by the next geocode_pending interval pass — coords aren't a publish gate.
     scheduler.add_job(
         _run_refetch_details,
@@ -312,7 +312,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         id=JOB_ID_REFETCH_EVENT_DETAILS,
         replace_existing=True,
     )
-    # Daily 06:00 Tallinn: build personalized feeds for all users
+    # Daily at FEED_BUILD_HOUR: build personalized feeds for all users
     scheduler.add_job(
         _run_build_daily_feeds,
         trigger="cron",
@@ -321,7 +321,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         id=JOB_ID_BUILD_DAILY_FEEDS,
         replace_existing=True,
     )
-    # Daily 07:00 Tallinn: send digest emails to opted-in users (one hour after feeds are built)
+    # Daily at DIGEST_SEND_HOUR: send digest emails to opted-in users (after feeds are built)
     scheduler.add_job(
         _run_send_daily_digests,
         trigger="cron",
@@ -347,8 +347,8 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         id=JOB_ID_SWEEP_PROMOTIONS,
         replace_existing=True,
     )
-    # Daily 05:00 Tallinn: expire a pending automated-mechanism claim abandoned
-    # for CLAIM_EXPIRY_DAYS (#413) — between the 04:30 refetch and 06:00 feed build.
+    # Daily at EXPIRE_STALE_CLAIMS_HOUR: expire a pending automated-mechanism claim
+    # abandoned for CLAIM_EXPIRY_DAYS (#413) — between the refetch and the feed build.
     scheduler.add_job(
         _run_expire_stale_claims,
         trigger="cron",

@@ -335,7 +335,7 @@ VENUE_SIBLING_RATIO_THRESHOLD = 90
 # Generic schema.org JSON-LD, so it no-ops on pages without an Event block.
 # Sized above the full future-event set (~700 today) so one daily run covers
 # everything; doubles as a safety valve. At REFETCH_REQUEST_DELAY_SECONDS that is
-# ~12 min/run, fine for a 04:30 cron.
+# ~12 min/run, fine for the daily REFETCH_HOUR cron.
 REFETCH_MAX_PER_RUN = 1000
 REFETCH_REQUEST_DELAY_SECONDS: float = 1.0
 # Source hosts refetched in parallel (each host stays sequential at the delay
@@ -344,8 +344,9 @@ REFETCH_HOST_CONCURRENCY = 4
 # Wall-clock backstop, independent of REFETCH_MAX_PER_RUN: an event that
 # triggers locale-variant fetches (fetch_locale_variants) pays its own
 # REFETCH_REQUEST_DELAY_SECONDS per variant, so REFETCH_MAX_PER_RUN events
-# don't bound run time the way the count alone suggests. Job starts 04:30,
-# build_daily_feeds runs 06:00 — 40 min leaves real margin in that window.
+# don't bound run time the way the count alone suggests. The job starts at
+# REFETCH_HOUR and build_daily_feeds runs at FEED_BUILD_HOUR — this cap leaves
+# real margin in that window.
 # detail_refetched_at ordering means anything cut off here is picked up first
 # next run, so this is self-limiting with no coverage loss.
 REFETCH_MAX_RUN_SECONDS: float = 2400.0

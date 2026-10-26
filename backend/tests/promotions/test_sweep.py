@@ -31,17 +31,6 @@ MIDNIGHT = at_tallinn(2090, 1, 10, 0, 0, 0)
 LIVE = at_tallinn(2090, 1, 11, 12)
 
 
-@pytest.fixture
-def sent(monkeypatch):
-    calls: list[tuple[str, str]] = []
-
-    async def fake(to_email, event_title, start, end, reason, locale, http_client=None):
-        calls.append((to_email, reason))
-
-    monkeypatch.setattr(sweep_module, "send_promotion_ended_email", fake)
-    return calls
-
-
 async def audit_rows(db, promotion_id):
     return (
         await db.scalars(select(AdminAction).where(AdminAction.target == str(promotion_id)))

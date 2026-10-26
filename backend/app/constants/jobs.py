@@ -7,22 +7,22 @@ from app.constants.admin import (
 )
 
 # Scheduler cadence (see docs/backend-ops.md "Scheduled Jobs" for the full cron schedule)
-ORGANIZER_SYNC_HOUR = 2  # weekly Sunday 02:00 Europe/Tallinn; never hour 3 (DST, #633)
+ORGANIZER_SYNC_HOUR = 2  # weekly on Sunday; never hour 3 (it repeats on fall-back day, #633)
 ORGANIZER_SYNC_MINUTE = 0
-CLEANUP_HOUR = 2  # weekly Sunday 02:30 Europe/Tallinn, after organizer sync
+CLEANUP_HOUR = 2  # weekly on Sunday, after ORGANIZER_SYNC_HOUR:ORGANIZER_SYNC_MINUTE
 CLEANUP_MINUTE = 30
 INGEST_INTERVAL_HOURS = 1
 LLM_PASS_INTERVAL_HOURS = 6  # dedup/classify/publish/geocode
-REFETCH_HOUR = 4  # daily 04:30 Europe/Tallinn, before the 06:00 feed build
+REFETCH_HOUR = 4  # daily, before FEED_BUILD_HOUR
 REFETCH_MINUTE = 30
-FEED_BUILD_HOUR = 6  # daily 06:00 Europe/Tallinn
+FEED_BUILD_HOUR = 6  # daily
 FEED_BUILD_MINUTE = 0
-# Daily 05:00 Europe/Tallinn, between the 04:30 refetch and the 06:00 feed
-# build — cheap DB-only sweep (#413), off-peak like every other cron entry.
+# Daily, between REFETCH_HOUR and FEED_BUILD_HOUR — cheap DB-only sweep (#413),
+# off-peak like every other cron entry.
 EXPIRE_STALE_CLAIMS_HOUR = 5
 EXPIRE_STALE_CLAIMS_MINUTE = 0
 
-DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
+DIGEST_SEND_HOUR = 7  # daily, after FEED_BUILD_HOUR's build_daily_feeds
 DIGEST_SEND_MINUTE = 0
 
 # Sub-stages that are also standalone triggers with their own single-flight

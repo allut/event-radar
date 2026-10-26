@@ -13,18 +13,12 @@ from app.promotions.lifecycle import edit_promotion, end_early, record_refund
 from app.promotions.refunds import refund_prefill
 from app.promotions.withdraw import withdraw_all, withdraw_promotion
 from tests.promotions.conftest import NOW, Clock, at_tallinn, d
-from tests.promotions.fakes import FakePaymentGateway
 from tests.promotions.test_lifecycle_commands import make_promo
 
 
 @pytest.fixture(autouse=True)
 def tax_rate(monkeypatch):
     monkeypatch.setattr(settings, "STRIPE_TAX_RATE_ID", "txr_24")
-
-
-@pytest.fixture
-def gateway() -> FakePaymentGateway:
-    return FakePaymentGateway()
 
 
 async def stripe_paid(db, make, start=10, end=14):
