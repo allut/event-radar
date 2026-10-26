@@ -45,6 +45,7 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 
 - **A query inside a per-row loop makes a job's cost grow with its row count.** The scheduled jobs touch every user or every pending event, so an N+1 loop turns a seconds-long job into minutes.
 - **Copy the existing shape when extending a job.** `app/ranking/score.py::build_daily_feeds()` and `app/llm/classifier.py::classify_pending()` fetch everything up front with `WHERE col IN (...)` and group in Python before the inner loop.
+- **A fixed query count is proven against real Postgres.** Run the job at two sizes inside `count_statements(db)` and compare the lengths. The helper and the rolled-back `db` fixture live in `backend/tests/conftest.py`.
 
 ### External Fan-Out
 

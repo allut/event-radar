@@ -13,7 +13,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
-from sqlalchemy import delete, event as sa_event, select
+from sqlalchemy import delete, select
 
 from app.config import settings
 from app.constants.core import TALLINN_TZ
@@ -33,6 +33,7 @@ from app.models.models import (
 )
 from app.promotions import counters
 from app.ranking.score import build_daily_feeds
+from tests.conftest import count_statements
 from datetime import datetime
 
 _n = itertools.count(1)
@@ -334,19 +335,12 @@ async def test_reach_counts_distinct_users_and_freezes_after_the_window(db, make
 
 
 @pytest.mark.asyncio
-async def test_query_count_is_fixed_as_users_and_promotions_grow(db, make, engine) -> None:
+async def test_query_count_is_fixed_as_users_and_promotions_grow(db, make) -> None:
     org = await make.organizer("Acme")
     await organic(make)
     await promoted(make, org)
     await users(db, 2)
-    statements: list[str] = []
-
-    def count(conn, cursor, statement, *_):
-        if not statement.lstrip().upper().startswith(("SAVEPOINT", "RELEASE", "ROLLBACK")):
-            statements.append(statement)
-
-    sa_event.listen(engine.sync_engine, "before_cursor_execute", count)
-    try:
+    with count_statements(db) as statements:
         await build_daily_feeds(db)
         small = len(statements)
 
@@ -358,6 +352,4 @@ async def test_query_count_is_fixed_as_users_and_promotions_grow(db, make, engin
         statements.clear()
         await build_daily_feeds(db)
         large = len(statements)
-    finally:
-        sa_event.remove(engine.sync_engine, "before_cursor_execute", count)
     assert large == small

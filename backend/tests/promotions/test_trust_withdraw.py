@@ -27,6 +27,7 @@ from app.promotions.grant import GrantRequest, grant_promotion
 from app.promotions.lifecycle import mark_paid
 from app.promotions.trust import trust_panel
 from app.promotions.withdraw import withdraw_all, withdraw_promotion
+from tests.conftest import count_statements
 from tests.promotions.conftest import NOW, at_tallinn, d
 from tests.promotions.test_lifecycle_api import audit_rows, mails, promo  # noqa: F401
 
@@ -120,18 +121,9 @@ async def test_trust_panel_counts_both_periods(db, make) -> None:
 
 
 @pytest.mark.asyncio
-async def test_trust_panel_query_count_is_fixed(db, make, engine) -> None:
-    from sqlalchemy import event as sa_event
-
+async def test_trust_panel_query_count_is_fixed(db, make) -> None:
     # Compare the count with zero then with several Promotions: it must not grow.
-    seen: list[str] = []
-
-    def listener(conn, cursor, statement, *rest):
-        seen.append(statement)
-
-    sync_engine = engine.sync_engine
-    sa_event.listen(sync_engine, "before_cursor_execute", listener)
-    try:
+    with count_statements(db) as seen:
         await baseline(db)
         seen.clear()  # the first call also opens the transaction
         await baseline(db)
@@ -141,8 +133,6 @@ async def test_trust_panel_query_count_is_fixed(db, make, engine) -> None:
         seen.clear()
         await baseline(db)
         assert len(seen) == first
-    finally:
-        sa_event.remove(sync_engine, "before_cursor_execute", listener)
 
 
 @pytest.mark.asyncio

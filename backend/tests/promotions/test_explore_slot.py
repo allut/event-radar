@@ -15,7 +15,6 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import event as sa_event
 
 from app._generated.shared_constants import VALID_VIBES
 from app.auth.dependencies import get_optional_user
@@ -42,6 +41,7 @@ from app.models.models import EventClassification, EventReport, Promotion, User,
 from app.promotions.fill import evaluate_gate, gate_closed_reason
 from app.rate_limit import limiter
 from app.routers import browse
+from tests.conftest import count_statements
 from tests.promotions.conftest import EVENT_END, EVENT_START, NOW, at_tallinn, d
 
 TOKEN = "zqx603"
@@ -431,21 +431,12 @@ async def test_gate_query_count_is_fixed(db, make) -> None:
         ev = await classified(make, i, org=org)
         await clear(db, ev)
         made.append(await promote(db, ev, org))
-    statements: list[str] = []
-
-    def count(conn, cursor, statement, *a):
-        statements.append(statement)
-
-    conn = db.sync_session.connection()
-    sa_event.listen(conn, "before_cursor_execute", count)
-    try:
+    with count_statements(db) as statements:
         await evaluate_gate(db, made[:1], NOW, facet_conditions([], [], False, None, None, None, NOW))
         one = len(statements)
         statements.clear()
         await evaluate_gate(db, made, NOW, facet_conditions([], [], False, None, None, None, NOW))
         many = len(statements)
-    finally:
-        sa_event.remove(conn, "before_cursor_execute", count)
     assert one == many
 
 
@@ -571,14 +562,7 @@ async def test_explore_query_count_is_independent_of_live_promotions(client, db,
         await clear(db, e)
         await promote(db, e, org)
     await db.flush()
-    statements: list[str] = []
-
-    def count(conn, cursor, statement, *a):
-        statements.append(statement)
-
-    conn = db.sync_session.connection()
-    sa_event.listen(conn, "before_cursor_execute", count)
-    try:
+    with count_statements(db) as statements:
         await get(client)
         few = len(statements)
         for e in events[-8:-2]:
@@ -589,6 +573,4 @@ async def test_explore_query_count_is_independent_of_live_promotions(client, db,
         statements.clear()
         await get(client)
         many = len(statements)
-    finally:
-        sa_event.remove(conn, "before_cursor_execute", count)
     assert few == many

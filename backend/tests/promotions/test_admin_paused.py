@@ -1,7 +1,6 @@
 """Admin list and detail carry the fill gate's current pause reason (#629)."""
 
 import pytest
-from sqlalchemy import event as sa_event
 
 from app.constants.promotions import (
     PROMOTION_NOT_SHOWING_EVENT_NOT_PUBLIC,
@@ -11,6 +10,7 @@ from app.constants.promotions import (
     PROMOTION_STATUS_UNPAID,
 )
 from app.promotions.views import grant_context, list_promotions, paused_reasons, promotion_detail
+from tests.conftest import count_statements
 from tests.promotions.conftest import NOW, d
 from tests.promotions.test_explore_slot import classified, clear, promote
 
@@ -101,17 +101,8 @@ async def test_list_query_count_is_fixed(db, make) -> None:
         org = await make.organizer()
         for i in range(n):
             await promote(db, await _owned(db, make, org, i), org, start_date=d(1), end_date=d(5))
-        seen: list[str] = []
-
-        def tap(conn, cursor, statement, *a):
-            seen.append(statement)
-
-        bind = db.get_bind()
-        sa_event.listen(bind, "before_cursor_execute", tap)
-        try:
+        with count_statements(db) as seen:
             await listed(db)
-        finally:
-            sa_event.remove(bind, "before_cursor_execute", tap)
         return len(seen)
 
     small = await count(1)

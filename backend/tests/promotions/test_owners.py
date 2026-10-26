@@ -1,10 +1,10 @@
 """Bulk owning-Organizer resolver."""
 
 import pytest
-from sqlalchemy import event as sa_event
 
 from app.constants.claims import CLAIM_STATUS_PENDING
 from app.promotions.owners import resolve_owner_ids
+from tests.conftest import count_statements
 
 
 @pytest.mark.asyncio
@@ -75,17 +75,8 @@ async def test_query_count_is_fixed_whatever_the_event_count(db, make) -> None:
     org = await make.organizer()
 
     async def count_queries(events) -> int:
-        stmts: list[str] = []
-
-        def _on(conn, cursor, statement, *a):  # type: ignore[no-untyped-def]
-            stmts.append(statement)
-
-        sync_engine = (await db.connection()).sync_connection.engine
-        sa_event.listen(sync_engine, "before_cursor_execute", _on)
-        try:
+        with count_statements(db) as stmts:
             await resolve_owner_ids(db, events)
-        finally:
-            sa_event.remove(sync_engine, "before_cursor_execute", _on)
         return len(stmts)
 
     one = [await make.event()]

@@ -1,9 +1,9 @@
 """Real-Postgres fixtures for the promotions package.
 
 The cap, overlap and ownership rules are SQL-shaped (and the cap needs a real
-lock), so these tests run against a migrated Postgres and skip when none is
-reachable (the migrations CI job, or the devcontainer db). Every test uses
-dates in 2090 so rows left in a shared dev database can never touch its cap.
+lock), so these tests run against a migrated Postgres through the root
+conftest's `engine`/`db` fixtures, and skip when none is reachable. Every test
+uses dates in 2090 so rows left in a shared dev database can never touch its cap.
 """
 
 from __future__ import annotations
@@ -19,8 +19,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth.dependencies import get_current_admin
 from app.constants.claims import CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES, CLAIM_STATUS_APPROVED
@@ -46,41 +45,6 @@ EVENT_END = at_tallinn(2090, 2, 28, 22)
 
 def d(day: int, month: int = 1) -> date:
     return date(2090, month, day)
-
-
-@pytest_asyncio.fixture
-async def engine() -> AsyncIterator[Any]:
-    url = os.environ.get("DATABASE_URL", "")
-    if not url:
-        pytest.skip("DATABASE_URL not set")
-    eng = create_async_engine(url)
-    try:
-        async with eng.connect() as conn:
-            ok = await conn.scalar(text("SELECT to_regclass('public.promotion_snapshots')"))
-    except Exception:
-        await eng.dispose()
-        pytest.skip("Postgres unreachable")
-    if not ok:
-        await eng.dispose()
-        pytest.skip("DB not at migration 0062")
-    yield eng
-    await eng.dispose()
-
-
-@pytest_asyncio.fixture
-async def db(engine: Any) -> AsyncIterator[AsyncSession]:
-    """A session inside an outer transaction that is rolled back, so nothing a
-    test writes (commits included) survives it."""
-    async with engine.connect() as conn:
-        outer = await conn.begin()
-        session = AsyncSession(
-            bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False
-        )
-        try:
-            yield session
-        finally:
-            await session.close()
-            await outer.rollback()
 
 
 class Factory:

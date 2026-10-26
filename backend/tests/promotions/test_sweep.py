@@ -4,7 +4,6 @@ claim revocation. The clock is frozen around Tallinn midnight."""
 from contextlib import asynccontextmanager
 
 import pytest
-from sqlalchemy import event as sa_event
 from sqlalchemy import select
 
 from app.constants.admin import (
@@ -23,6 +22,7 @@ from app.promotions import sweep as sweep_module
 from app.promotions.grant import GrantRequest, grant_promotion
 from app.promotions.lifecycle import mark_paid
 from app.promotions.sweep import sweep_promotions
+from tests.conftest import count_statements
 from tests.promotions.conftest import NOW, at_tallinn, d
 from tests.promotions.test_lifecycle_commands import make_promo
 
@@ -126,20 +126,10 @@ async def test_sweep_query_count_is_fixed(db, make, sent) -> None:
             await make_promo(db, make, 20, 24, org=await make.organizer())
         await db.flush()
 
-    statements: list[str] = []
-
-    def count(conn, cursor, statement, *a):
-        statements.append(statement)
-
     async def measured(now) -> int:
-        conn = db.sync_session.connection()
-        sa_event.listen(conn, "before_cursor_execute", count)
-        try:
-            statements.clear()
+        with count_statements(db) as statements:
             await sweep_promotions(db, now)
-            return len(statements)
-        finally:
-            sa_event.remove(conn, "before_cursor_execute", count)
+        return len(statements)
 
     await seed(1)
     one = await measured(at_tallinn(2090, 1, 21, 12))

@@ -1,6 +1,8 @@
 """Tests for the daily detail-refetch sync (refetch_event_details + reconciliation)."""
 
 import asyncio
+import itertools
+import os
 from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -32,6 +34,9 @@ from app.ingestion.refetch import (
 )
 from app.ingestion.selectors import KUMU_SITE_NAME_ET, KUMU_SITE_TITLE_SUFFIX
 from app.ingestion.sources.kumu import kumu_localized_text
+from app.email.resend import resend_http_client
+from app.models.models import Event, EventReport, User
+from tests.conftest import count_statements
 
 # --- HTML builders -----------------------------------------------------------
 
@@ -1264,41 +1269,6 @@ class TestSourceGone:
         assert order[-2:] == ["commit", "email"]
 
     @pytest.mark.asyncio
-    async def test_cancel_sweep_query_and_client_count_is_fixed(self, mock_db):
-        """N gone events cost one UPDATE, one reporter lookup and one Resend client."""
-
-        async def measured(n: int) -> tuple[int, int, int]:
-            mock_db.reset_mock()
-            events = [_future_event(id=i) for i in range(1, n + 1)]
-            reports = [MagicMock(id=i, event_id=i, user_id=i) for i in range(1, n + 1)]
-            users = [MagicMock(id=i, email=f"r{i}@example.com", locale="en") for i in range(1, n + 1)]
-            mock_db.execute.return_value.scalars.return_value = MagicMock(
-                all=MagicMock(return_value=reports)
-            )
-            mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=users))
-            clients = MagicMock()
-            clients.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
-            clients.return_value.__aexit__ = AsyncMock(return_value=False)
-            send = AsyncMock()
-            summary = {"cancelled_gone": 0}
-            with (
-                patch(
-                    "app.ingestion.refetch._ids_without_live_sibling",
-                    new=AsyncMock(return_value={e.id for e in events}),
-                ),
-                patch("app.events.cancellation.resend_http_client", new=clients),
-                patch("app.events.cancellation.send_report_outcome_email", new=send),
-            ):
-                await _cancel_gone_events(mock_db, events, summary, datetime.now(TALLINN_TZ))
-            assert summary["cancelled_gone"] == n
-            assert send.await_count == n
-            assert all(e.status == EVENT_STATUS_CANCELLED for e in events)
-            queries = mock_db.execute.await_count + mock_db.scalars.await_count
-            return queries, clients.call_count, mock_db.commit.await_count
-
-        assert await measured(1) == await measured(4)
-
-    @pytest.mark.asyncio
     async def test_success_clears_marker(self, mock_db):
         event = _future_event(source_gone_since=datetime.now(TALLINN_TZ) - timedelta(days=1))
         await _run(mock_db, event, "<html><body>no jsonld here</body></html>")
@@ -1325,3 +1295,49 @@ class TestSourceGone:
         assert event.detail_refetched_at is None
         assert event.detail_refetch_count == 0
         cancel.assert_not_awaited()
+
+
+# --- Source-gone batch cancel against real Postgres ---------------------------
+
+_gone_seq = itertools.count(1)
+
+
+async def _gone_event_with_report(db, now: datetime) -> Event:
+    n = next(_gone_seq)
+    user = User(email=f"gone-{n}-{os.getpid()}@example.com")
+    event = Event(
+        slug=f"gone-{n}-{os.getpid()}",
+        title_orig=f"Gone {n}",
+        starts_at=now + timedelta(days=7),
+        status="published",
+    )
+    db.add_all([user, event])
+    await db.flush()
+    db.add(EventReport(user_id=user.id, event_id=event.id, reason="spam_or_scam"))
+    await db.flush()
+    return event
+
+
+@pytest.mark.asyncio
+async def test_cancel_gone_events_query_and_client_count_is_fixed(db) -> None:
+    """N gone events cost the same statements and one Resend client, whatever N."""
+    now = datetime.now(TALLINN_TZ)
+
+    async def measured(n: int) -> int:
+        events = [await _gone_event_with_report(db, now) for _ in range(n)]
+        summary = {"cancelled_gone": 0}
+        send = AsyncMock()
+        clients = MagicMock(wraps=resend_http_client)
+        with (
+            patch("app.events.cancellation.send_report_outcome_email", new=send),
+            patch("app.events.cancellation.resend_http_client", new=clients),
+            count_statements(db) as statements,
+        ):
+            await _cancel_gone_events(db, events, summary, now)
+        assert summary["cancelled_gone"] == n
+        assert all(e.status == EVENT_STATUS_CANCELLED for e in events)
+        assert send.await_count == n
+        assert clients.call_count == 1
+        return len(statements)
+
+    assert await measured(1) == await measured(4)

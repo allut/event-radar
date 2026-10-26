@@ -3,12 +3,17 @@ import os
 # Must be set before any app module import so pydantic-settings can validate Settings.
 os.environ.setdefault("SECRET_KEY", "test-secret-not-for-production-32chars")
 
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
+from sqlalchemy import event as sa_event
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from starlette.requests import Request
 
 from app._generated.shared_constants import (
@@ -324,3 +329,64 @@ def assert_hardened_cookie(
     assert f"Path={path}" in set_cookie
     if cleared:
         assert "Max-Age=0" in set_cookie
+
+
+# --- Real Postgres ------------------------------------------------------------
+# For SQL-shaped behaviour a mock can't show: locks, constraints, and the
+# fixed query counts that "Batch jobs bulk-load" asks for. Skips when no
+# migrated database is reachable (`scratch-test.sh --no-db`).
+
+
+@pytest_asyncio.fixture
+async def engine() -> AsyncIterator[AsyncEngine]:
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        pytest.skip("DATABASE_URL not set")
+    eng = create_async_engine(url)
+    try:
+        async with eng.connect() as conn:
+            ok = await conn.scalar(text("SELECT to_regclass('public.alembic_version')"))
+    except Exception:
+        await eng.dispose()
+        pytest.skip("Postgres unreachable")
+    if not ok:
+        await eng.dispose()
+        pytest.skip("DB not migrated")
+    yield eng
+    await eng.dispose()
+
+
+@pytest_asyncio.fixture
+async def db(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
+    """A session inside an outer transaction that is rolled back, so nothing a
+    test writes (commits included) survives it."""
+    async with engine.connect() as conn:
+        outer = await conn.begin()
+        session = AsyncSession(
+            bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False
+        )
+        try:
+            yield session
+        finally:
+            await session.close()
+            await outer.rollback()
+
+
+@contextmanager
+def count_statements(db: AsyncSession) -> Iterator[list[str]]:
+    """Collect every SQL statement run on `db`'s engine inside the block, from
+    any session. A fixed-query-count test runs the job at two sizes and
+    compares `len()` of the two lists. Savepoint statements are the `db`
+    fixture's transaction plumbing, not queries, so they are left out."""
+    statements: list[str] = []
+
+    def tap(conn: Any, cursor: Any, statement: str, *_: Any) -> None:
+        if not statement.lstrip().upper().startswith(("SAVEPOINT", "RELEASE", "ROLLBACK")):
+            statements.append(statement)
+
+    sync_engine = db.bind.sync_engine
+    sa_event.listen(sync_engine, "before_cursor_execute", tap)
+    try:
+        yield statements
+    finally:
+        sa_event.remove(sync_engine, "before_cursor_execute", tap)
