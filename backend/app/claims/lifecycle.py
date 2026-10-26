@@ -60,7 +60,6 @@ from app.constants.claims import (
     ORGANIZER_DAILY_CLAIM_CAP,
 )
 from app.constants.core import TALLINN_TZ
-from app.constants.email import RESEND_TIMEOUT_SECONDS
 from app.constants.events import ERROR_EVENT_NOT_FOUND, EVENT_STATUS_PUBLISHED
 from app.constants.ingestion import (
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
@@ -75,6 +74,7 @@ from app.email.claim_resolution import (
     send_claim_granted_email,
     send_claim_self_cancelled_email,
 )
+from app.email.resend import resend_http_client
 from app.ingestion.http_client import http_get_stored_url
 from app.models.models import Claim, Event, EventSource, Organizer
 from app.events.localize import resolve_title
@@ -920,7 +920,7 @@ async def _send_claim_expiry_emails(db: AsyncSession, expired: list[Claim]) -> N
                     extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
                 )
 
-    async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as http_client:
+    async with resend_http_client() as http_client:
         await asyncio.gather(
             *(_send_one(claim, http_client) for claim in expired),
             return_exceptions=True,

@@ -18,6 +18,11 @@ if staged '^(backend/|shared/)'; then
   (cd backend && python -m mypy app)
 fi
 
+if staged '^backend/'; then
+  echo "pre-commit: backend guard tests"
+  out=$(bash backend/scripts/scratch-test.sh --no-db tests/test_code_rules.py tests/test_constants_unique.py -q 2>&1) || { echo "$out"; exit 1; }
+fi
+
 if staged '^(frontend/|shared/)'; then
   echo "pre-commit: eslint"
   (cd frontend && npm run --silent lint)

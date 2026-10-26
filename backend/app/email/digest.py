@@ -36,7 +36,6 @@ from app.constants.email import (
     LIST_UNSUBSCRIBE_ONE_CLICK,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
-    RESEND_TIMEOUT_SECONDS,
 )
 from app.constants.http import AUTHORIZATION_HEADER, BEARER_PREFIX
 from app.constants.log_events import LOG_EVENT_EMAIL_SEND_FAILED
@@ -44,6 +43,7 @@ from app._generated.shared_constants import PROMOTION_REF_DIGEST_AD
 from app.constants.promotions import PROMOTION_STAT_DIGEST_SENT
 from app.constants.ranking import DAILY_5_COUNT, FEED_BUILD_USER_BATCH_SIZE
 from app.email.links import frontend_url
+from app.email.resend import resend_http_client
 from app.email.brand import brand_mark_attachments, brand_mark_html
 from app.email.styles import EmailStyles, get_email_styles
 from app.email.templates import (
@@ -306,15 +306,6 @@ def build_digest_html(
 # ---------------------------------------------------------------------------
 
 
-def digest_http_client() -> httpx.AsyncClient:
-    """Build an ``httpx.AsyncClient`` configured for digest sends, for
-    ``send_daily_digests`` to open once and reuse across its whole paged loop
-    via ``send_digest_email``'s ``http_client`` param — instead of a fresh
-    connection pool + TLS handshake per user (Big-O audit M7), mirroring
-    ``llm_http_client()``."""
-    return httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS)
-
-
 async def send_digest_email(
     to_email: str,
     locale: str,
@@ -390,7 +381,7 @@ async def send_digest_email(
     if http_client is not None:
         await _send(http_client)
     else:
-        async with digest_http_client() as client:
+        async with resend_http_client() as client:
             await _send(client)
     if sponsored is not None:
         counters.bump(sponsored.promotion_id, feed_date, PROMOTION_STAT_DIGEST_SENT)
@@ -552,7 +543,7 @@ async def send_daily_digests(
 
     # One shared client for the whole run (Big-O audit M7) — dry runs never
     # send, so they skip opening a connection pool entirely.
-    client_ctx = digest_http_client() if not dry_run else nullcontext(None)
+    client_ctx = resend_http_client() if not dry_run else nullcontext(None)
     async with client_ctx as http_client:
         for i in range(0, len(user_ids), FEED_BUILD_USER_BATCH_SIZE):
             page_ids = user_ids[i : i + FEED_BUILD_USER_BATCH_SIZE]
