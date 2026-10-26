@@ -91,6 +91,8 @@ These are not bypasses, and they show where the line falls:
 
 - **`E501` is ignored.** Long lines are allowed where wrapping would hurt readability.
 - **`app/_generated` is excluded.** The generator owns those files, so they aren't hand-formatted.
+- **Ruff enforces the annotation and datetime rules.** `UP006`/`UP007`/`UP035`/`UP045` require PEP 604/585 syntax, `ANN201` a public return type, and the `DTZ` rules an aware datetime. Tests are exempt from `ANN201`, since a test function returns `None`.
+- **A parsed naive datetime chains `.replace(tzinfo=TALLINN_TZ)` onto the `strptime()` call.** `DTZ007` accepts the chained form but not a naive intermediate variable.
 
 ### Mypy
 

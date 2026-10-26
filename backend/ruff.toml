@@ -4,7 +4,15 @@ preview = true
 
 [lint]
 explicit-preview-rules = true
-select = ["E", "F", "W", "Q", "PLC2701"]
+select = [
+    "E", "F", "W", "Q", "PLC2701",
+    # PEP 604/585 annotations
+    "UP006", "UP007", "UP035", "UP045",
+    # Public functions annotate their return type
+    "ANN201",
+    # No naive datetimes
+    "DTZ001", "DTZ003", "DTZ005", "DTZ007", "DTZ011",
+]
 ignore = ["E501"]
 
 [lint.flake8-quotes]
@@ -13,5 +21,5 @@ multiline-quotes = "double"
 docstring-quotes = "double"
 
 [lint.per-file-ignores]
-"tests/**" = ["PLC2701"]
+"tests/**" = ["PLC2701", "ANN201"]
 "alembic/versions/*" = ["PLC2701"]

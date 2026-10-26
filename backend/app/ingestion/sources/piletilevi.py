@@ -180,8 +180,9 @@ def _parse_piletilevi_date(date_str: str) -> datetime | None:
         # Strip weekday abbreviation: "We 19.08.2026" → "19.08.2026"
         date_part = date_part_raw.strip().split(" ", 1)[-1].strip()
         time_part = time_part.strip()
-        naive = datetime.strptime(f"{date_part} {time_part}", PILETILEVI_DATE_FORMAT)
-        return naive.replace(tzinfo=TALLINN_TZ)
+        return datetime.strptime(
+            f"{date_part} {time_part}", PILETILEVI_DATE_FORMAT
+        ).replace(tzinfo=TALLINN_TZ)
     except (ValueError, IndexError):
         return None
 

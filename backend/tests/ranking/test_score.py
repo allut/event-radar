@@ -1,5 +1,5 @@
 """Unit tests for the scoring formula — no DB, all pure functions."""
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -30,7 +30,7 @@ def _no_daily5_slot(monkeypatch):
     Sponsored-slot pick (#607) has its own real-Postgres tests."""
     from app.promotions.daily5 import Daily5Run
 
-    run = Daily5Run(today=datetime(2026, 5, 10).date(), now=_now(), eligible=[])
+    run = Daily5Run(today=date(2026, 5, 10), now=_now(), eligible=[])
     monkeypatch.setattr(run, "finish", AsyncMock())
     monkeypatch.setattr("app.ranking.score.prepare_daily5", AsyncMock(return_value=run))
 
