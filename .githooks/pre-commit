@@ -27,7 +27,7 @@ fi
 
 if staged '^frontend/src/(.*\.css$|constants/)'; then
   echo "pre-commit: guard tests"
-  (cd frontend && npx vitest run --silent src/cssRules.test.ts src/constants/mirrors.test.ts src/displayTokens.test.ts)
+  (cd frontend && npx vitest run src/cssRules.test.ts src/constants/mirrors.test.ts src/displayTokens.test.ts)
 fi
 
 if staged '^(CLAUDE\.md|README\.md|docs/)'; then
