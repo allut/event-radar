@@ -219,6 +219,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 - **The `migrations` job round-trips the alembic chain against a `postgres:16` service.** It runs `upgrade head`, `downgrade base`, `upgrade head`, then `alembic check`, which fails when a model changed without a matching migration.
 - **That job exists because of a prod incident.** Code shipped the `admin_actions` model and its migration, but the deployed DB never ran it, so every audited admin action returned 500.
 - **The `lint` job runs ruff, mypy, eslint and the TypeScript type-check.** `.githooks/pre-commit` runs the same checks on the staged areas, plus the docs style test and the backend and frontend guard tests. The dependency CVE audit is described in [security.md](security.md)'s Dependency Audit section.
+- **A partly staged commit is checked as committed.** With unstaged or untracked backend changes, the hook runs the backend checks on a copy of the index under `.git`.
 
 ## Data Retention & Cleanup
 

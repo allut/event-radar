@@ -11,16 +11,31 @@ if staged '^(shared/|backend/app/_generated/|frontend/src/_generated/)'; then
   python scripts/generate_shared.py --check
 fi
 
+# The backend checks read files from disk, so with unstaged or untracked backend
+# changes they would pass on the working tree while the commit itself is broken.
+# Check a copy of the index instead; its mypy cache persists under .git.
+backend=backend
+mypy_cache=()
+if staged '^(backend/|shared/)' \
+  && { ! git diff --quiet -- backend/ || [ -n "$(git ls-files --others --exclude-standard -- backend/)" ]; }; then
+  snapshot="$(git rev-parse --absolute-git-dir)/precommit-snapshot"
+  rm -rf "$snapshot"
+  git ls-files -z -- backend/ | git checkout-index -z --stdin --prefix="$snapshot/"
+  backend="$snapshot/backend"
+  mypy_cache=(--cache-dir "$(git rev-parse --absolute-git-dir)/precommit-mypy-cache")
+  echo "pre-commit: unstaged backend changes, checking the staged snapshot"
+fi
+
 if staged '^(backend/|shared/)'; then
   echo "pre-commit: ruff"
-  (cd backend && python -m ruff check .)
+  (cd "$backend" && python -m ruff check .)
   echo "pre-commit: mypy"
-  (cd backend && python -m mypy app)
+  (cd "$backend" && python -m mypy app "${mypy_cache[@]}")
 fi
 
 if staged '^backend/'; then
   echo "pre-commit: backend guard tests"
-  out=$(bash backend/scripts/scratch-test.sh --no-db tests/test_code_rules.py tests/test_constants_unique.py -q 2>&1) || { echo "$out"; exit 1; }
+  out=$(bash "$backend/scripts/scratch-test.sh" --no-db tests/test_code_rules.py tests/test_constants_unique.py -q 2>&1) || { echo "$out"; exit 1; }
 fi
 
 if staged '^(frontend/|shared/)'; then
