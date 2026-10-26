@@ -52,6 +52,7 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 - **Pick the cap from the provider's documented rate limit, with headroom for retries.** `app/constants/email.py::DIGEST_SEND_CONCURRENCY` is the model.
 - **`return_exceptions=True` keeps one failed call from discarding the other results.** Each result is then checked on its own.
 - **The Nominatim geocoding passes serial-await on purpose.** Nominatim's usage policy allows one request per second, which a concurrency cap can't express. See [pipeline.md](pipeline.md)'s Geocoding Backfill section.
+- **The Fienta organizer probe in `app/ingestion/organizer_sync.py::_check_existing_organizers()` is serial on purpose too.** It waits on an `AsyncRateLimiter` between calls to respect Fienta's rate limit, so a gather would only queue behind the limiter.
 
 ### HTTP Retry
 
