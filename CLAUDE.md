@@ -108,10 +108,8 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 - **HTTP calls go through `app/ingestion/http_client.py::http_get()`/`http_post()`** for tenacity backoff and 429 `Retry-After`. Request-path Resend sends use `app/email/resend.py::send_resend_email()`, a single attempt. `docs/conventions.md` lists the other bypasses and their reasons; add one only with a reason.
 - **Gate numeric fields with `is not None`, never truthiness.** `0` is falsy, so a truthiness check silently drops free events.
 
-### Style and checks
+### Tests
 
-- **TS quotes are single for strings and double for JSX attributes** (ESLint). Run `ruff check --fix` and `eslint --fix` before committing.
-- **`python -m ruff check .` and `python -m mypy app` (from `backend/`) pass clean.** Ruff config is `backend/ruff.toml`; there is no `backend/pyproject.toml`. Give a reused loop variable of an incompatible type its own name.
 - **Reuse the shared test fixtures** in `backend/tests/conftest.py`, the package conftests and `frontend/src/test/utils.tsx`. Frontend tests mock the `api` module, not `fetch`.
 
 ## Conventions
@@ -122,7 +120,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 ## Traps
 
 - **Production builds from `release`, not `master`.** `master` is the CI/PR branch. A Cloudflare Pages build of any other branch skips the prerender pass (`PRERENDER_CADENCE_GIT_BRANCH`, `frontend/src/constants/prerender.ts`).
-- **CI's `lint` job and `.githooks/pre-commit` run ruff, mypy, eslint and type-check.** The devcontainer enables the hook (`git config core.hooksPath .githooks`). Elsewhere, enable it yourself, or run the four checks by hand before committing.
+- **CI's `lint` job and `.githooks/pre-commit` run ruff, mypy, eslint and type-check.** Ruff's config is `backend/ruff.toml`; there is no `backend/pyproject.toml`. The devcontainer enables the hook (`git config core.hooksPath .githooks`). Elsewhere, enable it yourself, or run the four checks by hand before committing.
 - **Edit translations and shared values in `shared/`, then run `python scripts/generate_shared.py`.** Commit the JSON and the regenerated `_generated/` files together, and leave `_generated/` to the script. `backend/tests/test_generated_sync.py` fails on drift.
 - **The three auth tracks never mix.** Consumer, organizer and admin sessions use separate signing salts and cookies, and consumer and organizer accounts live in separate tables. `CONTEXT.md` names them and `docs/security.md` has the flows.
 
