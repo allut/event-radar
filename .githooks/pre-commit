@@ -25,6 +25,11 @@ if staged '^(frontend/|shared/)'; then
   (cd frontend && npm run --silent type-check)
 fi
 
+if staged '^frontend/src/(.*\.css$|constants/)'; then
+  echo "pre-commit: guard tests"
+  (cd frontend && npx vitest run --silent src/cssRules.test.ts src/constants/mirrors.test.ts src/displayTokens.test.ts)
+fi
+
 if staged '^(CLAUDE\.md|README\.md|docs/)'; then
   echo "pre-commit: docs style"
   out=$(bash backend/scripts/scratch-test.sh tests/test_docs_style.py -q 2>&1) || { echo "$out"; exit 1; }

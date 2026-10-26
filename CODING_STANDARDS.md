@@ -19,6 +19,6 @@ These rules need judgement no lint can supply, so they live here rather than in 
 
 ### Frontend Judgement Rules
 
-- **A date-only ISO string goes through `parseISODateLocal()`,** never `new Date()`. `new Date('2026-10-25')` parses as UTC midnight and shows the previous day west of UTC.
 - **Admin Promotions copy lives in `constants/promotions.ts`.** A label, heading or button text in `routes/AdminPromotionDetail/` or `lib/promotions.ts` is a constant first.
-- **Money and VAT math goes through the `lib/organizerPromotions.ts` helpers** (`formatMoney`, `grossCents`). A route never re-derives a gross price or slices the currency symbol off a formatted string.
+- **A date-only ISO string held in a variable goes through `parseISODateLocal()`.** ESLint catches only a `'YYYY-MM-DD'` literal, so check `new Date(x)` where `x` could be date-only: `new Date('2026-10-25')` parses as UTC midnight and shows the previous day west of UTC.
+- **A gross price goes through `grossCents` and `formatMoney` (`lib/organizerPromotions.ts`).** ESLint catches slicing a `formatMoney()` result; a route re-deriving VAT inline is the case left to review.

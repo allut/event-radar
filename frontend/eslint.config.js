@@ -51,6 +51,17 @@ export default tseslint.config(
           message:
             'Compare HTTP statuses with StatusCodes.* from http-status-codes (api/client.ts does).',
         },
+        {
+          selector: "NewExpression[callee.name='Date'] > Literal[value=/^\\d{4}-\\d{2}-\\d{2}$/]",
+          message:
+            'new Date(\'YYYY-MM-DD\') parses as UTC midnight; use parseISODateLocal() from utils.ts.',
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name=/^(slice|substring|replace)$/][callee.object.callee.name='formatMoney']",
+          message:
+            'Do not edit a formatted price; use formatMoney(cents, locale, { symbol: false }) (lib/organizerPromotions.ts).',
+        },
       ],
     },
   },
