@@ -20,6 +20,7 @@ from app.constants.promotions import (
     PROMOTION_ERROR_CHECKOUT_PROVIDER,
     PROMOTION_ERROR_OFFER_DISABLED,
     PROMOTION_ERROR_REGISTRY_UNAVAILABLE,
+    PROMOTION_REGISTRY_CODE_MAX_LEN,
 )
 from app.constants.rate_limits import (
     RATE_LIMIT_PROMOTION_CHECKOUT,
@@ -74,14 +75,14 @@ _CHECKOUT_REFUSAL_STATUS = {
 
 
 class RegistryLookupBody(BaseModel):
-    registry_code: str = Field(max_length=32)
+    registry_code: str = Field(max_length=PROMOTION_REGISTRY_CODE_MAX_LEN)
 
 
 class CheckoutBody(BaseModel):
     event_id: int
     start_date: date
     end_date: date
-    registry_code: str = Field(max_length=32)
+    registry_code: str = Field(max_length=PROMOTION_REGISTRY_CODE_MAX_LEN)
     billing_email: EmailStr | None = Field(
         default=None, max_length=PROMOTION_BILLING_EMAIL_MAX_CHARS
     )

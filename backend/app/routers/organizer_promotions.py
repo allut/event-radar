@@ -24,6 +24,7 @@ from app.constants.promotions import (
     PROMOTION_ADVERTISER_NAME_MAX_CHARS,
     PROMOTION_BILLING_EMAIL_MAX_CHARS,
     PROMOTION_NOTE_MAX_CHARS,
+    PROMOTION_REGISTRY_CODE_MAX_LEN,
 )
 from app.constants.rate_limits import RATE_LIMIT_BROWSE, RATE_LIMIT_SUBMIT
 from app.db import get_db
@@ -67,7 +68,7 @@ class PromotionRequestBody(BaseModel):
     start_date: date
     end_date: date
     advertiser_legal_name: str = Field(max_length=PROMOTION_ADVERTISER_NAME_MAX_CHARS)
-    advertiser_registry_code: str = Field(max_length=32)
+    advertiser_registry_code: str = Field(max_length=PROMOTION_REGISTRY_CODE_MAX_LEN)
     billing_email: EmailStr | None = Field(
         default=None, max_length=PROMOTION_BILLING_EMAIL_MAX_CHARS
     )

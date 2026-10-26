@@ -18,6 +18,7 @@ from app.constants.promotions import (
     PROMOTION_END_REASON_ADMIN,
     PROMOTION_ERROR_ADVERTISER_NAME_REQUIRED,
     PROMOTION_ERROR_ALREADY_STARTED,
+    PROMOTION_NULLABLE_TEXT_FIELDS,
     PROMOTION_ERROR_ENDS_AFTER_EVENT,
     PROMOTION_ERROR_INVALID_INVOICE_REFERENCE,
     PROMOTION_ERROR_INVALID_REGISTRY_CODE,
@@ -87,7 +88,6 @@ PROMOTION_EDITABLE_FIELDS = frozenset(
         "invoice_reference",
     }
 )
-_NULLABLE_TEXT_FIELDS = frozenset({"billing_email", "invoice_reference"})
 
 
 class PromotionNotFound(Exception):
@@ -161,7 +161,7 @@ def _normalize_changes(changes: Mapping[str, Any]) -> dict[str, Any]:
     for key, value in changes.items():
         if isinstance(value, str):
             value = value.strip()
-            if not value and key in _NULLABLE_TEXT_FIELDS:
+            if not value and key in PROMOTION_NULLABLE_TEXT_FIELDS:
                 value = None
         out[key] = value
     return out

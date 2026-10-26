@@ -33,6 +33,7 @@ from app.constants.promotions import (
     PROMOTION_ERROR_NOT_EDITABLE,
     PROMOTION_GRANTED_BY_ADMIN,
     PROMOTION_HOLDING_STATUSES,
+    PROMOTION_RESTRICTION_BACKFILL_PAGE_SIZE,
     PROMOTION_RESTRICTION_NONE,
     VALID_PROMOTION_RESTRICTION_VALUES,
 )
@@ -48,9 +49,6 @@ from app.promotions.owners import resolve_owner_ids
 from app.promotions.windows import RuleViolation, tallinn_today
 
 log = logging.getLogger(__name__)
-
-# Events assessed per backfill query page.
-RESTRICTION_BACKFILL_PAGE_SIZE = 200
 
 
 def parse_promotion_restriction(value: Any) -> str | None:
@@ -233,7 +231,7 @@ async def backfill_restrictions(db: AsyncSession, now: datetime) -> dict[str, in
                     event_not_ended_filter(now),
                 )
                 .order_by(Event.id)
-                .limit(RESTRICTION_BACKFILL_PAGE_SIZE)
+                .limit(PROMOTION_RESTRICTION_BACKFILL_PAGE_SIZE)
             )
         ).all()
         if not page:

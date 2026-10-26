@@ -94,8 +94,11 @@ from app.constants.promotions import (
     PROMOTION_LIVE_CAP,
     ADMIN_PROMOTIONS_MAX_PAGE_SIZE,
     ADMIN_PROMOTIONS_PAGE_SIZE,
+    ERROR_PROMOTION_ADVERTISER_LEGAL_NAME_REQUIRED,
+    ERROR_PROMOTION_FIELD_NOT_NULLABLE,
     ERROR_PROMOTION_INVALID_STATE,
     ERROR_PROMOTION_NOT_FOUND,
+    ERROR_PROMOTION_NOTE_REQUIRED,
     ERROR_PROMOTION_SLOTS_STILL_ENABLED,
     PROMOTION_ADVERTISER_NAME_MAX_CHARS,
     PROMOTION_BILLING_EMAIL_MAX_CHARS,
@@ -113,7 +116,10 @@ from app.constants.promotions import (
     PROMOTION_ERROR_REASON_REQUIRED,
     PROMOTION_CHECKOUT_ERROR_MESSAGES,
     PROMOTION_ERROR_REFUND_PROVIDER,
+    PROMOTION_INVOICE_REFERENCE_MAX_LEN,
     PROMOTION_NOTE_MAX_CHARS,
+    PROMOTION_NULLABLE_TEXT_FIELDS,
+    PROMOTION_REGISTRY_CODE_MAX_LEN,
     PROMOTION_REQUEST_STATUS_PENDING,
     VALID_PROMOTION_REQUEST_STATUSES,
     VALID_PROMOTION_STATES,
@@ -1667,13 +1673,13 @@ class _PromotionGrantBody(BaseModel):
     start_date: date
     end_date: date
     advertiser_legal_name: str = Field(max_length=PROMOTION_ADVERTISER_NAME_MAX_CHARS)
-    advertiser_registry_code: str = Field(max_length=32)
+    advertiser_registry_code: str = Field(max_length=PROMOTION_REGISTRY_CODE_MAX_LEN)
     billing_email: EmailStr | None = Field(
         default=None, max_length=PROMOTION_BILLING_EMAIL_MAX_CHARS
     )
     is_complimentary: bool = False
     complimentary_note: str | None = Field(default=None, max_length=PROMOTION_NOTE_MAX_CHARS)
-    invoice_reference: str | None = Field(default=None, max_length=64)
+    invoice_reference: str | None = Field(default=None, max_length=PROMOTION_INVOICE_REFERENCE_MAX_LEN)
     # Required (both) when the event carries a Promotion restriction (#612).
     restriction_clearance_confirmed: bool = False
     restriction_clearance_note: str | None = Field(default=None, max_length=PROMOTION_NOTE_MAX_CHARS)
@@ -1734,7 +1740,8 @@ async def admin_log_promotion_complaint(
     note = body.note.strip()
     if not note:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="note required"
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=ERROR_PROMOTION_NOTE_REQUIRED,
         )
     complainant = (body.complainant or "").strip() or None
 
@@ -1953,7 +1960,7 @@ async def admin_grant_promotion(
     if not grant_request.advertiser_legal_name:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="advertiser_legal_name is required",
+            detail=ERROR_PROMOTION_ADVERTISER_LEGAL_NAME_REQUIRED,
         )
 
     async def _run() -> dict:
@@ -2008,7 +2015,7 @@ async def admin_grant_promotion(
 
 
 class _PromotionMarkPaidBody(BaseModel):
-    invoice_reference: str | None = Field(default=None, max_length=64)
+    invoice_reference: str | None = Field(default=None, max_length=PROMOTION_INVOICE_REFERENCE_MAX_LEN)
 
 
 class _PromotionEditBody(BaseModel):
@@ -2017,11 +2024,11 @@ class _PromotionEditBody(BaseModel):
     advertiser_legal_name: str | None = Field(
         default=None, max_length=PROMOTION_ADVERTISER_NAME_MAX_CHARS
     )
-    advertiser_registry_code: str | None = Field(default=None, max_length=32)
+    advertiser_registry_code: str | None = Field(default=None, max_length=PROMOTION_REGISTRY_CODE_MAX_LEN)
     billing_email: EmailStr | None = Field(
         default=None, max_length=PROMOTION_BILLING_EMAIL_MAX_CHARS
     )
-    invoice_reference: str | None = Field(default=None, max_length=64)
+    invoice_reference: str | None = Field(default=None, max_length=PROMOTION_INVOICE_REFERENCE_MAX_LEN)
 
 
 class _PromotionRepointBody(BaseModel):
@@ -2039,11 +2046,6 @@ class _PromotionReasonBody(BaseModel):
 class _PromotionRefundBody(BaseModel):
     amount_cents: int
     note: str = Field(max_length=PROMOTION_NOTE_MAX_CHARS)
-
-
-# Edit fields that may be sent as null (clearing them); every other field must
-# carry a value when present.
-_PROMOTION_CLEARABLE_FIELDS = frozenset({"billing_email", "invoice_reference"})
 
 
 def _promotion_audit_summary(promotion: Promotion) -> dict:
@@ -2205,7 +2207,7 @@ async def admin_grant_promotion_request(
     if not grant_request.advertiser_legal_name:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="advertiser_legal_name is required",
+            detail=ERROR_PROMOTION_ADVERTISER_LEGAL_NAME_REQUIRED,
         )
 
     async def _run() -> dict:
@@ -2370,10 +2372,10 @@ async def admin_edit_promotion(
     null to clear them."""
     changes = body.model_dump(exclude_unset=True)
     for key, value in changes.items():
-        if value is None and key not in _PROMOTION_CLEARABLE_FIELDS:
+        if value is None and key not in PROMOTION_NULLABLE_TEXT_FIELDS:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail=f"{key} cannot be null",
+                detail=ERROR_PROMOTION_FIELD_NOT_NULLABLE.format(key=key),
             )
     logged = {k: (v.isoformat() if isinstance(v, date) else v) for k, v in changes.items()}
     return await _run_promotion_command(

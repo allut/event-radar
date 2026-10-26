@@ -59,6 +59,14 @@ PROMOTION_REGISTRY_CODE_RE = re.compile(r"^\d{8}$")
 PROMOTION_ADVERTISER_NAME_MAX_CHARS = 255
 PROMOTION_BILLING_EMAIL_MAX_CHARS = 255
 PROMOTION_NOTE_MAX_CHARS = 1000
+# Request-body length bounds; the regexes above do the format check.
+PROMOTION_REGISTRY_CODE_MAX_LEN = 32
+PROMOTION_INVOICE_REFERENCE_MAX_LEN = 64
+# Text fields an admin edit may clear by sending null (stored as NULL).
+PROMOTION_NULLABLE_TEXT_FIELDS = frozenset({"billing_email", "invoice_reference"})
+ERROR_PROMOTION_NOTE_REQUIRED = "note required"
+ERROR_PROMOTION_ADVERTISER_LEGAL_NAME_REQUIRED = "advertiser_legal_name is required"
+ERROR_PROMOTION_FIELD_NOT_NULLABLE = "{key} cannot be null"
 
 ADMIN_PROMOTIONS_PAGE_SIZE: int = 50
 ADMIN_PROMOTIONS_MAX_PAGE_SIZE: int = 500
@@ -301,6 +309,11 @@ PROMOTION_NOT_SHOWING_OUTSIDE_DAILY5_WINDOW = "outside_daily5_window"
 # Trust panel, complaints and Withdraw (#620).
 PROMOTION_TRUST_WINDOW_DAYS = 28
 PROMOTION_TRUST_RECENT_COMPLAINTS = 20
+# Trust panel period keys (frontend PROMOTION_PERIODS mirrors them).
+PROMOTION_TRUST_PERIOD_ROLLING = "rolling_4_weeks"
+PROMOTION_TRUST_PERIOD_LAUNCH = "since_launch"
+# Events assessed per restriction-backfill query page (restriction.py).
+PROMOTION_RESTRICTION_BACKFILL_PAGE_SIZE = 200
 # `admin_actions.target` of every logged complaint (it is about the ads, not
 # one Promotion).
 PROMOTION_COMPLAINT_TARGET = "promotion_ads"

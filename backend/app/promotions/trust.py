@@ -16,6 +16,8 @@ from app.constants.email import CONSENT_SOURCE_EMAIL_LINK_UNDO, VALID_CONSENT_SO
 from app.constants.promotions import (
     PROMOTION_STATUS_ENDED_EARLY,
     PROMOTION_STATUS_PAID,
+    PROMOTION_TRUST_PERIOD_LAUNCH,
+    PROMOTION_TRUST_PERIOD_ROLLING,
     PROMOTION_TRUST_RECENT_COMPLAINTS,
     PROMOTION_TRUST_WINDOW_DAYS,
 )
@@ -29,9 +31,6 @@ from app.models.models import (
     User,
 )
 from app.promotions.windows import tallinn_today
-
-PERIOD_ROLLING = "rolling_4_weeks"
-PERIOD_LAUNCH = "since_launch"
 
 
 def _window_start(today: date) -> date:
@@ -80,12 +79,12 @@ async def _reports(db: AsyncSession, since: datetime) -> dict[str, dict[str, int
         )
     ).one()
     return {
-        PERIOD_LAUNCH: {
+        PROMOTION_TRUST_PERIOD_LAUNCH: {
             "reports_on_promoted": reports[0],
             "reports_resolved": reports[2],
             "promotions_taken_down": takedowns[0],
         },
-        PERIOD_ROLLING: {
+        PROMOTION_TRUST_PERIOD_ROLLING: {
             "reports_on_promoted": reports[1],
             "reports_resolved": reports[3],
             "promotions_taken_down": takedowns[1],
@@ -108,7 +107,7 @@ async def _consent(db: AsyncSession, since: datetime) -> dict[str, dict[str, Any
         )
     ).all()
     out: dict[str, dict[str, Any]] = {}
-    for column, period in ((2, PERIOD_LAUNCH), (3, PERIOD_ROLLING)):
+    for column, period in ((2, PROMOTION_TRUST_PERIOD_LAUNCH), (3, PROMOTION_TRUST_PERIOD_ROLLING)):
         by_source = dict.fromkeys(sorted(VALID_CONSENT_SOURCES), 0)
         granted = 0
         for row in rows:
@@ -152,7 +151,7 @@ async def _delivery(db: AsyncSession, window_start: date) -> dict[str, dict[str,
     ).one()
     keys = ("explore_served", "daily5_placed", "digest_sent", "web_opens", "slot_dislikes")
     out: dict[str, dict[str, Any]] = {}
-    for offset, period in ((0, PERIOD_LAUNCH), (len(keys), PERIOD_ROLLING)):
+    for offset, period in ((0, PROMOTION_TRUST_PERIOD_LAUNCH), (len(keys), PROMOTION_TRUST_PERIOD_ROLLING)):
         values = {k: int(row[offset + i]) for i, k in enumerate(keys)}
         out[period] = {
             "slots_served": values["explore_served"] + values["daily5_placed"] + values["digest_sent"],
@@ -187,7 +186,7 @@ async def _complaints(
         )
     ).all()
     return (
-        {PERIOD_LAUNCH: total, PERIOD_ROLLING: rolling},
+        {PROMOTION_TRUST_PERIOD_LAUNCH: total, PROMOTION_TRUST_PERIOD_ROLLING: rolling},
         [
             {
                 "id": a.id,
@@ -238,7 +237,7 @@ async def trust_panel(db: AsyncSession, now: datetime) -> dict[str, Any]:
                 **delivery[period],
                 "complaints": complaint_counts[period],
             }
-            for period in (PERIOD_ROLLING, PERIOD_LAUNCH)
+            for period in (PROMOTION_TRUST_PERIOD_ROLLING, PROMOTION_TRUST_PERIOD_LAUNCH)
         },
         "recent_complaints": recent,
     }
