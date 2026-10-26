@@ -26,6 +26,8 @@ from app.config import settings
 from app._generated.shared_constants import (
     BROWSE_PAGE_SIZE,
     IMAGE_UPLOAD_ALLOWED_MIME,
+    ORGANIZER_VENUE_ADDRESS_MAX_LEN,
+    ORGANIZER_VENUE_NAME_MAX_LEN,
     PAGINATION_MAX_OFFSET,
 )
 from app.constants.core import TALLINN_TZ
@@ -62,8 +64,6 @@ from app.constants.organizer import (
     ORGANIZER_IMPORTANT_INFO_MAX_LEN,
     ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX,
     ORGANIZER_TITLE_MAX_LEN,
-    ORGANIZER_VENUE_ADDRESS_MAX_LEN,
-    ORGANIZER_VENUE_NAME_MAX_LEN,
     WEBP_FOURCC,
     WEBP_FOURCC_OFFSET,
     WEBP_RIFF_MAGIC,

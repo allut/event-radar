@@ -1,13 +1,5 @@
 """Organizer portal: daily caps, field length limits, image upload/Cloudinary, and submission errors."""
 
-# Cross-stack field limits (shared/app-config.json). ORGANIZER_NAME_MAX_LEN is the Organizer.name
-# column width (routers/organizer_profile.py, #175; models/models.py).
-from app._generated.shared_constants import (
-    ORGANIZER_NAME_MAX_LEN as ORGANIZER_NAME_MAX_LEN,
-    ORGANIZER_VENUE_ADDRESS_MAX_LEN as ORGANIZER_VENUE_ADDRESS_MAX_LEN,
-    ORGANIZER_VENUE_NAME_MAX_LEN as ORGANIZER_VENUE_NAME_MAX_LEN,
-)
-
 # Per-organizer daily submission ceiling (routers/organizer_events.py), computed
 # from Tallinn calendar-day start — an IP rate limit alone can't cap a single
 # organizer account across multiple IPs.

@@ -2,16 +2,7 @@
 
 import re
 
-from app._generated.shared_constants import (
-    ORGANIZER_TERMS_VERSION as ORGANIZER_TERMS_VERSION,
-    PROMOTION_CHECKOUT_SESSION_MINUTES as PROMOTION_CHECKOUT_SESSION_MINUTES,
-    PROMOTION_DAY_PRICE_CENTS as PROMOTION_DAY_PRICE_CENTS,
-    PROMOTION_DECLINE_REASON_MAX_CHARS as PROMOTION_DECLINE_REASON_MAX_CHARS,
-    PROMOTION_MAX_DAYS as PROMOTION_MAX_DAYS,
-    PROMOTION_REF_AD as PROMOTION_REF_AD,
-    PROMOTION_REF_DIGEST_AD as PROMOTION_REF_DIGEST_AD,
-    PROMOTION_VAT_RATE_PERCENT as PROMOTION_VAT_RATE_PERCENT,
-)
+from app._generated.shared_constants import ORGANIZER_TERMS_VERSION, PROMOTION_MAX_DAYS
 
 # Stored statuses are commercial only. Scheduled, live and finished are
 # computed from the window and today's Tallinn date, never stored.

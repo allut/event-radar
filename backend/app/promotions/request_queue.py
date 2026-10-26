@@ -6,12 +6,14 @@ from datetime import datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app._generated.shared_constants import (
+    PROMOTION_DAY_PRICE_CENTS,
+    PROMOTION_VAT_RATE_PERCENT,
+)
 from app.constants.promotions import (
     PROMOTION_ERROR_NOT_PROMOTABLE,
     PROMOTION_NOT_SHOWING_NOT_OWNED,
     PROMOTION_REQUEST_STATUS_PENDING,
-    PROMOTION_DAY_PRICE_CENTS,
-    PROMOTION_VAT_RATE_PERCENT,
 )
 from app.models.models import Event, Organizer, PromotionRequest
 from app.promotions.grant import validate_grant

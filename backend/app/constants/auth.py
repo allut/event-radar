@@ -3,12 +3,7 @@
 from typing import Literal
 
 from app._generated.shared_constants import (
-    AUTH_TRACK_ORGANIZER as AUTH_TRACK_ORGANIZER,
-    AUTH_TRACK_USER as AUTH_TRACK_USER,
-    GOOGLE_SIGNIN_RESULT_QUERY_PARAM as GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
     MAGIC_LINK_TTL_MINUTES as _MAGIC_LINK_TTL_MINUTES_SHARED,
-    OAUTH_ERROR_DENIED as OAUTH_ERROR_DENIED,
-    OAUTH_ERROR_QUERY_PARAM as OAUTH_ERROR_QUERY_PARAM,
     SESSION_TTL_DAYS as _SESSION_TTL_DAYS_SHARED,
 )
 
@@ -135,7 +130,8 @@ GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL = "unverified_email"
 # a server-side redirect with no app JS in between, so this param tells
 # main.tsx which track's hint to set before the router's first render (see
 # frontend/src/lib/googleSignInLanding.ts). Values reuse AUTH_TRACK_USER/
-# AUTH_TRACK_ORGANIZER above — no separate value constants.
+# AUTH_TRACK_ORGANIZER from app._generated.shared_constants — no separate value
+# constants.
 # Callback redirect-with-error query param + failure reason codes — internal,
 # not i18n keys (mirrors the ERROR_* constants' English-only convention).
 OAUTH_ERROR_STATE_INVALID = "state_invalid"

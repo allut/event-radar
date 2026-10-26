@@ -18,10 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants.events import ERROR_EVENT_NOT_FOUND
 from app.constants.log_events import LOG_EVENT_REPORT_SUBMITTED
 from app.constants.rate_limits import RATE_LIMIT_REPORT
+from app._generated.shared_constants import REPORT_DETAIL_MAX_CHARS
 from app.constants.reports import (
     ERROR_REPORT_DETAIL_REQUIRED,
     ERROR_REPORT_DETAIL_TOO_LONG,
-    REPORT_DETAIL_MAX_CHARS,
     REPORT_REASON_OTHER,
     REPORT_STATUS_OPEN,
 )

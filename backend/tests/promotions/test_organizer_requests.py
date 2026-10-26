@@ -13,10 +13,8 @@ from httpx import ASGITransport, AsyncClient
 from app.auth.dependencies import get_current_organizer
 from app.config import settings
 from app.constants.claims import CLAIM_STATUS_REVOKED
-from app.constants.promotions import (
-    ORGANIZER_TERMS_VERSION,
-    PROMOTION_LIVE_CAP,
-)
+from app._generated.shared_constants import ORGANIZER_TERMS_VERSION
+from app.constants.promotions import PROMOTION_LIVE_CAP
 from app.db import get_db
 from app.models.models import Promotion, PromotionDailyStat, PromotionRequest
 from app.promotions.grant import GrantRequest, grant_promotion

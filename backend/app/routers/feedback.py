@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app._generated.shared_constants import (
     BROWSE_PAGE_SIZE,
     PAGINATION_MAX_OFFSET,
+    PROMOTION_REF_AD,
     VALID_SIGNALS,
 )
 from app.constants.events import ERROR_EVENT_NOT_FOUND
@@ -34,7 +35,7 @@ from app.constants.ranking import (
     PREFERENCE_SIGNALS_SQL_PREDICATE,
     SIGNAL_DISLIKE,
 )
-from app.constants.promotions import PROMOTION_REF_AD, PROMOTION_STAT_SLOT_DISLIKES
+from app.constants.promotions import PROMOTION_STAT_SLOT_DISLIKES
 from app.constants.rate_limits import RATE_LIMIT_FEEDBACK
 from app.db import get_db
 from app.models.models import Event, User, UserEventFeedback

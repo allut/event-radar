@@ -22,7 +22,7 @@ from app.constants.auth import (
 )
 from app.constants.core import SECONDS_PER_DAY
 from app.constants.log_events import LOG_EVENT_IDENTITY_UNLINKED
-from app.constants.organizer import ORGANIZER_NAME_MAX_LEN
+from app._generated.shared_constants import ORGANIZER_NAME_MAX_LEN
 from app.constants.rate_limits import RATE_LIMIT_AUTHENTICATED_WRITE, RATE_LIMIT_SUBMIT
 from app.db import get_db
 from app.models.models import Organizer, OrganizerIdentity

@@ -22,8 +22,9 @@ from sqlalchemy.orm import load_only, selectinload
 
 from app._generated.shared_constants import (
     BROWSE_PAGE_SIZE,
-    PAGINATION_MAX_OFFSET,
+    BROWSE_QUERY_MAX_LEN,
     DEFAULT_USER_LOCALE,
+    PAGINATION_MAX_OFFSET,
     VALID_CATEGORIES,
     VALID_VIBES,
 )
@@ -32,7 +33,6 @@ from app.constants.ranking import (
     BROWSE_FORYOU_MIN_AFFINITY,
     BROWSE_MAX_PAGE_SIZE,
     BROWSE_NEG_INF,
-    BROWSE_QUERY_MAX_LEN,
     BROWSE_RELEVANCE_CEILING,
     BROWSE_SCORE_CACHE_ID_TYPECODE,
     BROWSE_SCORE_CACHE_MAX_ENTRIES,

@@ -1,9 +1,5 @@
 """Event reports: reasons, statuses, detail limits, resolution notes, and report errors."""
 
-from app._generated.shared_constants import (
-    REPORT_DETAIL_MAX_CHARS as REPORT_DETAIL_MAX_CHARS,
-)
-
 # Report-an-inappropriate-event feature (event_reports table).
 REPORT_REASON_SPAM_OR_SCAM = "spam_or_scam"
 REPORT_REASON_SEXUAL_OR_EXPLICIT = "sexual_or_explicit"

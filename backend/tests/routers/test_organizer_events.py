@@ -13,12 +13,12 @@ from app.constants.events import (
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
 )
+from app._generated.shared_constants import ORGANIZER_VENUE_NAME_MAX_LEN
 from app.constants.organizer import (
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DAILY_SUBMISSION_CAP,
     ORGANIZER_DESCRIPTION_MAX_LEN,
     ORGANIZER_IMPORTANT_INFO_MAX_LEN,
-    ORGANIZER_VENUE_NAME_MAX_LEN,
 )
 
 

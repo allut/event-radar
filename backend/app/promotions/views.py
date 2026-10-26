@@ -8,22 +8,24 @@ from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.admin import PROMOTION_ADMIN_ACTIONS
+from app._generated.shared_constants import (
+    PROMOTION_DAY_PRICE_CENTS,
+    PROMOTION_MAX_DAYS,
+    PROMOTION_VAT_RATE_PERCENT,
+)
 from app.constants.promotions import (
     PROMOTION_STATUS_ENDED_EARLY,
     PROMOTION_STATUS_PAID,
     PROMOTION_STATUS_UNPAID,
     PROMOTION_STAT_REPORT_COLUMNS,
     PROMOTION_CAP_STRIP_DAYS,
-    PROMOTION_DAY_PRICE_CENTS,
     PROMOTION_HOLDING_STATUSES,
     PROMOTION_LIVE_CAP,
-    PROMOTION_MAX_DAYS,
     PROMOTION_MIN_DAYS,
     PROMOTION_MIN_LEAD_DAYS,
     PROMOTION_STATE_FINISHED,
     PROMOTION_STATE_LIVE,
     PROMOTION_STATE_SCHEDULED,
-    PROMOTION_VAT_RATE_PERCENT,
 )
 from app.models.models import AdminAction, Event, Organizer, Promotion, PromotionDailyStat
 from app.promotions.fill import evaluate_gate

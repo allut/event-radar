@@ -39,6 +39,7 @@ from app.claims.lifecycle import (
 from app.claims.pinning import bulk_resolve_series_events
 from app.ingestion.http_client import host_matches_domain
 from app._generated.shared_constants import (
+    BROWSE_QUERY_MAX_LEN,
     CLAIM_EVENTS_PAGE_SIZE,
     ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
     PAGINATION_MAX_OFFSET,
@@ -80,11 +81,7 @@ from app.constants.events import EVENT_SEARCH_TEXT_SQL, ERROR_EVENT_NOT_FOUND
 from app.constants.http import HTTP_TIMEOUT_SECONDS
 from app.constants.log_events import LOG_EVENT_AUTH_FAILED
 from app.constants.organizer import ERROR_ORGANIZER_NOT_FOUND
-from app.constants.ranking import (
-    BROWSE_QUERY_MAX_LEN,
-    PAGINATION_MIN_LIMIT,
-    PAGINATION_MIN_OFFSET,
-)
+from app.constants.ranking import PAGINATION_MIN_LIMIT, PAGINATION_MIN_OFFSET
 from app.constants.rate_limits import (
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,

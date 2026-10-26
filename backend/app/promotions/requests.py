@@ -15,9 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.core import TALLINN_TZ
 from app.constants.events import EVENT_STATUS_CANCELLED
+from app._generated.shared_constants import ORGANIZER_TERMS_VERSION
 from app.constants.promotions import (
     ORGANIZER_DAILY_PROMOTION_REQUEST_CAP,
-    ORGANIZER_TERMS_VERSION,
     PROMOTION_ERROR_INVALID_REGISTRY_CODE,
     PROMOTION_ERROR_NOT_PROMOTABLE,
     PROMOTION_ERROR_REGISTRY_CHECKSUM,

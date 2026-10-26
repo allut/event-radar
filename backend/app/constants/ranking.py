@@ -1,7 +1,6 @@
 """Ranking and browse: Daily 5, score weights, signals, time slots, browse sorting and pagination, onboarding personas."""
 
 from app._generated.shared_constants import (
-    BROWSE_QUERY_MAX_LEN as BROWSE_QUERY_MAX_LEN,
     PERSONA_MAX_SELECTABLE,
     PERSONA_PRIMARY_WEIGHT,
     PERSONA_SECONDARY_WEIGHT,

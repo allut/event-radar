@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
 from app.constants.core import TALLINN_TZ
+from app._generated.shared_constants import PROMOTION_MAX_DAYS
 from app.constants.promotions import (
     PROMOTION_ERROR_ENDS_AFTER_EVENT,
     PROMOTION_ERROR_MESSAGES,
@@ -12,7 +13,6 @@ from app.constants.promotions import (
     PROMOTION_ERROR_TOO_SHORT,
     PROMOTION_ERROR_WINDOW_ORDER,
     PROMOTION_HOLDING_STATUSES,
-    PROMOTION_MAX_DAYS,
     PROMOTION_MIN_DAYS,
     PROMOTION_MIN_LEAD_DAYS,
     PROMOTION_STATE_FINISHED,

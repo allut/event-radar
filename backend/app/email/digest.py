@@ -40,7 +40,8 @@ from app.constants.email import (
 )
 from app.constants.http import AUTHORIZATION_HEADER, BEARER_PREFIX
 from app.constants.log_events import LOG_EVENT_EMAIL_SEND_FAILED
-from app.constants.promotions import PROMOTION_REF_DIGEST_AD, PROMOTION_STAT_DIGEST_SENT
+from app._generated.shared_constants import PROMOTION_REF_DIGEST_AD
+from app.constants.promotions import PROMOTION_STAT_DIGEST_SENT
 from app.constants.ranking import DAILY_5_COUNT, FEED_BUILD_USER_BATCH_SIZE
 from app.email.links import frontend_url
 from app.email.brand import brand_mark_attachments, brand_mark_html

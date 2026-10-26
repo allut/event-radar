@@ -9,8 +9,11 @@ from decimal import ROUND_HALF_UP, Decimal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants.promotions import (
+from app._generated.shared_constants import (
     PROMOTION_DAY_PRICE_CENTS,
+    PROMOTION_VAT_RATE_PERCENT,
+)
+from app.constants.promotions import (
     PROMOTION_ERROR_CAP_EXCEEDED,
     PROMOTION_ERROR_INVALID_INVOICE_REFERENCE,
     PROMOTION_ERROR_INVALID_REGISTRY_CODE,
@@ -26,7 +29,6 @@ from app.constants.promotions import (
     PROMOTION_SNAPSHOT_TRIGGER_GRANT,
     PROMOTION_STATUS_PAID,
     PROMOTION_STATUS_UNPAID,
-    PROMOTION_VAT_RATE_PERCENT,
 )
 from app.models.models import Event, Promotion
 from app.promotions.cap import full_days, lock_cap

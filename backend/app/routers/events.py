@@ -10,15 +10,17 @@ from app.claims.lifecycle import (
     claiming_organizer_name,
     resolve_claim_for_event,
 )
-from app._generated.shared_constants import DEFAULT_USER_LOCALE
+from app._generated.shared_constants import (
+    DEFAULT_USER_LOCALE,
+    PROMOTION_REF_AD,
+    PROMOTION_REF_DIGEST_AD,
+)
 from app.constants.claims import (
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
 )
 from app.constants.events import ERROR_EVENT_NOT_FOUND
 from app.constants.promotions import (
-    PROMOTION_REF_AD,
-    PROMOTION_REF_DIGEST_AD,
     PROMOTION_STAT_DIGEST_OPENS,
     PROMOTION_STAT_WEB_OPENS,
 )

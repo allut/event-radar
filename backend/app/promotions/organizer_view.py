@@ -10,8 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants.promotions import (
+from app._generated.shared_constants import (
+    ORGANIZER_TERMS_VERSION,
     PROMOTION_DAY_PRICE_CENTS,
+    PROMOTION_MAX_DAYS,
+    PROMOTION_VAT_RATE_PERCENT,
+)
+from app.constants.promotions import (
     PROMOTION_GATE_OUTCOME_PAUSED,
     PROMOTION_GATE_OUTCOME_SHOWN,
     PROMOTION_HOLDING_STATUSES,
@@ -25,7 +30,6 @@ from app.constants.promotions import (
     PROMOTION_LIST_PAUSED,
     PROMOTION_LIST_REQUESTED,
     PROMOTION_LIST_SCHEDULED,
-    PROMOTION_MAX_DAYS,
     PROMOTION_MIN_DAYS,
     PROMOTION_MIN_LEAD_DAYS,
     PROMOTION_REQUEST_STATUS_DECLINED,
@@ -43,8 +47,6 @@ from app.constants.promotions import (
     PROMOTION_STATUS_UNPAID,
     PROMOTION_STATUS_VOID,
     PROMOTION_UNAVAILABLE_HORIZON_DAYS,
-    PROMOTION_VAT_RATE_PERCENT,
-    ORGANIZER_TERMS_VERSION,
 )
 from app.events.localize import resolve_title
 from app.models.models import Event, Organizer, Promotion, PromotionRequest

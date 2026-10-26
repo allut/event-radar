@@ -19,16 +19,16 @@ from app.auth.tokens import oauth_state_ttl_seconds
 from app.config import settings
 from app._generated.shared_constants import (
     DEFAULT_USER_LOCALE,
+    GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
+    OAUTH_ERROR_QUERY_PARAM,
     ORGANIZER_MAX_CATEGORIES,
     VALID_CATEGORIES,
     VALID_LOCALES,
 )
 from app.constants.admin import ERROR_ADMIN_JOB_ALREADY_RUNNING, ERROR_ADMIN_JOB_FAILED
 from app.constants.auth import (
-    GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
     IDENTITY_PROVIDER_GOOGLE,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
-    OAUTH_ERROR_QUERY_PARAM,
     OAUTH_STATE_COOKIE_SAMESITE,
     SESSION_COOKIE_HTTPONLY,
     SESSION_COOKIE_SAMESITE,
