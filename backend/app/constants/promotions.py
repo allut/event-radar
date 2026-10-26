@@ -283,6 +283,9 @@ PROMOTION_AUTO_END_EMAIL_REASONS = frozenset(PROMOTION_AUTO_END_NOTES) - {
     PROMOTION_END_REASON_UNPAID_AT_START,
     PROMOTION_END_REASON_CHECKOUT_EXPIRED,
 }
+# Bounded concurrency for the sweep's ended-early emails and the restriction
+# notices — same Resend free-tier rate as REPORT_EMAIL_SEND_CONCURRENCY.
+PROMOTION_EMAIL_SEND_CONCURRENCY: int = 8
 ERROR_PROMOTION_NOT_FOUND = "promotion not found"
 
 # Daily 5 Sponsored slot (#607).

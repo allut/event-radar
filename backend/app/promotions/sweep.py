@@ -16,9 +16,11 @@ SELECT per status, the two owner queries, one Organizer lookup, the request
 expiry (one SELECT and two owner queries) and the flush.
 """
 
+import asyncio
 import logging
 from datetime import datetime, timedelta
 
+import httpx
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,12 +38,14 @@ from app.constants.promotions import (
     PROMOTION_END_REASON_CHECKOUT_EXPIRED,
     PROMOTION_END_REASON_CLAIM_REVOKED,
     PROMOTION_END_REASON_UNPAID_AT_START,
+    PROMOTION_EMAIL_SEND_CONCURRENCY,
     PROMOTION_STATUS_ENDED_EARLY,
     PROMOTION_STATUS_PAID,
     PROMOTION_STATUS_UNPAID,
     PROMOTION_STATUS_VOID,
 )
 from app.email.promotion_notice import send_promotion_ended_email
+from app.email.resend import resend_http_client
 from app.events.localize import resolve_title
 from app.models.models import Event, Organizer, Promotion
 from app.promotions.audit import record_system_action
@@ -136,24 +140,37 @@ async def sweep_promotions(db: AsyncSession, now: datetime | None = None) -> dic
     requests_expired = await expire_requests(db, now)
     await db.commit()
 
-    for promotion, event, reason in to_email:
+    semaphore = asyncio.Semaphore(PROMOTION_EMAIL_SEND_CONCURRENCY)
+
+    async def _send_one(
+        promotion: Promotion, event: Event, reason: str, http_client: httpx.AsyncClient
+    ) -> None:
         organizer = organizers.get(promotion.organizer_id)
         if organizer is None:
-            continue
-        try:
-            await send_promotion_ended_email(
-                organizer.email,
-                resolve_title(event, organizer.locale),
-                promotion.start_date,
-                promotion.end_date,
-                PROMOTION_AUTO_END_NOTES[reason],
-                organizer.locale,
-            )
-        except Exception:
-            log.error(
-                "Failed to send promotion ended email (promotion_id=%s)",
-                promotion.id,
-                exc_info=True,
-                extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+            return
+        async with semaphore:
+            try:
+                await send_promotion_ended_email(
+                    organizer.email,
+                    resolve_title(event, organizer.locale),
+                    promotion.start_date,
+                    promotion.end_date,
+                    PROMOTION_AUTO_END_NOTES[reason],
+                    organizer.locale,
+                    http_client=http_client,
+                )
+            except Exception:
+                log.error(
+                    "Failed to send promotion ended email (promotion_id=%s)",
+                    promotion.id,
+                    exc_info=True,
+                    extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
+                )
+
+    if to_email:
+        async with resend_http_client() as http_client:
+            await asyncio.gather(
+                *(_send_one(p, e, r, http_client) for p, e, r in to_email),
+                return_exceptions=True,
             )
     return {"voided": len(unpaid), "ended": len(ended), "requests_expired": requests_expired}

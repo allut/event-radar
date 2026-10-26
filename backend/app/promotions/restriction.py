@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from typing import Any
 from datetime import datetime
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +26,7 @@ from app.constants.llm import (
     LLM_TASK_PROMOTION_RESTRICTION,
 )
 from app.constants.promotions import (
+    PROMOTION_EMAIL_SEND_CONCURRENCY,
     PROMOTION_ERROR_CLEARANCE_NOT_NEEDED,
     PROMOTION_ERROR_CLEARANCE_NOTE_REQUIRED,
     PROMOTION_ERROR_CLEARANCE_REQUIRED,
@@ -35,6 +37,7 @@ from app.constants.promotions import (
     VALID_PROMOTION_RESTRICTION_VALUES,
 )
 from app.email.promotion_admin import send_restriction_flagged_notice
+from app.email.resend import resend_http_client
 from app.events.queries import event_not_ended_filter
 from app.events.venue import resolve_venue_name
 from app.ingestion.sanitize import html_to_text
@@ -105,8 +108,9 @@ async def notify_newly_restricted(
 ) -> list[int]:
     """Email the admin for every scheduled or live Promotion whose event just
     became restricted (previous value is `changes[i][1]`) and whose clearance
-    doesn't cover it. One query whatever the row count; best-effort sends.
-    The fill gate pauses these on its own. Returns the notified Promotion ids."""
+    doesn't cover it. One query and one Resend client whatever the row count;
+    best-effort sends behind a bounded gather. The fill gate pauses these on
+    its own. Returns the notified Promotion ids."""
     flagged = {
         event.id: event
         for event, previous in changes
@@ -126,19 +130,33 @@ async def notify_newly_restricted(
             .order_by(Promotion.id)
         )
     ).all()
-    notified: list[int] = []
-    for promotion in promotions:
+    pending = [
+        promotion
+        for promotion in promotions
+        if promotion.restriction_cleared != flagged[promotion.event_id].promotion_restriction
+    ]
+    if not pending:
+        return []
+    semaphore = asyncio.Semaphore(PROMOTION_EMAIL_SEND_CONCURRENCY)
+
+    async def _notify(promotion: Promotion, http_client: httpx.AsyncClient) -> bool:
         event = flagged[promotion.event_id]
-        if promotion.restriction_cleared == event.promotion_restriction:
-            continue
-        try:
-            await send_restriction_flagged_notice(
-                promotion, event, event.promotion_restriction or ""
-            )
-            notified.append(promotion.id)
-        except Exception:
-            log.exception("restriction notice failed for promotion_id=%s", promotion.id)
-    return notified
+        async with semaphore:
+            try:
+                await send_restriction_flagged_notice(
+                    promotion, event, event.promotion_restriction or "", http_client=http_client
+                )
+            except Exception:
+                log.exception("restriction notice failed for promotion_id=%s", promotion.id)
+                return False
+        return True
+
+    async with resend_http_client() as http_client:
+        results = await asyncio.gather(
+            *(_notify(promotion, http_client) for promotion in pending),
+            return_exceptions=True,
+        )
+    return [promotion.id for promotion, sent in zip(pending, results) if sent is True]
 
 
 def _assess_prompt(event: Event) -> str:

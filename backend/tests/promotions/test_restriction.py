@@ -3,6 +3,7 @@ the grant requirement, clearing a newly flagged Promotion, the admin notice,
 the backfill and the "Promoted" report tagging."""
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -218,6 +219,37 @@ class TestClearNewlyFlagged:
             )
         assert notified == [p_new.id]
         assert send.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_notices_share_one_client_and_survive_a_failure(self, db, make) -> None:
+        org = await make.organizer()
+        events = [await classified(make, i, org=org) for i in range(3)]
+        promos = []
+        for ev in events:
+            ev.promotion_restriction = "tobacco"
+            promos.append(await promote(db, ev, org))
+        clients: list[object] = []
+
+        @asynccontextmanager
+        async def one_client():
+            client = object()
+            clients.append(client)
+            yield client
+
+        async def send(promotion, event, restriction, *, http_client=None):
+            assert http_client is clients[0]
+            if promotion.id == promos[1].id:
+                raise RuntimeError("resend down")
+
+        with (
+            patch("app.promotions.restriction.resend_http_client", new=one_client),
+            patch("app.promotions.restriction.send_restriction_flagged_notice", new=send),
+        ):
+            notified = await notify_newly_restricted(
+                db, [(ev, "none") for ev in events], LIVE_NOW
+            )
+        assert len(clients) == 1
+        assert notified == [promos[0].id, promos[2].id]
 
     @pytest.mark.asyncio
     async def test_notice_email_has_contact_address_and_deep_link(

@@ -1,6 +1,8 @@
 """Automatic lifecycle (#602): void at the start date, end on cancellation or
 claim revocation. The clock is frozen around Tallinn midnight."""
 
+from contextlib import asynccontextmanager
+
 import pytest
 from sqlalchemy import event as sa_event
 from sqlalchemy import select
@@ -155,6 +157,36 @@ async def test_sweep_query_count_is_fixed(db, make, sent) -> None:
     await seed(4)
     many = await measured(at_tallinn(2090, 1, 21, 12))
     assert one == many
+
+
+@pytest.mark.asyncio
+async def test_ended_emails_share_one_client(db, make, monkeypatch) -> None:
+    """Every ended-early email in one sweep goes out on one shared Resend client."""
+    clients: list[object] = []
+
+    @asynccontextmanager
+    async def one_client():
+        client = object()
+        clients.append(client)
+        yield client
+
+    calls: list[tuple[str, object]] = []
+
+    async def fake(to_email, event_title, start, end, reason, locale, http_client=None):
+        calls.append((to_email, http_client))
+
+    monkeypatch.setattr(sweep_module, "resend_http_client", one_client)
+    monkeypatch.setattr(sweep_module, "send_promotion_ended_email", fake)
+    orgs = [await make.organizer() for _ in range(3)]
+    for org in orgs:
+        ev, _ = await make_promo(db, make, 10, 14, paid=True, org=org)
+        ev.status = "cancelled"
+        ev.cancellation_reason = "admin_retract"
+    await db.flush()
+    await sweep_promotions(db, LIVE)
+    assert len(clients) == 1
+    assert sorted(to for to, _ in calls) == sorted(o.email for o in orgs)
+    assert all(client is clients[0] for _, client in calls)
 
 
 async def make_promo_for(db, ev, org):

@@ -64,7 +64,7 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 These groups skip `http_get()`/`http_post()`. Add another only with a reason recorded here.
 
 - **Request-path Resend sends use `app/email/resend.py::send_resend_email()`, a single attempt.** A five-attempt backoff would stall the user's response for up to about 150 seconds. This covers the magic link, contact form, report notify, reporter outcome and claim resolution sends.
-- **Fan-out Resend callers share one client instead of retrying per send.** The report-outcome and claim-expiry sweeps pass `resend_http_client()` into each `send_resend_email()` call.
+- **Fan-out Resend callers share one client instead of retrying per send.** The report-outcome, claim-expiry and Promotion sweeps and the restriction notices pass `resend_http_client()` into each `send_resend_email()` call.
 - **`app/llm/router.py` calls each `LLM_PROVIDERS` entry directly.** The Groq → Cloudflare Workers AI → Mistral fallback chain is the retry strategy. A tenacity backoff underneath would fight its fast-fail-and-advance behaviour.
 - **`app/logging_config.py` ships logs with a sync `httpx.Client`.** It runs on the `QueueListener` background thread, which can't await the async `http_post()`.
 - **`app/integrations/payments.py` calls Stripe through the official `stripe` SDK.** The SDK signs requests, sets idempotency keys and verifies webhook signatures, and rebuilding that on `http_post()` would be riskier than the bypass. It is the only module that imports `stripe`.

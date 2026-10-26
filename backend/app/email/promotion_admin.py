@@ -3,6 +3,8 @@ deep link. Mirrors report_notify.py: a single attempt via send_resend_email."""
 
 import html
 
+import httpx
+
 from app.config import settings
 from app.constants.promotions import ADMIN_PROMOTIONS_PATH
 from app.email.resend import send_resend_email
@@ -21,7 +23,11 @@ from app.models.models import Event, Organizer, Promotion, PromotionRequest
 
 
 async def send_restriction_flagged_notice(
-    promotion: Promotion, event: Event, restriction: str
+    promotion: Promotion,
+    event: Event,
+    restriction: str,
+    *,
+    http_client: httpx.AsyncClient | None = None,
 ) -> None:
     title = " ".join(event.title_orig.split())
     href = f"{settings.FRONTEND_URL}{ADMIN_PROMOTIONS_PATH}/{promotion.id}"
@@ -44,6 +50,7 @@ async def send_restriction_flagged_notice(
             ),
             "text": PROMOTION_RESTRICTION_NOTIFY_TEXT.format(**fields),
         },
+        http_client=http_client,
         log_label="promotion restriction notice",
         log_ref=f"promotion_id={promotion.id}",
     )
