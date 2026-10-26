@@ -110,9 +110,8 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 
 ### Style and checks
 
-- **Quotes:** double in Python (Ruff `Q`); single for TS strings and double for JSX attributes (ESLint). Run `ruff check --fix` and `eslint --fix` before committing.
+- **TS quotes are single for strings and double for JSX attributes** (ESLint). Run `ruff check --fix` and `eslint --fix` before committing.
 - **`python -m ruff check .` and `python -m mypy app` (from `backend/`) pass clean.** Ruff config is `backend/ruff.toml`; there is no `backend/pyproject.toml`. Give a reused loop variable of an incompatible type its own name.
-- **Use PEP 604/585 annotations** (`X | None`, `list[T]`), and annotate every public return type.
 - **Reuse the shared test fixtures** in `backend/tests/conftest.py`, the package conftests and `frontend/src/test/utils.tsx`. Frontend tests mock the `api` module, not `fetch`.
 
 ## Conventions
