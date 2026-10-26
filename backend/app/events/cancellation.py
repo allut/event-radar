@@ -4,6 +4,8 @@ self-delete, and the detail-refetch sync's source-gone sweep."""
 
 import asyncio
 import logging
+from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime
 
 import httpx
@@ -42,11 +44,19 @@ async def resolve_open_reports(
     landing between this call and the caller's commit) can't be missed —
     the WHERE clause is evaluated atomically at execution time.
     """
+    return await _resolve_open_reports(db, [event.id], resolution_note)
+
+
+async def _resolve_open_reports(
+    db: AsyncSession, event_ids: list[int], resolution_note: str
+) -> list[EventReport]:
+    """The single UPDATE...RETURNING behind ``resolve_open_reports`` and
+    ``cancel_events_and_resolve_reports``, for any number of events."""
     resolved_at = datetime.now(TALLINN_TZ)
     stmt = (
         update(EventReport)
         .where(
-            EventReport.event_id == event.id,
+            EventReport.event_id.in_(event_ids),
             EventReport.status == REPORT_STATUS_OPEN,
         )
         .values(
@@ -77,15 +87,29 @@ async def send_report_resolution_emails(
     ``resolve_open_reports``'s docstring for why the ordering matters. A
     per-report send failure is swallowed and logged; the ``resolved`` status
     transition (already committed) is the durable record."""
-    if not reports:
+    await send_report_resolution_emails_bulk(db, [(event, reports)], resolution_note)
+
+
+async def send_report_resolution_emails_bulk(
+    db: AsyncSession,
+    resolved: Sequence[tuple[Event, list[EventReport]]],
+    resolution_note: str,
+) -> None:
+    """``send_report_resolution_emails`` for many events at once: one reporter
+    lookup, one Resend client and one bounded gather whatever the event count.
+    Same after-commit rule."""
+    pairs = [(event, report) for event, reports in resolved for report in reports]
+    if not pairs:
         return
-    user_ids = {report.user_id for report in reports}
+    user_ids = {report.user_id for _, report in pairs}
     users = (await db.scalars(select(User).where(User.id.in_(user_ids)))).all()
     users_by_id = {u.id: u for u in users}
 
     semaphore = asyncio.Semaphore(REPORT_EMAIL_SEND_CONCURRENCY)
 
-    async def _send_one(report: EventReport, http_client: httpx.AsyncClient) -> None:
+    async def _send_one(
+        event: Event, report: EventReport, http_client: httpx.AsyncClient
+    ) -> None:
         reporter = users_by_id.get(report.user_id)
         if reporter is None:
             return
@@ -117,7 +141,7 @@ async def send_report_resolution_emails(
     # mirroring digest.py's Big-O audit M7 fix.
     async with resend_http_client() as http_client:
         await asyncio.gather(
-            *(_send_one(report, http_client) for report in reports),
+            *(_send_one(event, report, http_client) for event, report in pairs),
             return_exceptions=True,
         )
 
@@ -134,3 +158,25 @@ async def cancel_event_and_resolve_reports(
     event.status = EVENT_STATUS_CANCELLED
     event.cancellation_reason = cancellation_reason
     return await resolve_open_reports(db, event, resolution_note)
+
+
+async def cancel_events_and_resolve_reports(
+    db: AsyncSession,
+    events: Sequence[Event],
+    cancellation_reason: str,
+    resolution_note: str,
+) -> list[tuple[Event, list[EventReport]]]:
+    """``cancel_event_and_resolve_reports`` for a batch job: one UPDATE for
+    every event's open reports. Returns each event that had reports resolved,
+    paired with them, for ``send_report_resolution_emails_bulk``. Caller commits.
+    """
+    if not events:
+        return []
+    for event in events:
+        event.status = EVENT_STATUS_CANCELLED
+        event.cancellation_reason = cancellation_reason
+    reports = await _resolve_open_reports(db, [e.id for e in events], resolution_note)
+    by_event: dict[int, list[EventReport]] = defaultdict(list)
+    for report in reports:
+        by_event[report.event_id].append(report)
+    return [(event, by_event[event.id]) for event in events if by_event.get(event.id)]

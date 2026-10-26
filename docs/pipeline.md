@@ -258,7 +258,7 @@ The public `/ranking` page states the signals and their order, never the weights
 - **A detail page answering 404 or 410 (`REFETCH_GONE_STATUS_CODES`) means the source removed the event.** It isn't counted in `failed`. The run stamps `events.source_gone_since` on the first sighting and marks the event synced, so it moves to the back of the queue.
 - **Any other status, a `RequestError` or an SSRF-guard `ValueError` is transient.** It counts in `failed` and leaves the event untouched.
 - **A later successful fetch clears `source_gone_since`.**
-- **An event gone for `REFETCH_GONE_CANCEL_AFTER_DAYS` is cancelled** with `cancellation_reason = source_gone`, through `app/events/cancellation.py::cancel_event_and_resolve_reports()` like every other cancel path. The wait keeps one bad response from the source from cancelling a live event.
+- **An event gone for `REFETCH_GONE_CANCEL_AFTER_DAYS` is cancelled** with `cancellation_reason = source_gone`, through `app/events/cancellation.py::cancel_events_and_resolve_reports()`, the batch form of every other cancel path. One UPDATE resolves the open reports of every event cancelled in a run, and `send_report_resolution_emails_bulk()` sends the reporter emails on one client. The wait keeps one bad response from the source from cancelling a live event.
 - **A dedup representative with a live sibling is spared** (`no_live_dedup_sibling_clause()`) and retried next run.
 - **Cancellations run once after the host walk, in one batched sibling query.** The run commits, then sends the reporter emails, so no one is told about a cancel that rolled back. The summary counts `source_gone` and `cancelled_gone`.
 

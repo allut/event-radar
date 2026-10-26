@@ -93,8 +93,8 @@ from app.ingestion.locale_urls import (
     locale_from_url_path,
 )
 from app.events.cancellation import (
-    cancel_event_and_resolve_reports,
-    send_report_resolution_emails,
+    cancel_events_and_resolve_reports,
+    send_report_resolution_emails_bulk,
 )
 from app.events.queries import no_live_dedup_sibling_clause
 from app.claims.lifecycle import bulk_dormant_pinned_event_ids
@@ -113,7 +113,7 @@ from app.ingestion.sources.piletilevi import (
     piletilevi_store_login,
     piletilevi_store_price_fields,
 )
-from app.models.models import Event, EventReport, EventSource, Source
+from app.models.models import Event, EventSource, Source
 
 log = logging.getLogger(__name__)
 
@@ -584,27 +584,26 @@ async def _cancel_gone_events(
 ) -> None:
     """Cancel events whose source page has been gone past the threshold.
 
-    Goes through cancel_event_and_resolve_reports like every other cancel path
-    so open reports are auto-resolved. A dedup representative with a live
-    sibling is spared (retried next run). Reporter emails are sent only after
-    the commit that persists the cancellation (#127).
+    Goes through cancel_events_and_resolve_reports, the batch form of every
+    other cancel path, so open reports are auto-resolved in one UPDATE. A dedup
+    representative with a live sibling is spared (retried next run). Reporter
+    emails are sent only after the commit that persists the cancellation (#127).
     """
     if not gone_due:
         return
     cancelable = await _ids_without_live_sibling(db, [e.id for e in gone_due], now)
-    resolved: list[tuple[Event, list[EventReport]]] = []
-    for event in gone_due:
-        if event.id not in cancelable:
-            continue
-        reports = await cancel_event_and_resolve_reports(
-            db, event, EVENT_CANCELLATION_REASON_SOURCE_GONE, REPORT_AUTO_RESOLVE_NOTE
+    to_cancel = [event for event in gone_due if event.id in cancelable]
+    resolved = (
+        await cancel_events_and_resolve_reports(
+            db, to_cancel, EVENT_CANCELLATION_REASON_SOURCE_GONE, REPORT_AUTO_RESOLVE_NOTE
         )
-        summary["cancelled_gone"] += 1
-        if reports:
-            resolved.append((event, reports))
+        if to_cancel
+        else []
+    )
+    summary["cancelled_gone"] += len(to_cancel)
     await db.commit()
-    for event, reports in resolved:
-        await send_report_resolution_emails(db, event, reports, REPORT_AUTO_RESOLVE_NOTE)
+    if resolved:
+        await send_report_resolution_emails_bulk(db, resolved, REPORT_AUTO_RESOLVE_NOTE)
 
 
 def _mark_synced(event: Event, now: datetime) -> None:

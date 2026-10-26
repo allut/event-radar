@@ -25,6 +25,7 @@ from app.constants.ingestion import (
 from app.claims.pinning import pin_key
 from app.ingestion.locale_urls import locale_from_url_path
 from app.ingestion.refetch import (
+    _cancel_gone_events,
     _is_empty_venue_name,
     _is_suspect_locale_title,
     refetch_event_details,
@@ -1166,8 +1167,8 @@ async def _run_failing(
             "app.ingestion.refetch._ids_without_live_sibling",
             new=AsyncMock(return_value=cancelable),
         ),
-        patch("app.ingestion.refetch.cancel_event_and_resolve_reports", new=cancel),
-        patch("app.ingestion.refetch.send_report_resolution_emails", new=emails),
+        patch("app.ingestion.refetch.cancel_events_and_resolve_reports", new=cancel),
+        patch("app.ingestion.refetch.send_report_resolution_emails_bulk", new=emails),
     ):
         summary = await refetch_event_details(mock_db)
     return summary, cancel, emails
@@ -1204,7 +1205,7 @@ class TestSourceGone:
         event = _future_event(source_gone_since=since)
         summary, cancel, emails = await _run_failing(mock_db, event, _status_error(404))
         cancel.assert_awaited_once()
-        assert cancel.await_args.args[1] is event
+        assert cancel.await_args.args[1] == [event]
         assert cancel.await_args.args[2] == EVENT_CANCELLATION_REASON_SOURCE_GONE
         assert summary["cancelled_gone"] == 1
         # reporter emails go out only after the commit that persists the cancel
@@ -1254,13 +1255,48 @@ class TestSourceGone:
                 new=AsyncMock(return_value={event.id}),
             ),
             patch(
-                "app.ingestion.refetch.cancel_event_and_resolve_reports",
-                new=AsyncMock(return_value=[report]),
+                "app.ingestion.refetch.cancel_events_and_resolve_reports",
+                new=AsyncMock(return_value=[(event, [report])]),
             ),
-            patch("app.ingestion.refetch.send_report_resolution_emails", new=emails),
+            patch("app.ingestion.refetch.send_report_resolution_emails_bulk", new=emails),
         ):
             await refetch_event_details(mock_db)
         assert order[-2:] == ["commit", "email"]
+
+    @pytest.mark.asyncio
+    async def test_cancel_sweep_query_and_client_count_is_fixed(self, mock_db):
+        """N gone events cost one UPDATE, one reporter lookup and one Resend client."""
+
+        async def measured(n: int) -> tuple[int, int, int]:
+            mock_db.reset_mock()
+            events = [_future_event(id=i) for i in range(1, n + 1)]
+            reports = [MagicMock(id=i, event_id=i, user_id=i) for i in range(1, n + 1)]
+            users = [MagicMock(id=i, email=f"r{i}@example.com", locale="en") for i in range(1, n + 1)]
+            mock_db.execute.return_value.scalars.return_value = MagicMock(
+                all=MagicMock(return_value=reports)
+            )
+            mock_db.scalars.return_value = MagicMock(all=MagicMock(return_value=users))
+            clients = MagicMock()
+            clients.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            clients.return_value.__aexit__ = AsyncMock(return_value=False)
+            send = AsyncMock()
+            summary = {"cancelled_gone": 0}
+            with (
+                patch(
+                    "app.ingestion.refetch._ids_without_live_sibling",
+                    new=AsyncMock(return_value={e.id for e in events}),
+                ),
+                patch("app.events.cancellation.resend_http_client", new=clients),
+                patch("app.events.cancellation.send_report_outcome_email", new=send),
+            ):
+                await _cancel_gone_events(mock_db, events, summary, datetime.now(TALLINN_TZ))
+            assert summary["cancelled_gone"] == n
+            assert send.await_count == n
+            assert all(e.status == EVENT_STATUS_CANCELLED for e in events)
+            queries = mock_db.execute.await_count + mock_db.scalars.await_count
+            return queries, clients.call_count, mock_db.commit.await_count
+
+        assert await measured(1) == await measured(4)
 
     @pytest.mark.asyncio
     async def test_success_clears_marker(self, mock_db):
