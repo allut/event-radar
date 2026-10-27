@@ -39,6 +39,9 @@ PROMOTION_GRANTED_BY_ADMIN = "admin"
 PROMOTION_LIVE_CAP = 5
 PROMOTION_MIN_DAYS = 3
 PROMOTION_CAP_STRIP_DAYS = 14
+# A window longer than this skips the per-day cap check: an out-of-bounds
+# window can span years, and the window rules already refuse it.
+PROMOTION_CAP_CHECK_MAX_DAYS = 366
 # The earliest start is this many Tallinn days after today (tomorrow).
 PROMOTION_MIN_LEAD_DAYS = 1
 

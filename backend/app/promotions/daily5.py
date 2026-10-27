@@ -10,8 +10,8 @@ matched to the five's categories. On top of that, per user: the five's events,
 dedup groups and series are never repeated, the viewer's own signals only
 exclude (``fill.viewer_excluded_promotions``), and a Promotion stored for the
 user within the last ``PROMOTION_DAILY5_COOLDOWN_DAYS`` days is skipped. The
-cooldown never relaxes: when nothing survives, the slot collapses. Order is
-``fill.rotation_order`` seeded with user id + Tallinn date.
+cooldown never relaxes: when nothing survives, the slot collapses. The pick is
+``fill.rotation_pick`` seeded with user id + Tallinn date.
 
 Every read here is bulk with a fixed query count, however many users and
 Promotions there are.
@@ -42,7 +42,7 @@ from app.promotions.fill import (
     evaluate_gate,
     explore_seed,
     gate_closed_reason,
-    rotation_order,
+    rotation_pick,
     surviving,
     viewer_excluded_promotions,
 )
@@ -152,7 +152,7 @@ class Daily5Run:
                 visible[uid],
             )
             if candidates:
-                picked = rotation_order(candidates, explore_seed(uid, self.today))[0]
+                picked = rotation_pick(candidates, explore_seed(uid, self.today))
                 rows.append(
                     {"user_id": uid, "slot_date": self.today, "promotion_id": picked.promotion.id}
                 )
@@ -333,4 +333,4 @@ async def _next_eligible(
     )
     if not candidates:
         return None
-    return rotation_order(candidates, explore_seed(user_id, today))[0]
+    return rotation_pick(candidates, explore_seed(user_id, today))

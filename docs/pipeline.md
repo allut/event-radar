@@ -24,6 +24,7 @@ Each stage runs as a scheduled job. [backend-ops.md](backend-ops.md)'s Scheduled
 - **Organizer self-submission has no polling adapter.** `POST /organizer/events` inserts on the `user_submission` source through `app/ingestion/adapter.py::insert_normalized_event()`. See [organizer-portal.md](organizer-portal.md).
 - **Telliskivi, Kultuurikatel and Fotografiska are `enabled=False`** in `app/ingestion/registry.py`. Telliskivi's data was unfixably mis-dated. The other two wait for a rewrite onto `HtmlListingAdapter`.
 - **Eventbrite was never added.** Its API closed to non-partners before integration.
+- **The hourly run ingests up to `INGEST_SOURCE_CONCURRENCY` (3) sources at once** (`app/ingestion/jobs.py::ingest_all_enabled`). Each source keeps its own session and its own host's rate limit.
 
 ### Fienta Detail Merge
 
@@ -149,6 +150,7 @@ The public `/ranking` page states the signals and their order, never the weights
 
 - **The builder scores events starting in the next 14 days and writes `daily_feeds`.** MMR-lite diversity caps each category at `DAILY_5_MAX_PER_CATEGORY` (2).
 - **Its candidate window uses the publish gate's `event_not_ended_filter()`.** An ongoing event stays a candidate until it ends.
+- **A user with no feedback is scored from their persona mix alone.** `_SharedFeedContext.persona_only_scores` keeps one score list per mix, so later users with the same mix reuse it. Scoring yields to the event loop between users.
 
 ### Series Collapse
 
@@ -276,7 +278,7 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 - **The slot is one separate card after a full five, never one of the five.** `build_daily_feeds` picks it only for users who got `DAILY_5_COUNT` events, after persisting the five, so the five can't depend on it. `app/promotions/daily5.py` owns the whole flow.
 - **The pick stores a row in `daily_sponsored_slots`** (one per user per Tallinn day), apart from `daily_feeds` so no consent-free path can pick it up. It is pruned on `DAILY_FEEDS_RETENTION_DAYS`. A rebuild keeps today's row.
 - **Eligibility is the shared fill gate plus the Daily 5 context.** The event starts within `DAILY_5_LOOKAHEAD_DAYS` (14), the builder's window, and is never matched to the five's categories.
-- **Per user, the pick skips** the five's events, dedup groups and series, anything the viewer's own signals exclude (`fill.viewer_excluded_promotions`), and any Promotion stored for them in the last `PROMOTION_DAILY5_COOLDOWN_DAYS` (3) days. The order is the `rotation_order` hash seeded with user id and Tallinn date.
+- **Per user, the pick skips** the five's events, dedup groups and series, anything the viewer's own signals exclude (`fill.viewer_excluded_promotions`), and any Promotion stored for them in the last `PROMOTION_DAILY5_COOLDOWN_DAYS` (3) days. The pick is the lowest `rotation_pick` hash, seeded with user id and Tallinn date.
 - **The cooldown never relaxes.** When nothing survives, the slot collapses and no row is written.
 - **The read path re-runs the gate on the stored pick.** If it fails, the next eligible Promotion in the same user-day order replaces it: `is_swap` is set and `replaced_promotion_id` records the old one. The replacement sticks for the day. The same bans apply to it.
 - **The swap happens once.** If nothing is left, or the replacement later fails too, `promotion_id` becomes NULL and the collapse sticks. The write is a compare-and-set on the stored Promotion, so two requests can't both swap. A digest already sent is unaffected.
@@ -350,8 +352,9 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 
 - **`GET /public/showcase` (`app/routers/public.py`) is the only user-facing list with no auth-dependent behaviour.** Explore is reachable signed out but branches on the user; the showcase never does. Never add a user-scoped field to its response.
 - **It returns `SHOWCASE_EVENT_COUNT` (6) top-quality events this week** (`SHOWCASE_WINDOW_DAYS`). Landing renders only the first `LANDING_SHOWCASE_PLATE_COUNT` (3), as plates. A thin week widens to `SHOWCASE_FALLBACK_WINDOW_DAYS`. It is rate-limited by `RATE_LIMIT_PUBLIC` and cached in-process per locale.
-- **The SQL mirrors `_browse_sql_path`'s quality sort without any personalization.** The query is unlimited, because a LIMIT before the series collapse could drop a series' only surviving row.
+- **The SQL mirrors `_browse_sql_path`'s quality sort without any personalization.** The query is unlimited, because a LIMIT before the series collapse could drop a series' only surviving row. It selects only the columns the collapse and sort read, and only the six winners are hydrated.
 - **After `collapse_series_duplicates()`, Python re-sorts and slices.** The keys match the SQL `ORDER BY`: narrow window first, `quality_score` descending with nulls last, then `starts_at`. The collapse survivor isn't always the row SQL ranked first.
+- **A cache miss loads once.** Concurrent cold requests wait on `_showcase_lock` and read what the first one cached.
 
 ### Landing Counts
 

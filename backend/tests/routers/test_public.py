@@ -1,5 +1,6 @@
 """Tests for GET /public/showcase, GET /public/counts (app/routers/public.py)."""
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -21,24 +22,45 @@ def _agg_row(
     return row
 
 
+def _showcase_db(mock_db, events):
+    """Serve `events` to both showcase queries: the slim window rows, then
+    the hydration of the winners."""
+    mock_db.execute.return_value.all.return_value = [
+        SimpleNamespace(
+            id=e.id,
+            title_orig=e.title_orig,
+            starts_at=e.starts_at,
+            quality_score=e.classification.quality_score,
+            venue_name=e.venue_name,
+            linked_name=None,
+            linked_name_en=None,
+            linked_name_ru=None,
+        )
+        for e in events
+    ]
+    mock_db.scalars.return_value = _scalars_result(events)
+
+
 class TestShowcase:
     @pytest.mark.asyncio
     async def test_one_query_warms_every_locale(self, mock_db, make_event, make_request):
         from app.routers.public import showcase
 
-        mock_db.scalars.return_value = _scalars_result([make_event(1, title="One")])
+        _showcase_db(mock_db, [make_event(1, title="One")])
 
         await showcase(request=make_request(), locale="en", db=mock_db)
         await showcase(request=make_request(), locale="ru", db=mock_db)
         await showcase(request=make_request(), locale="et", db=mock_db)
 
+        assert mock_db.execute.call_count == 1
         assert mock_db.scalars.call_count == 1
 
     @pytest.mark.asyncio
     async def test_returns_serialized_events(self, mock_db, make_event, make_request):
         from app.routers.public import showcase
 
-        mock_db.scalars.return_value = _scalars_result(
+        _showcase_db(
+            mock_db,
             [make_event(1, title="Event One"), make_event(2, title="Event Two")]
         )
 
@@ -50,7 +72,7 @@ class TestShowcase:
     async def test_no_user_signals_hydrated(self, mock_db, make_event, make_request):
         from app.routers.public import showcase
 
-        mock_db.scalars.return_value = _scalars_result([make_event(1)])
+        _showcase_db(mock_db, [make_event(1)])
 
         result = await showcase(request=make_request(), locale="en", db=mock_db)
 
@@ -61,17 +83,18 @@ class TestShowcase:
     async def test_empty_returns_empty_list(self, mock_db, make_request):
         from app.routers.public import showcase
 
-        mock_db.scalars.return_value = _scalars_result([])
+        _showcase_db(mock_db, [])
 
         result = await showcase(request=make_request(), locale="en", db=mock_db)
 
         assert result["events"] == []
+        mock_db.scalars.assert_not_awaited()  # nothing to hydrate
 
     @pytest.mark.asyncio
     async def test_invalid_locale_falls_back(self, mock_db, make_event, make_request):
         from app.routers.public import showcase
 
-        mock_db.scalars.return_value = _scalars_result([make_event(1)])
+        _showcase_db(mock_db, [make_event(1)])
 
         # A bogus locale must not raise — it degrades to the default locale.
         result = await showcase(request=make_request(), locale="zz", db=mock_db)
@@ -88,13 +111,15 @@ class TestShowcase:
         narrow-then-fallback shape."""
         from app.routers.public import showcase
 
-        mock_db.scalars.return_value = _scalars_result(
+        _showcase_db(
+            mock_db,
             [make_event(1, title="Event One"), make_event(2, title="Event Two")]
         )
 
         result = await showcase(request=make_request(), locale="en", db=mock_db)
 
         assert len(result["events"]) == 2
+        assert mock_db.execute.await_count == 1
         assert mock_db.scalars.await_count == 1
 
     @pytest.mark.asyncio
@@ -104,7 +129,8 @@ class TestShowcase:
         from app.constants.events import SHOWCASE_EVENT_COUNT
         from app.routers.public import showcase
 
-        mock_db.scalars.return_value = _scalars_result(
+        _showcase_db(
+            mock_db,
             [
                 make_event(i, title=f"Event {i}")
                 for i in range(1, SHOWCASE_EVENT_COUNT + 1)
@@ -114,6 +140,7 @@ class TestShowcase:
         result = await showcase(request=make_request(), locale="en", db=mock_db)
 
         assert len(result["events"]) == SHOWCASE_EVENT_COUNT
+        assert mock_db.execute.await_count == 1
         assert mock_db.scalars.await_count == 1
 
     @pytest.mark.asyncio
@@ -140,7 +167,7 @@ class TestShowcase:
             venue_name="Kanuti Gildi SAAL",
             starts_at=datetime(2026, 9, 10, 19, 0, 0, tzinfo=timezone.utc),
         )
-        mock_db.scalars.return_value = _scalars_result([earlier, later])
+        _showcase_db(mock_db, [earlier, later])
 
         result = await showcase(request=make_request(), locale="en", db=mock_db)
 
@@ -391,3 +418,72 @@ class TestCounts:
         await counts(request=make_request(), locale="ru", db=mock_db)
 
         assert mock_db.execute.await_count == 2
+
+
+class TestShowcaseRealDb:
+    """The slim window query, collapse and winner hydration against Postgres.
+    Dates sit in 2090 so nothing else in the database falls in the window."""
+
+    NOW = datetime(2090, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    async def _event(self, db, n, *, quality, days, title=None, venue=None):
+        from datetime import timedelta
+
+        from app.models.models import Event, EventClassification
+
+        ev = Event(
+            slug=f"showcase-{n}-{id(db)}",
+            title_orig=title or f"Showcase {n}",
+            starts_at=self.NOW + timedelta(days=days),
+            venue_name=None if venue else f"Hall {n}",
+            venue_id=venue.id if venue else None,
+            status="published",
+        )
+        db.add(ev)
+        await db.flush()
+        db.add(EventClassification(event_id=ev.id, categories=["music"], vibes=[], quality_score=quality))
+        await db.flush()
+        return ev
+
+    @pytest.mark.asyncio
+    async def test_query_count_is_fixed_and_winners_ranked(self, db):
+        from app.constants.events import SHOWCASE_EVENT_COUNT
+        from app.routers.public import _load_showcase
+        from tests.conftest import count_statements
+
+        events = [
+            await self._event(db, i, quality=i / 20, days=1 + i % 3)
+            for i in range(SHOWCASE_EVENT_COUNT * 2)
+        ]
+        db.expunge_all()
+
+        with count_statements(db) as statements:
+            payloads = await _load_showcase(db, self.NOW)
+
+        # Window query, winner hydration, and its classification selectinload
+        # (no linked venues here, so the venue selectinload has nothing to load).
+        assert len(statements) == 3
+        expected = sorted(events, key=lambda e: -e.id)[:SHOWCASE_EVENT_COUNT]
+        assert [e["id"] for e in payloads["en"]["events"]] == [e.id for e in expected]
+
+    @pytest.mark.asyncio
+    async def test_venue_linked_series_collapses_to_earliest(self, db):
+        from app.models.models import Organizer, Venue
+        from app.routers.public import _load_showcase
+
+        org = Organizer(email=f"showcase-{id(db)}@example.com", name="Org")
+        db.add(org)
+        await db.flush()
+        venue = Venue(organizer_id=org.id, name="Kanuti Gildi SAAL")
+        db.add(venue)
+        await db.flush()
+        later = await self._event(db, 1, quality=0.9, days=3, title="Workshop", venue=venue)
+        earlier = await self._event(db, 2, quality=0.1, days=1, title="Workshop", venue=venue)
+        db.expunge_all()
+
+        payloads = await _load_showcase(db, self.NOW)
+
+        ids = [e["id"] for e in payloads["en"]["events"]]
+        assert ids == [earlier.id]
+        assert later.id not in ids
+        assert payloads["en"]["events"][0]["venue_name"] == "Kanuti Gildi SAAL"

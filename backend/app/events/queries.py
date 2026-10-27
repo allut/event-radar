@@ -1,8 +1,9 @@
 """Event query predicates and series identity shared by the feed, publish gate,
 claims and dedup — the one home for "which events count" definitions."""
 
+from collections.abc import Callable, Sequence
 from datetime import date, datetime, timedelta
-from typing import Any
+from typing import Any, Protocol, TypeVar, cast
 
 from sqlalchemy import Select, and_, ColumnElement, exists, false, func, or_, select, true
 from sqlalchemy.orm import aliased, selectinload
@@ -135,9 +136,27 @@ def serialize_event_series_key(key: tuple[str, str]) -> str:
     return f"{title_key}\x1f{venue_key}"
 
 
+class SeriesInstance(Protocol):
+    """What ``collapse_series_duplicates`` reads: an Event, or a slim row
+    carrying the same three columns."""
+
+    @property
+    def id(self) -> int: ...
+
+    @property
+    def title_orig(self) -> str: ...
+
+    @property
+    def starts_at(self) -> datetime: ...
+
+
+_SeriesT = TypeVar("_SeriesT", bound=SeriesInstance)
+
+
 def collapse_series_duplicates(
-    event_rows: list[Event],
-) -> tuple[list[Event], dict[int, tuple[str, str]]]:
+    event_rows: Sequence[_SeriesT],
+    venue_name_of: Callable[[_SeriesT], str | None] | None = None,
+) -> tuple[list[_SeriesT], dict[int, tuple[str, str]]]:
     """One representative per event_series_key — nearest (earliest) starts_at
     wins; ties broken by event id, so the surviving instance is deterministic
     across builds even when the underlying query has no ORDER BY.
@@ -154,10 +173,18 @@ def collapse_series_duplicates(
     Returns the collapsed events plus their series keys (each key computed
     exactly once here) so callers building `candidate_series_key` don't
     recompute `event_series_key()` a second time over the same rows.
+
+    ``venue_name_of`` resolves a slim row's venue name; omitted, each row is
+    an Event and its linked venue is read.
     """
-    earliest_by_key: dict[tuple[str, str], Event] = {}
+    earliest_by_key: dict[tuple[str, str], _SeriesT] = {}
     for event in event_rows:
-        key = event_series_key(event.title_orig, resolve_venue_name(event))
+        venue_name = (
+            venue_name_of(event)
+            if venue_name_of is not None
+            else resolve_venue_name(cast(Event, event))
+        )
+        key = event_series_key(event.title_orig, venue_name)
         current = earliest_by_key.get(key)
         if current is None or (event.starts_at, event.id) < (
             current.starts_at,

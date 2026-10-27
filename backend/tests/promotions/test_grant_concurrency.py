@@ -24,14 +24,14 @@ async def test_two_concurrent_grants_for_the_last_cap_day_leave_exactly_one(
 ) -> None:
     # Widen the check-then-insert gap so an unserialized pair would both pass
     # the cap check before either inserts.
-    real_full_days = grant_module.full_days
+    real_validate_grants = grant_module.validate_grants
 
-    async def slow_full_days(*args, **kwargs):
-        result = await real_full_days(*args, **kwargs)
+    async def slow_validate_grants(*args, **kwargs):
+        result = await real_validate_grants(*args, **kwargs)
         await asyncio.sleep(0.3)
         return result
 
-    monkeypatch.setattr(grant_module, "full_days", slow_full_days)
+    monkeypatch.setattr(grant_module, "validate_grants", slow_validate_grants)
     created_events: list[int] = []
     created_orgs: list[int] = []
     day = (d(20), d(22))
@@ -98,14 +98,14 @@ async def test_two_concurrent_grants_for_the_last_cap_day_leave_exactly_one(
 async def test_a_grant_and_an_edit_racing_for_the_last_cap_day_leave_exactly_one(
     engine, sessionmaker_for, monkeypatch
 ) -> None:
-    real_full_days = grant_module.full_days
+    real_validate_grants = grant_module.validate_grants
 
-    async def slow_full_days(*args, **kwargs):
-        result = await real_full_days(*args, **kwargs)
+    async def slow_validate_grants(*args, **kwargs):
+        result = await real_validate_grants(*args, **kwargs)
         await asyncio.sleep(0.3)
         return result
 
-    monkeypatch.setattr(grant_module, "full_days", slow_full_days)
+    monkeypatch.setattr(grant_module, "validate_grants", slow_validate_grants)
     created_events: list[int] = []
     created_orgs: list[int] = []
 

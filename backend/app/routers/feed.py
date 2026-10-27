@@ -94,8 +94,20 @@ async def get_feed(
         }
 
     event_ids = [e.id for e in events]
-    sigs = await load_user_signals(db, current_user.id, event_ids)
-    reported = await load_user_reported_events(db, current_user.id, event_ids)
+    # Sponsored slot (#607): a separate card after the five, from the stored
+    # pick re-gated now. The five never depend on it; its event joins the
+    # five's signal batch.
+    picked = None
+    if settings.PROMOTIONS_SLOTS_ENABLED and not is_stale:
+        slot = await resolve_feed_slot(
+            db, current_user.id, now, event_ids, request.headers.get("user-agent")
+        )
+        if slot.swapped:
+            await db.commit()
+        picked = slot.result
+    signal_ids = event_ids + ([picked.event.id] if picked is not None else [])
+    sigs = await load_user_signals(db, current_user.id, signal_ids)
+    reported = await load_user_reported_events(db, current_user.id, signal_ids)
     effective_locale = resolve_locale_param(locale, current_user.locale)
 
     response: dict = {
@@ -113,28 +125,15 @@ async def get_feed(
         "is_stale": is_stale,
     }
 
-    # Sponsored slot (#607): a separate card after the five, from the stored
-    # pick re-gated now. The five above never depend on it.
-    if settings.PROMOTIONS_SLOTS_ENABLED and not is_stale:
-        slot = await resolve_feed_slot(
-            db, current_user.id, now, event_ids, request.headers.get("user-agent")
-        )
-        if slot.swapped:
-            await db.commit()
-        if slot.result is not None:
-            picked = slot.result
-            slot_sigs = await load_user_signals(db, current_user.id, [picked.event.id])
-            slot_reported = await load_user_reported_events(
-                db, current_user.id, [picked.event.id]
-            )
-            response["sponsored_slot"] = {
-                **serialize_event(
-                    picked.event,
-                    locale=effective_locale,
-                    feedback_by_event=slot_sigs,
-                    reported_event_ids=slot_reported,
-                ),
-                "advertiser": picked.promotion.advertiser_legal_name,
-                "explanation": PROMOTION_EXPLANATION_DAILY5,
-            }
+    if picked is not None:
+        response["sponsored_slot"] = {
+            **serialize_event(
+                picked.event,
+                locale=effective_locale,
+                feedback_by_event=sigs,
+                reported_event_ids=reported,
+            ),
+            "advertiser": picked.promotion.advertiser_legal_name,
+            "explanation": PROMOTION_EXPLANATION_DAILY5,
+        }
     return response

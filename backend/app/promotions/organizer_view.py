@@ -187,14 +187,14 @@ async def promotions_list(
     today = tallinn_today(now)
     requests = (
         await db.scalars(
-            select(PromotionRequest).where(PromotionRequest.organizer_id == organizer.id)
+            select(PromotionRequest).where(
+                PromotionRequest.organizer_id == organizer.id,
+                PromotionRequest.status.in_(
+                    (PROMOTION_REQUEST_STATUS_PENDING, PROMOTION_REQUEST_STATUS_DECLINED)
+                ),
+            )
         )
     ).all()
-    requests = [
-        r
-        for r in requests
-        if r.status in (PROMOTION_REQUEST_STATUS_PENDING, PROMOTION_REQUEST_STATUS_DECLINED)
-    ]
     promotions = [
         p
         for p in (

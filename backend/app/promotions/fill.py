@@ -198,9 +198,10 @@ def explore_seed(user_id: int | None, today: date) -> str:
     return f"{user_id}:{today.isoformat()}"
 
 
-def rotation_order(results: Sequence[GateResult], seed: str) -> list[GateResult]:
-    """Equal share, no weighting: order by hash(seed, promotion id)."""
-    return sorted(
+def rotation_pick(results: Sequence[GateResult], seed: str) -> GateResult:
+    """Equal share, no weighting: the lowest hash(seed, promotion id) wins.
+    `results` must be non-empty."""
+    return min(
         results,
         key=lambda r: hashlib.sha256(f"{seed}:{r.promotion.id}".encode()).digest(),
     )

@@ -19,14 +19,14 @@ from tests.promotions.fakes import FakePaymentGateway, FakeRegistry
 async def test_two_simultaneous_checkouts_for_the_last_cap_day_leave_exactly_one(
     engine, sessionmaker_for, monkeypatch
 ) -> None:
-    real_full_days = grant_module.full_days
+    real_validate_grants = grant_module.validate_grants
 
-    async def slow_full_days(*args, **kwargs):
-        result = await real_full_days(*args, **kwargs)
+    async def slow_validate_grants(*args, **kwargs):
+        result = await real_validate_grants(*args, **kwargs)
         await asyncio.sleep(0.3)  # widen the check-then-insert gap
         return result
 
-    monkeypatch.setattr(grant_module, "full_days", slow_full_days)
+    monkeypatch.setattr(grant_module, "validate_grants", slow_validate_grants)
     gateway, registry = FakePaymentGateway(), FakeRegistry()
     registry.found("12345678", "Acme OÜ")
     created_events: list[int] = []

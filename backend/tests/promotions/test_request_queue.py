@@ -93,6 +93,32 @@ async def test_queue_flags_requests_whose_dates_are_sold_out(client, db, make) -
 
 
 @pytest.mark.asyncio
+async def test_queue_reasons_cost_a_fixed_number_of_queries(db, make) -> None:
+    from app.promotions.request_queue import list_requests
+    from tests.conftest import count_statements
+
+    async def queue_statements() -> tuple[int, dict[int, str | None]]:
+        with count_statements(db) as statements:
+            items, _ = await list_requests(
+                db, status="pending", limit=50, offset=0, now=NOW
+            )
+        return len(statements), {i["id"]: i["not_eligible_reason"] for i in items}
+
+    clash = await make_request(db, make, start=10, end=14)
+    clash_event = await db.get(Event, clash.event_id)
+    await grant_promotion(db, clash_event, GrantRequest(d(12), d(16), "X OÜ", "12345678"), NOW)
+    await make_request(db, make, start=20, end=24)
+    few, reasons = await queue_statements()
+    for _ in range(4):
+        await make_request(db, make, start=20, end=24)
+    many, more_reasons = await queue_statements()
+
+    assert few == many
+    assert reasons[clash.id] == "overlap"
+    assert list(more_reasons.values()).count(None) == 5
+
+
+@pytest.mark.asyncio
 async def test_grant_creates_promotion_marks_granted_and_audits(client, db, make) -> None:
     req = await make_request(db, make)
     resp = await client.post(

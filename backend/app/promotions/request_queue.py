@@ -16,7 +16,7 @@ from app.constants.promotions import (
     PROMOTION_REQUEST_STATUS_PENDING,
 )
 from app.models.models import Event, Organizer, PromotionRequest
-from app.promotions.grant import validate_grant
+from app.promotions.grant import validate_grants
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.requests import promotable_event_ids
 from app.promotions.views import price_breakdown
@@ -59,22 +59,27 @@ async def list_requests(
         )
     ).all()
     events = [e for _, e, _ in rows]
-    owners = await resolve_owner_ids(db, events) if pending else {}
-    promotable = await promotable_event_ids(db, events, now) if pending else set()
+    reasons: dict[int, str | None] = {}
+    if pending:
+        owners = await resolve_owner_ids(db, events)
+        promotable = await promotable_event_ids(db, events, now)
+        to_validate = []
+        for request, event, _ in rows:
+            if event.id not in promotable:
+                reasons[request.id] = PROMOTION_ERROR_NOT_PROMOTABLE
+            elif owners.get(event.id) != request.organizer_id:
+                reasons[request.id] = PROMOTION_NOT_SHOWING_NOT_OWNED
+            else:
+                to_validate.append((request, event))
+        violations_per_window = await validate_grants(
+            db, [(event, r.start_date, r.end_date) for r, event in to_validate], now
+        )
+        for (request, _), violations in zip(to_validate, violations_per_window):
+            reasons[request.id] = violations[0].code if violations else None
 
     items: list[dict] = []
     for request, event, organizer in rows:
-        reason: str | None = None
-        if pending:
-            if event.id not in promotable:
-                reason = PROMOTION_ERROR_NOT_PROMOTABLE
-            elif owners.get(event.id) != request.organizer_id:
-                reason = PROMOTION_NOT_SHOWING_NOT_OWNED
-            else:
-                violations = await validate_grant(
-                    db, event, request.start_date, request.end_date, now
-                )
-                reason = violations[0].code if violations else None
+        reason = reasons.get(request.id)
         days = (request.end_date - request.start_date).days + 1
         items.append(
             {

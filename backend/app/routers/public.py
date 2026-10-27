@@ -8,11 +8,13 @@ browse.py::_browse_sql_path, minus every user/feedback/persona concern, plus a
 symmetric date window (see _showcase_stmt).
 """
 
+import asyncio
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Row, Select, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app._generated.shared_constants import DEFAULT_USER_LOCALE, VALID_LOCALES
@@ -39,13 +41,16 @@ from app.events.queries import (
     select_events_with_classification,
 )
 from app.events.localize import resolve_title
-from app.events.venue import resolve_venue_name
+from app.events.venue import resolve_venue_name, resolve_venue_name_from_row
 
 router = APIRouter(prefix="/public", tags=["public"])
 
 
-def _showcase_stmt(now: datetime) -> Select[tuple[Event]]:
-    """Top-quality events within SHOWCASE_FALLBACK_WINDOW_DAYS, preferring ones
+_ShowcaseRow = tuple[int, str, datetime, float | None, str | None, str, str | None, str | None]
+
+
+def _showcase_stmt(now: datetime) -> Select[_ShowcaseRow]:
+    """Slim rows of the top-quality events within SHOWCASE_FALLBACK_WINDOW_DAYS, preferring ones
     within the narrower SHOWCASE_WINDOW_DAYS ("this week") — a single query
     replacing the old narrow-then-fallback two-query shape (the narrow result
     is always a subset of this wider one: same filters, same tie-break order,
@@ -63,16 +68,25 @@ def _showcase_stmt(now: datetime) -> Select[tuple[Event]]:
     duplicates (``collapse_series_duplicates``) before slicing to
     SHOWCASE_EVENT_COUNT, so a SQL-level LIMIT here could discard a series'
     only surviving instance before the collapse ever saw it. Still bounded by
-    the fallback window and public_event_filter() — the same shape of
-    unbounded-but-window-bounded load ``_load_candidate_events`` already does
-    for the Daily 5 builder.
+    the fallback window and public_event_filter(). Only the columns the
+    collapse and sort read come back; ``_load_showcase`` hydrates the winners.
     """
     in_narrow_window = (Event.starts_at >= now - timedelta(days=SHOWCASE_WINDOW_DAYS)) & (
         Event.starts_at < now + timedelta(days=SHOWCASE_WINDOW_DAYS)
     )
     return (
-        select_events_with_classification()
+        select(
+            Event.id,
+            Event.title_orig,
+            Event.starts_at,
+            EventClassification.quality_score,
+            Event.venue_name,
+            Venue.name.label("linked_name"),
+            Venue.name_en.label("linked_name_en"),
+            Venue.name_ru.label("linked_name_ru"),
+        )
         .join(Event.classification)
+        .outerjoin(Event.venue)
         .where(
             public_event_filter(),
             event_not_ended_filter(now),
@@ -94,32 +108,70 @@ def _showcase_stmt(now: datetime) -> Select[tuple[Event]]:
 # per-request 60-day hydrate+sort is not warranted for a grid that only
 # meaningfully changes a few times a day (see docstring below).
 _showcase_cache: dict[str, tuple[float, dict]] = {}
+# One load per cache miss: concurrent cold requests wait for the first one's
+# result instead of each running the window query (same idea as
+# browse.py::_score_cache_lock, with a single key).
+_showcase_lock = asyncio.Lock()
+
+
+@dataclass(frozen=True, slots=True)
+class _ShowcaseCandidate:
+    id: int
+    title_orig: str
+    starts_at: datetime
+    quality_score: float | None
+    venue_name: str | None
+
+    @classmethod
+    def from_row(cls, row: Row[_ShowcaseRow]) -> "_ShowcaseCandidate":
+        return cls(
+            id=row.id,
+            title_orig=row.title_orig,
+            starts_at=row.starts_at,
+            quality_score=row.quality_score,
+            venue_name=resolve_venue_name_from_row(
+                row.venue_name, row.linked_name, row.linked_name_en, row.linked_name_ru
+            ),
+        )
 
 
 async def _load_showcase(db: AsyncSession, now: datetime) -> dict[str, dict]:
-    """One window query + collapse + sort, serialized for every locale — the
-    ranking is locale-independent, so loading per locale would repeat the
-    same 60-day hydrate once per cold cache entry."""
-    events = list((await db.scalars(_showcase_stmt(now))).all())
-    collapsed, _ = collapse_series_duplicates(events)
+    """One slim window query, collapse + sort in Python, then hydrate only
+    the winners — serialized for every locale, since the ranking is
+    locale-independent."""
+    candidates = [
+        _ShowcaseCandidate.from_row(row)
+        for row in (await db.execute(_showcase_stmt(now))).all()
+    ]
+    collapsed, _ = collapse_series_duplicates(
+        candidates, venue_name_of=lambda c: c.venue_name
+    )
 
     narrow_start = now - timedelta(days=SHOWCASE_WINDOW_DAYS)
     narrow_end = now + timedelta(days=SHOWCASE_WINDOW_DAYS)
 
-    def _sort_key(event: Event) -> tuple[int, bool, float, datetime]:
-        in_narrow_window = narrow_start <= event.starts_at < narrow_end
-        quality_score = (
-            event.classification.quality_score if event.classification else None
-        )
+    def _sort_key(c: _ShowcaseCandidate) -> tuple[int, bool, float, datetime]:
+        in_narrow_window = narrow_start <= c.starts_at < narrow_end
         return (
             0 if in_narrow_window else 1,
-            quality_score is None,
-            -(quality_score or 0),
-            event.starts_at,
+            c.quality_score is None,
+            -(c.quality_score or 0),
+            c.starts_at,
         )
 
     collapsed.sort(key=_sort_key)
-    events = collapsed[:SHOWCASE_EVENT_COUNT]
+    winner_ids = [c.id for c in collapsed[:SHOWCASE_EVENT_COUNT]]
+    events: list[Event] = []
+    if winner_ids:
+        by_id = {
+            e.id: e
+            for e in (
+                await db.scalars(
+                    select_events_with_classification().where(Event.id.in_(winner_ids))
+                )
+            ).all()
+        }
+        events = [by_id[eid] for eid in winner_ids if eid in by_id]
     return {
         loc: {"events": [serialize_event(e, locale=loc) for e in events]}
         for loc in VALID_LOCALES
@@ -160,14 +212,19 @@ async def showcase(
     locale = resolve_locale_param(locale, DEFAULT_USER_LOCALE)
 
     cached = _showcase_cache.get(locale)
-    now_monotonic = time.monotonic()
-    if cached is not None and now_monotonic - cached[0] < PUBLIC_COUNTS_CACHE_TTL_SECONDS:
+    if cached is not None and time.monotonic() - cached[0] < PUBLIC_COUNTS_CACHE_TTL_SECONDS:
         return cached[1]
 
-    now = datetime.now(TALLINN_TZ)
-    payloads = await _load_showcase(db, now)
-    for loc, loc_payload in payloads.items():
-        _showcase_cache[loc] = (now_monotonic, loc_payload)
+    async with _showcase_lock:
+        # Re-check: the request holding the lock may have filled the cache.
+        cached = _showcase_cache.get(locale)
+        now_monotonic = time.monotonic()
+        if cached is not None and now_monotonic - cached[0] < PUBLIC_COUNTS_CACHE_TTL_SECONDS:
+            return cached[1]
+        now = datetime.now(TALLINN_TZ)
+        payloads = await _load_showcase(db, now)
+        for loc, loc_payload in payloads.items():
+            _showcase_cache[loc] = (now_monotonic, loc_payload)
     return payloads[locale]
 
 

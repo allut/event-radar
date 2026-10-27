@@ -84,7 +84,7 @@ from app.promotions.fill import (
     explore_seed,
     gate_closed_reason,
     load_visible,
-    rotation_order,
+    rotation_pick,
     surviving,
     without_viewer_excluded,
 )
@@ -625,7 +625,7 @@ async def explore_events(
     if offset == 0:
         response = await serve(limit - 1, 0)
         response["limit"] = limit
-        picked = rotation_order(survivors, explore_seed(user_id, tallinn_today(now)))[0]
+        picked = rotation_pick(survivors, explore_seed(user_id, tallinn_today(now)))
         bump(picked.promotion.id, tallinn_today(now), PROMOTION_STAT_EXPLORE_SERVED)
         sigs, reported = await _load_signals_and_reported(db, user_id, [picked.event.id])
         response["sponsored_slot"] = {

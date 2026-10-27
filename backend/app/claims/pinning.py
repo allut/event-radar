@@ -103,30 +103,25 @@ async def bulk_resolve_series_events(
     indexed query (``events.series_key``, trigger-maintained — migration
     0052) over the not-yet-ended events carrying any requested key, instead
     of one scan per claim. The earliest-starting match wins per key, same as
-    the single-claim lookup. Keys with no match are absent from the result."""
+    the single-claim lookup. Keys with no match are absent from the result.
+    DISTINCT ON keeps one row per key in SQL, so a daily series hydrates one
+    event rather than every future date."""
     if not series_keys:
         return {}
     now = datetime.now(TALLINN_TZ)
     candidates = (
-        (
-            await db.execute(
-                select_events_with_classification()
-                .where(
-                    Event.series_key.in_(series_keys),
-                    event_not_ended_filter(now),
-                    series_claim_event_filter(),
-                )
-                .order_by(Event.starts_at)
+        await db.scalars(
+            select_events_with_classification()
+            .where(
+                Event.series_key.in_(series_keys),
+                event_not_ended_filter(now),
+                series_claim_event_filter(),
             )
+            .distinct(Event.series_key)
+            .order_by(Event.series_key, Event.starts_at, Event.id)
         )
-        .scalars()
-        .all()
-    )
-    matched: dict[str, Event] = {}
-    for event in candidates:
-        if event.series_key is not None:
-            matched.setdefault(event.series_key, event)
-    return matched
+    ).all()
+    return {event.series_key: event for event in candidates if event.series_key is not None}
 
 
 async def clear_claim_pins(db: AsyncSession, claim: Claim) -> list[int]:

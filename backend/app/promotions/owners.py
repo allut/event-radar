@@ -49,9 +49,9 @@ async def resolve_owner_ids(
             )
         )
     ).all()
-    publishers_by_event: dict[int, set[int]] = {}
+    events_by_publisher: dict[int, list[int]] = {}
     for event_id, publisher_id in publisher_rows:
-        publishers_by_event.setdefault(event_id, set()).add(publisher_id)
+        events_by_publisher.setdefault(publisher_id, []).append(event_id)
 
     series_events: dict[str, list[int]] = {}
     for event in unresolved:
@@ -62,7 +62,7 @@ async def resolve_owner_ids(
         ):
             series_events.setdefault(event.series_key, []).append(event.id)
 
-    publisher_ids = {p for ids in publishers_by_event.values() for p in ids}
+    publisher_ids = set(events_by_publisher)
     claims = (
         await db.execute(
             select(Claim.id, Claim.kind, Claim.organizer_id, Claim.publisher_id, Claim.event_series_key)
@@ -79,12 +79,8 @@ async def resolve_owner_ids(
     # Oldest claim wins when more than one covers the same event.
     for claim in claims:
         covered: list[int] = []
-        if claim.kind == CLAIM_KIND_PUBLISHER:
-            covered = [
-                event_id
-                for event_id, pids in publishers_by_event.items()
-                if claim.publisher_id in pids
-            ]
+        if claim.kind == CLAIM_KIND_PUBLISHER and claim.publisher_id is not None:
+            covered = events_by_publisher.get(claim.publisher_id, [])
         elif claim.kind == CLAIM_KIND_SERIES and claim.event_series_key is not None:
             covered = series_events.get(claim.event_series_key, [])
         for event_id in covered:

@@ -262,3 +262,38 @@ async def test_granting_never_touches_the_events_updated_at(db, make) -> None:
     await grant_promotion(db, ev, req(d(10), d(14)), NOW)
     await db.refresh(ev)
     assert ev.updated_at == before
+
+
+@pytest.mark.asyncio
+async def test_bulk_validation_keeps_an_overlong_window_from_widening_the_load(
+    db, make, monkeypatch
+) -> None:
+    from app.promotions import grant as grant_module
+    from app.promotions.grant import validate_grants
+
+    far = await make.event(
+        submitted_by=await make.organizer(),
+        starts_at=at_tallinn(2095, 1, 1, 19),
+        ends_at=at_tallinn(2095, 1, 31, 22),
+    )
+    await grant_promotion(db, far, req(date(2095, 1, 10), date(2095, 1, 14)), NOW)
+    long_ev = await make.event(submitted_by=await make.organizer())
+    await grant_promotion(db, long_ev, req(d(12), d(16)), NOW)
+    short_ev = await make.event(submitted_by=await make.organizer())
+    seen: list[tuple[str, date, date]] = []
+    real_tally = grant_module.tally_cap_days
+
+    def spy(rows, start, end, today):
+        rows = list(rows)
+        seen.extend(rows)
+        return real_tally(rows, start, end, today)
+
+    monkeypatch.setattr(grant_module, "tally_cap_days", spy)
+
+    long_found, short_found = await validate_grants(
+        db, [(long_ev, d(10), date(2096, 1, 1)), (short_ev, d(20), d(24))], NOW
+    )
+
+    assert PROMOTION_ERROR_OVERLAP in [v.code for v in long_found]
+    assert short_found == []
+    assert all(start.year == 2090 for _, start, _ in seen)  # 2095 never loaded

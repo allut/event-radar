@@ -1,6 +1,7 @@
 """Cap accounting: how many Promotions hold each Tallinn day, and the lock
 that makes a check-and-insert atomic."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -15,7 +16,7 @@ from app.constants.promotions import (
     PROMOTION_STATUS_PAID,
 )
 from app.models.models import Promotion
-from app.promotions.windows import window_dates
+from app.promotions.windows import window_dates, window_days
 
 
 @dataclass(frozen=True)
@@ -66,20 +67,38 @@ async def cap_days(
     )
     if exclude_promotion_id is not None:
         query = query.where(Promotion.id != exclude_promotion_id)
-    rows = (await db.execute(query)).all()
-    days = window_dates(start, end)
-    reserved = dict.fromkeys(days, 0)
-    paid = dict.fromkeys(days, 0)
+    rows = (await db.execute(query)).tuples().all()
+    return tally_cap_days(rows, start, end, today)
+
+
+def tally_cap_days(
+    rows: Iterable[tuple[str, date, date]], start: date, end: date, today: date
+) -> list[CapDay]:
+    """Per-day counts over [start, end] from holding Promotions'
+    (status, start_date, end_date). A difference array keeps it linear in
+    rows plus days; rows outside the window are clipped away."""
+    n = window_days(start, end)
+    reserved = [0] * (n + 1)
+    paid = [0] * (n + 1)
     for status, p_start, p_end in rows:
-        for day in days:
-            if p_start <= day <= p_end:
-                reserved[day] += 1
-                if status == PROMOTION_STATUS_PAID:
-                    paid[day] += 1
-    return [
-        CapDay(day, reserved[day], paid[day], paid[day] if day == today else 0)
-        for day in days
-    ]
+        lo, hi = max(p_start, start), min(p_end, end)
+        if lo > hi:
+            continue
+        i, j = (lo - start).days, (hi - start).days + 1
+        reserved[i] += 1
+        reserved[j] -= 1
+        if status == PROMOTION_STATUS_PAID:
+            paid[i] += 1
+            paid[j] -= 1
+    days: list[CapDay] = []
+    running_reserved = running_paid = 0
+    for k, day in enumerate(window_dates(start, end)):
+        running_reserved += reserved[k]
+        running_paid += paid[k]
+        days.append(
+            CapDay(day, running_reserved, running_paid, running_paid if day == today else 0)
+        )
+    return days
 
 
 async def full_days(
