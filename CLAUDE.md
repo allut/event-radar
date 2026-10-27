@@ -16,6 +16,7 @@ Deep-dive docs are not auto-loaded. Open the row's doc before editing what it co
 |---|---|
 | **Pipeline** — `docs/pipeline.md` | `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/ranking/`, `app/events/`, `app/publish.py`, `app/routers/{browse,public,feedback,feed,events,webhooks}.py` |
 | **Security** — `docs/security.md` | `app/main.py`, `app/rate_limit.py`, `app/auth/`, `app/routers/{auth,organizer_auth,admin_auth,unsubscribe,utils}.py`, `app/ingestion/http_client.py`, any new endpoint |
+| **Security audit state** — `docs/security-audit.md` | fixing or adding an audit finding |
 | **Backend ops** — `docs/backend-ops.md` | `render.yaml`, `frontend/wrangler.toml`, `frontend/public/_headers`, `frontend/functions/`, `app/routers/{admin,admin_auth,reports}.py`, `app/cleanup.py`, `backend/scripts/`, scheduled jobs, CI |
 | **Frontend** — `docs/frontend.md` | `frontend/src/{routes,components,hooks,lib,content}/`, `frontend/scripts/generate-icons.ts`, `shared/i18n/`, `app/email/` |
 | **SEO and prerender** — `docs/seo.md` | `frontend/scripts/prerender.ts`, `frontend/functions/api/{seo-audit,prerender-cadence}.ts`, `useSeoMeta`, `SeoTags/`, `frontend/src/lib/{structuredData,jsonLd,seoValidation,seoAudit*,prerender*,r2ChainState}.ts` |

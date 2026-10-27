@@ -133,6 +133,10 @@ async def test_field_validation(db, make) -> None:
     assert await refused_codes(
         db, ev, req(d(10), d(12), invoice_reference="INV-1")
     ) == [PROMOTION_ERROR_INVALID_INVOICE_REFERENCE]
+    # `$` with match() let a trailing newline through to the stored column.
+    assert await refused_codes(
+        db, ev, req(d(10), d(12), invoice_reference="ER-M-1\n")
+    ) == [PROMOTION_ERROR_INVALID_INVOICE_REFERENCE]
 
 
 @pytest.mark.asyncio

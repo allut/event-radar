@@ -139,7 +139,7 @@ async def mark_paid(
     if tallinn_today(now) >= promotion.start_date:
         raise _refuse(PROMOTION_ERROR_ALREADY_STARTED)
     reference = (invoice_reference or "").strip() or None
-    if reference is not None and not PROMOTION_INVOICE_REFERENCE_RE.match(reference):
+    if reference is not None and not PROMOTION_INVOICE_REFERENCE_RE.fullmatch(reference):
         raise _refuse(PROMOTION_ERROR_INVALID_INVOICE_REFERENCE)
     if reference is not None:
         promotion.invoice_reference = reference
@@ -179,7 +179,7 @@ def _field_violations(promotion: Promotion, diff: Mapping[str, Any]) -> list[Rul
     if reference is not None:
         if promotion.is_complimentary:
             found.append(RuleViolation(PROMOTION_ERROR_INVOICE_ON_COMPLIMENTARY))
-        elif not PROMOTION_INVOICE_REFERENCE_RE.match(reference):
+        elif not PROMOTION_INVOICE_REFERENCE_RE.fullmatch(reference):
             found.append(RuleViolation(PROMOTION_ERROR_INVALID_INVOICE_REFERENCE))
     return found
 

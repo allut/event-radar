@@ -14,6 +14,7 @@ These rules fail a check, so an audit skips hunting them where the guard reaches
 
 - **`backend/tests/test_route_guards.py` fails a route with no rate limit, no auth dependency, or the wrong track's dependency.** A route meant to be public goes in its `PUBLIC_ROUTES` on purpose.
 - **`backend/tests/routers/test_price_fields.py` fails a request-body `price_*` field that isn't `backend/app/routers/utils.py::PriceField`.** Bare floats overflow `Numeric(10,2)` into a 500.
+- **`backend/tests/test_regex_validators.py` fails a `^...$` pattern, a `match()` on a `$`-ended pattern, and a `fullmatch()` pattern using `\d` or `\w` without `re.ASCII`.** Each one lets a trailing newline or a Unicode digit past a validator.
 - **`backend/tests/test_csrf_middleware.py` and `backend/tests/test_security_headers.py` pin the Origin check and the API's response headers.**
 - **`frontend/src/lib/csp.test.ts` fails when an inline script's hash is missing from `frontend/public/_headers`.**
 - **`.github/workflows/dependency-audit.yml` runs `pip-audit` and `npm audit` on every push and weekly.** Both run locally too, since `pip-audit` is in `backend/requirements-dev.txt`.

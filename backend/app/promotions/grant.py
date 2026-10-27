@@ -96,7 +96,7 @@ def request_violations(request: GrantRequest) -> list[RuleViolation]:
     if request.invoice_reference:
         if request.is_complimentary:
             found.append(RuleViolation(PROMOTION_ERROR_INVOICE_ON_COMPLIMENTARY))
-        elif not PROMOTION_INVOICE_REFERENCE_RE.match(request.invoice_reference):
+        elif not PROMOTION_INVOICE_REFERENCE_RE.fullmatch(request.invoice_reference):
             found.append(RuleViolation(PROMOTION_ERROR_INVALID_INVOICE_REFERENCE))
     return found
 

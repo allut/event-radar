@@ -53,9 +53,9 @@ PROMOTION_MIN_LEAD_DAYS = 1
 # check-and-insert (the cap is global, so one key covers it).
 PROMOTION_CAP_LOCK_KEY = 6_000_597
 
-# Manual invoice references live in the ER-M- series.
+# Manual invoice references live in the ER-M- series. Callers use fullmatch.
 PROMOTION_INVOICE_PREFIX = "ER-M-"
-PROMOTION_INVOICE_REFERENCE_RE = re.compile(r"^ER-M-[A-Za-z0-9][A-Za-z0-9/_-]{0,39}$")
+PROMOTION_INVOICE_REFERENCE_RE = re.compile(r"ER-M-[A-Za-z0-9][A-Za-z0-9/_-]{0,39}")
 # Estonian business registry codes (Äriregister) are 8 ASCII digits. Callers
 # use fullmatch: `\d` would take Unicode digits and `$` a trailing newline.
 PROMOTION_REGISTRY_CODE_RE = re.compile(r"[0-9]{8}")
