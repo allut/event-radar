@@ -65,12 +65,6 @@ SCORE_WEIGHT_LOCALITY: float = 0.05
 SCORE_WEIGHT_ANON_RECENCY: float = 0.25
 SCORE_WEIGHT_ANON_QUALITY: float = 0.125
 SCORE_WEIGHT_ANON_LOCALITY: float = 0.0625
-# _time_slots_for_event() memoization cap (ranking/score.py) — bounds an lru_cache keyed
-# on distinct starts_at values so repeated calls across users scoring the same event
-# don't redo the astimezone conversion. Comfortably above the number of distinct
-# starts_at values in one DAILY_5_LOOKAHEAD_DAYS candidate window.
-TIME_SLOTS_CACHE_MAXSIZE = 4096
-
 # Chunk size for the bulk pg_insert(...).on_conflict_do_update(...) upserts in
 # build_daily_feeds (_persist_new_scores / _persist_daily_feeds). The Postgres
 # wire protocol caps bind parameters at 32767 (int16); with 4 params/row and a
