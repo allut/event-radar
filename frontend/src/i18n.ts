@@ -43,6 +43,13 @@ export function ti(key: string, locale: string, vars: Record<string, string>): s
   return str;
 }
 
+// Built once at module load: tn() runs per row per render (promotion lists).
+const PLURAL_RULES: Record<string, Intl.PluralRules> = {
+  [LOCALE_EN]: new Intl.PluralRules(LOCALE_EN),
+  [LOCALE_ET]: new Intl.PluralRules(LOCALE_ET),
+  [LOCALE_RU]: new Intl.PluralRules(LOCALE_RU),
+};
+
 /** Plural-aware ti(): picks `{key}_{category}` by the locale's plural rule
  * for `count` (Intl.PluralRules). Each locale's catalogue holds every
  * category its rule can return: `one`/`other` for en and et, plus
@@ -50,6 +57,6 @@ export function ti(key: string, locale: string, vars: Record<string, string>): s
  * locale-formatted count in it. */
 export function tn(key: string, locale: string, count: number, vars: Record<string, string>): string {
   const loc = locale in TRANSLATIONS ? locale : LOCALE_EN;
-  const category = new Intl.PluralRules(loc).select(count);
+  const category = PLURAL_RULES[loc].select(count);
   return ti(`${key}_${category}`, loc, vars);
 }

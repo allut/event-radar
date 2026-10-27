@@ -346,10 +346,22 @@ function dateTimeFormatter(
   options: Intl.DateTimeFormatOptions,
   tallinn = false,
 ): Intl.DateTimeFormat {
-  const key = tallinn ? `${localeCode}|${shapeKey}|tallinn` : `${localeCode}|${shapeKey}`;
+  return cachedDateTimeFormat(localeCode, shapeKey, options, tallinn ? TALLINN_TZ : undefined);
+}
+
+/** The cache behind every formatter here, for one outside utils.ts (ESLint
+ * bans a per-call `new Intl.*` elsewhere). `timeZone: 'UTC'` formats a bare
+ * YYYY-MM-DD day built with a `Z` suffix without shifting it. */
+export function cachedDateTimeFormat(
+  localeCode: string,
+  shapeKey: string,
+  options: Intl.DateTimeFormatOptions,
+  timeZone?: string,
+): Intl.DateTimeFormat {
+  const key = `${localeCode}|${shapeKey}|${timeZone ?? ''}`;
   let fmt = DATE_TIME_FORMATTERS.get(key);
   if (!fmt) {
-    fmt = new Intl.DateTimeFormat(localeCode, tallinn ? { ...options, timeZone: TALLINN_TZ } : options);
+    fmt = new Intl.DateTimeFormat(localeCode, timeZone ? { ...options, timeZone } : options);
     DATE_TIME_FORMATTERS.set(key, fmt);
   }
   return fmt;

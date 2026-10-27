@@ -8,7 +8,7 @@ import {
   PROMOTION_REGISTRY_CODE_LENGTH,
   type PromotionListStatus,
 } from '../constants/organizerPromotions';
-import { formatCount } from '../utils';
+import { cachedDateTimeFormat, formatCount } from '../utils';
 import { tn } from '../i18n';
 
 export interface PromotionPrice {
@@ -137,24 +137,28 @@ function utcDay(iso: string): Date {
   return new Date(`${iso}T00:00:00Z`);
 }
 
-function dayFormat(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
-  return new Intl.DateTimeFormat(toLocaleCode(locale), { ...options, timeZone: 'UTC' });
+const DTF_PROMO_DAY: Intl.DateTimeFormatOptions = { weekday: 'short', day: 'numeric', month: 'short' };
+const DTF_SHORT_DAY: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+const DTF_DAY_NUMBER: Intl.DateTimeFormatOptions = { day: 'numeric' };
+
+function dayFormat(locale: string, shapeKey: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  return cachedDateTimeFormat(toLocaleCode(locale), shapeKey, options, 'UTC');
 }
 
 /** "Sat, 24 Oct". */
 export function formatPromoDay(iso: string, locale: string): string {
-  return dayFormat(locale, { weekday: 'short', day: 'numeric', month: 'short' }).format(utcDay(iso));
+  return dayFormat(locale, 'promo-day', DTF_PROMO_DAY).format(utcDay(iso));
 }
 
 function formatShortDay(iso: string, locale: string): string {
-  return dayFormat(locale, { day: 'numeric', month: 'short' }).format(utcDay(iso));
+  return dayFormat(locale, 'promo-short-day', DTF_SHORT_DAY).format(utcDay(iso));
 }
 
 /** "12–18 Oct", "24 Oct – 2 Nov", or one day. */
 export function formatPromoRange(start: string, end: string, locale: string): string {
   if (start === end) return formatShortDay(start, locale);
   if (start.slice(0, 7) === end.slice(0, 7)) {
-    return `${dayFormat(locale, { day: 'numeric' }).format(utcDay(start))}–${formatShortDay(end, locale)}`;
+    return `${dayFormat(locale, 'promo-day-number', DTF_DAY_NUMBER).format(utcDay(start))}–${formatShortDay(end, locale)}`;
   }
   return `${formatShortDay(start, locale)} – ${formatShortDay(end, locale)}`;
 }
