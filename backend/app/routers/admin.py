@@ -1825,11 +1825,20 @@ async def admin_withdraw_all_promotions(
         async with AsyncSessionLocal() as db:
             outcome = await withdraw_all(db, now, gateway)
             emits = await _audit_withdrawals(db, outcome.withdrawn)
-            mails = [
-                (item.promotion, await db.get(Organizer, item.promotion.organizer_id),
-                 await db.get(Event, item.promotion.event_id))
-                for item in outcome.withdrawn
-            ]
+            promotions = [item.promotion for item in outcome.withdrawn]
+            organizers = {
+                o.id: o
+                for o in await db.scalars(
+                    select(Organizer).where(Organizer.id.in_({p.organizer_id for p in promotions}))
+                )
+            }
+            events = {
+                e.id: e
+                for e in await db.scalars(
+                    select(Event).where(Event.id.in_({p.event_id for p in promotions}))
+                )
+            }
+            mails = [(p, organizers.get(p.organizer_id), events.get(p.event_id)) for p in promotions]
             await db.commit()
             for emit in emits:
                 emit()

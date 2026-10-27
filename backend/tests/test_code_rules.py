@@ -62,6 +62,57 @@ def test_llm_calls_pass_a_prefetched_cache() -> None:
     assert hits == []
 
 
+_COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+
+
+def _awaits_db_in_loops(node: ast.AST, in_loop: bool = False) -> list[int]:
+    """Lines of an `await` on `db.<method>(...)`, or on a call taking `db`
+    positionally, that run once per item of a loop in the same function. A
+    loop's own iterable runs once, so it counts as outside the loop."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        in_loop = False
+    lines: list[int] = []
+    if in_loop and isinstance(node, ast.Await) and isinstance(node.value, ast.Call):
+        func, args = node.value.func, node.value.args
+        on_db = isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id == "db"
+        if on_db or any(isinstance(a, ast.Name) and a.id == "db" for a in args):
+            lines.append(node.lineno)
+    if isinstance(node, (ast.For, ast.AsyncFor)):
+        once: list[ast.AST] = [node.iter]
+    elif isinstance(node, _COMPREHENSIONS):
+        once = [node.generators[0].iter]
+    elif isinstance(node, ast.While):
+        once = []
+    else:
+        for child in ast.iter_child_nodes(node):
+            lines += _awaits_db_in_loops(child, in_loop)
+        return lines
+    for child in ast.iter_child_nodes(node):
+        if child in once:
+            lines += _awaits_db_in_loops(child, in_loop)
+        elif isinstance(child, ast.comprehension) and child.iter in once:
+            lines += _awaits_db_in_loops(child.iter, in_loop)
+            for part in (child.target, *child.ifs):
+                lines += _awaits_db_in_loops(part, True)
+        else:
+            lines += _awaits_db_in_loops(child, True)
+    return lines
+
+
+def test_routers_query_outside_loops() -> None:
+    """A router awaits no `db` query, and no helper taking `db`, per loop item.
+
+    A request's query count stays fixed whatever the row count: load with one
+    `WHERE col IN (...)` before the loop and look rows up in a dict inside it.
+    """
+    hits = [
+        f"{_rel(path)}:{line}"
+        for path in sorted((APP_DIR / "routers").glob("*.py"))
+        for line in _awaits_db_in_loops(ast.parse(path.read_text(encoding="utf-8")))
+    ]
+    assert hits == []
+
+
 def _is_str_literal(node: ast.expr) -> bool:
     return isinstance(node, ast.JoinedStr) or (
         isinstance(node, ast.Constant) and isinstance(node.value, str)
