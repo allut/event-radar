@@ -183,19 +183,35 @@ async def test_aggregate_keeps_last_value_for_snapshot_fields(monkeypatch):
 async def test_dedup_pass_drain_now_no_sleep_aggregated_capped(monkeypatch):
     sleep = AsyncMock()
     monkeypatch.setattr("app.ingestion.jobs.asyncio.sleep", sleep)
+    # Every pass clears some pairs, so the drain runs to its cap.
     monkeypatch.setattr(
         "app.ingestion.jobs.dedup_pass",
-        AsyncMock(return_value={"total": 100, "deferred_pairs": 5}),
+        AsyncMock(
+            side_effect=[
+                {"total": 100, "deferred_pairs": LLM_BACKLOG_MAX_DRAIN_PASSES + 1 - i}
+                for i in range(LLM_BACKLOG_MAX_DRAIN_PASSES)
+            ]
+        ),
     )
 
     result = await dedup_pass_drain_now()
 
     sleep.assert_not_awaited()
     assert result["passes"] == LLM_BACKLOG_MAX_DRAIN_PASSES
-    assert result["deferred_pairs"] == 5 * LLM_BACKLOG_MAX_DRAIN_PASSES
     # snapshot fields (recomputed each pass over the whole corpus) report the
     # last pass's value, not a sum across passes
     assert result["total"] == 100
+
+
+@pytest.mark.asyncio
+async def test_dedup_pass_drain_now_stops_when_a_pass_makes_no_headway(monkeypatch):
+    run = AsyncMock(return_value={"total": 100, "deferred_pairs": 5})
+    monkeypatch.setattr("app.ingestion.jobs.dedup_pass", run)
+
+    result = await dedup_pass_drain_now()
+
+    assert result["passes"] == 2
+    assert run.await_count == 2
 
 
 @pytest.mark.asyncio

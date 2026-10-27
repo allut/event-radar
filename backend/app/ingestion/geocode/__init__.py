@@ -267,6 +267,9 @@ async def geocode_pending(db: AsyncSession) -> dict:
             .where(
                 Event.venue_address.is_not(None),
                 Event.lat.is_(None),
+                # An ended event's map pin is never shown again; retrying it
+                # forever would spend this run's slots and Nominatim quota.
+                event_not_ended_filter(now),
                 or_(
                     Event.geocode_attempted_at.is_(None),
                     Event.geocode_attempted_at < due_before,

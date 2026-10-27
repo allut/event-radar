@@ -11,6 +11,7 @@ import http
 import ipaddress
 import logging
 import socket
+import threading
 import time
 from collections.abc import Callable, Coroutine
 from datetime import UTC
@@ -45,6 +46,7 @@ from app.constants.http import (
 )
 from app.constants.security import (
     ALLOWED_SOURCE_HOSTS,
+    DNS_RESOLVE_CACHE_MAX_ENTRIES,
     DNS_RESOLVE_CACHE_TTL_SECONDS,
     SITE_LOCAL_IPV6_CIDR,
     URL_RENDER_FORBIDDEN_RE,
@@ -344,13 +346,13 @@ def host_is_allowed(hostname: str | None) -> bool:
 
 # host -> (verdict, expires_at monotonic time). A source's event batch shares
 # 1-4 hostnames, so this turns O(N_new) redundant getaddrinfo() calls per
-# ingest run into effectively O(distinct hosts). Not thread-safe against a
-# torn read/write under true multi-threading, but this process is single
-# event-loop asyncio (each caller reaches this via asyncio.to_thread from the
-# same loop), so a stale-by-one-TTL read is the only realistic race — no worse
-# than the TOCTOU window already documented below.
+# ingest run into effectively O(distinct hosts). Callers reach this through
+# asyncio.to_thread, and sources ingest concurrently, so writes and the
+# capped eviction happen under _dns_verdict_lock. A read outside it can only
+# be stale by one TTL — no worse than the TOCTOU window documented below.
 _SITE_LOCAL_IPV6 = ipaddress.ip_network(SITE_LOCAL_IPV6_CIDR)
 _dns_verdict_cache: dict[str | None, tuple[bool, float]] = {}
+_dns_verdict_lock = threading.Lock()
 
 
 def resolves_to_private_ip(hostname: str | None) -> bool:
@@ -400,7 +402,11 @@ def resolves_to_private_ip(hostname: str | None) -> bool:
         if not infos:
             verdict = True
 
-    _dns_verdict_cache[hostname] = (verdict, now + DNS_RESOLVE_CACHE_TTL_SECONDS)
+    with _dns_verdict_lock:
+        _dns_verdict_cache.pop(hostname, None)
+        if len(_dns_verdict_cache) >= DNS_RESOLVE_CACHE_MAX_ENTRIES:
+            _dns_verdict_cache.pop(next(iter(_dns_verdict_cache)))
+        _dns_verdict_cache[hostname] = (verdict, now + DNS_RESOLVE_CACHE_TTL_SECONDS)
     return verdict
 
 

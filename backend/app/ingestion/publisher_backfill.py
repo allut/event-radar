@@ -21,7 +21,7 @@ from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.constants.core import TALLINN_TZ
+from app.constants.core import SQL_IN_CHUNK_SIZE, TALLINN_TZ
 from app.constants.events import EVENT_STATUS_PUBLISHED
 from app.constants.http import HTTP_TIMEOUT_SECONDS
 from app.constants.ingestion import (
@@ -65,26 +65,27 @@ async def _raw_organizer_by_external_id(
     db: AsyncSession, source_id: int, external_ids: list[str]
 ) -> dict[str, int]:
     """external_id -> organizer_id from each listing's freshest raw_events row
-    carrying an organizer_id stamp — one query regardless of listing count."""
+    carrying an organizer_id stamp — one query per SQL_IN_CHUNK_SIZE listings."""
     organizer_expr = RawEvent.payload["organizer_id"].as_string()
-    rows = (
-        await db.execute(
-            select(RawEvent.external_id, organizer_expr)
-            .where(
-                RawEvent.source_id == source_id,
-                RawEvent.external_id.in_(external_ids),
-                organizer_expr.is_not(None),
-            )
-            .distinct(RawEvent.external_id)
-            .order_by(RawEvent.external_id, RawEvent.fetched_at.desc())
-        )
-    ).all()
     resolved: dict[str, int] = {}
-    for external_id, organizer_id in rows:
-        try:
-            resolved[external_id] = int(organizer_id)
-        except (TypeError, ValueError):
-            continue
+    for i in range(0, len(external_ids), SQL_IN_CHUNK_SIZE):
+        rows = (
+            await db.execute(
+                select(RawEvent.external_id, organizer_expr)
+                .where(
+                    RawEvent.source_id == source_id,
+                    RawEvent.external_id.in_(external_ids[i : i + SQL_IN_CHUNK_SIZE]),
+                    organizer_expr.is_not(None),
+                )
+                .distinct(RawEvent.external_id)
+                .order_by(RawEvent.external_id, RawEvent.fetched_at.desc())
+            )
+        ).all()
+        for external_id, organizer_id in rows:
+            try:
+                resolved[external_id] = int(organizer_id)
+            except (TypeError, ValueError):
+                continue
     return resolved
 
 

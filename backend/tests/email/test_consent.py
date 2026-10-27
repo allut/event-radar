@@ -111,7 +111,7 @@ async def test_wording_reset_withdraws_stale_and_logs(mock_db) -> None:
     result.all.return_value = [(1, "et", 1), (2, "en", 1)]
     mock_db.execute.return_value = result
     assert await reset_consent_for_wording_change(mock_db) == 2
-    assert mock_db.execute.await_count == 3  # SELECT, UPDATE, bulk INSERT
+    assert mock_db.execute.await_count == 2  # UPDATE ... RETURNING, bulk INSERT
 
 
 @pytest.mark.asyncio

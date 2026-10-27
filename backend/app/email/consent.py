@@ -62,25 +62,28 @@ def log_account_deletion(user: User, db: AsyncSession) -> bool:
 
 async def reset_consent_for_wording_change(db: AsyncSession) -> int:
     """Reset everyone consented to an older wording version to off, logging
-    `wording_change` with the version they had agreed to. Three statements
-    whatever the row count. Returns how many were reset (caller commits)."""
+    `wording_change` with the version they had agreed to. Two statements
+    whatever the row count, and no id list bound as parameters: the UPDATE
+    reads the stale rows through a CTE and returns their old version.
+    Returns how many were reset (caller commits)."""
+    stale = (
+        select(User.id, User.email_ad_consent_version)
+        .where(
+            User.email_ad_consent.is_(True),
+            User.email_ad_consent_version.is_distinct_from(EMAIL_AD_CONSENT_WORDING_VERSION),
+        )
+        .cte("stale_consent")
+    )
     rows = (
         await db.execute(
-            select(User.id, User.locale, User.email_ad_consent_version).where(
-                User.email_ad_consent.is_(True),
-                User.email_ad_consent_version.is_distinct_from(
-                    EMAIL_AD_CONSENT_WORDING_VERSION
-                ),
-            )
+            update(User)
+            .where(User.id == stale.c.id)
+            .values(email_ad_consent=False, email_ad_consent_version=None)
+            .returning(User.id, User.locale, stale.c.email_ad_consent_version)
         )
     ).all()
     if not rows:
         return 0
-    await db.execute(
-        update(User)
-        .where(User.id.in_([r[0] for r in rows]))
-        .values(email_ad_consent=False, email_ad_consent_version=None)
-    )
     await db.execute(
         insert(EmailAdConsentLog),
         [

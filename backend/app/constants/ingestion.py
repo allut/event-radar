@@ -341,6 +341,9 @@ REFETCH_REQUEST_DELAY_SECONDS: float = 1.0
 # Source hosts refetched in parallel (each host stays sequential at the delay
 # above). Bounds the fan-out; there are only a handful of ingest hosts.
 REFETCH_HOST_CONCURRENCY = 4
+# Sources ingest_all_enabled runs at once. Each scrapes its own host behind
+# its own rate limiter and session; the cap bounds memory and DB connections.
+INGEST_SOURCE_CONCURRENCY = 3
 # Wall-clock backstop, independent of REFETCH_MAX_PER_RUN: an event that
 # triggers locale-variant fetches (fetch_locale_variants) pays its own
 # REFETCH_REQUEST_DELAY_SECONDS per variant, so REFETCH_MAX_PER_RUN events

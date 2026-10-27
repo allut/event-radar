@@ -172,6 +172,15 @@ class TestResolvesToPrivateIp:
         with patch("socket.getaddrinfo", return_value=_addrinfo(ip)):
             assert resolves_to_private_ip("x.example") is True
 
+    def test_verdict_cache_evicts_oldest_past_its_cap(self, monkeypatch):
+        from app.ingestion import http_client
+
+        monkeypatch.setattr(http_client, "DNS_RESOLVE_CACHE_MAX_ENTRIES", 2)
+        with patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")):
+            for host in ("a.example", "b.example", "c.example"):
+                resolves_to_private_ip(host)
+        assert list(http_client._dns_verdict_cache) == ["b.example", "c.example"]
+
 
 class TestSafeFetchableUrl:
     @pytest.mark.asyncio

@@ -1159,6 +1159,8 @@ class TestExtractAddressFromVenueName:
         select_call = mock_db.scalars.call_args
         compiled = str(select_call.args[0])
         assert "geocode_attempted_at" in compiled
+        # Ended events drop out instead of retrying forever.
+        assert "coalesce(events.ends_at, events.starts_at)" in compiled
 
     @pytest.mark.asyncio
     async def test_donor_cache_skips_out_of_bbox_address(self, mock_db, make_event):
