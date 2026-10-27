@@ -112,8 +112,11 @@ function PopoverBody({ id, value, onChange, min, max, dateOnly, isDayDisabled, l
   // With no value yet and a future min (Ends opened before Starts has been
   // picked), default the view to min's month rather than today's — today's
   // month would otherwise open with every cell disabled.
-  const baseDay = parsed ? new Date(parsed.year, parsed.month, parsed.day) : (minDay && minDay > today ? minDay : today);
-  const initialDay = !parsed && (maxDay || isDayDisabled) ? nextOpen(baseDay, 1) : baseDay;
+  // Lazy: the nextOpen walk can cover a year of days, and only the first render needs it.
+  const [initialDay] = useState(() => {
+    const baseDay = parsed ? new Date(parsed.year, parsed.month, parsed.day) : (minDay && minDay > today ? minDay : today);
+    return !parsed && (maxDay || isDayDisabled) ? nextOpen(baseDay, 1) : baseDay;
+  });
 
   // Fresh state per mount — PopoverBody only exists while the popover is open
   // (DatePicker conditionally renders it), so every open re-derives from the

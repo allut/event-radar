@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
 import { ADMIN_GENERIC_ERROR } from '../../constants/admin';
 import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
@@ -43,6 +43,19 @@ interface Outcome {
 
 const WITHDRAWABLE_STATES = [PROMOTION_STATE.live, PROMOTION_STATE.scheduled];
 
+/** Merges the per-state lists. Module scope keeps the function stable, so
+ * `useQueries` re-runs it only when a list changes, not on every render. */
+function combineLists(lists: UseQueryResult<ListResponse>[]) {
+  return {
+    today: lists.find((l) => l.data)?.data?.today ?? '',
+    rows: lists
+      .flatMap((l) => l.data?.promotions ?? [])
+      .filter((p) => p.status === PROMOTION_STATUS.paid)
+      .sort((a, b) => a.id - b.id),
+    loadFailed: lists.some((l) => l.isError),
+  };
+}
+
 /** Withdraw (#620): end every paid Promotion with feature_withdrawn once the
  * slots flag is off. The server owns the rule (409 slots_still_enabled), so
  * the buttons stay clickable and show its refusal. */
@@ -54,7 +67,7 @@ export default function PromotionWithdraw() {
   const [allError, setAllError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
-  const lists = useQueries({
+  const { today, rows, loadFailed } = useQueries({
     queries: WITHDRAWABLE_STATES.map((state) => ({
       queryKey: [QUERY_KEYS.adminPromotionWithdrawable, state],
       queryFn: () =>
@@ -62,14 +75,8 @@ export default function PromotionWithdraw() {
           `${API.adminPromotions}?state=${state}&${PAGE_PARAM.limit}=${ADMIN_PROMOTIONS_WITHDRAW_LIMIT}&${PAGE_PARAM.offset}=0`,
         ),
     })),
+    combine: combineLists,
   });
-
-  const today = lists.find((l) => l.data)?.data?.today ?? '';
-  const rows = lists
-    .flatMap((l) => l.data?.promotions ?? [])
-    .filter((p) => p.status === PROMOTION_STATUS.paid)
-    .sort((a, b) => a.id - b.id);
-  const loadFailed = lists.some((l) => l.isError);
 
   function refresh() {
     void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminPromotionWithdrawable] });

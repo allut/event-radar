@@ -1,5 +1,5 @@
 import { StatusCodes } from 'http-status-codes';
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError, organizerApi } from '../../api/client';
@@ -131,6 +131,10 @@ export default function OrganizerPromotionRequest() {
     retry: false,
   });
   const ctx = context.data;
+  // Built once per context, not per keystroke: the date pickers call this per day cell.
+  const unavailableDates = ctx?.unavailable_dates;
+  const unavailableDays = useMemo(() => new Set(unavailableDates), [unavailableDates]);
+  const isDayUnavailable = useCallback((day: string) => unavailableDays.has(day), [unavailableDays]);
   // The context says up front whether card checkout is open for this event; a
   // refusal at submit (a stale context) still lands on the same request path.
   const ctxBlock: CardBlock = ctx?.review_required ? 'review' : ctx && !ctx.checkout_available ? 'unavailable' : null;
@@ -374,7 +378,6 @@ export default function OrganizerPromotionRequest() {
   const codeInvalid = lookupState === 'invalid' || lookupState === 'deleted' || lookupState === 'notFound' || (tried && !registryOk && !outage);
   const startInvalid = tried && !isIsoDay(start);
   const endInvalid = (tried && !isIsoDay(end)) || (datesPicked && Boolean(dateError));
-  const unavailableDays = new Set(ctx.unavailable_dates);
   const startMax = ctx.event_last_day;
   const endMax =
     start && isIsoDay(start)
@@ -448,7 +451,7 @@ export default function OrganizerPromotionRequest() {
                     locale={locale}
                     min={ctx.earliest_start}
                     max={startMax}
-                    isDayDisabled={(day) => unavailableDays.has(day)}
+                    isDayDisabled={isDayUnavailable}
                     invalid={startInvalid}
                     ariaLabel={t('promo_start_date', locale)}
                   />
@@ -463,7 +466,7 @@ export default function OrganizerPromotionRequest() {
                     locale={locale}
                     min={start && isIsoDay(start) ? start : ctx.earliest_start}
                     max={endMax}
-                    isDayDisabled={(day) => unavailableDays.has(day)}
+                    isDayDisabled={isDayUnavailable}
                     invalid={endInvalid}
                     ariaLabel={t('promo_end_date', locale)}
                   />

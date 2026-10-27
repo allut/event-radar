@@ -25,9 +25,8 @@ def git(*args: str, stdin: str | None = None) -> str:
     return result.stdout.strip()
 
 
-def merge_message(commit: str, base: str, previous: str) -> str:
+def merge_message(body: str, second_parent: str, base: str, previous: str) -> str:
     """Subject lines of the commits a merge brought in, oldest as the title."""
-    second_parent = git("log", "-1", "--format=%P", commit).split()[1]
     subjects = [
         s
         for s in git(
@@ -36,7 +35,7 @@ def merge_message(commit: str, base: str, previous: str) -> str:
         if s
     ]
     if not subjects:
-        return git("log", "-1", "--format=%B", commit)
+        return body
     if len(subjects) == 1:
         return subjects[0]
     body = "\n".join(f"- {s}" for s in reversed(subjects[:-1]))
@@ -50,23 +49,35 @@ def main() -> None:
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
 
-    chain = git(
-        "log", "--first-parent", "--reverse", "--format=%H", f"{args.base}..{args.branch}"
-    ).split()
+    # One git call for every commit's hash, tree, parents and message, rather
+    # than three or four per commit. NUL splits the fields, RS the commits.
+    log = subprocess.run(
+        [
+            GIT,
+            "log",
+            "--first-parent",
+            "--reverse",
+            "--format=%H%x00%T%x00%P%x00%B%x1e",
+            f"{args.base}..{args.branch}",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    chain = [record.lstrip("\n").split("\0", 3) for record in log.split("\x1e")]
     new_tip = git("rev-parse", args.base)
     previous = new_tip
     previous_tree = git("rev-parse", f"{args.base}^{{tree}}")
 
-    for commit in chain:
-        tree = git("rev-parse", f"{commit}^{{tree}}")
+    for commit, tree, parent_list, body in (fields for fields in chain if len(fields) == 4):
         if tree == previous_tree:
             print(f"{commit[:8]} skipped (empty)")
             continue
-        parents = git("log", "-1", "--format=%P", commit).split()
+        parents = parent_list.split()
         if len(parents) == 1:
-            message = git("log", "-1", "--format=%B", commit)
+            message = body
         else:
-            message = merge_message(commit, args.base, previous)
+            message = merge_message(body, parents[1], args.base, previous)
         message = message.rstrip()
         if "Co-Authored-By" not in message:
             message += f"\n\n{TRAILER}"

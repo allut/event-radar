@@ -840,7 +840,9 @@ function createLimiter(limit: number): {
   drain: () => Promise<void>;
 } {
   let active = 0;
+  // Head-index queue, as in RateGate: Array.shift() re-indexes every waiter.
   const waiting: (() => void)[] = [];
+  let head = 0;
   const all: Promise<void>[] = [];
   async function execute(task: () => Promise<void>): Promise<void> {
     if (active >= limit) await new Promise<void>((resolve) => waiting.push(resolve));
@@ -851,7 +853,14 @@ function createLimiter(limit: number): {
       // Fail open — see doc comment.
     } finally {
       active--;
-      waiting.shift()?.();
+      if (head < waiting.length) {
+        const next = waiting[head++];
+        if (head * 2 >= waiting.length) {
+          waiting.splice(0, head);
+          head = 0;
+        }
+        next();
+      }
     }
   }
   return {
