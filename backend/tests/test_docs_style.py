@@ -12,13 +12,18 @@ still names a file, `§N` section and heading that exist;
 from __future__ import annotations
 
 import fnmatch
+import os
 import re
 import subprocess
 from functools import cache
 from pathlib import Path
 
 
-REPO = Path(__file__).parent.parent.parent
+# Docs and code are read from REPO. The pre-commit hook points DOCS_STYLE_ROOT
+# at a checkout of the index, so a commit is judged on what it stages, not on
+# unstaged edits. `git ls-files` runs in GIT_ROOT, whose index is that set.
+GIT_ROOT = Path(__file__).parent.parent.parent
+REPO = Path(os.environ.get("DOCS_STYLE_ROOT") or GIT_ROOT)
 
 MAX_UNIT_WORDS = 60
 MAX_BANNER_WORDS = 30
@@ -209,7 +214,7 @@ def _heading_exists(quoted: str, texts: list[str]) -> bool:
 
 def _code_files() -> list[str]:
     result = subprocess.run(
-        ["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True
+        ["git", "ls-files"], cwd=GIT_ROOT, capture_output=True, text=True, check=True
     )
     return [
         f
@@ -256,7 +261,7 @@ def test_code_doc_pointers_resolve() -> None:
 def _tracked() -> tuple[frozenset[str], frozenset[str]]:
     """(tracked files, every directory that holds one)."""
     result = subprocess.run(
-        ["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True
+        ["git", "ls-files"], cwd=GIT_ROOT, capture_output=True, text=True, check=True
     )
     files = frozenset(result.stdout.splitlines())
     dirs = frozenset(f.rsplit("/", i)[0] for f in files for i in range(1, f.count("/") + 1))

@@ -52,5 +52,14 @@ fi
 
 if staged '^(CLAUDE\.md|README\.md|docs/)'; then
   echo "pre-commit: docs style"
-  out=$(bash backend/scripts/scratch-test.sh --no-db tests/test_docs_style.py -q 2>&1) || { echo "$out"; exit 1; }
+  # The guard reads docs and the code they cite from disk; with unstaged or
+  # untracked changes, point it at a checkout of the index instead.
+  docs_root=""
+  if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    docs_root="$(git rev-parse --absolute-git-dir)/precommit-docs-snapshot"
+    rm -rf "$docs_root"
+    git checkout-index -a --prefix="$docs_root/"
+    echo "pre-commit: unstaged changes, checking the staged docs"
+  fi
+  out=$(DOCS_STYLE_ROOT="$docs_root" bash backend/scripts/scratch-test.sh --no-db tests/test_docs_style.py -q 2>&1) || { echo "$out"; exit 1; }
 fi
