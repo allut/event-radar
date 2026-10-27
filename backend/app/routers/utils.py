@@ -6,11 +6,11 @@ import logging
 from urllib.parse import unquote, urlsplit
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import HTTPException, Response, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import ColumnElement, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
@@ -45,6 +45,7 @@ from app.constants.events import (
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
+    PRICE_MAX_VALUE,
 )
 from app.constants.log_events import (
     LOG_EVENT_ADMIN_ACTION,
@@ -113,6 +114,12 @@ class RequestLinkBody(BaseModel):
 
     email: EmailStr
     locale: str | None = None
+
+
+PriceField = Annotated[float, Field(ge=0, lt=PRICE_MAX_VALUE, allow_inf_nan=False)]
+"""Every request-body price_* field. events.price_* are Numeric(10,2), so an
+unbounded float (or JSON's Infinity) overflows into a DataError 500 — the same
+bound ingest enforces through parse_bounded_price (OWASP audit M-6)."""
 
 
 class VerifyTokenBody(BaseModel):

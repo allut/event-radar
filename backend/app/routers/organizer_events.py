@@ -100,6 +100,7 @@ from app.events.cancellation import (
     send_report_resolution_emails,
 )
 from app.routers.utils import (
+    PriceField,
     apply_moderation_flags,
     apply_price_edit,
     check_image_host,
@@ -149,8 +150,8 @@ class SubmitEventBody(BaseModel):
     venue_id: int | None = None
     url: str | None = Field(default=None, max_length=URL_MAX_LEN)
     image_url: str | None = Field(default=None, max_length=URL_MAX_LEN)
-    price_min: float | None = Field(None, ge=0)
-    price_max: float | None = Field(None, ge=0)
+    price_min: PriceField | None = None
+    price_max: PriceField | None = None
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
     categories: list[str] | None = None
 
@@ -210,8 +211,8 @@ class PatchEventBody(BaseModel):
     venue_id: int | None = None
     url: str | None = Field(default=None, max_length=URL_MAX_LEN)
     image_url: str | None = Field(default=None, max_length=URL_MAX_LEN)
-    price_min: float | None = Field(None, ge=0)
-    price_max: float | None = Field(None, ge=0)
+    price_min: PriceField | None = None
+    price_max: PriceField | None = None
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
     categories: list[str] | None = None
 

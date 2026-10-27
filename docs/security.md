@@ -42,6 +42,7 @@ What's in here: the middleware stack, rate limiting and its client key, URL and 
 ## Rate Limiting
 
 - **Every endpoint carries `@limiter.limit(...)` with a `RATE_LIMIT_*` constant from `app/constants/rate_limits.py`**, authenticated ones included. Add both to any new endpoint, public or not.
+- **`backend/tests/test_route_guards.py` enforces this and the auth rule on the live app.** A route with no track dependency must be listed in its `PUBLIC_ROUTES`, which makes going public a reviewed choice.
 - **The limiter lives in `app/rate_limit.py`** so `main.py` and the routers can both import it without a cycle.
 - **All other `/admin/*` routes in `app/routers/admin.py` share one bucket** through `limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")`. Per-route limits would let an attacker cycling every admin route multiply the nominal cap.
 - **Admin queue list GETs and `GET /admin/counts` share a second bucket at `RATE_LIMIT_BROWSE`**, scope `RATE_LIMIT_SCOPE_ADMIN_READ`. Numbered paging plus a refetch after each action costs several reads per action, which the 10/minute action bucket can't absorb. Admin writes stay on `RATE_LIMIT_ADMIN`.
@@ -120,6 +121,7 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 
 - **Regex runs in linear time on untrusted text.** Edge-`<br>` trimming is the loop-based `_strip_edge_brs()`. `CURRENCY_AMOUNT_RE` bounds digit runs, and `price_context_digest` truncates input to `PRICE_CONTEXT_INPUT_MAX_CHARS`. Both have timing regression tests.
 - **Numbers from LLMs and JSON-LD are bounded.** `parse_bounded_price()` accepts finite `0 <= x < PRICE_MAX_VALUE`, `normalize_currency()` enforces `VALID_CURRENCY_CODES`, non-finite quality is dropped, and refetched coordinates are bbox-gated.
+- **Request-body prices share the same ceiling.** Every `price_*` field on an organizer, claim-edit or venue body is `app/routers/utils.py::PriceField`, which also refuses `Infinity`. A bare float would overflow `Numeric(10,2)` into a 500.
 - **Validation replaces per-event savepoints.** Classify and refetch share one `AsyncSession` across concurrent workers, so a nested transaction there is unsafe.
 - **LLM booleans go through `app/llm/router.py::strict_bool()`** with fail-safe defaults.
 - **Why-go bullets are length-capped, stripped of URLs and emails, and explicit-filtered.** Venue-extract output may only reuse words from its input.
@@ -318,6 +320,4 @@ The confirmation link must not attach an attacker's Google account to a victim w
 
 ## Known Gaps
 
-- **Outbound `http_get` has no streaming byte cap on response bodies.** Every test mocks `client.get`, so the cap needs its own change.
-- **Claim-edit `image_url` isn't Cloudinary-pinned yet.** The claim edit UI is a free-text field, so pinning waits on an approved upload control.
-- **`organizer_sanitize()` runs inline in the async handler**, not in a threadpool.
+- **Open gaps live in [security-audit.md](security-audit.md)'s Open Findings**, each with its recommended fix. The audit ledger is their one home, so a fix updates one file.

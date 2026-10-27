@@ -4,4 +4,5 @@ pytest-asyncio==1.4.0
 pytest-cov==7.0.0
 ruff==0.15.16
 mypy==2.1.0
+pip-audit==2.10.1
 qrcode==8.2  # scripts/admin_totp_enroll.py only — not a runtime app dependency

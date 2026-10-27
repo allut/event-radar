@@ -65,6 +65,7 @@ from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
+    PriceField,
     apply_moderation_flags,
     apply_price_edit,
     fold_legacy_category,
@@ -103,8 +104,8 @@ class PatchClaimEventBody(BaseModel):
     ends_at: datetime | None = None
     url: str | None = Field(default=None, max_length=URL_MAX_LEN)
     categories: list[str] | None = None
-    price_min: float | None = Field(None, ge=0)
-    price_max: float | None = Field(None, ge=0)
+    price_min: PriceField | None = None
+    price_max: PriceField | None = None
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
     has_free_tier: bool | None = None
     accept_new_price: bool = False
