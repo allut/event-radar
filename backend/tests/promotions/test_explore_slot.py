@@ -42,7 +42,8 @@ from app.promotions.fill import evaluate_gate, gate_closed_reason
 from app.rate_limit import limiter
 from app.routers import browse
 from tests.conftest import count_statements
-from tests.promotions.conftest import EVENT_END, EVENT_START, NOW, at_tallinn, d
+from tests.conftest import EVENT_END, EVENT_START
+from tests.promotions.conftest import NOW, at_tallinn, d
 
 TOKEN = "zqx603"
 PAGE = 24

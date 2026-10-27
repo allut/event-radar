@@ -11,7 +11,8 @@ from app.models.models import Event, Organizer, Promotion
 from app.promotions import grant as grant_module
 from app.promotions.checkout import CheckoutInput, start_checkout
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion
-from tests.promotions.conftest import NOW, Factory, d
+from tests.conftest import Factory
+from tests.promotions.conftest import NOW, d
 from tests.promotions.fakes import FakePaymentGateway, FakeRegistry
 
 

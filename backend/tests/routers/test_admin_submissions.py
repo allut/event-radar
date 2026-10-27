@@ -220,74 +220,46 @@ async def test_submissions_list_and_counts_use_the_admin_read_bucket(
 
 
 @pytest.mark.asyncio
-async def test_list_submissions_walks_tied_created_at_pages_without_repeats(admin_app):
-    """Against a real Postgres (skipped without one): seven submissions share
-    one created_at; walking them three per page returns each exactly once, in
-    id-desc order. Seeded in a transaction that is rolled back."""
-    import asyncio
-    import os
-
+async def test_list_submissions_walks_tied_created_at_pages_without_repeats(admin_app, db):
+    """Against a real Postgres (the shared `db` fixture skips without one):
+    seven submissions share one created_at; walking them three per page returns
+    each exactly once, in id-desc order. The fixture rolls the seed back."""
     from sqlalchemy import text
-    from sqlalchemy.exc import DBAPIError, SQLAlchemyError
-    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-    from sqlalchemy.pool import NullPool
 
-    url = os.environ.get("DATABASE_URL", "")
-    if not url:
-        pytest.skip("DATABASE_URL not set")
-    engine = create_async_engine(url, poolclass=NullPool)
-    try:
-        conn = await asyncio.wait_for(engine.connect(), timeout=3)
-    except (OSError, asyncio.TimeoutError, SQLAlchemyError):
-        await engine.dispose()
-        pytest.skip("Postgres unreachable")
-    tx = await conn.begin()
-    session = AsyncSession(
-        bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False
-    )
-    try:
-        try:
-            # Far-future created_at so the seeded rows sort ahead of any
-            # submissions already in a dev database.
-            seeded = [
-                (
-                    await session.execute(
-                        text(
-                            "INSERT INTO events (slug, title_orig, starts_at, status, "
-                            "needs_review, created_at) VALUES (:slug, 'Tie', now(), "
-                            "'published', true, '2999-01-01T00:00:00+00') RETURNING id"
-                        ),
-                        {"slug": f"tie-walk-{n}"},
-                    )
-                ).scalar_one()
-                for n in range(7)
-            ]
-        except DBAPIError as exc:
-            pytest.skip(f"schema not insertable with minimal columns: {exc}")
+    # Far-future created_at so the seeded rows sort ahead of any submissions
+    # already in a dev database.
+    seeded = [
+        (
+            await db.execute(
+                text(
+                    "INSERT INTO events (slug, title_orig, starts_at, status, "
+                    "needs_review, created_at) VALUES (:slug, 'Tie', now(), "
+                    "'published', true, '2999-01-01T00:00:00+00') RETURNING id"
+                ),
+                {"slug": f"tie-walk-{n}"},
+            )
+        ).scalar_one()
+        for n in range(7)
+    ]
 
-        ctx = MagicMock()
-        ctx.__aenter__ = AsyncMock(return_value=session)
-        ctx.__aexit__ = AsyncMock(return_value=False)
-        walked: list[int] = []
-        with (
-            patch_admin_settings() as mock_settings,
-            patch("app.routers.admin.AsyncSessionLocal", return_value=ctx),
-        ):
-            mock_settings.ADMIN_PASSWORD = ""
-            mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
-            async with AsyncClient(
-                transport=ASGITransport(app=admin_app), base_url="http://test"
-            ) as client:
-                for offset in (0, 3, 6):
-                    body = (
-                        await client.get(f"/admin/submissions?limit=3&offset={offset}")
-                    ).json()
-                    walked += [row["id"] for row in body["events"]]
-    finally:
-        await session.close()
-        await tx.rollback()
-        await conn.close()
-        await engine.dispose()
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=db)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    walked: list[int] = []
+    with (
+        patch_admin_settings() as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=ctx),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+        async with AsyncClient(
+            transport=ASGITransport(app=admin_app), base_url="http://test"
+        ) as client:
+            for offset in (0, 3, 6):
+                body = (
+                    await client.get(f"/admin/submissions?limit=3&offset={offset}")
+                ).json()
+                walked += [row["id"] for row in body["events"]]
 
     assert walked[:7] == sorted(seeded, reverse=True)
 

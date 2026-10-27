@@ -251,7 +251,7 @@ async def test_stripe_refund_runs_without_the_cap_lock_held(engine, sessionmaker
 
     from app.constants.promotions import PROMOTION_CAP_LOCK_KEY
     from app.models.models import Event, Organizer, Promotion, PromotionSnapshot
-    from tests.promotions.conftest import Factory
+    from tests.conftest import Factory
 
     seen: list[bool] = []
     real_refund = gateway.refund

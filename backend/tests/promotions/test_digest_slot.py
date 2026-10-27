@@ -18,7 +18,7 @@ from app.email import digest
 from app.models.models import DailyFeed, DailySponsoredSlot, User
 from app.promotions import counters
 from app.promotions.digest_slot import load_digest_slots
-from tests.promotions.conftest import Factory
+from tests.conftest import Factory
 from tests.promotions.test_daily5_slot import _n, organic, promoted, today
 
 

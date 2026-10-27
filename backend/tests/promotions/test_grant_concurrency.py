@@ -15,7 +15,8 @@ from app.models.models import Event, Organizer, Promotion, PromotionSnapshot
 from app.promotions import grant as grant_module
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion
 from app.promotions.lifecycle import edit_promotion
-from tests.promotions.conftest import NOW, Factory, d
+from tests.conftest import Factory
+from tests.promotions.conftest import NOW, d
 
 
 @pytest.mark.asyncio

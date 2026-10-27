@@ -231,31 +231,21 @@ class TestRepresentativeEventForClaim:
 
 class TestBulkResolveSeriesEventsRealDb:
     @pytest.mark.asyncio
-    async def test_one_earliest_event_per_key(self, db):
-        from datetime import datetime, timedelta
+    async def test_one_earliest_event_per_key(self, db, make):
+        from datetime import timedelta
 
         from app.claims.pinning import bulk_resolve_series_events
-        from app.constants.core import TALLINN_TZ
-        from app.models.models import Event
-        from tests.conftest import count_statements
+        from tests.conftest import EVENT_START, count_statements
 
-        start = datetime(2090, 3, 1, 19, tzinfo=TALLINN_TZ)
-        events = []
-        for n, (title, days) in enumerate(
-            [("Daily Tour", 3), ("Daily Tour", 1), ("Daily Tour", 2), ("Quiz Night", 5)]
-        ):
-            ev = Event(
-                slug=f"series-{n}-{id(db)}",
+        events = [
+            await make.event(
                 title_orig=title,
-                starts_at=start + timedelta(days=days),
                 venue_name="Kultuurikatel",
-                status="published",
+                starts_at=EVENT_START + timedelta(days=days),
+                ends_at=None,
             )
-            db.add(ev)
-            events.append(ev)
-        await db.flush()
-        for ev in events:
-            await db.refresh(ev)  # series_key is trigger-maintained
+            for title, days in [("Daily Tour", 3), ("Daily Tour", 1), ("Daily Tour", 2), ("Quiz Night", 5)]
+        ]
         tour, quiz = events[1], events[3]
         db.expunge_all()
 

@@ -426,33 +426,26 @@ class TestShowcaseRealDb:
 
     NOW = datetime(2090, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
 
-    async def _event(self, db, n, *, quality, days, title=None, venue=None):
+    async def _event(self, make, *, quality, days, **kw):
         from datetime import timedelta
 
-        from app.models.models import Event, EventClassification
+        from app.models.models import EventClassification
 
-        ev = Event(
-            slug=f"showcase-{n}-{id(db)}",
-            title_orig=title or f"Showcase {n}",
-            starts_at=self.NOW + timedelta(days=days),
-            venue_name=None if venue else f"Hall {n}",
-            venue_id=venue.id if venue else None,
-            status="published",
+        ev = await make.event(starts_at=self.NOW + timedelta(days=days), ends_at=None, **kw)
+        make.db.add(
+            EventClassification(event_id=ev.id, categories=["music"], vibes=[], quality_score=quality)
         )
-        db.add(ev)
-        await db.flush()
-        db.add(EventClassification(event_id=ev.id, categories=["music"], vibes=[], quality_score=quality))
-        await db.flush()
+        await make.db.flush()
         return ev
 
     @pytest.mark.asyncio
-    async def test_query_count_is_fixed_and_winners_ranked(self, db):
+    async def test_query_count_is_fixed_and_winners_ranked(self, db, make):
         from app.constants.events import SHOWCASE_EVENT_COUNT
         from app.routers.public import _load_showcase
         from tests.conftest import count_statements
 
         events = [
-            await self._event(db, i, quality=i / 20, days=1 + i % 3)
+            await self._event(make, quality=i / 20, days=1 + i % 3)
             for i in range(SHOWCASE_EVENT_COUNT * 2)
         ]
         db.expunge_all()
@@ -467,18 +460,13 @@ class TestShowcaseRealDb:
         assert [e["id"] for e in payloads["en"]["events"]] == [e.id for e in expected]
 
     @pytest.mark.asyncio
-    async def test_venue_linked_series_collapses_to_earliest(self, db):
-        from app.models.models import Organizer, Venue
+    async def test_venue_linked_series_collapses_to_earliest(self, db, make):
         from app.routers.public import _load_showcase
 
-        org = Organizer(email=f"showcase-{id(db)}@example.com", name="Org")
-        db.add(org)
-        await db.flush()
-        venue = Venue(organizer_id=org.id, name="Kanuti Gildi SAAL")
-        db.add(venue)
-        await db.flush()
-        later = await self._event(db, 1, quality=0.9, days=3, title="Workshop", venue=venue)
-        earlier = await self._event(db, 2, quality=0.1, days=1, title="Workshop", venue=venue)
+        venue = await make.venue(await make.organizer(), name="Kanuti Gildi SAAL")
+        series = {"title_orig": "Workshop", "venue_id": venue.id}
+        later = await self._event(make, quality=0.9, days=3, **series)
+        earlier = await self._event(make, quality=0.1, days=1, **series)
         db.expunge_all()
 
         payloads = await _load_showcase(db, self.NOW)

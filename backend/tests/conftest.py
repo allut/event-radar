@@ -1,3 +1,4 @@
+import itertools
 import os
 
 # Must be set before any app module import so pydantic-settings can validate Settings.
@@ -21,7 +22,10 @@ from app._generated.shared_constants import (
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
 )
+from app.constants.claims import CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES, CLAIM_STATUS_APPROVED
+from app.constants.core import TALLINN_TZ
 from app.constants.events import TALLINN_CENTER_LAT, TALLINN_CENTER_LNG
+from app.models.models import Claim, Event, EventSource, Organizer, Publisher, Source, Venue
 
 
 DEV_DB_NAME = "eventradar"
@@ -390,3 +394,109 @@ def count_statements(db: AsyncSession) -> Iterator[list[str]]:
         yield statements
     finally:
         sa_event.remove(sync_engine, "before_cursor_execute", tap)
+
+
+# Rows for real-Postgres tests. Dates sit in 2090 so rows left in a shared dev
+# database never touch live windows, caps or feeds.
+_factory_counter = itertools.count(1)
+
+
+def at_tallinn(y: int, m: int, d: int, hh: int = 12, mm: int = 0, ss: int = 0) -> datetime:
+    return datetime(y, m, d, hh, mm, ss, tzinfo=TALLINN_TZ)
+
+
+EVENT_START = at_tallinn(2090, 2, 1, 19)
+EVENT_END = at_tallinn(2090, 2, 28, 22)
+
+
+class Factory:
+    """Flushed rows on the `db` session: organizers, venues, events, claims."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.db = session
+
+    async def organizer(self, name: str | None = "Acme Events") -> Organizer:
+        n = next(_factory_counter)
+        org = Organizer(email=f"factory-{n}-{os.getpid()}@example.com", name=name)
+        self.db.add(org)
+        await self.db.flush()
+        return org
+
+    async def venue(self, organizer: Organizer, name: str = "Kultuurikatel") -> Venue:
+        venue = Venue(organizer_id=organizer.id, name=name)
+        self.db.add(venue)
+        await self.db.flush()
+        return venue
+
+    async def event(
+        self,
+        *,
+        submitted_by: Organizer | None = None,
+        starts_at: datetime = EVENT_START,
+        ends_at: datetime | None = EVENT_END,
+        title: str = "Promo Show",
+        venue_name: str | None = None,
+        status: str = "published",
+        **kw: Any,
+    ) -> Event:
+        """`title` gets a unique suffix; pass `title_orig` for an exact title
+        (several dates of one series)."""
+        n = next(_factory_counter)
+        ev = Event(
+            slug=f"factory-{n}-{os.getpid()}",
+            title_orig=kw.pop("title_orig", f"{title} {n}"),
+            starts_at=starts_at,
+            ends_at=ends_at,
+            venue_name=venue_name or f"Hall {n}",
+            status=status,
+            submitted_by_organizer_id=submitted_by.id if submitted_by else None,
+            **kw,
+        )
+        self.db.add(ev)
+        await self.db.flush()
+        await self.db.refresh(ev)  # series_key is trigger-maintained
+        return ev
+
+    async def publisher_claim(
+        self, event: Event, organizer: Organizer, *, dormant: bool = False, status: str = CLAIM_STATUS_APPROVED
+    ) -> Claim:
+        n = next(_factory_counter)
+        source = Source(slug=f"factory-src-{n}-{os.getpid()}", kind="html", config={})
+        self.db.add(source)
+        await self.db.flush()
+        pub = Publisher(source_id=source.id, external_id=str(n), name=f"Pub {n}")
+        self.db.add(pub)
+        await self.db.flush()
+        self.db.add(EventSource(event_id=event.id, source_id=source.id, publisher_id=pub.id))
+        claim = Claim(
+            organizer_id=organizer.id,
+            kind=CLAIM_KIND_PUBLISHER,
+            publisher_id=pub.id,
+            status=status,
+            proof_token="tok",
+            dormant=dormant,
+        )
+        self.db.add(claim)
+        await self.db.flush()
+        return claim
+
+    async def series_claim(
+        self, event: Event, organizer: Organizer, *, dormant: bool = False, status: str = CLAIM_STATUS_APPROVED
+    ) -> Claim:
+        claim = Claim(
+            organizer_id=organizer.id,
+            kind=CLAIM_KIND_SERIES,
+            event_series_key=event.series_key,
+            status=status,
+            proof_token="tok",
+            justification="mine",
+            dormant=dormant,
+        )
+        self.db.add(claim)
+        await self.db.flush()
+        return claim
+
+
+@pytest.fixture
+def make(db: AsyncSession) -> Factory:
+    return Factory(db)
