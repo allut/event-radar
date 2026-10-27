@@ -18,6 +18,9 @@ LOG_EVENT_ADMIN_ACTION = "admin_action"  # /admin/auth/* login/logout (issue #15
 # Global (not per-IP) daily unverified-account-creation budget crossed — see
 # routers/utils.py::record_unverified_account_creation (OWASP audit F10).
 LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED = "unverified_account_budget_exceeded"
+# promotions/counters.py::first_ref_hit's per-day set hit
+# PROMOTION_REF_SEEN_MAX_ENTRIES — ?ref= opens stop counting until midnight.
+LOG_EVENT_PROMOTION_REF_SEEN_FULL = "promotion_ref_seen_full"
 # ADR 0002 (Google sign-in) — carries `track`/`outcome` (see GOOGLE_SIGNIN_OUTCOME_*).
 LOG_EVENT_GOOGLE_SIGNIN = "google_signin"
 # Network/5xx failure talking to Google (token exchange or JWKS fetch) — distinct

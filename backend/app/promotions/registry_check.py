@@ -29,7 +29,7 @@ class RegistryRefused(Exception):
 async def verified_legal_name(registry: RegistryLookup, registry_code: str) -> str:
     """The register's legal name for an active company, or `RegistryRefused`."""
     code = registry_code.strip()
-    if not PROMOTION_REGISTRY_CODE_RE.match(code):
+    if not PROMOTION_REGISTRY_CODE_RE.fullmatch(code):
         raise RegistryRefused(PROMOTION_ERROR_REGISTRY_INVALID_CODE)
     try:
         result = await registry.lookup(code)

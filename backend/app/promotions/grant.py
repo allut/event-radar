@@ -91,7 +91,7 @@ def request_violations(request: GrantRequest) -> list[RuleViolation]:
     found: list[RuleViolation] = []
     if request.is_complimentary and not (request.complimentary_note or "").strip():
         found.append(RuleViolation(PROMOTION_ERROR_NOTE_REQUIRED))
-    if not PROMOTION_REGISTRY_CODE_RE.match(request.advertiser_registry_code):
+    if not PROMOTION_REGISTRY_CODE_RE.fullmatch(request.advertiser_registry_code):
         found.append(RuleViolation(PROMOTION_ERROR_INVALID_REGISTRY_CODE))
     if request.invoice_reference:
         if request.is_complimentary:

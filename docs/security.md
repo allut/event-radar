@@ -80,8 +80,9 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 
 ### Organizer Images
 
-- **`app/routers/utils.py::check_image_host()` pins organizer `image_url` to our own Cloudinary account.** The host must be in `ALLOWED_IMAGE_HOSTS` and the path under `/{CLOUDINARY_CLOUD_NAME}/image/upload/`. It fails closed when the cloud name is unset.
+- **`app/routers/utils.py::check_image_host()` pins organizer `image_url` to our own Cloudinary account.** It calls `app/ingestion/http_client.py::own_cloudinary_url()`: the host must be in `ALLOWED_IMAGE_HOSTS` and the path under `/{CLOUDINARY_CLOUD_NAME}/image/upload/`. It fails closed when the cloud name is unset.
 - **The path pin matters because `res.cloudinary.com` serves every account.** The daily digest embeds `image_url` as an `<img>`, so an arbitrary host would be an unconsented tracking pixel leaking each recipient's IP and open time.
+- **The digest embeds an image only from our Cloudinary account or an `ALLOWED_SOURCE_HOSTS` host** (`app/email/digest.py::_embeddable_image_url`). Any other `image_url`, such as one a claimant pinned, gets the branded band instead.
 - **Organizer images go through the signed `POST /organizer/events/image` upload.** Scraped sources are unaffected by the pin.
 
 ### Fetched URLs
@@ -308,7 +309,7 @@ The confirmation link must not attach an attacker's Google account to a victim w
 - **`app/auth/totp.py::check_totp_code` rejects any time step at or before the last accepted one.** `record_totp_step()` records a step only after the whole login succeeds. An observed code can't mint a second session inside its `ADMIN_TOTP_VALID_WINDOW` drift window.
 - **The cookie is httpOnly, Secure, `SameSite=Strict`** (`ADMIN_SESSION_COOKIE_NAME`, `Path=/api/admin`), minted by `tokens.py::generate_admin_session_token` with its own salt `AUTH_ADMIN_SESSION_SALT`.
 - **It carries no id or version claim, because there's no admins table.** So there's no per-session revocation, and `ADMIN_SESSION_TTL_SECONDS` (12h) is shorter than the consumer TTL to compensate.
-- **The token's `e` (epoch) claim is a SHA-256 of `ADMIN_SESSION_EPOCH`, `ADMIN_PASSWORD` and `ADMIN_TOTP_SECRET`** (`tokens.py::_admin_session_epoch`). Rotating any of them invalidates every admin session, with no separate step.
+- **The token's `e` (epoch) claim is an HMAC-SHA256 under `SECRET_KEY` of `ADMIN_SESSION_EPOCH`, `ADMIN_PASSWORD` and `ADMIN_TOTP_SECRET`** (`tokens.py::_admin_session_epoch`). Rotating any of them invalidates every admin session, with no separate step. The key matters because the payload is signed, not encrypted: a bare hash would let anyone holding the cookie guess the password offline.
 - **TOTP enrollment is a local script, `backend/scripts/admin_totp_enroll.py`.** There are no backup codes, so a lost authenticator means rotating `ADMIN_TOTP_SECRET`.
 
 #### Lockout

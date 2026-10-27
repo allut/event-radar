@@ -29,7 +29,8 @@ from app.auth.dependencies import get_optional_user
 from app.db import get_db
 from app.models.models import Event, User
 from app.promotions.counters import record_ref_hit
-from app.rate_limit import limiter
+from app.promotions.fill import is_bot_user_agent
+from app.rate_limit import client_key, limiter
 from app.routers.utils import (
     load_user_reported_events,
     load_user_signals,
@@ -70,11 +71,16 @@ async def get_event(
         )
 
     # A slot card link carries ?ref=ad (#606): one anonymous per-day count for
-    # the event's live Promotion. Never read by ranking or the persona.
-    if ref == PROMOTION_REF_AD:
-        await record_ref_hit(db, event.id, PROMOTION_STAT_WEB_OPENS)
-    elif ref == PROMOTION_REF_DIGEST_AD:
-        await record_ref_hit(db, event.id, PROMOTION_STAT_DIGEST_OPENS)
+    # the event's live Promotion. Never read by ranking or the persona. The
+    # counts reach paying advertisers, so bots don't count and a client counts
+    # once a day.
+    if ref in (PROMOTION_REF_AD, PROMOTION_REF_DIGEST_AD) and not is_bot_user_agent(
+        request.headers.get("user-agent")
+    ):
+        column = (
+            PROMOTION_STAT_WEB_OPENS if ref == PROMOTION_REF_AD else PROMOTION_STAT_DIGEST_OPENS
+        )
+        await record_ref_hit(db, event.id, column, client=client_key(request))
 
     # get_optional_user already resolved the caller (None when signed out, or
     # for an expired/invalid/revoked token — a revoked token, post logout-all,

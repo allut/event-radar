@@ -5,10 +5,13 @@ and reach ``promotion_daily_stats`` as one bulk upsert every
 ``PROMOTION_COUNTER_FLUSH_SECONDS`` and on shutdown. This relies on the
 single-process topology (CLAUDE.md): a crash loses at most a minute of counts.
 
-No viewer identifier is ever recorded, and nothing here feeds ranking, the
-persona or ``user_event_feedback``.
+No viewer identifier is ever written to the database, and nothing here feeds
+ranking, the persona or ``user_event_feedback``. The ``?ref=`` opens count once
+per client a day, so the set that dedups them holds ``client_key()`` in memory
+for the current Tallinn day only.
 """
 
+import logging
 from collections import Counter
 from datetime import date
 
@@ -16,14 +19,23 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.constants.log_events import LOG_EVENT_PROMOTION_REF_SEEN_FULL
 from app.constants.promotions import (
     PROMOTION_COUNTER_COLUMNS,
+    PROMOTION_REF_SEEN_MAX_ENTRIES,
     PROMOTION_STATUS_PAID,
 )
 from app.models.models import Promotion, PromotionDailyStat
 from app.promotions.windows import now_tallinn, tallinn_today
 
+log = logging.getLogger(__name__)
+
 _pending: Counter[tuple[int, date, str]] = Counter()
+# day -> (client_key, promotion id, column) already counted that day. Only
+# today's entry is kept; a new day drops the old one.
+_ref_seen: dict[date, set[tuple[str, int, str]]] = {}
+# Days whose set filled up and already logged it, so the warning fires once.
+_ref_seen_full_logged: set[date] = set()
 
 
 def bump(promotion_id: int, day: date, column: str) -> None:
@@ -33,8 +45,34 @@ def bump(promotion_id: int, day: date, column: str) -> None:
     _pending[(promotion_id, day, column)] += 1
 
 
+def first_ref_hit(client: str, promotion_id: int, day: date, column: str) -> bool:
+    """True the first time ``client`` opens this Promotion's ``column`` on
+    ``day``. A full set refuses new clients rather than evicting: eviction
+    would let enough rotating addresses re-count forever."""
+    seen = _ref_seen.get(day)
+    if seen is None:
+        _ref_seen.clear()
+        _ref_seen_full_logged.clear()
+        seen = _ref_seen[day] = set()
+    key = (client, promotion_id, column)
+    if key in seen:
+        return False
+    if len(seen) >= PROMOTION_REF_SEEN_MAX_ENTRIES:
+        if day not in _ref_seen_full_logged:
+            _ref_seen_full_logged.add(day)
+            log.warning(
+                "promotion ref dedup set full; opens stop counting until midnight",
+                extra={"event": LOG_EVENT_PROMOTION_REF_SEEN_FULL},
+            )
+        return False
+    seen.add(key)
+    return True
+
+
 def reset() -> None:
     _pending.clear()
+    _ref_seen.clear()
+    _ref_seen_full_logged.clear()
 
 
 async def live_promotion_id(db: AsyncSession, event_id: int, today: date) -> int | None:
@@ -52,12 +90,18 @@ async def live_promotion_id(db: AsyncSession, event_id: int, today: date) -> int
     )
 
 
-async def record_ref_hit(db: AsyncSession, event_id: int, column: str) -> None:
-    """Count ``column`` for the event's Promotion when one is live today."""
+async def record_ref_hit(
+    db: AsyncSession, event_id: int, column: str, client: str | None = None
+) -> None:
+    """Count ``column`` for the event's Promotion when one is live today. With
+    ``client``, only that client's first hit of the day counts."""
     today = tallinn_today(now_tallinn())
     promotion_id = await live_promotion_id(db, event_id, today)
-    if promotion_id is not None:
-        bump(promotion_id, today, column)
+    if promotion_id is None:
+        return
+    if client is not None and not first_ref_hit(client, promotion_id, today, column):
+        return
+    bump(promotion_id, today, column)
 
 
 async def flush(db: AsyncSession) -> dict:

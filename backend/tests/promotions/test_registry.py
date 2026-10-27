@@ -11,6 +11,7 @@ from app.integrations.registry import (
     CachedRegistryLookup,
     RegistryUnavailable,
 )
+from app.promotions.registry import is_valid_registry_checksum, registry_code_check_digit
 from app.promotions.registry_check import RegistryRefused, verified_legal_name
 from tests.promotions.fakes import FakeRegistry
 
@@ -118,6 +119,10 @@ async def test_verified_legal_name_refusals_are_coded() -> None:
     assert await verified_legal_name(fake, " 11111111 ") == "Live OÜ"
     for code, expected in [
         ("abc", "registry_invalid_code"),
+        ("111111111", "registry_invalid_code"),
+        # Unicode digits pass `\d` and int(); only ASCII reaches the register.
+        ("١١١١١١١١", "registry_invalid_code"),
+        ("1111111１", "registry_invalid_code"),
         ("22222222", "registry_company_deleted"),
         ("33333333", "registry_company_not_found"),
     ]:
@@ -129,3 +134,10 @@ async def test_verified_legal_name_refusals_are_coded() -> None:
         await verified_legal_name(fake, "11111111")
     assert exc.value.code == "registry_unavailable"
 
+
+def test_checksum_refuses_unicode_digits() -> None:
+    first_seven = "1234567"
+    code = first_seven + str(registry_code_check_digit(first_seven))
+    assert is_valid_registry_checksum(code)
+    assert not is_valid_registry_checksum(code.translate(str.maketrans("0123456789", "٠١٢٣٤٥٦٧٨٩")))
+    assert not is_valid_registry_checksum(code + "\n")

@@ -8,6 +8,7 @@ so a compromised DB row cannot be turned back into a valid token.
 """
 
 import hashlib
+import hmac
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import TypedDict
@@ -239,9 +240,15 @@ def _admin_session_epoch() -> str:
     ADMIN_TOTP_SECRET after a suspected compromise auto-revokes every
     outstanding admin session, with no separate revocation lever an operator
     has to remember to pull (OWASP audit F4). ADMIN_SESSION_EPOCH stays in
-    the mix so a manual bump still works even when credentials are unchanged."""
-    return hashlib.sha256(
-        f"{settings.ADMIN_SESSION_EPOCH}:{settings.ADMIN_PASSWORD}:{settings.ADMIN_TOTP_SECRET}".encode()
+    the mix so a manual bump still works even when credentials are unchanged.
+
+    Keyed by SECRET_KEY: the payload is signed, not encrypted, so a bare hash
+    of the credentials would hand anyone holding the cookie an offline
+    guessing oracle for ADMIN_PASSWORD (security audit, 2026-10)."""
+    return hmac.new(
+        settings.SECRET_KEY.encode(),
+        f"{settings.ADMIN_SESSION_EPOCH}:{settings.ADMIN_PASSWORD}:{settings.ADMIN_TOTP_SECRET}".encode(),
+        hashlib.sha256,
     ).hexdigest()[:ADMIN_SESSION_EPOCH_HASH_LEN]
 
 

@@ -44,7 +44,7 @@ class TestCheckImageHost:
     def test_own_cloudinary_account_accepted(self):
         from app.routers.utils import check_image_host
 
-        with patch("app.routers.utils.settings") as mock_settings:
+        with patch("app.ingestion.http_client.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
             check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
 
@@ -62,7 +62,7 @@ class TestCheckImageHost:
         from fastapi import HTTPException
         from app.routers.utils import check_image_host
 
-        with patch("app.routers.utils.settings") as mock_settings:
+        with patch("app.ingestion.http_client.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
             with pytest.raises(HTTPException) as exc_info:
                 check_image_host(url)
@@ -72,7 +72,7 @@ class TestCheckImageHost:
         from fastapi import HTTPException
         from app.routers.utils import check_image_host
 
-        with patch("app.routers.utils.settings") as mock_settings:
+        with patch("app.ingestion.http_client.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = ""
             with pytest.raises(HTTPException):
                 check_image_host("https://res.cloudinary.com/demo/image/upload/x.png")
@@ -110,7 +110,7 @@ class TestCheckImageHost:
         from fastapi import HTTPException
         from app.routers.utils import check_image_host
 
-        with patch("app.routers.utils.settings") as mock_settings:
+        with patch("app.ingestion.http_client.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
             with pytest.raises(HTTPException):
                 check_image_host(url)
@@ -118,7 +118,7 @@ class TestCheckImageHost:
     def test_returns_reserialized_url(self):
         from app.routers.utils import check_image_host
 
-        with patch("app.routers.utils.settings") as mock_settings:
+        with patch("app.ingestion.http_client.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
             url = "https://res.cloudinary.com/demo/image/upload/x.png"
             assert check_image_host(url) == url

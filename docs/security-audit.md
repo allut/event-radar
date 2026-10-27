@@ -33,16 +33,12 @@ Ranked by severity. Each carries the fix the audit recommended.
 
 ### Medium
 
-- **A claimant's `image_url` can be any https host, and the digest embeds it as `<img>`.** That is a tracking pixel leaking each recipient's IP and open time. Fix: in `backend/app/email/digest.py`, embed only our Cloudinary path or an `ALLOWED_SOURCE_HOSTS` host.
-- **The claim edit itself still takes a free-text `image_url`.** Pinning it to Cloudinary waits on an approved upload control in the claim edit UI.
+- **The claim edit still takes a free-text `image_url`.** The digest no longer embeds it, but the event page renders it under `img-src https:`, so a web visitor's IP still reaches the claimant's host. Pinning it to Cloudinary waits on an approved upload control in the claim edit UI.
 
 ### Low
 
-- **`GET /events/{id}?ref=ad` bumps Promotion open counters on every hit.** It is anonymous, skips `is_bot_user_agent()`, and the counts reach paying advertisers. Fix: count once per `client_key()`, Promotion, day and column, and skip bots.
 - **Outbound `backend/app/ingestion/http_client.py::http_get()` has no streaming byte cap on response bodies.** Every test mocks `client.get`, so the cap needs its own change.
-- **The admin session's `e` claim is a truncated SHA-256 over the admin password and TOTP secret.** The payload is signed, not encrypted. Fix: derive it as an HMAC under `SECRET_KEY` in `backend/app/auth/tokens.py::_admin_session_epoch()`.
 
 ### Info
 
 - **Checkout binds neither the registry code nor the billing email to the Organizer.** Any Organizer can name any active company on a Stripe invoice and send it anywhere. This needs a product decision.
-- **`PROMOTION_REGISTRY_CODE_RE` accepts Unicode digits**, since `\d` isn't ASCII-only. Fix: `[0-9]{8}` with `fullmatch`.

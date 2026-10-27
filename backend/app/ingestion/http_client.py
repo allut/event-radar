@@ -18,7 +18,7 @@ from datetime import UTC
 from email.utils import parsedate_to_datetime
 from typing import Any
 import re
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 import httpx
 from tenacity import (
@@ -31,6 +31,7 @@ from tenacity import (
 )
 
 from app._generated.shared_constants import SAFE_URL_SCHEMES
+from app.config import settings
 from app.constants.http import (
     HEADER_RETRY_AFTER,
     HOST_WWW_PREFIX,
@@ -44,7 +45,9 @@ from app.constants.http import (
     HTTP_RETRY_WAIT_MULTIPLIER,
     URL_SCHEME_HTTPS,
 )
+from app.constants.organizer import CLOUDINARY_DELIVERY_PATH_TEMPLATE
 from app.constants.security import (
+    ALLOWED_IMAGE_HOSTS,
     ALLOWED_SOURCE_HOSTS,
     DNS_RESOLVE_CACHE_MAX_ENTRIES,
     DNS_RESOLVE_CACHE_TTL_SECONDS,
@@ -316,6 +319,29 @@ def safe_render_url(url: str | None) -> str | None:
     ):
         return None
     return urlunsplit(parts)
+
+
+def own_cloudinary_url(url: str | None) -> str | None:
+    """``safe_render_url(url)`` when it is one of OUR Cloudinary uploads, else None.
+
+    The host must be the delivery domain (see ALLOWED_IMAGE_HOSTS) AND the
+    path must sit under this account's ``/{cloud_name}/image/upload/`` —
+    res.cloudinary.com serves every Cloudinary account (and remote-fetches
+    other sites), so the host alone would still let an arbitrary third-party
+    image become a tracking pixel once the digest embeds it as an <img>."""
+    safe = safe_render_url(url)
+    cloud_name = settings.CLOUDINARY_CLOUD_NAME
+    if safe is None or not cloud_name:
+        return None
+    parts = urlsplit(safe)
+    path = unquote(parts.path)
+    if (
+        parts.hostname in ALLOWED_IMAGE_HOSTS
+        and path.startswith(CLOUDINARY_DELIVERY_PATH_TEMPLATE.format(cloud_name=cloud_name))
+        and ".." not in path.split("/")
+    ):
+        return safe
+    return None
 
 
 def normalized_hostname(url: str | None) -> str:

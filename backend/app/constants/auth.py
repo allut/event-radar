@@ -157,8 +157,8 @@ ADMIN_SESSION_TTL_SECONDS = 12 * 60 * 60
 # guess window.
 ADMIN_TOTP_VALID_WINDOW = 1
 # _admin_session_epoch()'s hexdigest truncation length (app/auth/tokens.py) —
-# 16 hex chars (64 bits) of the sha256 digest is ample collision resistance
-# for a value that only ever feeds another hash, not a standalone credential.
+# 16 hex chars (64 bits) of the HMAC-SHA256 digest is ample for a value that
+# only ever gates an already-signed token, not a standalone credential.
 ADMIN_SESSION_EPOCH_HASH_LEN = 16
 
 # Per-email magic-link resend cooldown (routers/auth.py::_recent_unused_link_exists) —

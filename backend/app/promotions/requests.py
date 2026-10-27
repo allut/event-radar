@@ -79,7 +79,7 @@ async def promotable_event_ids(
 
 
 def registry_violations(code: str) -> list[RuleViolation]:
-    if not PROMOTION_REGISTRY_CODE_RE.match(code):
+    if not PROMOTION_REGISTRY_CODE_RE.fullmatch(code):
         return [RuleViolation(PROMOTION_ERROR_INVALID_REGISTRY_CODE)]
     if not is_valid_registry_checksum(code):
         return [RuleViolation(PROMOTION_ERROR_REGISTRY_CHECKSUM)]

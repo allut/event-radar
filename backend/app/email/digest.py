@@ -8,6 +8,7 @@ import logging
 from collections.abc import Sequence
 from contextlib import nullcontext
 from datetime import date, datetime
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import select, true
@@ -46,6 +47,7 @@ from app.email.links import frontend_url
 from app.email.resend import resend_http_client
 from app.email.brand import brand_mark_attachments, brand_mark_html
 from app.email.styles import EmailStyles, get_email_styles
+from app.ingestion.http_client import host_is_allowed, own_cloudinary_url, safe_render_url
 from app.email.templates import (
     DIGEST_EMPTY_STATE,
     DIGEST_FOOTER,
@@ -120,6 +122,20 @@ def _format_price_pill(event: Event, locale: str) -> str:
     return price_str
 
 
+def _embeddable_image_url(image_url: str | None) -> str | None:
+    """The URL to embed as the card's <img>, or None for the branded band.
+
+    Only our own Cloudinary uploads and the scraped sources' hosts qualify. A
+    claimant can pin any https image_url, and an <img> on a host they run
+    would log every recipient's IP and open time (security audit, 2026-10)."""
+    if own := own_cloudinary_url(image_url):
+        return own
+    safe = safe_render_url(image_url)
+    if safe is not None and host_is_allowed(urlsplit(safe).hostname):
+        return safe
+    return None
+
+
 def _build_event_block(
     event: Event,
     locale: str,
@@ -148,10 +164,11 @@ def _build_event_block(
         else ""
     )
 
-    if event.image_url:
+    image_url = _embeddable_image_url(event.image_url)
+    if image_url:
         image_html = EVENT_IMAGE.format(
             event_href=event_href,
-            image_url=html_lib.escape(event.image_url, quote=True),
+            image_url=html_lib.escape(image_url, quote=True),
             title=html_lib.escape(resolve_title(event, locale)),
             s_img=s.s_img,
         )

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.config import settings
 from app.email.digest import (
     _format_feed_date,
     _format_event_time,
@@ -283,9 +284,38 @@ class TestBuildDigestHtml:
         assert "bullets fallback" in html
 
     def test_event_image_rendered_when_present(self, make_event):
-        events = [make_event(image_url="https://example.com/photo.jpg")]
+        events = [make_event(image_url="https://www.piletilevi.ee/photo.jpg")]
         html = build_digest_html(events, date(2026, 5, 20), "en", "https://eventradar.ee")
-        assert '<img src="https://example.com/photo.jpg"' in html
+        assert '<img src="https://www.piletilevi.ee/photo.jpg"' in html
+
+    def test_own_cloudinary_image_rendered(self, make_event, monkeypatch):
+        monkeypatch.setattr(settings, "CLOUDINARY_CLOUD_NAME", "er")
+        url = "https://res.cloudinary.com/er/image/upload/v1/a.jpg"
+        html = build_digest_html(
+            [make_event(image_url=url)], date(2026, 5, 20), "en", "https://eventradar.ee"
+        )
+        assert f'<img src="{url}"' in html
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            # A claimant's own host: a tracking pixel on every recipient.
+            "https://tracker.example/pixel.gif",
+            # Another Cloudinary account (or its remote fetch) on the same host.
+            "https://res.cloudinary.com/someone-else/image/upload/v1/a.jpg",
+            "https://res.cloudinary.com/er/image/fetch/https://tracker.example/p.gif",
+            # Parser-differential spelling of an allowed host.
+            "https://tracker.example\\@www.piletilevi.ee/x.jpg",
+            "https://notpiletilevi.ee/x.jpg",
+        ],
+    )
+    def test_untrusted_image_host_falls_back_to_band(self, make_event, monkeypatch, url):
+        monkeypatch.setattr(settings, "CLOUDINARY_CLOUD_NAME", "er")
+        html = build_digest_html(
+            [make_event(image_url=url)], date(2026, 5, 20), "en", "https://eventradar.ee"
+        )
+        assert html.count("<img") == 1  # only the header brand mark
+        assert "&#9670;" in html
 
     def test_branded_band_rendered_when_no_image(self, make_event):
         events = [make_event(image_url=None)]

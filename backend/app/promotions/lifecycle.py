@@ -171,7 +171,7 @@ def _field_violations(promotion: Promotion, diff: Mapping[str, Any]) -> list[Rul
     found: list[RuleViolation] = []
     if "advertiser_legal_name" in diff and not diff["advertiser_legal_name"]:
         found.append(RuleViolation(PROMOTION_ERROR_ADVERTISER_NAME_REQUIRED))
-    if "advertiser_registry_code" in diff and not PROMOTION_REGISTRY_CODE_RE.match(
+    if "advertiser_registry_code" in diff and not PROMOTION_REGISTRY_CODE_RE.fullmatch(
         diff["advertiser_registry_code"] or ""
     ):
         found.append(RuleViolation(PROMOTION_ERROR_INVALID_REGISTRY_CODE))

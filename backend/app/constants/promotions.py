@@ -56,8 +56,9 @@ PROMOTION_CAP_LOCK_KEY = 6_000_597
 # Manual invoice references live in the ER-M- series.
 PROMOTION_INVOICE_PREFIX = "ER-M-"
 PROMOTION_INVOICE_REFERENCE_RE = re.compile(r"^ER-M-[A-Za-z0-9][A-Za-z0-9/_-]{0,39}$")
-# Estonian business registry codes (Äriregister) are 8 digits.
-PROMOTION_REGISTRY_CODE_RE = re.compile(r"^\d{8}$")
+# Estonian business registry codes (Äriregister) are 8 ASCII digits. Callers
+# use fullmatch: `\d` would take Unicode digits and `$` a trailing newline.
+PROMOTION_REGISTRY_CODE_RE = re.compile(r"[0-9]{8}")
 
 PROMOTION_ADVERTISER_NAME_MAX_CHARS = 255
 PROMOTION_BILLING_EMAIL_MAX_CHARS = 255
@@ -264,6 +265,11 @@ PROMOTION_STAT_REPORT_COLUMNS = (
     PROMOTION_STAT_SLOT_DISLIKES,
 )
 PROMOTION_COUNTER_FLUSH_SECONDS = 60
+# Distinct (client, Promotion, column) ?ref= opens remembered for the current
+# Tallinn day (promotions/counters.py::first_ref_hit). Once full, new clients
+# stop counting until midnight, so a flood of addresses can't inflate the
+# advertiser's numbers past this.
+PROMOTION_REF_SEEN_MAX_ENTRIES = 50_000
 
 # Automatic lifecycle sweep (#602): void unpaid, end on cancellation or claim
 # revocation. Runs often so a Tallinn-midnight start and a takedown take

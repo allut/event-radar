@@ -330,8 +330,9 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 - **`flush()` writes the dict as one bulk upsert that adds to the stored totals.** It runs every `PROMOTION_COUNTER_FLUSH_SECONDS` (60) from the `flush_promotion_counters` job and once on shutdown. A crash loses at most a minute, and a failed flush puts the counts back.
 - **Four counters go through the in-process dict:** `explore_served` when page 1 fills a slot, `daily5_placed` when a Daily 5 slot is placed, `web_opens` when `GET /events/{id}?ref=ad` hits an event whose paid Promotion covers today, and `slot_dislikes` when `POST /feedback` sends `signal=dislike` with `ref=ad` (the feedback row is still written).
 - **`digest_opens` counts `ref=digest-ad` the same way as `web_opens`,** and `digest_sent` counts each digest sent with the slot.
+- **The two `?ref=` opens count once per `client_key()`, Promotion, column and Tallinn day, and never for a bot user agent** (`counters.py::first_ref_hit`, `fill.py::is_bot_user_agent`). The dedup set lives in memory for the current day. At `PROMOTION_REF_SEEN_MAX_ENTRIES` it refuses new clients until midnight and logs `promotion_ref_seen_full` once.
 - **The gate columns are written by the daily build** (see Daily 5 Sponsored slot).
-- **Counters never feed ranking, the persona or `user_event_feedback`.** No viewer identifier is recorded; not counted: ticket clicks, total page views, viewable impressions.
+- **Counters never feed ranking, the persona or `user_event_feedback`.** No viewer identifier reaches the database; not counted: ticket clicks, total page views, viewable impressions.
 - **`GET /admin/promotions/{id}/daily-stats` returns one row per complete window day** (today is left out), with zeros where nothing was counted. It reads with one `WHERE promotion_id IN (...)` (`views.load_daily_stats`).
 
 ### Pagination

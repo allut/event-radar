@@ -113,10 +113,16 @@ async def _make_user(db) -> User:
     return user
 
 
+def _from(ip: str, ua: str = "Mozilla/5.0") -> dict[str, str]:
+    return {"X-Forwarded-For": ip, "User-Agent": ua}
+
+
 async def test_ref_ad_on_live_promotion_counts_a_web_open(db, make, client):
     ev, p = await live_promotion(db, make)
-    for ref in ("ad", "ad", None, "other"):
-        resp = await client.get(f"/events/{ev.id}", params={"ref": ref} if ref else {})
+    for ref, ip in (("ad", "198.51.100.1"), ("ad", "198.51.100.2"), (None, "198.51.100.3"), ("other", "198.51.100.4")):
+        resp = await client.get(
+            f"/events/{ev.id}", params={"ref": ref} if ref else {}, headers=_from(ip)
+        )
         assert resp.status_code == 200
     await counters.flush(db)
     assert (await stats(db, p.id))[d(1)].web_opens == 2
@@ -124,12 +130,56 @@ async def test_ref_ad_on_live_promotion_counts_a_web_open(db, make, client):
 
 async def test_ref_digest_ad_on_live_promotion_counts_a_digest_open(db, make, client):
     ev, p = await live_promotion(db, make)
-    for ref in ("digest-ad", "digest-ad", "ad", None):
-        resp = await client.get(f"/events/{ev.id}", params={"ref": ref} if ref else {})
+    for ref, ip in (("digest-ad", "198.51.100.1"), ("digest-ad", "198.51.100.2"), ("ad", "198.51.100.1"), (None, "198.51.100.1")):
+        resp = await client.get(
+            f"/events/{ev.id}", params={"ref": ref} if ref else {}, headers=_from(ip)
+        )
         assert resp.status_code == 200
     await counters.flush(db)
     got = (await stats(db, p.id))[d(1)]
     assert (got.digest_opens, got.web_opens) == (2, 1)
+
+
+async def test_ref_open_counts_once_per_client_a_day(db, make, client):
+    """Anonymous opens reach paying advertisers: one client refreshing, or
+    rotating within its IPv6 /64, must not inflate them (security audit)."""
+    ev, p = await live_promotion(db, make)
+    for ip in ("198.51.100.7", "198.51.100.7", "2001:db8::1", "2001:db8::2"):
+        resp = await client.get(f"/events/{ev.id}", params={"ref": "ad"}, headers=_from(ip))
+        assert resp.status_code == 200
+    await counters.flush(db)  # a flush must not forget who already counted
+    resp = await client.get(f"/events/{ev.id}", params={"ref": "ad"}, headers=_from("198.51.100.7"))
+    await counters.flush(db)
+    assert (await stats(db, p.id))[d(1)].web_opens == 2
+
+
+async def test_ref_open_from_a_bot_does_not_count(db, make, client):
+    ev, p = await live_promotion(db, make)
+    resp = await client.get(
+        f"/events/{ev.id}",
+        params={"ref": "ad"},
+        headers=_from("198.51.100.8", "Mozilla/5.0 (compatible; Googlebot/2.1)"),
+    )
+    assert resp.status_code == 200
+    await counters.flush(db)
+    assert d(1) not in await stats(db, p.id)
+
+
+def test_first_ref_hit_is_per_day_and_refuses_new_clients_when_full(monkeypatch, caplog):
+    monkeypatch.setattr(counters, "PROMOTION_REF_SEEN_MAX_ENTRIES", 2)
+    col = PROMOTION_STAT_WEB_OPENS
+    assert counters.first_ref_hit("a", 1, d(1), col)
+    assert not counters.first_ref_hit("a", 1, d(1), col)
+    assert counters.first_ref_hit("a", 2, d(1), col)  # another Promotion
+    # Full: a new client is refused rather than evicting someone (eviction
+    # would let rotating addresses re-count without bound); one warning.
+    assert not counters.first_ref_hit("b", 1, d(1), col)
+    assert not counters.first_ref_hit("c", 1, d(1), col)
+    assert [r.event for r in caplog.records] == ["promotion_ref_seen_full"]  # type: ignore[attr-defined]
+    assert not counters.first_ref_hit("a", 1, d(1), col)
+    # A new day starts empty.
+    assert counters.first_ref_hit("a", 1, d(2), col)
+    assert counters.first_ref_hit("b", 1, d(2), col)
 
 
 async def test_digest_sent_flushes(db, make):

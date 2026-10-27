@@ -23,6 +23,6 @@ def registry_code_check_digit(first_seven: str) -> int:
 
 def is_valid_registry_checksum(code: str) -> bool:
     """True for 8 digits whose last digit is the correct check digit."""
-    if not PROMOTION_REGISTRY_CODE_RE.match(code):
+    if not PROMOTION_REGISTRY_CODE_RE.fullmatch(code):
         return False
     return registry_code_check_digit(code[:7]) == int(code[7])

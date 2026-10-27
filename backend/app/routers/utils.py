@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-from urllib.parse import unquote, urlsplit
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
@@ -52,7 +51,6 @@ from app.constants.log_events import (
     LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED,
 )
 from app.constants.organizer import (
-    CLOUDINARY_DELIVERY_PATH_TEMPLATE,
     ERROR_IMAGE_HOST_NOT_ALLOWED,
     ERROR_VENUE_NOT_FOUND,
 )
@@ -70,7 +68,6 @@ from app.constants.reports import (
     VALID_REPORT_REASONS,
 )
 from app.constants.security import (
-    ALLOWED_IMAGE_HOSTS,
     ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
     ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
 )
@@ -88,7 +85,7 @@ from app.events.venue import (
     resolve_venue_name,
 )
 from app.ingestion.content_filters import content_flags, localized_text_values
-from app.ingestion.http_client import safe_render_url
+from app.ingestion.http_client import own_cloudinary_url
 from app.ingestion.pricing import normalize_currency
 from app.ingestion.sanitize import sanitize_html
 from app.promotions.grant import PromotionRefused
@@ -919,30 +916,15 @@ def claim_dns_record_name(mechanism: str | None, domain: str | None) -> str | No
 
 def check_image_host(image_url: str | None) -> str | None:
     """Reject an organizer-submission image_url that isn't one of OUR signed
-    Cloudinary uploads and return its re-serialized form (None for empty).
-
-    The host must be the delivery domain (see ALLOWED_IMAGE_HOSTS) AND the
-    path must sit under this account's ``/{cloud_name}/image/upload/`` —
-    res.cloudinary.com serves every Cloudinary account (and remote-fetches
-    other sites), so the host alone would still let an arbitrary third-party
-    image become a tracking pixel once the digest embeds it as an <img> (see
-    app/email/digest.py). Parser-differential spellings (``\\``, userinfo,
+    Cloudinary uploads (``own_cloudinary_url``) and return its re-serialized
+    form (None for empty). Parser-differential spellings (``\\``, userinfo,
     ports) are refused up front by ``safe_render_url`` and the stored value is
     its re-serialized form (OWASP audit M-1)."""
     if not image_url:
         return None
-    safe = safe_render_url(image_url)
-    cloud_name = settings.CLOUDINARY_CLOUD_NAME
+    safe = own_cloudinary_url(image_url)
     if safe is not None:
-        parts = urlsplit(safe)
-        path = unquote(parts.path)
-        if (
-            parts.hostname in ALLOWED_IMAGE_HOSTS
-            and cloud_name
-            and path.startswith(CLOUDINARY_DELIVERY_PATH_TEMPLATE.format(cloud_name=cloud_name))
-            and ".." not in path.split("/")
-        ):
-            return safe
+        return safe
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=ERROR_IMAGE_HOST_NOT_ALLOWED,
