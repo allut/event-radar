@@ -494,8 +494,12 @@ async def test_approve_submission_clears_needs_review(admin_app, make_db_ctx, mo
     # M2: a first approval is what makes the organizer trusted going forward.
     assert organizer.verified is True
     # The publish gate must run inline so this event (now eligible) goes live
-    # immediately rather than waiting for the next scheduled pass.
-    mock_publish.assert_awaited_once_with(db, diagnostics=False)
+    # immediately rather than waiting for the next scheduled pass — scoped to
+    # this event plus the organizer's classified backlog (mocked empty here).
+    mock_publish.assert_awaited_once_with(db, event_ids=[42], diagnostics=False)
+    backlog_stmt = str(db.scalars.await_args.args[0])
+    assert "events.submitted_by_organizer_id" in backlog_stmt
+    assert "events.status" in backlog_stmt
 
     admin_action_records = [
         r for r in caplog.records if getattr(r, "event", None) == "admin_action"
@@ -579,4 +583,4 @@ async def test_approve_submission_with_no_submitting_organizer_still_publishes(
             )
 
     assert resp.status_code == http.HTTPStatus.OK
-    mock_publish.assert_awaited_once_with(db, diagnostics=False)
+    mock_publish.assert_awaited_once_with(db, event_ids=[42], diagnostics=False)

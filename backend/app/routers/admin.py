@@ -80,6 +80,7 @@ from app.constants.events import (
     EVENT_CANCELLATION_REASON_ADMIN_RETRACT,
     EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN,
     EVENT_STATUS_CANCELLED,
+    EVENT_STATUS_CLASSIFIED,
 )
 from app.constants.http import MIME_APPLICATION_NDJSON, HTTP_TIMEOUT_SECONDS
 from app.constants.ingestion import ERROR_UNKNOWN_SOURCE
@@ -571,9 +572,21 @@ async def admin_approve_submission(
                 if organizer is not None:
                     organizer.verified = True
             # organizer.verified flipping True can unlock this organizer's
-            # whole backlog, not just this event — leave event_ids unscoped.
+            # whole backlog, not just this event: scope the gate to their
+            # classified events, so the request never scans every classified
+            # row. Anyone else's eligible rows wait for the scheduled pass.
             # Diagnostic breakdown is unused by this endpoint's response.
-            await publish_pending(db, diagnostics=False)
+            backlog_ids = (
+                await db.scalars(
+                    select(Event.id).where(
+                        Event.submitted_by_organizer_id == event.submitted_by_organizer_id,
+                        Event.status == EVENT_STATUS_CLASSIFIED,
+                    )
+                )
+            ).all()
+            await publish_pending(
+                db, event_ids=list({event.id, *backlog_ids}), diagnostics=False
+            )
             result = {"id": event.id, "needs_review": event.needs_review, "note": note}
             emit_admin_log = log_admin_action(
                 db, ADMIN_ACTION_APPROVE_SUBMISSION, event_id, result

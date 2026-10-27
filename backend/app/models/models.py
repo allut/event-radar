@@ -30,6 +30,7 @@ from app._generated.shared_constants import DEFAULT_USER_CITY, DEFAULT_USER_LOCA
 from app.constants.claims import CLAIM_STATUS_APPROVED, CLAIM_STATUS_PENDING
 from app.constants.events import (
     EVENT_SEARCH_TEXT_SQL,
+    EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_DRAFT,
     EVENT_STATUS_PUBLISHED,
 )
@@ -705,6 +706,14 @@ class Event(Base):
             "ix_events_live_until",
             text("coalesce(ends_at, starts_at)"),
         ),
+        # publish_pending's UPDATE: live rows still 'classified'. Rejects never
+        # leave that status, so the status index alone walks all of them
+        # (Big-O audit P4, migration 0070).
+        Index(
+            "ix_events_classified_live_until",
+            text("coalesce(ends_at, starts_at)"),
+            postgresql_where=text(f"status = '{EVENT_STATUS_CLASSIFIED}'"),
+        ),
         # ORDER BY events.price_min ASC NULLS LAST (browse.py's price sort, Path A).
         Index("ix_events_price_min", "price_min"),
         Index("ix_events_venue_id", "venue_id"),
@@ -883,6 +892,14 @@ class EventSource(Base):
             "id",
             postgresql_include=["event_id"],
         ),
+        # publish.py::_stamp_missing_fienta_publishers: one source's rows with
+        # no publisher yet (Big-O audit P4, migration 0070).
+        Index(
+            "ix_event_sources_unstamped",
+            "source_id",
+            "event_id",
+            postgresql_where=text("publisher_id IS NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -924,7 +941,11 @@ class EventClassification(Base):
         # ORDER BY quality_score DESC NULLS LAST — public.py showcase,
         # browse.py's quality sort (Path A) and For-you pool ordering, and the
         # publish gate's quality_score >= PUBLISH_MIN_QUALITY_SCORE subquery.
-        Index("ix_event_classifications_quality_score", "quality_score"),
+        # Descending with NULLS LAST to match that order (migration 0070).
+        Index(
+            "ix_event_classifications_quality_score",
+            text("quality_score DESC NULLS LAST"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

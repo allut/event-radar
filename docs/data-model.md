@@ -111,6 +111,12 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **The query side must match the index expression textually.** `app/routers/organizer_claims.py::claim_search_text()` builds it, and `backend/tests/test_claim_search_indexes.py` guards drift.
 - **They are expression indexes, not columns,** so the `updated_at` trigger's column list is untouched.
 
+#### Publish and Quality Indexes
+
+- **`ix_events_classified_live_until` serves `backend/app/publish.py::publish_pending`** (migration 0070). It is partial on `status = 'classified'` over `coalesce(ends_at, starts_at)`, so the UPDATE skips every reject that has already ended.
+- **`ix_event_sources_unstamped` serves `backend/app/publish.py::_stamp_missing_fienta_publishers`.** It is partial on `publisher_id IS NULL`.
+- **`ix_event_classifications_quality_score` is `quality_score DESC NULLS LAST`,** the order every quality sort asks for. `backend/tests/test_bigo_indexes.py` checks that the planner uses all three.
+
 #### Pinned Fields
 
 - **`events.pinned_fields` lists the fields a claim has pinned against overwrite** by ingestion and detail-refetch. It defaults to `[]`. A per-locale text field pins one locale with a `"<field>:<locale>"` entry.
