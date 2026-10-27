@@ -16,6 +16,7 @@ from datetime import datetime
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.constants.events import EVENT_STATUS_CANCELLED
 from app.constants.llm import (
@@ -43,7 +44,7 @@ from app.events.queries import event_not_ended_filter
 from app.events.venue import resolve_venue_name
 from app.ingestion.sanitize import html_to_text
 from app.llm.prompts import LLM_PROMOTION_RESTRICTION_PROMPT_TEMPLATE, escape_prompt_delimiters
-from app.llm.router import llm_http_client, llm_json_or_none
+from app.llm.router import llm_http_client, llm_json_or_none, prefetch_llm_cache
 from app.models.models import Event, Promotion
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.windows import RuleViolation, tallinn_today
@@ -172,16 +173,19 @@ async def assess_events(db: AsyncSession, events: Sequence[Event]) -> int:
     edits and the backfill. Returns how many events were assessed. Caller commits."""
     if not events:
         return 0
+    prompts = {event.id: _assess_prompt(event) for event in events}
+    prefetched_cache = await prefetch_llm_cache(db, prompts.values())
     semaphore = asyncio.Semaphore(LLM_BATCH_FANOUT_CONCURRENCY)
 
     async def _one(event: Event) -> str | None:
         async with semaphore:
             response = await llm_json_or_none(
                 LLM_TASK_PROMOTION_RESTRICTION,
-                _assess_prompt(event),
+                prompts[event.id],
                 db,
                 event_id=event.id,
                 context=f"restriction assess failed for event_id={event.id}",
+                prefetched_cache=prefetched_cache,
                 http_client=http_client,
             )
         if response is None:
@@ -224,6 +228,9 @@ async def backfill_restrictions(db: AsyncSession, now: datetime) -> dict[str, in
         page = (
             await db.scalars(
                 select(Event)
+                # The prompt reads the linked venue; a lazy load there raises
+                # under async.
+                .options(selectinload(Event.venue))
                 .where(
                     Event.id > last_id,
                     Event.promotion_restriction.is_(None),

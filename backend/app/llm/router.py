@@ -14,6 +14,7 @@ import hashlib
 import http
 import json
 import logging
+from collections.abc import Iterable
 from typing import Any
 
 import httpx
@@ -21,6 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.constants.core import SQL_IN_CHUNK_SIZE
 from app.constants.http import AUTHORIZATION_HEADER, BEARER_PREFIX
 from app.constants.llm import (
     LLM_FAILURE_BAD_SHAPE,
@@ -110,6 +112,34 @@ def content_hash(text: str) -> str:
     return _content_hash(text)
 
 
+async def prefetch_llm_cache(
+    db: AsyncSession, prompts: Iterable[str]
+) -> dict[str, tuple[dict[str, Any], str]]:
+    """Bulk-load the ``llm_calls`` cache for a batch of prompts, keyed by
+    content hash, newest successful row winning — the ``prefetched_cache`` a
+    fan-out caller hands ``llm_json``. Without it each concurrent ``llm_json``
+    runs its own cache ``SELECT`` on the shared session, which an
+    ``AsyncSession`` refuses. One query per ``SQL_IN_CHUNK_SIZE`` hashes."""
+    from app.models.models import LlmCall
+
+    hashes = list(dict.fromkeys(_content_hash(p) for p in prompts))
+    cache: dict[str, tuple[dict[str, Any], str]] = {}
+    for i in range(0, len(hashes), SQL_IN_CHUNK_SIZE):
+        rows = (
+            await db.execute(
+                select(LlmCall.content_hash, LlmCall.response_json, LlmCall.provider, LlmCall.model)
+                .where(
+                    LlmCall.content_hash.in_(hashes[i : i + SQL_IN_CHUNK_SIZE]),
+                    LlmCall.response_json.is_not(None),
+                )
+                .order_by(LlmCall.created_at)
+            )
+        ).all()
+        for row_hash, response_json, provider, model in rows:
+            cache[row_hash] = (response_json, f"{provider}/{model}")
+    return cache
+
+
 def _provider_base_url(provider: dict[str, Any]) -> str:
     """Provider base URL — a literal, or a settings attr when it's deployment-specific
     (Cloudflare Workers AI embeds the account id in the path)."""
@@ -168,7 +198,7 @@ async def llm_json(
         event_id: Optional event FK for audit traceability.
         prefetched_cache: Optional bulk-loaded cache map from a batch caller —
             when provided, skips the per-call cache ``SELECT`` entirely (see
-            ``classify_pending``'s ``_prefetch_classify_cache``).
+            ``prefetch_llm_cache``). Required under ``asyncio.gather`` on one session.
         http_client: Optional shared ``httpx.AsyncClient`` from a batch caller —
             when provided, reused instead of opening a fresh connection pool /
             TLS context per call.

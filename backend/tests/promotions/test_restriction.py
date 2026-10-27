@@ -2,8 +2,8 @@
 the grant requirement, clearing a newly flagged Promotion, the admin notice,
 the backfill and the "Promoted" report tagging."""
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -11,8 +11,10 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from app.auth.dependencies import get_current_user
+from app.constants.llm import LLM_BATCH_FANOUT_CONCURRENCY
 from app.constants.promotions import (
     PROMOTION_ERROR_CLEARANCE_NOT_NEEDED,
     PROMOTION_ERROR_CLEARANCE_NOTE_REQUIRED,
@@ -22,7 +24,7 @@ from app.constants.promotions import (
 )
 from app.constants.reports import REPORT_STATUS_OPEN
 from app.db import get_db
-from app.models.models import EventReport, Promotion, User
+from app.models.models import Event, EventReport, Promotion, User, Venue
 from app.promotions.fill import evaluate_gate
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion
 from app.promotions.restriction import (
@@ -31,6 +33,7 @@ from app.promotions.restriction import (
     parse_promotion_restriction,
 )
 from app.routers import reports as reports_router
+from tests.conftest import count_statements
 from tests.promotions.conftest import NOW, d
 from tests.promotions.test_explore_slot import classified, promote
 
@@ -271,6 +274,32 @@ class TestClearNewlyFlagged:
         assert "political" in payload["subject"]
 
 
+def alcohol_answer() -> AsyncMock:
+    """A provider `post` that always answers `alcohol`."""
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.raise_for_status = MagicMock()
+    resp.json.return_value = {
+        "choices": [{"message": {"content": '{"promotion_restriction": "alcohol"}'}}],
+        "usage": {"prompt_tokens": 5, "completion_tokens": 3},
+    }
+    return AsyncMock(return_value=resp)
+
+
+@contextmanager
+def groq_only(post: AsyncMock) -> Iterator[None]:
+    """Run the real `llm_json` (cache lookup included) against one fake provider."""
+    with (
+        patch("app.llm.router.settings") as cfg,
+        patch("httpx.AsyncClient.post", post),
+    ):
+        cfg.GROQ_API_KEY = "gsk_test"
+        cfg.CLOUDFLARE_WORKERS_AI_API_KEY = ""
+        cfg.CLOUDFLARE_WORKERS_AI_BASE_URL = ""
+        cfg.MISTRAL_API_KEY = ""
+        yield
+
+
 class TestAssessAgainstRealTable:
     @pytest.mark.asyncio
     async def test_llm_call_row_persists_and_second_assess_hits_cache(self, db, make) -> None:
@@ -280,22 +309,8 @@ class TestAssessAgainstRealTable:
         from app.promotions.restriction import assess_events
 
         ev = await make.event(submitted_by=await make.organizer())
-        resp = MagicMock()
-        resp.status_code = 200
-        resp.raise_for_status = MagicMock()
-        resp.json.return_value = {
-            "choices": [{"message": {"content": '{"promotion_restriction": "alcohol"}'}}],
-            "usage": {"prompt_tokens": 5, "completion_tokens": 3},
-        }
-        post = AsyncMock(return_value=resp)
-        with (
-            patch("app.llm.router.settings") as cfg,
-            patch("httpx.AsyncClient.post", post),
-        ):
-            cfg.GROQ_API_KEY = "gsk_test"
-            cfg.CLOUDFLARE_WORKERS_AI_API_KEY = ""
-            cfg.CLOUDFLARE_WORKERS_AI_BASE_URL = ""
-            cfg.MISTRAL_API_KEY = ""
+        post = alcohol_answer()
+        with groq_only(post):
             await assess_events(db, [ev])
             await db.flush()
             assert ev.promotion_restriction == "alcohol"
@@ -325,6 +340,33 @@ class TestBackfill:
         assert first["assessed"] >= 1
         assert second["assessed"] == 0 or second["assessed"] <= first["assessed"] - 1
         assert answers.await_count == first["assessed"]  # idempotent: no re-assess
+
+    @pytest.mark.asyncio
+    async def test_fresh_page_wider_than_the_fan_out_is_fully_assessed(self, db, make) -> None:
+        """The backfill script's shape: a fresh session (venues not loaded) and
+        more events than LLM_BATCH_FANOUT_CONCURRENCY, through the real
+        `llm_json`. Every event is assessed, its linked venue reaches the prompt,
+        and the fan-out issues no per-event cache SELECT on the shared session."""
+        org = await make.organizer()
+        venue = Venue(organizer_id=org.id, name="Kultuurikatel")
+        db.add(venue)
+        await db.flush()
+        events = [
+            await make.event(submitted_by=org, venue_id=venue.id)
+            for _ in range(LLM_BATCH_FANOUT_CONCURRENCY + 2)
+        ]
+        ids = [e.id for e in events]
+        db.expunge_all()
+        post = alcohol_answer()
+        with groq_only(post), count_statements(db) as statements:
+            await backfill_restrictions(db, NOW)
+        assessed = (await db.scalars(select(Event).where(Event.id.in_(ids)))).all()
+        assert [e.promotion_restriction for e in assessed] == ["alcohol"] * len(ids)
+        assert post.await_count == len(ids)
+        prompt = post.await_args.kwargs["json"]["messages"][0]["content"]
+        assert "Kultuurikatel" in prompt
+        cache_lookups = [s for s in statements if "FROM llm_calls" in s]
+        assert len(cache_lookups) == 1
 
     @pytest.mark.asyncio
     async def test_llm_outage_leaves_event_unassessed(self, db, make) -> None:
