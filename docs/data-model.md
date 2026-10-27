@@ -212,7 +212,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 
 ## Migrations
 
-- **Chain `down_revision` to the previous revision**, and keep each migration small and reversible. CI round-trips the whole chain and runs `alembic check` (see `docs/backend-ops.md`'s CI section).
+- **Chain `down_revision` to the previous revision**, and keep each migration small and reversible. CI round-trips the whole chain and runs `alembic check` (see `docs/backend-ops.md`'s CI section). Locally, `backend/tests/test_models_match_migrations.py` runs the same check against the scratch database.
 - **Before creating a unique index, add a defensive `DELETE`** that keeps the smallest `id` per key. Historical duplicates exist even where the application now prevents them; `event_sources(source_id, external_id)` in `0007` was the first case.
 
 ## Connection Pooling
