@@ -117,6 +117,9 @@ PROMOTION_ERROR_CLEARANCE_NOT_NEEDED = "restriction_not_flagged"
 # Request-path rule codes beyond the grant ones.
 PROMOTION_ERROR_REQUEST_PENDING = "request_pending"
 PROMOTION_ERROR_TERMS_NOT_ACCEPTED = "terms_not_accepted"
+# Both paths: the Organizer confirms the registry code is its own business.
+PROMOTION_ERROR_BUSINESS_ATTESTATION = "business_attestation_required"
+PROMOTION_BUSINESS_ATTESTATION_MESSAGE = "Confirm that the registry code is your own business."
 PROMOTION_ERROR_REGISTRY_CHECKSUM = "registry_code_checksum"
 PROMOTION_ERROR_NOT_PROMOTABLE = "not_promotable"
 PROMOTION_ERROR_REQUEST_NOT_PENDING = "request_not_pending"
@@ -159,6 +162,7 @@ PROMOTION_ERROR_MESSAGES = {
     PROMOTION_ERROR_REGISTRY_CHECKSUM: "That is not a valid Estonian registry code.",
     PROMOTION_ERROR_REQUEST_PENDING: "This event already has a pending Promotion request.",
     PROMOTION_ERROR_TERMS_NOT_ACCEPTED: "The Organizer terms must be accepted.",
+    PROMOTION_ERROR_BUSINESS_ATTESTATION: PROMOTION_BUSINESS_ATTESTATION_MESSAGE,
     PROMOTION_ERROR_NOT_PROMOTABLE: "This event cannot be promoted right now.",
     PROMOTION_ERROR_REQUEST_NOT_PENDING: "The request is no longer pending.",
     PROMOTION_ERROR_REQUEST_OWNER_CHANGED: "The requesting Organizer no longer owns this event.",
@@ -458,6 +462,7 @@ PROMOTION_CHECKOUT_ERROR_MESSAGES = {
     PROMOTION_ERROR_CHECKOUT_NOT_PROMOTABLE: "This event cannot be promoted.",
     PROMOTION_ERROR_CHECKOUT_NOT_OWNER: "You do not own this event.",
     PROMOTION_ERROR_CHECKOUT_ATTESTATION: "Confirm that the event complies with the Promotion content policy.",
+    PROMOTION_ERROR_BUSINESS_ATTESTATION: PROMOTION_BUSINESS_ATTESTATION_MESSAGE,
     PROMOTION_ERROR_CHECKOUT_TERMS: "Accept the Organizer terms to continue.",
     PROMOTION_ERROR_CHECKOUT_PROVIDER: "Card checkout could not be opened. Try again or send a request.",
     PROMOTION_ERROR_REFUND_PROVIDER: "The card refund could not be issued. Nothing was recorded.",

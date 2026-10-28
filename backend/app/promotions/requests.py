@@ -18,6 +18,7 @@ from app.constants.events import EVENT_STATUS_CANCELLED
 from app._generated.shared_constants import ORGANIZER_TERMS_VERSION
 from app.constants.promotions import (
     ORGANIZER_DAILY_PROMOTION_REQUEST_CAP,
+    PROMOTION_ERROR_BUSINESS_ATTESTATION,
     PROMOTION_ERROR_INVALID_REGISTRY_CODE,
     PROMOTION_ERROR_NOT_PROMOTABLE,
     PROMOTION_ERROR_REGISTRY_CHECKSUM,
@@ -55,6 +56,7 @@ class RequestInput:
     advertiser_registry_code: str
     billing_email: str | None
     note: str | None
+    business_attested: bool
     terms_accepted: bool
 
 
@@ -100,6 +102,8 @@ async def create_request(
     violations: list[RuleViolation] = []
     if not data.terms_accepted:
         violations.append(RuleViolation(PROMOTION_ERROR_TERMS_NOT_ACCEPTED))
+    if not data.business_attested:
+        violations.append(RuleViolation(PROMOTION_ERROR_BUSINESS_ATTESTATION))
     violations += registry_violations(data.advertiser_registry_code)
     if not await promotable_event_ids(db, [event], now):
         violations.append(RuleViolation(PROMOTION_ERROR_NOT_PROMOTABLE))
@@ -140,6 +144,7 @@ async def create_request(
         status=PROMOTION_REQUEST_STATUS_PENDING,
         terms_version=ORGANIZER_TERMS_VERSION,
         terms_accepted_at=now,
+        business_attested_at=now,
         created_at=now,
         updated_at=now,
     )

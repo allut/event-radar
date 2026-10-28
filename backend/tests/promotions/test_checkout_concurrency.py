@@ -71,6 +71,7 @@ async def test_two_simultaneous_checkouts_for_the_last_cap_day_leave_exactly_one
                             registry_code="12345678",
                             billing_email=None,
                             content_policy_attested=True,
+                            business_attested=True,
                             terms_accepted=True,
                         ),
                         NOW,

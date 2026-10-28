@@ -73,6 +73,7 @@ def req_body(event_id: int, start: int = 10, end: int = 14, **kw: Any) -> dict:
         "end_date": d(end).isoformat(),
         "advertiser_legal_name": "Acme Events OÜ",
         "advertiser_registry_code": VALID_CODE,
+        "business_attested": True,
         "terms_accepted": True,
     }
     out.update(kw)
@@ -120,6 +121,7 @@ async def test_create_request_records_terms_and_notifies_admin(oclient, db, make
     assert row.status == "pending"
     assert row.terms_version == ORGANIZER_TERMS_VERSION
     assert row.terms_accepted_at == NOW
+    assert row.business_attested_at == NOW
     assert row.note == "please"
     assert notices == [row.id]
 
@@ -129,11 +131,19 @@ async def test_request_refusals(oclient, make, notices) -> None:
     ev = await own_event(make)
     resp = await oclient.post(
         "/organizer/promotions/requests",
-        json=req_body(ev.id, 1, 2, advertiser_registry_code=BAD_CHECKSUM, terms_accepted=False),
+        json=req_body(
+            ev.id,
+            1,
+            2,
+            advertiser_registry_code=BAD_CHECKSUM,
+            terms_accepted=False,
+            business_attested=False,
+        ),
     )
     assert resp.status_code == 422
     assert await codes(resp) == [
         "terms_not_accepted",
+        "business_attestation_required",
         "registry_code_checksum",
         "window_too_short",
         "starts_too_early",

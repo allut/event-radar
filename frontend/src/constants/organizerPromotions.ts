@@ -79,6 +79,7 @@ export const PROMOTION_FORM_ERROR_KEYS: Readonly<Record<string, string>> = {
   terms_not_accepted: 'promo_err_terms',
   organizer_terms_required: 'promo_err_terms',
   content_policy_attestation_required: 'promo_err_policy',
+  business_attestation_required: 'promo_need_business',
   invalid_registry_code: 'promo_need_code',
   registry_code_checksum: 'promo_need_code',
 };

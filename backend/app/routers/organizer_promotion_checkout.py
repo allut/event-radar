@@ -87,6 +87,7 @@ class CheckoutBody(BaseModel):
         default=None, max_length=PROMOTION_BILLING_EMAIL_MAX_CHARS
     )
     content_policy_attested: bool
+    business_attested: bool
     terms_accepted: bool
 
 
@@ -135,6 +136,7 @@ async def start_promotion_checkout(
         registry_code=body.registry_code,
         billing_email=str(body.billing_email) if body.billing_email else None,
         content_policy_attested=body.content_policy_attested,
+        business_attested=body.business_attested,
         terms_accepted=body.terms_accepted,
     )
     try:

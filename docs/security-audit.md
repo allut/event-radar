@@ -27,6 +27,8 @@ An audit leaves these out of its report.
 - **A verified Organizer's submission publishes before admin review.** Only an unverified Organizer's events wait; `backend/app/publish.py::publish_pending` holds them.
 - **`backend/app/routers/utils.py::organizer_sanitize()` runs inline in the async handler**, not in a threadpool. Field `max_length` bounds the work.
 - **Scraped LLM input is untrusted by design.** Outputs are validated field by field instead; see [security.md](security.md)'s Untrusted Values section.
+- **The business on a Promotion is the Organizer's word.** Both paths take a business attestation and nothing more, and a false one ends the Promotion with no refund; see [ADR 0005](adr/0005-card-only-stripe-checkout-for-promotions.md).
+- **A Promotion's billing email is free text.** Stripe invoices it only after the Organizer's own card payment, and an admin invoices a request's address by hand. It is no spam channel and reveals only the Operator's public details.
 
 ## Open Findings
 
@@ -39,7 +41,3 @@ Ranked by severity. Each carries the fix the audit recommended.
 ### Low
 
 - **Outbound `backend/app/ingestion/http_client.py::http_get()` has no streaming byte cap on response bodies.** Every test mocks `client.get`, so the cap needs its own change.
-
-### Info
-
-- **Checkout binds neither the registry code nor the billing email to the Organizer.** Any Organizer can name any active company on a Stripe invoice and send it anywhere. This needs a product decision.

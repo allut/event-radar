@@ -29,6 +29,7 @@ from app.constants.promotions import (
     PROMOTION_CHECKOUT_PATH_SUCCESS,
     PROMOTION_CONTENT_POLICY_VERSION,
     PROMOTION_END_REASON_CHECKOUT_FAILED,
+    PROMOTION_ERROR_BUSINESS_ATTESTATION,
     PROMOTION_ERROR_CHECKOUT_ATTESTATION,
     PROMOTION_ERROR_CHECKOUT_NEEDS_REVIEW,
     PROMOTION_ERROR_CHECKOUT_NOT_OWNER,
@@ -88,6 +89,7 @@ class CheckoutInput:
     registry_code: str
     billing_email: str | None
     content_policy_attested: bool
+    business_attested: bool
     terms_accepted: bool
 
 
@@ -193,6 +195,8 @@ async def start_checkout(
         raise CheckoutRefused(PROMOTION_ERROR_CHECKOUT_NOT_PROMOTABLE)
     if not data.content_policy_attested:
         raise CheckoutRefused(PROMOTION_ERROR_CHECKOUT_ATTESTATION)
+    if not data.business_attested:
+        raise CheckoutRefused(PROMOTION_ERROR_BUSINESS_ATTESTATION)
     if not data.terms_accepted:
         raise CheckoutRefused(PROMOTION_ERROR_CHECKOUT_TERMS)
     registry_code = data.registry_code.strip()
@@ -224,6 +228,7 @@ async def start_checkout(
         checkout_expires_at=now + timedelta(minutes=PROMOTION_CHECKOUT_SESSION_MINUTES),
         content_policy_attested_at=now,
         content_policy_version=PROMOTION_CONTENT_POLICY_VERSION,
+        business_attested_at=now,
         terms_accepted_at=now,
         terms_version=PROMOTION_ORGANIZER_TERMS_VERSION,
     )

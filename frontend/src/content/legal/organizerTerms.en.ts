@@ -112,6 +112,9 @@ const doc: LegalDoc = {
               'Promotions are sold only to businesses and non-profits registered in Estonia, and you must give your Estonian registry code.',
             ],
             [
+              'You buy only for your own business, never on behalf of another one. When you buy, you confirm that the registry code is your own business’s and that you are authorised to act for it. Its legal name appears on the Promotion and on the invoice.',
+            ],
+            [
               'The price is €5 per day plus VAT at the applicable rate (at 24%, €6.20 per day). For example, 7 days cost €35 plus €8.40 VAT, €43.40 in total.',
             ],
             [
@@ -131,13 +134,13 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'By card. You enter your registry code, your legal name is filled in from the Estonian business register, you confirm that your event meets the content policy and accept these terms, and you pay through Stripe. While you are in checkout we hold the days you chose for 30 minutes. If a payment arrives after the hold has lapsed, we refund it in full automatically and tell you by email.',
+            'By card. You enter your registry code, your legal name is filled in from the Estonian business register, you confirm that the business is your own and that your event meets the content policy, accept these terms, and pay through Stripe. While you are in checkout we hold the days you chose for 30 minutes. If a payment arrives after the hold has lapsed, we refund it in full automatically and tell you by email.',
           ],
         },
         {
           kind: 'p',
           content: [
-            'By bank transfer, through a request. You send a Promotion request with your dates, legal name, registry code, billing email and an optional note, and you accept these terms. A request is not an offer that we must accept. We may grant it, grant it on other dates agreed with you, or decline it with a reason. If we grant it, we invoice you and you pay by bank transfer. A Promotion that is still unpaid when its start date begins is voided and its days are released.',
+            'By bank transfer, through a request. You send a Promotion request with your dates, legal name, registry code, billing email and an optional note, confirm that the business is your own, and accept these terms. A request is not an offer that we must accept. We may grant it, grant it on other dates agreed with you, or decline it with a reason. If we grant it, we invoice you and you pay by bank transfer. A Promotion that is still unpaid when its start date begins is voided and its days are released.',
           ],
         },
         {
@@ -222,6 +225,9 @@ const doc: LegalDoc = {
             ],
             [
               'Content test: if the content was already restricted when we accepted payment, we refund the unused days. If it changed into breach after payment, we do not. We decide this against the record we keep of what the Promotion displayed. We may refuse a refund where the content attestation was knowingly false.',
+            ],
+            [
+              'If the business you named is not your own, we end the Promotion and refund nothing.',
             ],
             [
               'Days that have run are not refunded, and low delivery is never a ground for a refund.',

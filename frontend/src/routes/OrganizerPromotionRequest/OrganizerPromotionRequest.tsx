@@ -117,6 +117,7 @@ export default function OrganizerPromotionRequest() {
   const [note, setNote] = useState('');
   const [terms, setTerms] = useState(false);
   const [policy, setPolicy] = useState(false);
+  const [business, setBusiness] = useState(false);
   const [mode, setMode] = useState<'card' | 'request'>('card');
   const [failedBlock, setCardBlock] = useState<CardBlock>(null);
   const [registryDown, setRegistryDown] = useState(false);
@@ -204,6 +205,7 @@ export default function OrganizerPromotionRequest() {
   if (!registryOk) problems.push(t(outage ? 'promo_need_legal' : 'promo_need_code', locale));
   if (!terms) problems.push(t('promo_need_terms', locale));
   if (wantsCard && !policy) problems.push(t('promo_need_policy', locale));
+  if (!business) problems.push(t('promo_need_business', locale));
 
   const billingEmail = email.trim();
   const checkout = useMutation({
@@ -215,6 +217,7 @@ export default function OrganizerPromotionRequest() {
         registry_code: code,
         billing_email: billingEmail || null,
         content_policy_attested: policy,
+        business_attested: business,
         terms_accepted: terms,
       }),
     // The browser leaves for Stripe's hosted page; it comes back to the success route.
@@ -254,6 +257,7 @@ export default function OrganizerPromotionRequest() {
         advertiser_registry_code: code,
         billing_email: billingEmail || null,
         note: note.trim() || null,
+        business_attested: business,
         terms_accepted: terms,
       }),
     onSuccess: (created) => {
@@ -645,6 +649,9 @@ export default function OrganizerPromotionRequest() {
                 {policyAfter}
               </CheckRow>
             )}
+            <CheckRow id={`${ids}-business`} checked={business} onChange={setBusiness} invalid={tried && !business}>
+              {t('promo_business_label', locale)}
+            </CheckRow>
             <CheckRow id={`${ids}-terms`} checked={terms} onChange={setTerms} invalid={tried && !terms}>
               {termsBefore}
               <Link to={localePath(ROUTES.organizerTerms)}>{t('promo_terms_link', locale)}</Link>

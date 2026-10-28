@@ -200,7 +200,7 @@ The Organizer offer and request path (`app/routers/organizer_promotions.py`, `ap
 
 ### Requests
 
-- **`POST /organizer/promotions/requests` creates a pending request** with dates, legal name, registry code, optional billing email (default: the account email) and note, plus `terms_accepted`. It records `ORGANIZER_TERMS_VERSION` and the time, and emails the admin a deep link.
+- **`POST /organizer/promotions/requests` creates a pending request** with dates, legal name, registry code, optional billing email (default: the account email) and note, plus `terms_accepted` and `business_attested`. It records `ORGANIZER_TERMS_VERSION` and both times, and emails the admin a deep link.
 - **The registry code must be 8 digits with a valid check digit** (`app/promotions/registry.py`). Window, overlap and sold-out rules reuse the grant validation.
 - **Limits are one pending request per event, no overlap with an `unpaid` or `paid` Promotion, and `ORGANIZER_DAILY_PROMOTION_REQUEST_CAP` per Tallinn day.** Refusals carry `detail.errors`: 409 for state, 429 for the daily cap, 422 for input.
 - **An event the Organizer does not currently own is a 404,** whoever owns it.
@@ -228,6 +228,7 @@ The Organizer offer and request path (`app/routers/organizer_promotions.py`, `ap
 - **A row's `Promote` link or badge comes from `PromotionRowAction`, after `Edit`.** The badge opens `/organizer/promotions?event=<id>`, which scrolls to that event's open item. Claim event rows keep their stretched title link, and the action sits above it.
 - **The request form (`OrganizerPromotionRequest/`, `/organizer/promotions/new?event_id=`) validates dates through `GET /validate`.** Sold-out days arrive as dates from `/context` and grey out in `DatePicker`. A real `EventCard` previews the ad with the typed or registry name.
 - **Card payment is the default action, with the request as fallback.** The form starts on Pay only when `/context` says `checkout_available` and not `review_required`; otherwise it starts on the request with the review copy. A 409 `event_needs_review`, a 404 or a registry outage still fall back.
+- **Both paths make the Organizer confirm the business is its own.** Without it the server refuses `business_attestation_required`; with it, `business_attested_at` is recorded. The claim is trusted; see [ADR 0005](adr/0005-card-only-stripe-checkout-for-promotions.md).
 - **The registry lookup runs once the 8-digit check digit passes.** A found name locks the field. Deleted and not-found codes block the form, and an outage opens a typed name and the request path.
 - **The terms and content-policy links open `/organizer-terms` and its `#content-policy` section** (`ROUTES.organizerTerms`, `ROUTES.organizerContentPolicy`). That page carries a DRAFT notice; see [frontend.md](frontend.md)'s i18n section.
 - **`OrganizerPromotionSuccess/` never trusts the redirect.** It polls the list until the Promotion is `scheduled` or later, because the Stripe webhook can land after the return. A late payment still gets the automatic refund the page describes.

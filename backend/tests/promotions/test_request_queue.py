@@ -27,7 +27,16 @@ async def make_request(db, make, org=None, start=10, end=14, ev=None, **ev_kw) -
         db,
         org.id,
         ev,
-        RequestInput(d(start), d(end), "Acme OÜ", "10234957", None, "hello", True),
+        RequestInput(
+            start_date=d(start),
+            end_date=d(end),
+            advertiser_legal_name="Acme OÜ",
+            advertiser_registry_code="10234957",
+            billing_email=None,
+            note="hello",
+            business_attested=True,
+            terms_accepted=True,
+        ),
         NOW,
     )
 

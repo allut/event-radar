@@ -112,6 +112,9 @@ const doc: LegalDoc = {
               'Reklaamiperioode müüakse ainult Eestis registreeritud ettevõtetele ja mittetulundusühingutele ning sa pead esitama oma Eesti registrikoodi.',
             ],
             [
+              'Ostad ainult oma ettevõtte või ühingu jaoks, mitte kunagi kellegi teise eest. Ostes kinnitad, et registrikood kuulub sinu enda ettevõttele või ühingule ja et sul on õigus selle nimel tegutseda. Selle juriidiline nimi on näha reklaamiperioodil ja arvel.',
+            ],
+            [
               'Hind on 5 € päevas pluss käibemaks kehtiva määra järgi (24% korral 6,20 € päevas). Näiteks 7 päeva maksavad 35 € pluss 8,40 € käibemaksu, kokku 43,40 €.',
             ],
             [
@@ -131,13 +134,13 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            "Kaardiga. Sisestad oma registrikoodi, sinu juriidiline nimi täidetakse Eesti äriregistri põhjal, kinnitad, et sinu üritus vastab sisupoliitikale, nõustud nende tingimustega ja maksad Stripe'i kaudu. Kui oled makselehel, hoiame valitud päevi 30 minutit. Kui makse jõuab kohale pärast hoiu lõppu, tagastame selle automaatselt täies mahus ja teavitame sind e-kirjaga.",
+            "Kaardiga. Sisestad oma registrikoodi, sinu juriidiline nimi täidetakse Eesti äriregistri põhjal, kinnitad, et ettevõte või ühing on sinu oma ja et sinu üritus vastab sisupoliitikale, nõustud nende tingimustega ja maksad Stripe'i kaudu. Kui oled makselehel, hoiame valitud päevi 30 minutit. Kui makse jõuab kohale pärast hoiu lõppu, tagastame selle automaatselt täies mahus ja teavitame sind e-kirjaga.",
           ],
         },
         {
           kind: 'p',
           content: [
-            'Pangaülekandega, taotluse kaudu. Saadad reklaamitaotluse oma kuupäevade, juriidilise nime, registrikoodi, arveldus-e-posti ja valikulise märkusega ning nõustud nende tingimustega. Taotlus ei ole pakkumine, mille me peaksime vastu võtma. Võime selle rahuldada, rahuldada sinuga kokku lepitud muudel kuupäevadel või tagasi lükata koos põhjusega. Kui rahuldame, esitame sulle arve ja sa maksad pangaülekandega. Reklaamiperiood, mis on algamispäeva alguseks veel tasumata, tühistatakse ja selle päevad vabastatakse.',
+            'Pangaülekandega, taotluse kaudu. Saadad reklaamitaotluse oma kuupäevade, juriidilise nime, registrikoodi, arveldus-e-posti ja valikulise märkusega, kinnitad, et ettevõte või ühing on sinu oma, ning nõustud nende tingimustega. Taotlus ei ole pakkumine, mille me peaksime vastu võtma. Võime selle rahuldada, rahuldada sinuga kokku lepitud muudel kuupäevadel või tagasi lükata koos põhjusega. Kui rahuldame, esitame sulle arve ja sa maksad pangaülekandega. Reklaamiperiood, mis on algamispäeva alguseks veel tasumata, tühistatakse ja selle päevad vabastatakse.',
           ],
         },
         {
@@ -220,6 +223,9 @@ const doc: LegalDoc = {
             ],
             [
               'Sisutest: kui sisu oli makse vastuvõtmise ajal juba piiratud, tagastame kasutamata päevad. Kui see muutus rikkumiseks pärast maksmist, siis mitte. Otsustame seda kirje põhjal, mida me hoiame selle kohta, mida reklaamiperiood näitas. Võime keelduda tagasimaksest, kui sisu kinnitus oli teadlikult vale.',
+            ],
+            [
+              'Kui nimetatud ettevõte või ühing ei ole sinu oma, lõpetame reklaamiperioodi ja tagasimakset ei tee.',
             ],
             [
               'Möödunud päevi ei tagastata ja vähest näitamist ei loeta kunagi tagasimakse aluseks.',

@@ -321,6 +321,24 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
       expect(screen.queryByRole('checkbox', { name: /content policy/ })).not.toBeInTheDocument();
     });
 
+    it('asks the Organizer to confirm the business is its own, on both paths', async () => {
+      setup();
+      await screen.findByLabelText('Start date');
+      await fillDates();
+      await fillBusiness();
+      await userEvent.click(screen.getByRole('checkbox', { name: /I accept the Organizer terms/ }));
+      await userEvent.click(screen.getByRole('checkbox', { name: /content policy/ }));
+
+      await userEvent.click(screen.getByRole('button', { name: /^Pay [€…]/ }));
+      expect(await screen.findByText(/Confirm the business is your own to continue\./)).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: 'Pay by bank transfer instead' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Send request' }));
+      expect(await screen.findByText(/Confirm the business is your own to continue\./)).toBeInTheDocument();
+      expect(mockPost).not.toHaveBeenCalledWith('/organizer/promotions/checkout', expect.anything());
+      expect(mockPost).not.toHaveBeenCalledWith('/organizer/promotions/requests', expect.anything());
+    });
+
     it('links the terms and the content policy to their placeholder pages', async () => {
       setup();
       await screen.findByLabelText('Start date');
@@ -409,6 +427,7 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
       await fillDates('2026-10-29', '2026-11-03');
       await fillBusiness();
       await userEvent.click(screen.getByRole('checkbox', { name: /content policy/ }));
+      await userEvent.click(screen.getByRole('checkbox', { name: /belongs to my own business/ }));
       await userEvent.click(screen.getByRole('checkbox', { name: /I accept the Organizer terms/ }));
     }
 
@@ -442,6 +461,7 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
         registry_code: VALID_CODE,
         billing_email: 'arved@kalamaja.example',
         content_policy_attested: true,
+        business_attested: true,
         terms_accepted: true,
       });
     });
@@ -543,6 +563,7 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
       await fillDates('2026-10-29', '2026-11-03');
       await fillBusiness();
       await userEvent.type(field(/^Note for us/), 'Invoice to accounting please');
+      await userEvent.click(screen.getByRole('checkbox', { name: /belongs to my own business/ }));
       await userEvent.click(screen.getByRole('checkbox', { name: /I accept the Organizer terms/ }));
       mockPost.mockImplementation(async (path: string, body?: unknown) =>
         path === '/organizer/promotions/requests'
@@ -569,6 +590,7 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
         advertiser_registry_code: VALID_CODE,
         billing_email: null,
         note: 'Invoice to accounting please',
+        business_attested: true,
         terms_accepted: true,
       });
       const recap = screen.getByRole('status');
@@ -583,6 +605,7 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Pay by bank transfer instead' }));
       await fillDates();
       await fillBusiness();
+      await userEvent.click(screen.getByRole('checkbox', { name: /belongs to my own business/ }));
       await userEvent.click(screen.getByRole('checkbox', { name: /I accept the Organizer terms/ }));
       mockPost.mockImplementation(async (path: string) => {
         if (path === '/organizer/promotions/requests') throw new ApiError(429, 'Too many', 'daily_request_limit');

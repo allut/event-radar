@@ -43,6 +43,7 @@ def data(event, **overrides):
         registry_code="12345678",
         billing_email=None,
         content_policy_attested=True,
+        business_attested=True,
         terms_accepted=True,
     )
     values.update(overrides)
@@ -73,6 +74,7 @@ async def test_checkout_holds_the_days_and_opens_one_net_line_session(
     assert promo.invoice_source == "stripe"
     assert (promo.content_policy_version, promo.terms_version) == ("1", "1")
     assert promo.content_policy_attested_at == NOW and promo.terms_accepted_at == NOW
+    assert promo.business_attested_at == NOW
     assert promo.stripe_checkout_session_id == "cs_test_1"
     assert started.checkout_url == "https://checkout.stripe.test/1"
 
@@ -184,6 +186,7 @@ async def test_unpublished_event_is_not_promotable(db, make, gateway, registry) 
     "overrides,code",
     [
         ({"content_policy_attested": False}, "content_policy_attestation_required"),
+        ({"business_attested": False}, "business_attestation_required"),
         ({"terms_accepted": False}, "organizer_terms_required"),
     ],
 )
@@ -287,6 +290,7 @@ def body(event, **overrides):
         "end_date": "2090-01-14",
         "registry_code": "12345678",
         "content_policy_attested": True,
+        "business_attested": True,
         "terms_accepted": True,
     }
     values.update(overrides)

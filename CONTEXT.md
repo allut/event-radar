@@ -157,7 +157,8 @@ _Avoid_: owner, company, seller, platform, sole trader
 A placement, sold for a set window, of one event the Organizer owns:
 either an event they submitted or one covered by an approved claim that is not
 dormant. A Promotion buys Sponsored slots only. It never changes where the
-event ranks in any organic list. A complimentary Promotion, granted at no
+event ranks in any organic list. It is always sold to the Organizer's own
+business, never to another business through them. A complimentary Promotion, granted at no
 charge, is still a Promotion: it is labelled, rotated and counted exactly like
 one that was paid for.
 _Avoid_: boost, bump, ad campaign, featured
@@ -172,7 +173,7 @@ _Avoid_: campaign, flight, run
 
 **Promotion request**:
 An Organizer's request for a Promotion on one event they own, with the dates
-they want and the business that would pay. It is not a Promotion: nothing has
+they want and their own business, which would pay. It is not a Promotion: nothing has
 been sold, and it holds no days against the cap. An admin either grants it,
 which creates the Promotion (possibly on other dates agreed with the
 Organizer), or declines it with a reason. Otherwise it is withdrawn by the
@@ -190,7 +191,8 @@ _Avoid_: restricted category, banned event, unpromotable
 
 **Sponsored slot**:
 A labelled position on a public surface that shows one Promotion's event as
-advertising and names the paying Organizer. It sits beside the organic results,
+advertising and names the paying Organizer by the legal name of their business.
+It sits beside the organic results,
 outside them, and is never counted as one. Its Promotion is chosen by context
 (the surface and the viewer's active filters), never by the viewer's tastes; a
 viewer's own signals can only exclude a Promotion. When no Promotion is

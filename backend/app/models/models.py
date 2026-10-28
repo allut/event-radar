@@ -1273,6 +1273,12 @@ class Promotion(Base):
         DateTime(timezone=True), nullable=True
     )
     content_policy_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # The Organizer's statement that the registry code is its own business, at
+    # card checkout. A Promotion granted from a request keeps it on that request
+    # (source_request_id); a direct grant and an older checkout leave it NULL.
+    business_attested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     terms_accepted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -1334,6 +1340,10 @@ class PromotionRequest(Base):
     terms_version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     terms_accepted_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
+    )
+    # NULL on a request made before the business attestation existed.
+    business_attested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

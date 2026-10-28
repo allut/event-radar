@@ -75,7 +75,16 @@ async def held_promotion(db, make, gateway) -> Promotion:
         gateway,
         registry,
         org,
-        CheckoutInput(event.id, d(10), d(14), "12345678", None, True, True),
+        CheckoutInput(
+            event_id=event.id,
+            start_date=d(10),
+            end_date=d(14),
+            registry_code="12345678",
+            billing_email=None,
+            content_policy_attested=True,
+            business_attested=True,
+            terms_accepted=True,
+        ),
         NOW,
     )
     return started.promotion

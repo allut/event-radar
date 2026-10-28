@@ -73,6 +73,7 @@ class PromotionRequestBody(BaseModel):
         default=None, max_length=PROMOTION_BILLING_EMAIL_MAX_CHARS
     )
     note: str | None = Field(default=None, max_length=PROMOTION_NOTE_MAX_CHARS)
+    business_attested: bool = False
     terms_accepted: bool = False
 
     @field_validator("advertiser_legal_name", "advertiser_registry_code")
@@ -170,6 +171,7 @@ async def create_promotion_request(
                 advertiser_registry_code=body.advertiser_registry_code,
                 billing_email=str(body.billing_email or current_organizer.email),
                 note=(body.note or "").strip() or None,
+                business_attested=body.business_attested,
                 terms_accepted=body.terms_accepted,
             ),
             now_tallinn(),
