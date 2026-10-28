@@ -16,6 +16,19 @@ async def _plan(db, sql: str) -> str:
 
 @pytest.mark.asyncio
 async def test_publish_gate_reads_live_classified_rows_by_index(db) -> None:
+    # On an empty, analyzed events table this index and ix_events_status cost
+    # the same, so the planner's pick flips with whatever stats earlier tests
+    # or autovacuum left behind. Seed the production shape (ended rejects
+    # piling up in 'classified') and analyze, so the partial index wins on cost.
+    await db.execute(
+        text(
+            "INSERT INTO events (slug, title_orig, starts_at, status) "
+            "SELECT 'bigo-' || g, 'e', now() - interval '30 days' + (g % 20) * interval '1 day', "
+            "CASE WHEN g % 20 = 0 THEN 'published' ELSE 'classified' END "
+            "FROM generate_series(1, 2000) g"
+        )
+    )
+    await db.execute(text("ANALYZE events"))
     plan = await _plan(
         db,
         "UPDATE events SET status = 'published' "
