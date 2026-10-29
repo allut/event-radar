@@ -915,7 +915,7 @@ def claim_dns_record_name(mechanism: str | None, domain: str | None) -> str | No
 
 
 def check_image_host(image_url: str | None) -> str | None:
-    """Reject an organizer-submission image_url that isn't one of OUR signed
+    """Reject an organizer-submission or claim-edit image_url that isn't one of OUR signed
     Cloudinary uploads (``own_cloudinary_url``) and return its re-serialized
     form (None for empty). Parser-differential spellings (``\\``, userinfo,
     ports) are refused up front by ``safe_render_url`` and the stored value is

@@ -5,11 +5,13 @@ import { useLocalLocale } from '../../hooks/useLocalLocale';
 import { useClaimEventEdit } from '../../hooks/useClaimEventEdit';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import DatePicker from '../../components/DatePicker';
+import FileField from '../../components/FileField';
 import CategoryPicker from '../../components/CategoryPicker';
 import { t, ti } from '../../i18n';
 import { ORGANIZER_MAX_CATEGORIES } from '../../_generated/sharedConstants';
 import { CLAIM_EDIT_LOCALES } from '../../constants/claims';
 import { LOCALE_EN, LOCALE_ET } from '../../constants/core';
+import { ORGANIZER_IMAGE_ACCEPT } from '../../constants/organizer';
 import { EVENT_STATUS } from '../../constants/prerender';
 import { categoryOptions, cx, currencySymbol, localizedFieldLabel, titleWithBrand } from '../../utils';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
@@ -202,13 +204,21 @@ export default function ClaimEventEdit() {
                     <label className={styles.label} htmlFor="image_url">{t('claim_edit_field_image', locale)}</label>
                     {renderPin('image_url')}
                   </div>
-                  <input
+                  <FileField
                     id="image_url"
-                    type="text"
-                    className={styles.input}
-                    value={form.fields.imageUrl}
-                    onChange={(e) => form.setField('imageUrl', 'image_url', e.target.value)}
+                    accept={ORGANIZER_IMAGE_ACCEPT}
+                    onSelect={form.uploadImage}
+                    onClear={form.clearImage}
+                    previewUrl={form.fields.imageUrl}
+                    uploading={form.imageUploading}
+                    disabled={form.isSaving || form.imageUploading}
+                    chooseLabel={t('organizer_image_choose', locale)}
+                    replaceLabel={t('organizer_image_replace', locale)}
+                    emptyLabel={t('organizer_image_none', locale)}
+                    uploadingLabel={t('organizer_image_uploading', locale)}
+                    removeLabel={t('organizer_image_remove', locale)}
                   />
+                  {form.imageError && <p className={styles.error} role="alert">{form.imageError}</p>}
                 </div>
 
                 <div className={styles.fieldCol}>

@@ -74,16 +74,16 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 ### Rendered-Only URLs
 
 - **`app/ingestion/http_client.py::safe_external_url()` is the scheme check** (`SAFE_URL_SCHEMES`). It stops stored XSS through `javascript:` or `data:` URLs. Scraped `image_url` uses it.
-- **`safe_render_url()` guards every user-supplied URL that is only rendered:** organizer and claim-edit `url`/`image_url`. It rejects backslashes, controls, whitespace, userinfo, explicit ports, non-http(s) schemes, and `%` or non-ASCII in the authority.
+- **`safe_render_url()` guards every user-supplied URL that is only rendered:** organizer and claim-edit `url`, and organizer `image_url` before `check_image_host()` narrows it. It rejects backslashes, controls, whitespace, userinfo, explicit ports, non-http(s) schemes, and `%` or non-ASCII in the authority.
 - **Callers store `safe_render_url()`'s re-serialized form, never the raw input.** Python's `urlsplit` and browsers disagree on `https://evil.com\@fienta.com/`, so a host pin checked on one parser must hold for the stored string.
 - **A `user_submission` source's `event.url` is render-only.** Organizers edit their row through PATCH, so `refetch.py::_select_candidates` skips organizer rows. `adapter.py::insert_normalized_event()` picks `safe_external_url()` for that `source.kind`, since an organizer's ticketing domain is never on `ALLOWED_SOURCE_HOSTS`.
 
 ### Organizer Images
 
-- **`app/routers/utils.py::check_image_host()` pins organizer `image_url` to our own Cloudinary account.** It calls `app/ingestion/http_client.py::own_cloudinary_url()`: the host must be in `ALLOWED_IMAGE_HOSTS` and the path under `/{CLOUDINARY_CLOUD_NAME}/image/upload/`. It fails closed when the cloud name is unset.
+- **`app/routers/utils.py::check_image_host()` pins organizer and claim-edit `image_url` to our own Cloudinary account.** It calls `app/ingestion/http_client.py::own_cloudinary_url()`: the host must be in `ALLOWED_IMAGE_HOSTS` and the path under `/{CLOUDINARY_CLOUD_NAME}/image/upload/`. It fails closed when the cloud name is unset.
 - **The path pin matters because `res.cloudinary.com` serves every account.** The daily digest embeds `image_url` as an `<img>`, so an arbitrary host would be an unconsented tracking pixel leaking each recipient's IP and open time.
-- **The digest embeds an image only from our Cloudinary account or an `ALLOWED_SOURCE_HOSTS` host** (`app/email/digest.py::_embeddable_image_url`). Any other `image_url`, such as one a claimant pinned, gets the branded band instead.
-- **Organizer images go through the signed `POST /organizer/events/image` upload.** Scraped sources are unaffected by the pin.
+- **The digest embeds an image only from our Cloudinary account or an `ALLOWED_SOURCE_HOSTS` host** (`app/email/digest.py::_embeddable_image_url`). Any other `image_url` gets the branded band instead.
+- **Organizer and claim-edit images go through the signed `POST /organizer/events/image` upload.** The claim edit checks `image_url` only when the client sends it, so saving other fields never fails on an untouched scraped URL. Scraped sources are unaffected by the pin. `backend/scripts/clear_foreign_claim_images.py` clears the non-Cloudinary values claimants pinned before the host check existed, and leaves a pinned empty value alone.
 
 ### Fetched URLs
 

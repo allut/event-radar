@@ -27,7 +27,7 @@ An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter
 - **`POST /organizer/events/image` returns a signed Cloudinary upload**, so the API secret never reaches the SPA. It needs all three `CLOUDINARY_*` settings (`app/config.py`); with any unset it logs and returns 501.
 - **Uploads are gated by `IMAGE_UPLOAD_ALLOWED_MIME` (415) and `IMAGE_UPLOAD_MAX_BYTES` (413).**
 - **Never send `signature_algorithm` as an upload param.** It is an SDK-config knob. Cloudinary verifies against the params it receives, so sending it makes the check 401. `_cloudinary_signature` signs with SHA-256, which the account accepts by default.
-- **`image_url` is pinned to our own Cloudinary account.** See [security.md](security.md)'s Organizer Images section.
+- **`image_url` is pinned to our own Cloudinary account, on submit, edit and claim edit.** The claim edit form offers the same `FileField` upload. See [security.md](security.md)'s Organizer Images section.
 
 ### Daily Caps
 

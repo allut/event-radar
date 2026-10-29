@@ -48,7 +48,6 @@ from app.constants.events import (
 )
 from app.constants.http import HTTP_TIMEOUT_SECONDS
 from app.constants.organizer import (
-    ERROR_IMAGE_URL_SCHEME,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DESCRIPTION_MAX_LEN,
     ORGANIZER_TITLE_MAX_LEN,
@@ -68,6 +67,7 @@ from app.routers.utils import (
     PriceField,
     apply_moderation_flags,
     apply_price_edit,
+    check_image_host,
     fold_legacy_category,
     merged_localized,
     organizer_sanitize,
@@ -337,12 +337,7 @@ async def _save_claim_event(
         )
 
     if "image_url" in fields_set:
-        safe_image_url = safe_render_url(body.image_url)
-        if body.image_url and not safe_image_url:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_IMAGE_URL_SCHEME
-            )
-        event.image_url = safe_image_url
+        event.image_url = check_image_host(body.image_url)
         to_pin.add(pin_key("image_url"))
 
     if "starts_at" in fields_set and body.starts_at is not None:

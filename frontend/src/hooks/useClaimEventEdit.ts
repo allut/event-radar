@@ -2,7 +2,7 @@ import { StatusCodes } from 'http-status-codes';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../api/client';
-import { ORGANIZER_MAX_CATEGORIES } from '../_generated/sharedConstants';
+import { ORGANIZER_IMAGE_ALLOWED_MIME, ORGANIZER_MAX_CATEGORIES } from '../_generated/sharedConstants';
 import { API, QUERY_KEYS } from '../constants/api';
 import { CLAIM_ERROR_CODE_DORMANT } from '../constants/claims';
 import { t } from '../i18n';
@@ -95,6 +95,10 @@ export interface UseClaimEventEditResult {
    * capped at ORGANIZER_MAX_CATEGORIES, so a toggle is ignored once full. */
   pendingCategories: string[];
   togglePendingCategory: (slug: string) => void;
+  uploadImage: (file: File) => void;
+  clearImage: () => void;
+  imageUploading: boolean;
+  imageError: string;
   save: () => void;
   isSaving: boolean;
   saveError: string;
@@ -227,6 +231,21 @@ export function useClaimEventEdit(
     },
   });
 
+  // The claim edit accepts only our own Cloudinary uploads as image_url, so
+  // the image is uploaded first and its returned URL becomes the field value.
+  const imageMutation = useMutation({
+    mutationFn: (file: File) => {
+      // Skips a doomed round trip; the server re-validates (415 on mismatch).
+      if (!ORGANIZER_IMAGE_ALLOWED_MIME.includes(file.type)) {
+        return Promise.reject(new Error(t('generic_error', locale)));
+      }
+      const form = new FormData();
+      form.append('file', file);
+      return organizerApi.post<{ url: string }>(API.organizerEventImage, form);
+    },
+    onSuccess: (data) => setField('imageUrl', 'image_url', data.url),
+  });
+
   const acceptPriceMutation = useMutation({
     mutationFn: () =>
       organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId, eventId), {
@@ -264,6 +283,10 @@ export function useClaimEventEdit(
       const room = Math.max(0, ORGANIZER_MAX_CATEGORIES - (query.data?.categories.length ?? 0));
       setPendingCategories((prev) => toggleCapped(prev, slug, room));
     },
+    uploadImage: imageMutation.mutate,
+    clearImage: () => { setField('imageUrl', 'image_url', ''); imageMutation.reset(); },
+    imageUploading: imageMutation.isPending,
+    imageError: imageMutation.isError ? apiErrorMessage(imageMutation.error, t('generic_error', locale)) : '',
     save: () => {
       const err = clientValidationError();
       setClientError(err);

@@ -34,10 +34,6 @@ An audit leaves these out of its report.
 
 Ranked by severity. Each carries the fix the audit recommended.
 
-### Medium
-
-- **The claim edit still takes a free-text `image_url`.** The digest no longer embeds it, but the event page renders it under `img-src https:`, so a web visitor's IP still reaches the claimant's host. Pinning it to Cloudinary waits on an approved upload control in the claim edit UI.
-
 ### Low
 
 - **Outbound `backend/app/ingestion/http_client.py::http_get()` has no streaming byte cap on response bodies.** Every test mocks `client.get`, so the cap needs its own change.
