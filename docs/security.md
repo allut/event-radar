@@ -95,6 +95,7 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 
 ### Redirects
 
+- **`http_get()` streams the body and raises `ResponseTooLargeError` past `HTTP_MAX_RESPONSE_BYTES` (16 MiB).** The cap counts decoded bytes, so a false or missing `Content-Length` and a compressed bomb both hit it. The error is an `httpx.HTTPError` that `_is_retryable` skips. The largest real page is Fienta's events API at about 4 MiB.
 - **A client that follows redirects must pin every hop with `host_guard_hook`** (`http_client.py`). httpx's `follow_redirects=True` has no same-origin rule, and a pre-fetch check only sees the first URL.
 - **The hook runs on each redirect hop**, checking `(scheme, hostname, port)` and re-running `resolves_to_private_ip()`. `fienta.py`, `html_base.py`, `refetch.py` and the publisher backfill client use it. Add it to any new adapter that follows redirects.
 

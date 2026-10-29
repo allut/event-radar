@@ -36,6 +36,8 @@ from app.constants.http import (
     HEADER_RETRY_AFTER,
     HOST_WWW_PREFIX,
     HTTPS_DEFAULT_PORT,
+    HTTP_MAX_RESPONSE_BYTES,
+    HTTP_RESPONSE_CHUNK_BYTES,
     HTTP_RETRYABLE_STATUS_CODES,
     HTTP_RETRY_AFTER_MAX_SECONDS,
     HTTP_RETRY_JITTER_MAX,
@@ -56,6 +58,12 @@ from app.constants.security import (
 )
 
 log = logging.getLogger(__name__)
+
+
+class ResponseTooLargeError(httpx.HTTPError):
+    """A response body passed HTTP_MAX_RESPONSE_BYTES. Permanent: not a
+    RequestError or HTTPStatusError, so _is_retryable never retries it, and
+    callers already catching httpx.HTTPError treat it like any failed fetch."""
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -215,10 +223,34 @@ async def http_get(
     params: dict | None = None,
     headers: dict | None = None,
 ) -> httpx.Response:
-    """Shared HTTP GET with exponential-backoff retry for transient failures."""
-    r = await client.get(url, params=params, headers=headers)
-    r.raise_for_status()
-    return r
+    """Shared HTTP GET with exponential-backoff retry for transient failures.
+
+    The body is read in chunks and abandoned with ResponseTooLargeError once it
+    passes HTTP_MAX_RESPONSE_BYTES (decoded bytes, so a compressed bomb counts
+    too); Content-Length is only an early exit, never trusted."""
+    async with client.stream("GET", url, params=params, headers=headers) as r:
+        r.raise_for_status()
+        declared = r.headers.get("Content-Length", "")
+        if declared.isdigit() and int(declared) > HTTP_MAX_RESPONSE_BYTES:
+            raise ResponseTooLargeError(f"response too large: {url}")
+        body = bytearray()
+        async for chunk in r.aiter_bytes(HTTP_RESPONSE_CHUNK_BYTES):
+            body.extend(chunk)
+            if len(body) > HTTP_MAX_RESPONSE_BYTES:
+                raise ResponseTooLargeError(f"response too large: {url}")
+        # Rebuild with the decoded body so callers get a plain buffered
+        # Response; drop the headers describing the original wire encoding.
+        headers_out = httpx.Headers(r.headers)
+        for name in ("content-encoding", "content-length"):
+            headers_out.pop(name, None)
+        return httpx.Response(
+            r.status_code,
+            headers=headers_out,
+            content=bytes(body),
+            request=r.request,
+            extensions=r.extensions,
+            history=r.history,
+        )
 
 
 async def http_get_stored_url(

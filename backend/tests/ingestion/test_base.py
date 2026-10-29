@@ -26,11 +26,15 @@ from app.ingestion.adapter import (
     _make_slug,
     load_publisher_lookup,
 )
+from app.ingestion import http_client
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
 from app.ingestion.http_client import (
     AsyncRateLimiter,
+    ResponseTooLargeError,
+    _is_retryable,
     _retry_wait,
     host_is_allowed,
+    http_get,
     http_get_stored_url,
     resolves_to_private_ip,
     retry_after_seconds,
@@ -254,6 +258,93 @@ class TestHttpGetStoredUrl:
         ):
             await http_get_stored_url(client, "https://fienta.com/e/1")
         get.assert_awaited_once_with(client, "https://fienta.com/e/1")
+
+
+class TestHttpGetBodyCap:
+    """http_get streams the body through a real httpx transport (MockTransport)."""
+
+    @staticmethod
+    def _client(handler):
+        return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    @pytest.mark.asyncio
+    async def test_body_under_limit_is_returned_in_full(self):
+        client = self._client(lambda r: httpx.Response(200, content=b"x" * 1000))
+        async with client:
+            resp = await http_get(client, "https://fienta.com/e/1")
+        assert resp.status_code == 200
+        assert resp.content == b"x" * 1000
+        assert resp.text == "x" * 1000
+
+    @pytest.mark.asyncio
+    async def test_body_over_limit_raises_without_retry(self, monkeypatch):
+        monkeypatch.setattr(http_client, "HTTP_MAX_RESPONSE_BYTES", 100)
+        calls = []
+
+        def handler(request):
+            calls.append(request)
+            return httpx.Response(200, content=b"x" * 101)
+
+        async with self._client(handler) as client:
+            with pytest.raises(ResponseTooLargeError):
+                await http_get(client, "https://fienta.com/e/1")
+        assert len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_false_content_length_does_not_bypass_cap(self, monkeypatch):
+        monkeypatch.setattr(http_client, "HTTP_MAX_RESPONSE_BYTES", 100)
+        handler = lambda r: httpx.Response(  # noqa: E731
+            200, content=b"x" * 500, headers={"Content-Length": "5"}
+        )
+        async with self._client(handler) as client:
+            with pytest.raises(ResponseTooLargeError):
+                await http_get(client, "https://fienta.com/e/1")
+
+    @pytest.mark.asyncio
+    async def test_missing_content_length_does_not_bypass_cap(self, monkeypatch):
+        monkeypatch.setattr(http_client, "HTTP_MAX_RESPONSE_BYTES", 100)
+
+        async def chunks():
+            for _ in range(10):
+                yield b"x" * 50
+
+        handler = lambda r: httpx.Response(200, content=chunks())  # noqa: E731
+        async with self._client(handler) as client:
+            with pytest.raises(ResponseTooLargeError):
+                await http_get(client, "https://fienta.com/e/1")
+
+    @pytest.mark.asyncio
+    async def test_compressed_bomb_counts_decoded_bytes(self, monkeypatch):
+        import gzip
+
+        monkeypatch.setattr(http_client, "HTTP_MAX_RESPONSE_BYTES", 1000)
+        packed = gzip.compress(b"x" * 100_000)
+        assert len(packed) < 1000
+        handler = lambda r: httpx.Response(  # noqa: E731
+            200, content=packed, headers={"Content-Encoding": "gzip"}
+        )
+        async with self._client(handler) as client:
+            with pytest.raises(ResponseTooLargeError):
+                await http_get(client, "https://fienta.com/e/1")
+
+    @pytest.mark.asyncio
+    async def test_declared_oversize_content_length_fails_fast(self, monkeypatch):
+        monkeypatch.setattr(http_client, "HTTP_MAX_RESPONSE_BYTES", 100)
+        handler = lambda r: httpx.Response(  # noqa: E731
+            200, content=b"x" * 10, headers={"Content-Length": "101"}
+        )
+        async with self._client(handler) as client:
+            with pytest.raises(ResponseTooLargeError):
+                await http_get(client, "https://fienta.com/e/1")
+
+    @pytest.mark.asyncio
+    async def test_error_status_still_raises_status_error(self):
+        async with self._client(lambda r: httpx.Response(404)) as client:
+            with pytest.raises(httpx.HTTPStatusError):
+                await http_get(client, "https://fienta.com/e/1")
+
+    def test_too_large_is_not_retryable(self):
+        assert _is_retryable(ResponseTooLargeError("big")) is False
 
 
 class TestIsExplicitText:

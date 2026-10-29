@@ -34,6 +34,4 @@ An audit leaves these out of its report.
 
 Ranked by severity. Each carries the fix the audit recommended.
 
-### Low
-
-- **Outbound `backend/app/ingestion/http_client.py::http_get()` has no streaming byte cap on response bodies.** Every test mocks `client.get`, so the cap needs its own change.
+No findings are open.

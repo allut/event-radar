@@ -25,6 +25,11 @@ HTTP_RETRY_WAIT_MIN = 2
 HTTP_RETRY_WAIT_MAX = 30
 HTTP_RETRY_AFTER_MAX_SECONDS: float = 60.0  # cap on an honored Retry-After header
 HTTP_RETRY_JITTER_MAX: float = 1.0  # max random jitter added to the non-429 backoff wait
+# Cap on a streamed http_get() response body. The largest real source page is
+# Fienta's events API at ~4 MiB (the HTML pages are under 1 MiB), so this leaves
+# 4x headroom while keeping a hostile or broken source from exhausting memory.
+HTTP_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+HTTP_RESPONSE_CHUNK_BYTES = 64 * 1024
 HTTP_RETRYABLE_STATUS_CODES: frozenset[int] = frozenset(
     {
         http.HTTPStatus.TOO_MANY_REQUESTS,  # 429
