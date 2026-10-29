@@ -4,7 +4,6 @@ import { organizerApi } from '../api/client';
 import {
   ORGANIZER_MAX_CATEGORIES,
   DEFAULT_CURRENCY,
-  ORGANIZER_IMAGE_ALLOWED_MIME,
 } from '../_generated/sharedConstants';
 import { API, QUERY_KEYS } from '../constants/api';
 import { ORGANIZER_EVENT_DETAIL_KEY } from '../constants/organizer';
@@ -12,6 +11,7 @@ import { ROUTES } from '../constants/routes';
 import { t } from '../i18n';
 import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, toggleCapped, withLocaleQuery, type LocalizedTextFields } from '../utils';
 import { useLocaleNavigate } from './useLocaleNavigate';
+import { useOrganizerImageUpload } from './useOrganizerImageUpload';
 import type { SavedVenue, VenuePickerValue } from '../components/VenuePicker';
 
 interface OrganizerEventFull {
@@ -208,20 +208,7 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
     void Promise.resolve().then(() => setFields(fieldsFromExisting(existing)));
   }, [eventId, isEditMode, existing]);
 
-  const imageMutation = useMutation({
-    mutationFn: (file: File) => {
-      // Client-side MIME check purely to skip a doomed network round trip —
-      // the server re-validates and is the real security boundary (415 on
-      // mismatch), same as the <input accept> hint this mirrors.
-      if (!ORGANIZER_IMAGE_ALLOWED_MIME.includes(file.type)) {
-        return Promise.reject(new Error(t('generic_error', locale)));
-      }
-      const form = new FormData();
-      form.append('file', file);
-      return organizerApi.post<{ url: string }>(API.organizerEventImage, form);
-    },
-    onSuccess: (data) => setField('imageUrl', data.url),
-  });
+  const imageUpload = useOrganizerImageUpload(locale, (url) => setField('imageUrl', url));
 
   const createVenueMutation = useMutation({
     mutationFn: (v: VenuePickerValue & { mode: 'oneoff' }) =>
@@ -373,14 +360,14 @@ export function useOrganizerEventForm(locale: string, eventId?: number): UseOrga
     venue: fields.venue,
     url: fields.url,
     imageUrl: fields.imageUrl,
-    clearImage: () => { setField('imageUrl', ''); imageMutation.reset(); },
+    clearImage: () => { setField('imageUrl', ''); imageUpload.reset(); },
     priceMin: fields.priceMin,
     priceMax: fields.priceMax,
     categories: fields.categories,
     ...setters,
-    uploadImage: imageMutation.mutate,
-    imageUploading: imageMutation.isPending,
-    imageError: imageMutation.isError ? errorText(imageMutation.error) : '',
+    uploadImage: imageUpload.upload,
+    imageUploading: imageUpload.uploading,
+    imageError: imageUpload.error,
     submit,
     isSubmitting: submitMutation.isPending,
     submitError: submitMutation.isError ? errorText(submitMutation.error) : '',
