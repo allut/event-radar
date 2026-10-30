@@ -1,7 +1,8 @@
 """scripts/move_to_shared.py: a move into shared/ on a throwaway repo, checked file by file.
 
-Each test builds a small repo in tmp_path: a copy of the real shared/, VERSION and
-generator, plus fixture constants files and their consumers in both stacks.
+Each test builds a small repo in tmp_path: a copy of the real shared/,
+frontend/package.json and generator, plus fixture constants files and their
+consumers in both stacks.
 """
 
 from __future__ import annotations
@@ -39,7 +40,8 @@ def _write(root: Path, files: dict[str, str]) -> None:
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     shutil.copytree(REPO / "shared", tmp_path / "shared")
-    shutil.copy(REPO / "VERSION", tmp_path / "VERSION")
+    (tmp_path / "frontend").mkdir()
+    shutil.copy(REPO / "frontend" / "package.json", tmp_path / "frontend")
     (tmp_path / "scripts").mkdir()
     shutil.copy(REPO / "scripts" / "generate_shared.py", tmp_path / "scripts")
     _write(tmp_path, {".gitignore": "backend/scripts/_*\n"})

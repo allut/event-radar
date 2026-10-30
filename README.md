@@ -115,14 +115,14 @@ event-radar/
 ├── CODING_STANDARDS.md review-only rules and where every standard lives
 ├── CONTEXT.md          domain glossary
 ├── docker-compose.yml  local Postgres 16
-├── render.yaml         Render backend service
-└── VERSION             current release version
+└── render.yaml         Render backend service
 ```
 
 ## Development
 
 - **Day-to-day commands are in [CLAUDE.md's Commands](CLAUDE.md#commands):** tests, lint, type-check and build for both stacks. Read its [Traps](CLAUDE.md#traps) before your first commit.
 - **Shared values and translations live in `shared/`.** After an edit, run `python scripts/generate_shared.py` and commit both sides. See [shared/README.md](shared/README.md).
+- **Bump the version with `python scripts/bump_version.py [patch|minor|major]`** on `master`. The version lives in `frontend/package.json`. The script commits, tags `vX.Y.Z` and pushes `master` with the tag, so local commits not yet on `origin` go out too. `--help` lists the dry-run and no-push flags.
 - **Running the pipeline locally:** with the scheduler off, the feed stays empty until you trigger the stages yourself. Sign in at `/admin/login` and run them from `/admin/pipeline`. Locally, either set `ADMIN_PASSWORD` and `ADMIN_TOTP_SECRET`, or set `ALLOW_INSECURE_DEV=true` and leave both unset.
 - **Resetting event data:** `backend/scripts/reset_events.py` wipes events and pipeline state, dry run by default. See [docs/backend-ops.md](docs/backend-ops.md)'s Maintenance Scripts section.
 

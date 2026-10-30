@@ -63,3 +63,21 @@ def test_single_item_list_is_still_a_tuple() -> None:
 def test_unsupported_values_are_refused_with_the_scalar_named(value: object) -> None:
     with pytest.raises(ValueError, match=r"scalars\.BAD:"):
         _emit({"BAD": value})
+
+
+def test_version_comes_from_frontend_package_json(tmp_path: Path) -> None:
+    package_json = tmp_path / "package.json"
+    package_json.write_text('{"name": "frontend", "version": "2.3.4"}', encoding="utf-8")
+    assert gen._version(package_json) == "2.3.4"
+
+
+@pytest.mark.parametrize(
+    "package",
+    ['{"name": "frontend"}', '{"version": ""}', '{"version": "  "}', '{"version": 1}'],
+    ids=["missing", "empty", "blank", "not-a-string"],
+)
+def test_missing_or_empty_version_is_refused_with_the_file_named(tmp_path: Path, package: str) -> None:
+    package_json = tmp_path / "package.json"
+    package_json.write_text(package, encoding="utf-8")
+    with pytest.raises(ValueError, match=r"package\.json has no version"):
+        gen._version(package_json)
