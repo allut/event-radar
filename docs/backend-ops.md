@@ -220,6 +220,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 - **That job exists because of a prod incident.** Code shipped the `admin_actions` model and its migration, but the deployed DB never ran it, so every audited admin action returned 500.
 - **The `lint` job runs ruff, mypy, eslint and the TypeScript type-check.** `.githooks/pre-commit` runs the same checks on the staged areas, plus the docs style test and the backend and frontend guard tests. The dependency CVE audit is described in [security.md](security.md)'s Dependency Audit section.
 - **A partly staged commit is checked as committed.** With unstaged or untracked backend changes, the hook runs the backend checks on a copy of the index under `.git`.
+- **`.githooks/commit-msg` trims each message to its subject line.** It keeps any `Closes`, `Refs` or `Fixes #N` it finds below, one per line, and drops the rest, `Co-Authored-By` included, so a commit needs no later reword.
 
 ## Data Retention & Cleanup
 
