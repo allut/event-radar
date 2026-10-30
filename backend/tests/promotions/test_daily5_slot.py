@@ -17,11 +17,11 @@ from sqlalchemy import delete, select
 
 from app.config import settings
 from app.constants.core import TALLINN_TZ
-from app.constants.promotions import (
+from app._generated.shared_constants import (
     PROMOTION_NOT_SHOWING_RESTRICTION_UNASSESSED,
     PROMOTION_NOT_SHOWING_SLOTS_DISABLED,
-    PROMOTION_STATUS_PAID,
 )
+from app.constants.promotions import PROMOTION_STATUS_PAID
 from app.models.models import (
     DailyFeed,
     DailySponsoredSlot,

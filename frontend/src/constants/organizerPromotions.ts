@@ -2,6 +2,34 @@
 // form rules and polling. Strings are i18n keys (shared/i18n `promo_*`).
 // .js extensions required: Cloudflare Pages Functions import constants as unbundled ESM.
 
+import {
+  PROMOTION_ERROR_BUSINESS_ATTESTATION,
+  PROMOTION_ERROR_CHECKOUT_ATTESTATION,
+  PROMOTION_ERROR_CHECKOUT_NOT_PROMOTABLE,
+  PROMOTION_ERROR_CHECKOUT_TERMS,
+  PROMOTION_ERROR_ENDS_AFTER_EVENT,
+  PROMOTION_ERROR_INVALID_REGISTRY_CODE,
+  PROMOTION_ERROR_NOT_PROMOTABLE,
+  PROMOTION_ERROR_OVERLAP,
+  PROMOTION_ERROR_REGISTRY_CHECKSUM,
+  PROMOTION_ERROR_REQUEST_DAILY_LIMIT,
+  PROMOTION_ERROR_REQUEST_PENDING,
+  PROMOTION_ERROR_STARTS_TOO_EARLY,
+  PROMOTION_ERROR_TERMS_NOT_ACCEPTED,
+  PROMOTION_ERROR_WINDOW_ORDER,
+  PROMOTION_NOT_SHOWING_BOT,
+  PROMOTION_NOT_SHOWING_EVENT_ENDED,
+  PROMOTION_NOT_SHOWING_EVENT_NOT_CANONICAL,
+  PROMOTION_NOT_SHOWING_EVENT_NOT_PUBLIC,
+  PROMOTION_NOT_SHOWING_FILTERS_MISMATCH,
+  PROMOTION_NOT_SHOWING_NOT_OWNED,
+  PROMOTION_NOT_SHOWING_NOT_PAID,
+  PROMOTION_NOT_SHOWING_OUTSIDE_WINDOW,
+  PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED,
+  PROMOTION_NOT_SHOWING_RESTRICTION_UNASSESSED,
+  PROMOTION_NOT_SHOWING_SLOTS_DISABLED,
+} from '../_generated/sharedConstants.js';
+
 // GET /organizer/promotions item `status`; each is a `promo_status_*` key.
 export const PROMOTION_LIST_STATUS = {
   requested: 'requested',
@@ -37,21 +65,21 @@ export const PROMOTION_PAID_STATUSES: ReadonlySet<string> = new Set([
   PROMOTION_LIST_STATUS.finished,
 ]);
 
-// The fill gate's not-showing codes (backend PROMOTION_NOT_SHOWING_*) that
-// have their own plain-words copy (`promo_why_<code>` and `_short`); any other
-// code falls back to `promo_why_unknown`.
+// The fill gate's not-showing codes (shared) that have their own plain-words
+// copy (`promo_why_<code>` and `_short`); any other code falls back to
+// `promo_why_unknown`.
 export const PROMOTION_PAUSE_REASONS: ReadonlySet<string> = new Set([
-  'slots_disabled',
-  'bot_user_agent',
-  'not_paid',
-  'outside_window',
-  'event_not_public',
-  'event_not_canonical',
-  'event_ended',
-  'organizer_not_owner',
-  'restriction_unassessed',
-  'restriction_flagged',
-  'filters_mismatch',
+  PROMOTION_NOT_SHOWING_SLOTS_DISABLED,
+  PROMOTION_NOT_SHOWING_BOT,
+  PROMOTION_NOT_SHOWING_NOT_PAID,
+  PROMOTION_NOT_SHOWING_OUTSIDE_WINDOW,
+  PROMOTION_NOT_SHOWING_EVENT_NOT_PUBLIC,
+  PROMOTION_NOT_SHOWING_EVENT_NOT_CANONICAL,
+  PROMOTION_NOT_SHOWING_EVENT_ENDED,
+  PROMOTION_NOT_SHOWING_NOT_OWNED,
+  PROMOTION_NOT_SHOWING_RESTRICTION_UNASSESSED,
+  PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED,
+  PROMOTION_NOT_SHOWING_FILTERS_MISMATCH,
 ]);
 export const PROMOTION_PAUSE_REASON_FALLBACK = 'unknown';
 
@@ -66,40 +94,25 @@ export const PROMOTION_NOTE_ROWS = 3;
 export const PROMOTION_NOTE_MAX_LEN = 2000;
 export const PROMOTION_LEGAL_NAME_MAX_LEN = 255;
 
-// Window violation codes (backend PROMOTION_ERROR_*) the form words itself.
+// Window violation and request codes (shared PROMOTION_ERROR_*) the form words
+// itself. The window-length, cap, registry-lookup and checkout codes it reacts
+// to are imported from _generated/sharedConstants.ts where they're used.
 export const PROMOTION_FORM_ERROR_KEYS: Readonly<Record<string, string>> = {
-  window_order: 'promo_err_order',
-  starts_too_early: 'promo_err_start',
-  ends_after_event: 'promo_err_end',
-  overlap: 'promo_err_overlap',
-  request_pending: 'promo_err_pending',
-  daily_request_limit: 'promo_err_daily_limit',
-  not_promotable: 'promo_err_not_promotable',
-  event_not_promotable: 'promo_err_not_promotable',
-  terms_not_accepted: 'promo_err_terms',
-  organizer_terms_required: 'promo_err_terms',
-  content_policy_attestation_required: 'promo_err_policy',
-  business_attestation_required: 'promo_need_business',
-  invalid_registry_code: 'promo_need_code',
-  registry_code_checksum: 'promo_need_code',
+  [PROMOTION_ERROR_WINDOW_ORDER]: 'promo_err_order',
+  [PROMOTION_ERROR_STARTS_TOO_EARLY]: 'promo_err_start',
+  [PROMOTION_ERROR_ENDS_AFTER_EVENT]: 'promo_err_end',
+  [PROMOTION_ERROR_OVERLAP]: 'promo_err_overlap',
+  [PROMOTION_ERROR_REQUEST_PENDING]: 'promo_err_pending',
+  [PROMOTION_ERROR_REQUEST_DAILY_LIMIT]: 'promo_err_daily_limit',
+  [PROMOTION_ERROR_NOT_PROMOTABLE]: 'promo_err_not_promotable',
+  [PROMOTION_ERROR_CHECKOUT_NOT_PROMOTABLE]: 'promo_err_not_promotable',
+  [PROMOTION_ERROR_TERMS_NOT_ACCEPTED]: 'promo_err_terms',
+  [PROMOTION_ERROR_CHECKOUT_TERMS]: 'promo_err_terms',
+  [PROMOTION_ERROR_CHECKOUT_ATTESTATION]: 'promo_err_policy',
+  [PROMOTION_ERROR_BUSINESS_ATTESTATION]: 'promo_need_business',
+  [PROMOTION_ERROR_INVALID_REGISTRY_CODE]: 'promo_need_code',
+  [PROMOTION_ERROR_REGISTRY_CHECKSUM]: 'promo_need_code',
 };
-export const PROMOTION_ERROR_TOO_SHORT = 'window_too_short';
-export const PROMOTION_ERROR_TOO_LONG = 'window_too_long';
-export const PROMOTION_ERROR_CAP_EXCEEDED = 'cap_exceeded';
-
-// Registry lookup refusals (backend PROMOTION_ERROR_REGISTRY_*).
-export const PROMOTION_REGISTRY_CODE = {
-  invalid: 'registry_invalid_code',
-  deleted: 'registry_company_deleted',
-  notFound: 'registry_company_not_found',
-  unavailable: 'registry_unavailable',
-} as const;
-
-// Checkout refusals the form reacts to structurally (backend PROMOTION_ERROR_CHECKOUT_*).
-export const PROMOTION_CHECKOUT_CODE = {
-  needsReview: 'event_needs_review',
-  provider: 'checkout_unavailable',
-} as const;
 
 // The Promotions page and success page re-ask the list this often while a card
 // payment is still being confirmed, and stop after the cap.

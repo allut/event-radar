@@ -4,6 +4,30 @@ import re
 
 from app._generated.shared_constants import (
     ORGANIZER_TERMS_VERSION,
+    PROMOTION_ERROR_BUSINESS_ATTESTATION,
+    PROMOTION_ERROR_CAP_EXCEEDED,
+    PROMOTION_ERROR_CHECKOUT_ATTESTATION,
+    PROMOTION_ERROR_CHECKOUT_NEEDS_REVIEW,
+    PROMOTION_ERROR_CHECKOUT_NOT_PROMOTABLE,
+    PROMOTION_ERROR_CHECKOUT_PROVIDER,
+    PROMOTION_ERROR_CHECKOUT_TERMS,
+    PROMOTION_ERROR_ENDS_AFTER_EVENT,
+    PROMOTION_ERROR_INVALID_REGISTRY_CODE,
+    PROMOTION_ERROR_NOT_PROMOTABLE,
+    PROMOTION_ERROR_NO_OWNER,
+    PROMOTION_ERROR_OVERLAP,
+    PROMOTION_ERROR_REGISTRY_CHECKSUM,
+    PROMOTION_ERROR_REGISTRY_DELETED,
+    PROMOTION_ERROR_REGISTRY_INVALID_CODE,
+    PROMOTION_ERROR_REGISTRY_NOT_FOUND,
+    PROMOTION_ERROR_REGISTRY_UNAVAILABLE,
+    PROMOTION_ERROR_REQUEST_DAILY_LIMIT,
+    PROMOTION_ERROR_REQUEST_PENDING,
+    PROMOTION_ERROR_STARTS_TOO_EARLY,
+    PROMOTION_ERROR_TERMS_NOT_ACCEPTED,
+    PROMOTION_ERROR_TOO_LONG,
+    PROMOTION_ERROR_TOO_SHORT,
+    PROMOTION_ERROR_WINDOW_ORDER,
     PROMOTION_INVOICE_PREFIX,
     PROMOTION_MAX_DAYS,
     PROMOTION_REGISTRY_CODE_PATTERN,
@@ -84,17 +108,9 @@ ERROR_PROMOTION_FIELD_NOT_NULLABLE = "{key} cannot be null"
 ADMIN_PROMOTIONS_PAGE_SIZE: int = 50
 ADMIN_PROMOTIONS_MAX_PAGE_SIZE: int = 500
 
-# Rule-violation codes (grant refusals and live validation).
-PROMOTION_ERROR_NO_OWNER = "no_owner"
-PROMOTION_ERROR_WINDOW_ORDER = "window_order"
-PROMOTION_ERROR_TOO_SHORT = "window_too_short"
-PROMOTION_ERROR_TOO_LONG = "window_too_long"
-PROMOTION_ERROR_STARTS_TOO_EARLY = "starts_too_early"
-PROMOTION_ERROR_ENDS_AFTER_EVENT = "ends_after_event"
-PROMOTION_ERROR_OVERLAP = "overlap"
-PROMOTION_ERROR_CAP_EXCEEDED = "cap_exceeded"
+# Rule-violation codes (grant refusals and live validation). The ones the
+# frontend reacts to are cross-stack, in _generated/shared_constants.py.
 PROMOTION_ERROR_NOTE_REQUIRED = "complimentary_note_required"
-PROMOTION_ERROR_INVALID_REGISTRY_CODE = "invalid_registry_code"
 PROMOTION_ERROR_INVALID_INVOICE_REFERENCE = "invalid_invoice_reference"
 PROMOTION_ERROR_INVOICE_ON_COMPLIMENTARY = "invoice_on_complimentary"
 # Lifecycle commands (#601).
@@ -123,16 +139,11 @@ PROMOTION_ERROR_CLEARANCE_REQUIRED = "restriction_clearance_required"
 PROMOTION_ERROR_CLEARANCE_NOTE_REQUIRED = "restriction_clearance_note_required"
 PROMOTION_ERROR_CLEARANCE_NOT_NEEDED = "restriction_not_flagged"
 
-# Request-path rule codes beyond the grant ones.
-PROMOTION_ERROR_REQUEST_PENDING = "request_pending"
-PROMOTION_ERROR_TERMS_NOT_ACCEPTED = "terms_not_accepted"
-# Both paths: the Organizer confirms the registry code is its own business.
-PROMOTION_ERROR_BUSINESS_ATTESTATION = "business_attestation_required"
+# Request-path rule codes beyond the grant ones (the frontend's are shared).
+# Both paths: the Organizer confirms the registry code is its own business
+# (PROMOTION_ERROR_BUSINESS_ATTESTATION, shared).
 PROMOTION_BUSINESS_ATTESTATION_MESSAGE = "Confirm that the registry code is your own business."
-PROMOTION_ERROR_REGISTRY_CHECKSUM = "registry_code_checksum"
-PROMOTION_ERROR_NOT_PROMOTABLE = "not_promotable"
 PROMOTION_ERROR_REQUEST_NOT_PENDING = "request_not_pending"
-PROMOTION_ERROR_REQUEST_DAILY_LIMIT = "daily_request_limit"
 PROMOTION_ERROR_REQUEST_OWNER_CHANGED = "request_owner_changed"
 
 # Codes that mean "the state of things forbids this" (HTTP 409); every other
@@ -220,19 +231,9 @@ PROMOTION_BOT_USER_AGENT_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Named not-showing reasons, one per failing fill-gate clause (the console, the
-# portal and the daily stats row share them).
-PROMOTION_NOT_SHOWING_SLOTS_DISABLED = "slots_disabled"
-PROMOTION_NOT_SHOWING_BOT = "bot_user_agent"
-PROMOTION_NOT_SHOWING_NOT_PAID = "not_paid"
-PROMOTION_NOT_SHOWING_OUTSIDE_WINDOW = "outside_window"
-PROMOTION_NOT_SHOWING_EVENT_NOT_PUBLIC = "event_not_public"
-PROMOTION_NOT_SHOWING_EVENT_NOT_CANONICAL = "event_not_canonical"
-PROMOTION_NOT_SHOWING_EVENT_ENDED = "event_ended"
-PROMOTION_NOT_SHOWING_NOT_OWNED = "organizer_not_owner"
-PROMOTION_NOT_SHOWING_RESTRICTION_UNASSESSED = "restriction_unassessed"
-PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED = "restriction_flagged"
-PROMOTION_NOT_SHOWING_FILTERS_MISMATCH = "filters_mismatch"
+# The named not-showing reasons, PROMOTION_NOT_SHOWING_* (shared), are one per
+# failing fill-gate clause: the console, the portal and the daily stats row
+# share them.
 
 # `events.promotion_restriction`: `None` = unassessed, `none` = clear.
 PROMOTION_RESTRICTION_NONE = "none"
@@ -244,10 +245,7 @@ ADMIN_PROMOTIONS_PATH = "/admin/promotions"
 
 # Content snapshots (#601): what a Promotion displayed, taken when it becomes
 # paid and on every edit or re-point while scheduled or live. Never pruned.
-PROMOTION_SNAPSHOT_TRIGGER_GRANT = "grant"
-PROMOTION_SNAPSHOT_TRIGGER_MARK_PAID = "mark_paid"
-PROMOTION_SNAPSHOT_TRIGGER_EDIT = "edit"
-PROMOTION_SNAPSHOT_TRIGGER_REPOINT = "repoint"
+# The PROMOTION_SNAPSHOT_TRIGGER_* values are shared.
 PROMOTION_SNAPSHOT_DESCRIPTION_MAX_CHARS = 300
 # The caption on a Sponsored slot card.
 PROMOTION_LABEL_TEXT_TEMPLATE = "REKLAAM · {advertiser}"
@@ -409,7 +407,6 @@ PROMOTION_CHECKOUT_EXPIRY_MARGIN_SECONDS = 60
 # An `unpaid` checkout Promotion is voided this long after its session expiry.
 PROMOTION_CHECKOUT_SWEEP_GRACE_SECONDS = 3600
 PROMOTION_CHECKOUT_CURRENCY = "eur"
-PROMOTION_CHECKOUT_PATH_SUCCESS = "/organizer/promotions/checkout/success"
 PROMOTION_CHECKOUT_PATH_CANCEL = "/organizer/promotions"
 # Wording versions recorded when the Organizer attests and accepts at checkout.
 PROMOTION_CONTENT_POLICY_VERSION = "1"
@@ -445,18 +442,10 @@ REGISTRY_LOOKUP_FOUND = "found"
 REGISTRY_LOOKUP_DELETED = "deleted"
 REGISTRY_LOOKUP_NOT_FOUND = "not_found"
 
-# Coded refusals of the registry lookup and the checkout start.
+# Coded refusals of the registry lookup and the checkout start (the ones the
+# frontend reacts to are shared).
 PROMOTION_ERROR_OFFER_DISABLED = "promotions_unavailable"
-PROMOTION_ERROR_REGISTRY_INVALID_CODE = "registry_invalid_code"
-PROMOTION_ERROR_REGISTRY_DELETED = "registry_company_deleted"
-PROMOTION_ERROR_REGISTRY_NOT_FOUND = "registry_company_not_found"
-PROMOTION_ERROR_REGISTRY_UNAVAILABLE = "registry_unavailable"
-PROMOTION_ERROR_CHECKOUT_NEEDS_REVIEW = "event_needs_review"
-PROMOTION_ERROR_CHECKOUT_NOT_PROMOTABLE = "event_not_promotable"
 PROMOTION_ERROR_CHECKOUT_NOT_OWNER = "not_event_owner"
-PROMOTION_ERROR_CHECKOUT_ATTESTATION = "content_policy_attestation_required"
-PROMOTION_ERROR_CHECKOUT_TERMS = "organizer_terms_required"
-PROMOTION_ERROR_CHECKOUT_PROVIDER = "checkout_unavailable"
 PROMOTION_ERROR_REFUND_PROVIDER = "refund_provider_failed"
 PROMOTION_REGISTRY_ERROR_MESSAGES = {
     PROMOTION_ERROR_REGISTRY_INVALID_CODE: "The registry code must be 8 digits.",

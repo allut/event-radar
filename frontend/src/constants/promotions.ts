@@ -2,7 +2,34 @@
 // Admin console is English-only, so these are plain strings (no shared/i18n).
 // .js extensions required: Cloudflare Pages Functions import constants as unbundled ESM.
 
-import { PROMOTION_INVOICE_PREFIX, PROMOTION_REGISTRY_CODE_PATTERN } from '../_generated/sharedConstants.js';
+import {
+  PROMOTION_ERROR_CAP_EXCEEDED,
+  PROMOTION_ERROR_ENDS_AFTER_EVENT,
+  PROMOTION_ERROR_NOT_PROMOTABLE,
+  PROMOTION_ERROR_NO_OWNER,
+  PROMOTION_ERROR_OVERLAP,
+  PROMOTION_ERROR_STARTS_TOO_EARLY,
+  PROMOTION_ERROR_TOO_LONG,
+  PROMOTION_ERROR_TOO_SHORT,
+  PROMOTION_ERROR_WINDOW_ORDER,
+  PROMOTION_INVOICE_PREFIX,
+  PROMOTION_NOT_SHOWING_BOT,
+  PROMOTION_NOT_SHOWING_EVENT_ENDED,
+  PROMOTION_NOT_SHOWING_EVENT_NOT_CANONICAL,
+  PROMOTION_NOT_SHOWING_EVENT_NOT_PUBLIC,
+  PROMOTION_NOT_SHOWING_FILTERS_MISMATCH,
+  PROMOTION_NOT_SHOWING_NOT_OWNED,
+  PROMOTION_NOT_SHOWING_NOT_PAID,
+  PROMOTION_NOT_SHOWING_OUTSIDE_WINDOW,
+  PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED,
+  PROMOTION_NOT_SHOWING_RESTRICTION_UNASSESSED,
+  PROMOTION_NOT_SHOWING_SLOTS_DISABLED,
+  PROMOTION_REGISTRY_CODE_PATTERN,
+  PROMOTION_SNAPSHOT_TRIGGER_EDIT,
+  PROMOTION_SNAPSHOT_TRIGGER_GRANT,
+  PROMOTION_SNAPSHOT_TRIGGER_MARK_PAID,
+  PROMOTION_SNAPSHOT_TRIGGER_REPOINT,
+} from '../_generated/sharedConstants.js';
 
 export const ADMIN_PROMOTIONS_PAGE_SIZE = 50;
 
@@ -38,9 +65,9 @@ export type PromotionPillTone = 'live' | 'scheduled' | 'finished' | 'attention';
 export const PROMOTION_REGISTRY_CODE_RE = new RegExp(`^(?:${PROMOTION_REGISTRY_CODE_PATTERN})$`);
 export const PROMOTION_NOTE_ROWS = 2;
 
-// Rule-violation codes (backend PROMOTION_ERROR_*) that flag the start date
-// field; every other window, overlap or cap error flags the end date.
-export const PROMOTION_ERROR_START_CODES: ReadonlySet<string> = new Set(['starts_too_early']);
+// Rule-violation codes that flag the start date field; every other window,
+// overlap or cap error flags the end date.
+export const PROMOTION_ERROR_START_CODES: ReadonlySet<string> = new Set([PROMOTION_ERROR_STARTS_TOO_EARLY]);
 
 export const PROMOTION_COPY = {
   capStripHeading: 'Cap · next 14 days',
@@ -71,27 +98,26 @@ export const PROMOTION_COPY = {
 export const PROMOTION_REASON_ROWS = 2;
 export const PROMOTION_GATE_SHOWN = 'shown';
 
-// Backend PROMOTION_NOT_SHOWING_* codes, worded for the per-day table.
+// The fill gate's not-showing codes, worded for the per-day table.
 export const PROMOTION_GATE_REASON_LABELS: Readonly<Record<string, string>> = {
-  slots_disabled: 'slots off',
-  bot_user_agent: 'bot request',
-  not_paid: 'not paid',
-  outside_window: 'outside window',
-  event_not_public: 'event not public',
-  event_not_canonical: 'lost duplicate',
-  event_ended: 'event ended',
-  organizer_not_owner: 'claim inactive',
-  restriction_unassessed: 'restriction unassessed',
-  restriction_flagged: 'restricted',
-  filters_mismatch: 'filters mismatch',
+  [PROMOTION_NOT_SHOWING_SLOTS_DISABLED]: 'slots off',
+  [PROMOTION_NOT_SHOWING_BOT]: 'bot request',
+  [PROMOTION_NOT_SHOWING_NOT_PAID]: 'not paid',
+  [PROMOTION_NOT_SHOWING_OUTSIDE_WINDOW]: 'outside window',
+  [PROMOTION_NOT_SHOWING_EVENT_NOT_PUBLIC]: 'event not public',
+  [PROMOTION_NOT_SHOWING_EVENT_NOT_CANONICAL]: 'lost duplicate',
+  [PROMOTION_NOT_SHOWING_EVENT_ENDED]: 'event ended',
+  [PROMOTION_NOT_SHOWING_NOT_OWNED]: 'claim inactive',
+  [PROMOTION_NOT_SHOWING_RESTRICTION_UNASSESSED]: 'restriction unassessed',
+  [PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED]: 'restricted',
+  [PROMOTION_NOT_SHOWING_FILTERS_MISMATCH]: 'filters mismatch',
 };
 
-// Backend PROMOTION_SNAPSHOT_TRIGGER_*.
 export const PROMOTION_SNAPSHOT_TRIGGER_LABELS: Readonly<Record<string, string>> = {
-  grant: 'grant',
-  mark_paid: 'mark paid',
-  edit: 'edit',
-  repoint: 're-point',
+  [PROMOTION_SNAPSHOT_TRIGGER_GRANT]: 'grant',
+  [PROMOTION_SNAPSHOT_TRIGGER_MARK_PAID]: 'mark paid',
+  [PROMOTION_SNAPSHOT_TRIGGER_EDIT]: 'edit',
+  [PROMOTION_SNAPSHOT_TRIGGER_REPOINT]: 're-point',
 };
 
 export const PROMOTION_ACTION = {
@@ -195,22 +221,21 @@ export const PROMOTION_REQUEST_STATUS_OPTIONS = [
   { value: PROMOTION_REQUEST_STATUS.expired, label: 'Expired' },
 ] as const;
 export const PROMOTION_DECLINE_ROWS = 4;
-// Backend PROMOTION_NOT_SHOWING_NOT_OWNED: a dormant claim, which can recover.
-export const PROMOTION_REQUEST_DORMANT_CODE = 'organizer_not_owner';
 export const PROMOTION_RESTRICTION_NONE = 'none';
 
-// Backend PROMOTION_ERROR_* rule codes, worded for a request row.
+// Rule codes, worded for a request row. PROMOTION_NOT_SHOWING_NOT_OWNED is a
+// dormant claim, which can recover.
 export const PROMOTION_REQUEST_REASON_LABELS: Readonly<Record<string, string>> = {
-  no_owner: 'The event has no owning Organizer.',
-  window_order: 'The end date is before the start date.',
-  window_too_short: 'The window is shorter than the minimum.',
-  window_too_long: 'The window is longer than the maximum.',
-  starts_too_early: 'The start date has passed. Pick dates from tomorrow.',
-  ends_after_event: 'The window ends after the event’s last day.',
-  overlap: 'The window overlaps another Promotion on this event.',
-  cap_exceeded: 'A day in the window is already full.',
-  not_promotable: 'The event cannot be promoted right now.',
-  organizer_not_owner: 'Your claim is inactive, so this event cannot be promoted yet.',
+  [PROMOTION_ERROR_NO_OWNER]: 'The event has no owning Organizer.',
+  [PROMOTION_ERROR_WINDOW_ORDER]: 'The end date is before the start date.',
+  [PROMOTION_ERROR_TOO_SHORT]: 'The window is shorter than the minimum.',
+  [PROMOTION_ERROR_TOO_LONG]: 'The window is longer than the maximum.',
+  [PROMOTION_ERROR_STARTS_TOO_EARLY]: 'The start date has passed. Pick dates from tomorrow.',
+  [PROMOTION_ERROR_ENDS_AFTER_EVENT]: 'The window ends after the event’s last day.',
+  [PROMOTION_ERROR_OVERLAP]: 'The window overlaps another Promotion on this event.',
+  [PROMOTION_ERROR_CAP_EXCEEDED]: 'A day in the window is already full.',
+  [PROMOTION_ERROR_NOT_PROMOTABLE]: 'The event cannot be promoted right now.',
+  [PROMOTION_NOT_SHOWING_NOT_OWNED]: 'Your claim is inactive, so this event cannot be promoted yet.',
 };
 
 export const PROMOTION_REQUEST_COPY = {

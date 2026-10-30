@@ -3,12 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { adminApi } from '../../api/client';
 import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
+import { PROMOTION_NOT_SHOWING_NOT_OWNED } from '../../_generated/sharedConstants';
 import { UI_STATE } from '../../constants/core';
 import {
   ADMIN_PROMOTION_REQUESTS_PAGE_SIZE,
   ADMIN_PROMOTION_REQUESTS_PARAM,
   PROMOTION_REQUEST_COPY as COPY,
-  PROMOTION_REQUEST_DORMANT_CODE,
   PROMOTION_REQUEST_REASON_LABELS,
   PROMOTION_REQUEST_STATUS,
   PROMOTION_REQUEST_STATUS_OPTIONS,
@@ -75,7 +75,7 @@ function RequestRow({
           <div className={styles.reason}>
             {COPY.notGrantable}
             {PROMOTION_REQUEST_REASON_LABELS[reason] ?? reason}{' '}
-            {reason === PROMOTION_REQUEST_DORMANT_CODE ? COPY.dormantTail : COPY.editTail}
+            {reason === PROMOTION_NOT_SHOWING_NOT_OWNED ? COPY.dormantTail : COPY.editTail}
           </div>
         )}
         {request.status === PROMOTION_REQUEST_STATUS.declined && request.decline_reason && (

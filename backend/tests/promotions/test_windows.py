@@ -3,12 +3,14 @@
 from datetime import date, datetime, timezone
 
 from app.constants.core import TALLINN_TZ
-from app.constants.promotions import (
+from app._generated.shared_constants import (
     PROMOTION_ERROR_ENDS_AFTER_EVENT,
     PROMOTION_ERROR_STARTS_TOO_EARLY,
     PROMOTION_ERROR_TOO_LONG,
     PROMOTION_ERROR_TOO_SHORT,
     PROMOTION_ERROR_WINDOW_ORDER,
+)
+from app.constants.promotions import (
     PROMOTION_STATE_FINISHED,
     PROMOTION_STATE_LIVE,
     PROMOTION_STATE_SCHEDULED,

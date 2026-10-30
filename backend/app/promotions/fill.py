@@ -36,8 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.constants.ranking import SIGNAL_BOOKMARK, SIGNAL_DISLIKE, SIGNAL_LIKE
-from app.constants.promotions import (
-    PROMOTION_BOT_USER_AGENT_RE,
+from app._generated.shared_constants import (
     PROMOTION_NOT_SHOWING_BOT,
     PROMOTION_NOT_SHOWING_EVENT_ENDED,
     PROMOTION_NOT_SHOWING_EVENT_NOT_CANONICAL,
@@ -49,6 +48,9 @@ from app.constants.promotions import (
     PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED,
     PROMOTION_NOT_SHOWING_RESTRICTION_UNASSESSED,
     PROMOTION_NOT_SHOWING_SLOTS_DISABLED,
+)
+from app.constants.promotions import (
+    PROMOTION_BOT_USER_AGENT_RE,
     PROMOTION_RESTRICTION_NONE,
     PROMOTION_STATUS_PAID,
 )

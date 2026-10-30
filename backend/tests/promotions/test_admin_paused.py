@@ -2,13 +2,13 @@
 
 import pytest
 
-from app.constants.promotions import (
+from app._generated.shared_constants import (
     PROMOTION_NOT_SHOWING_EVENT_NOT_PUBLIC,
-    PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED,
     PROMOTION_NOT_SHOWING_NOT_OWNED,
+    PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED,
     PROMOTION_NOT_SHOWING_RESTRICTION_UNASSESSED,
-    PROMOTION_STATUS_UNPAID,
 )
+from app.constants.promotions import PROMOTION_STATUS_UNPAID
 from app.promotions.views import grant_context, list_promotions, paused_reasons, promotion_detail
 from tests.conftest import count_statements
 from tests.promotions.conftest import NOW, d

@@ -15,11 +15,11 @@ from sqlalchemy import select
 
 from app.auth.dependencies import get_current_user
 from app.constants.llm import LLM_BATCH_FANOUT_CONCURRENCY
+from app._generated.shared_constants import PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED
 from app.constants.promotions import (
-    PROMOTION_ERROR_CLEARANCE_NOT_NEEDED,
     PROMOTION_ERROR_CLEARANCE_NOTE_REQUIRED,
+    PROMOTION_ERROR_CLEARANCE_NOT_NEEDED,
     PROMOTION_ERROR_CLEARANCE_REQUIRED,
-    PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED,
     PROMOTION_STATUS_PAID,
 )
 from app.constants.reports import REPORT_STATUS_OPEN

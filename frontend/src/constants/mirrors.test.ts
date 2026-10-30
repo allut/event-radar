@@ -20,19 +20,14 @@ const isMirrorComment = (line: string): boolean =>
   (MIRROR_COMMENT.test(line) || BACKEND_NAME_COMMENT.test(line)) &&
   !Object.keys(FRONTEND_ONLY).some(name => new RegExp(`\\b${name}\\b`).test(line));
 
-// Files left out of the map have a baseline of 0. What remains here is
-// waiting on its own domain commit.
-const BASELINE: Readonly<Record<string, number>> = {
-  'organizerPromotions.ts': 4,
-  'promotions.ts': 5,
-  'routes.ts': 1,
-};
+// Files left out of the map have a baseline of 0. Every file is at 0 now
+// (#639), and the map only ever shrinks.
+const BASELINE: Readonly<Record<string, number>> = {};
 
 const counts = Object.fromEntries(
   readdirSync(import.meta.dirname)
     .filter(name => name.endsWith('.ts') && !name.endsWith('.test.ts'))
-    .map(name => [name, readFileSync(join(import.meta.dirname, name), 'utf8').split('\n').filter(isMirrorComment).length] as const)
-    .filter(([, count]) => count > 0),
+    .map(name => [name, readFileSync(join(import.meta.dirname, name), 'utf8').split('\n').filter(isMirrorComment).length] as const),
 );
 
 describe('constants that mirror the backend', () => {

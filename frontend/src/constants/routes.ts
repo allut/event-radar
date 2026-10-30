@@ -1,6 +1,8 @@
 // Client routes and the nav/menu item lists built from them.
 // .js extensions required: Cloudflare Pages Functions import constants as unbundled ESM.
 
+import { PROMOTION_CHECKOUT_PATH_SUCCESS } from '../_generated/sharedConstants.js';
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 // Every <Route> path, `navigate()` target and `<Link to>` in App.tsx / the
 // consumer + organizer nav chrome resolves through this map so the two stay
@@ -43,9 +45,9 @@ export const ROUTES = {
   organizerContact: '/organizer/contact',
   organizerPromotions: '/organizer/promotions',
   organizerPromotionRequest: '/organizer/promotions/new',
-  // Stripe's success_url (backend PROMOTION_CHECKOUT_PATH_SUCCESS); the cancel
-  // url is organizerPromotions.
-  organizerPromotionSuccess: '/organizer/promotions/checkout/success',
+  // Stripe's success_url (shared with the backend); the cancel url is
+  // organizerPromotions.
+  organizerPromotionSuccess: PROMOTION_CHECKOUT_PATH_SUCCESS,
   // The form's content-policy link: the Organizer terms page's own section.
   organizerContentPolicy: '/organizer-terms#content-policy',
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,

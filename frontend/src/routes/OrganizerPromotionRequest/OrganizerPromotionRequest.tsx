@@ -9,20 +9,27 @@ import OrganizerTopBar from '../../components/OrganizerTopBar';
 import PageState from '../../components/PageState';
 import PromotionResultCard from '../../components/PromotionResultCard';
 import SeoTags from '../../components/SeoTags';
-import { PROMOTION_CHECKOUT_SESSION_MINUTES, PROMOTION_MAX_DAYS } from '../../_generated/sharedConstants';
+import {
+  PROMOTION_CHECKOUT_SESSION_MINUTES,
+  PROMOTION_ERROR_CAP_EXCEEDED,
+  PROMOTION_ERROR_CHECKOUT_NEEDS_REVIEW,
+  PROMOTION_ERROR_CHECKOUT_PROVIDER,
+  PROMOTION_ERROR_REGISTRY_DELETED,
+  PROMOTION_ERROR_REGISTRY_INVALID_CODE,
+  PROMOTION_ERROR_REGISTRY_NOT_FOUND,
+  PROMOTION_ERROR_REGISTRY_UNAVAILABLE,
+  PROMOTION_ERROR_TOO_LONG,
+  PROMOTION_ERROR_TOO_SHORT,
+  PROMOTION_MAX_DAYS,
+} from '../../_generated/sharedConstants';
 import { API, QUERY_KEYS } from '../../constants/api';
 import { UI_STATE } from '../../constants/core';
 import {
-  PROMOTION_CHECKOUT_CODE,
-  PROMOTION_ERROR_CAP_EXCEEDED,
-  PROMOTION_ERROR_TOO_LONG,
-  PROMOTION_ERROR_TOO_SHORT,
   PROMOTION_FORM_ERROR_KEYS,
   PROMOTION_FORM_EVENT_PARAM,
   PROMOTION_LEGAL_NAME_MAX_LEN,
   PROMOTION_NOTE_MAX_LEN,
   PROMOTION_NOTE_ROWS,
-  PROMOTION_REGISTRY_CODE,
   PROMOTION_REGISTRY_CODE_LENGTH,
   PROMOTION_REGISTRY_CODE_PLACEHOLDER,
 } from '../../constants/organizerPromotions';
@@ -86,7 +93,7 @@ function dateErrorMessage(validation: PromotionValidation, context: PromotionReq
 /** A failed submit, worded in the viewer's language. */
 function submitErrorMessage(err: unknown, locale: string): string {
   if (err instanceof ApiError) {
-    if (err.code === PROMOTION_CHECKOUT_CODE.provider) return t('promo_err_checkout', locale);
+    if (err.code === PROMOTION_ERROR_CHECKOUT_PROVIDER) return t('promo_err_checkout', locale);
     if (err.code === PROMOTION_ERROR_CAP_EXCEEDED) return t('promo_err_full_any', locale);
     const key = err.code ? PROMOTION_FORM_ERROR_KEYS[err.code] : undefined;
     if (key) return t(key, locale);
@@ -183,11 +190,11 @@ export default function OrganizerPromotionRequest() {
   else if (codeReady && lookup.error) {
     const refusal = lookup.error instanceof ApiError ? lookup.error.code : undefined;
     lookupState =
-      refusal === PROMOTION_REGISTRY_CODE.deleted
+      refusal === PROMOTION_ERROR_REGISTRY_DELETED
         ? 'deleted'
-        : refusal === PROMOTION_REGISTRY_CODE.notFound
+        : refusal === PROMOTION_ERROR_REGISTRY_NOT_FOUND
           ? 'notFound'
-          : refusal === PROMOTION_REGISTRY_CODE.invalid
+          : refusal === PROMOTION_ERROR_REGISTRY_INVALID_CODE
             ? 'invalid'
             : 'outage';
   }
@@ -224,7 +231,7 @@ export default function OrganizerPromotionRequest() {
     onSuccess: (started) => window.location.assign(started.checkout_url),
     onError: (err) => {
       if (err instanceof ApiError) {
-        if (err.code === PROMOTION_CHECKOUT_CODE.needsReview) {
+        if (err.code === PROMOTION_ERROR_CHECKOUT_NEEDS_REVIEW) {
           setCardBlock('review');
           setSubmitError(null);
           return;
@@ -235,7 +242,7 @@ export default function OrganizerPromotionRequest() {
           setSubmitError(null);
           return;
         }
-        if (err.code === PROMOTION_REGISTRY_CODE.unavailable) {
+        if (err.code === PROMOTION_ERROR_REGISTRY_UNAVAILABLE) {
           setRegistryDown(true);
           setSubmitError(null);
           return;

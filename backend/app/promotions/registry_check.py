@@ -1,11 +1,13 @@
 """Turn a registry lookup into the legal name or a coded refusal. Fails closed:
 an outage is a refusal, never a pass."""
 
-from app.constants.promotions import (
+from app._generated.shared_constants import (
     PROMOTION_ERROR_REGISTRY_DELETED,
     PROMOTION_ERROR_REGISTRY_INVALID_CODE,
     PROMOTION_ERROR_REGISTRY_NOT_FOUND,
     PROMOTION_ERROR_REGISTRY_UNAVAILABLE,
+)
+from app.constants.promotions import (
     PROMOTION_REGISTRY_CODE_RE,
     PROMOTION_REGISTRY_ERROR_MESSAGES,
     REGISTRY_LOOKUP_DELETED,

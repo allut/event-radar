@@ -16,10 +16,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from app._generated.shared_constants import VALID_VIBES
-from app.auth.dependencies import get_optional_user
-from app.config import settings
-from app.constants.promotions import (
+from app._generated.shared_constants import (
     PROMOTION_NOT_SHOWING_BOT,
     PROMOTION_NOT_SHOWING_EVENT_ENDED,
     PROMOTION_NOT_SHOWING_EVENT_NOT_CANONICAL,
@@ -31,9 +28,11 @@ from app.constants.promotions import (
     PROMOTION_NOT_SHOWING_RESTRICTION_FLAGGED,
     PROMOTION_NOT_SHOWING_RESTRICTION_UNASSESSED,
     PROMOTION_NOT_SHOWING_SLOTS_DISABLED,
-    PROMOTION_STATUS_PAID,
-    PROMOTION_STATUS_UNPAID,
+    VALID_VIBES,
 )
+from app.auth.dependencies import get_optional_user
+from app.config import settings
+from app.constants.promotions import PROMOTION_STATUS_PAID, PROMOTION_STATUS_UNPAID
 from app.db import get_db
 from app.events.queries import facet_conditions
 from app.constants.ranking import SIGNAL_BOOKMARK, SIGNAL_DISLIKE, SIGNAL_LIKE

@@ -21,6 +21,7 @@ from app._generated.shared_constants import (
     GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
     OAUTH_ERROR_QUERY_PARAM,
     ORGANIZER_MAX_CATEGORIES,
+    PROMOTION_ERROR_REQUEST_DAILY_LIMIT,
     VALID_CATEGORIES,
     VALID_LOCALES,
 )
@@ -58,10 +59,7 @@ from app.constants.ranking import (
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
 )
-from app.constants.promotions import (
-    PROMOTION_CONFLICT_ERROR_CODES,
-    PROMOTION_ERROR_REQUEST_DAILY_LIMIT,
-)
+from app.constants.promotions import PROMOTION_CONFLICT_ERROR_CODES
 from app.constants.reports import (
     ERROR_INVALID_REPORT_REASON,
     REPORT_STATUS_OPEN,
