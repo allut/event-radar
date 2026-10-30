@@ -4,7 +4,8 @@
 
 .main { composes: pageMainOrganizer from '../../components/shared/Page.module.css'; }
 
-.mainWide {
+/* Out-ranks Page.module.css's max-width (design-system.md §7). */
+.main.mainWide {
   max-width: var(--page-max-medium);
 }
 
@@ -437,7 +438,8 @@
 }
 
 @media (max-width: 640px) {
-  .main {
+  /* Doubled: out-ranks Page.module.css's padding (design-system.md §7). */
+  .main.main {
     padding: var(--space-6) var(--space-4);
   }
 }

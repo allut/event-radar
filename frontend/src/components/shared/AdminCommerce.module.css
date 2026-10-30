@@ -169,6 +169,12 @@
 }
 .input[aria-invalid='true'] { border-color: var(--danger); }
 textarea.input { resize: vertical; }
+/* Modifier: restores Field's .fieldInput size, level with a DatePicker in
+   the same form. */
+.inputFieldSize {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-base);
+}
 
 .panel {
   display: grid;

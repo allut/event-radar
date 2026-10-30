@@ -114,7 +114,7 @@
   color: var(--text-soft);
 }
 
-.input { composes: input from '../../components/shared/AdminCommerce.module.css'; }
+.input { composes: input inputFieldSize from '../../components/shared/AdminCommerce.module.css'; }
 
 .error { composes: error from '../../components/shared/AdminCommerce.module.css'; }
 
@@ -151,19 +151,19 @@
   border-top: var(--border-w-hair) solid var(--border);
 }
 
-.table {
-  composes: table from '../../components/shared/AdminCommerce.module.css';
+.table { composes: table from '../../components/shared/AdminCommerce.module.css'; }
+
+/* Overrides of AdminCommerce's .table rules out-rank them (design-system.md §7):
+   that module can land after this file in the bundle. */
+.table.table {
   min-width: var(--admin-promotion-days-min);
 }
 
-.table th {
-  padding: var(--space-2) var(--space-3);
-  text-align: right;
-}
+.table.table th { text-align: right; }
 
-.table td {
+.table.table td {
   padding: var(--space-2) var(--space-3);
-  vertical-align: baseline;
+  vertical-align: middle;
   text-align: right;
 }
 
@@ -172,7 +172,7 @@
 
 .table td.nowrap { white-space: nowrap; }
 
-.paused td { color: var(--text-muted); }
+.table .paused td { color: var(--text-muted); }
 
 .total td {
   font-weight: var(--fw-bold);

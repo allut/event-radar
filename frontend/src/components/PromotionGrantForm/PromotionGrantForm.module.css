@@ -35,9 +35,10 @@
   color: var(--text-soft);
 }
 
-.input { composes: input from '../shared/AdminCommerce.module.css'; }
+.input { composes: input inputFieldSize from '../shared/AdminCommerce.module.css'; }
 
-.mono {
+/* Doubled: out-ranks AdminCommerce's .input font-family (design-system.md §7). */
+.mono.mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }

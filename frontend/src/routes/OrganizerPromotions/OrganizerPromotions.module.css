@@ -433,7 +433,8 @@ a.smallBtn:hover {
 }
 
 @media (max-width: 640px) {
-  .main {
+  /* Doubled: out-ranks Page.module.css's padding (design-system.md §7). */
+  .main.main {
     padding: var(--space-6) var(--space-4);
   }
 
