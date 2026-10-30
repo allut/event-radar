@@ -404,16 +404,25 @@ def write_frontend_shared_constants(cfg: dict, version: str) -> str:
 
 
 def _scalar_lines(cfg: dict, py: bool) -> list[str]:
-    """One `NAME = value` line per entry of `cfg["scalars"]` (int or str values).
+    """One `NAME = value` line per entry of `cfg["scalars"]`.
 
-    The grouped home for single cross-stack values whose name is the same in
-    both stacks; a value needing its own type or a comment gets a named key.
+    The grouped home for cross-stack values whose name is the same in both
+    stacks; a value needing its own type or a comment gets a named key. Values
+    are an int, a str, or a non-empty list of str: an ordered tuple in Python
+    (build a frozenset from it where membership is all that matters) and an
+    `as const` array in TypeScript, so its members stay literal types.
     """
     lines = []
     for name, value in cfg["scalars"].items():
-        if isinstance(value, bool) or not isinstance(value, (int, str)):
-            raise ValueError(f"scalars.{name}: only int and str values are supported")
-        if py:
+        is_str_list = isinstance(value, list) and bool(value) and all(isinstance(v, str) for v in value)
+        if not is_str_list and (isinstance(value, bool) or not isinstance(value, (int, str))):
+            raise ValueError(f"scalars.{name}: only int, str and non-empty str-list values are supported")
+        if is_str_list:
+            if py:
+                lines.append(f"{name}: tuple[str, ...] = ({', '.join(_py_str(v) for v in value)}{',' if len(value) == 1 else ''})")
+            else:
+                lines.append(f"export const {name} = {_ts_str_list(value)} as const;")
+        elif py:
             lines.append(f"{name}: {'int' if isinstance(value, int) else 'str'} = {value if isinstance(value, int) else _py_str(value)}")
         else:
             lines.append(f"export const {name} = {value if isinstance(value, int) else _ts_str(value)};")
