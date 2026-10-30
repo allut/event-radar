@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { ClaimPanel, ClaimPill } from './ClaimStrip';
 import { CACHED_CLAIMS_KEY, clientWithCachedClaimsList, renderWithProviders } from '../../test/utils';
 import { ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants/auth';
-import { CLAIM_JUSTIFICATION_REQUIRED_ERROR } from '../../constants/claims';
+import { CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED } from '../../_generated/sharedConstants';
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
@@ -84,7 +84,7 @@ describe('ClaimPanel', () => {
   it('reveals a justification field when the claim resolves to a series claim (#428), then resubmits with it', async () => {
     localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
     mockOrganizerPost
-      .mockRejectedValueOnce(new ApiError(422, CLAIM_JUSTIFICATION_REQUIRED_ERROR))
+      .mockRejectedValueOnce(new ApiError(422, 'A justification is required.', CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED))
       .mockResolvedValueOnce({ id: 42, status: 'pending' });
     renderWithProviders(null, {
       routes: [

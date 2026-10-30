@@ -10,7 +10,7 @@ vi.mock('../../api/client', async (importOriginal) => ({
 }));
 
 import { ApiError, organizerApi } from '../../api/client';
-import { CLAIM_JUSTIFICATION_REQUIRED_ERROR } from '../../constants/claims';
+import { CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED } from '../../_generated/sharedConstants';
 const mockGet = vi.mocked(organizerApi.get);
 const mockPost = vi.mocked(organizerApi.post);
 
@@ -91,7 +91,7 @@ describe('ClaimEventPicker', () => {
   it('reveals a justification field when the claim resolves to a series claim (#428), then resubmits with it', async () => {
     mockClaimGet({ events: [candidate] });
     mockPost
-      .mockRejectedValueOnce(new ApiError(422, CLAIM_JUSTIFICATION_REQUIRED_ERROR))
+      .mockRejectedValueOnce(new ApiError(422, 'A justification is required.', CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED))
       .mockResolvedValueOnce({ id: 42, status: 'pending' });
     renderPicker();
 
@@ -116,7 +116,7 @@ describe('ClaimEventPicker', () => {
   it('closes the justification panel when a later attempt fails for an unrelated reason', async () => {
     mockClaimGet({ events: [candidate] });
     mockPost
-      .mockRejectedValueOnce(new ApiError(422, CLAIM_JUSTIFICATION_REQUIRED_ERROR))
+      .mockRejectedValueOnce(new ApiError(422, 'A justification is required.', CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED))
       .mockRejectedValueOnce(new Error('network'));
     renderPicker();
 

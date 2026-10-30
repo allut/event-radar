@@ -65,6 +65,7 @@ CLAIM_DISCOVERY_STATUS_CLAIMED: str = "claimed"
 CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE: str = "not_claimable"
 CLAIM_ERROR_CODE_NOT_GRANTED: str = "claim_not_granted"
 CLAIM_ERROR_CODE_DORMANT: str = "claim_dormant"
+CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED: str = "claim_justification_required"
 PROMOTION_VAT_RATE_PERCENT: Decimal = Decimal("24.00")
 IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = frozenset({"image/jpeg", "image/png", "image/webp"})
 ORGANIZER_MAX_CATEGORIES: int = 3

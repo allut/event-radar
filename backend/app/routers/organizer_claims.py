@@ -40,6 +40,7 @@ from app.claims.pinning import bulk_resolve_series_events
 from app.ingestion.http_client import host_matches_domain
 from app._generated.shared_constants import (
     BROWSE_QUERY_MAX_LEN,
+    CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
     CLAIM_EVENTS_PAGE_SIZE,
     CLAIM_KIND_PUBLISHER,
     CLAIM_STATUS_APPROVED,
@@ -70,7 +71,6 @@ from app.constants.claims import (
     CLAIM_SEARCH_RESULT_LIMIT,
     CLAIM_SUGGESTIONS_LIMIT,
     ERROR_CLAIM_EVENTS_NOT_PUBLISHER,
-    ERROR_CLAIM_JUSTIFICATION_REQUIRED,
     ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
     FREE_EMAIL_PROVIDER_DOMAINS,
     ORGANIZER_CLAIM_VERIFY_PATH,
@@ -123,8 +123,8 @@ class CreateClaimBody(BaseModel):
     event_id: int
     # Required only when the event resolves to a Series claim (#428) — the
     # kind isn't known until create_claim resolves it server-side, so this
-    # stays optional here and create_claim itself raises
-    # ERROR_CLAIM_JUSTIFICATION_REQUIRED when it's needed and missing.
+    # stays optional here and create_claim itself raises a ClaimError coded
+    # CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED when it's needed and missing.
     justification: str | None = Field(default=None, max_length=CLAIM_JUSTIFICATION_MAX_CHARS)
 
 
@@ -240,7 +240,7 @@ async def create_own_claim(
                 db, client, current_organizer, body.event_id, body.justification
             )
         except ClaimError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+            raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
     if not created:
         # (#448) Re-claiming your own already-pending target returns that
         # existing claim rather than a new row — 200, not 201, since nothing
@@ -415,7 +415,7 @@ async def verify_claim_link(
         try:
             claim, _created = await create_claim(db, client, organizer, event_id)
         except ClaimError as exc:
-            if exc.detail == ERROR_CLAIM_JUSTIFICATION_REQUIRED:
+            if exc.code == CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED:
                 # (#428 review finding) This listing resolves to a Series
                 # claim, which the signed-out email-capture step never had a
                 # chance to collect a justification for — the magic link is
@@ -437,7 +437,7 @@ async def verify_claim_link(
                     "claim": None,
                     "needs_justification": True,
                 }
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+            raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
 
     return {
         "organizer": {

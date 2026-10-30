@@ -24,6 +24,7 @@ from app.claims.lifecycle import (
 from app.claims.target_resolution import ClaimTarget
 from app.claims.verification import VerificationResult
 from app._generated.shared_constants import (
+    CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
     CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
     CLAIM_DISCOVERY_STATUS_CLAIMED,
     CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
@@ -375,6 +376,7 @@ class TestCreateClaim:
                 await create_claim(mock_db, AsyncMock(), organizer, event_id=10, justification="   ")
 
         assert exc.value.status_code == 422
+        assert exc.value.code == CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED
         mock_db.add.assert_not_called()
 
     @pytest.mark.asyncio

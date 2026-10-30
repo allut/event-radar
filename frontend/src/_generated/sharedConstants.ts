@@ -70,6 +70,7 @@ export const CLAIM_DISCOVERY_STATUS_CLAIMED = 'claimed';
 export const CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE = 'not_claimable';
 export const CLAIM_ERROR_CODE_NOT_GRANTED = 'claim_not_granted';
 export const CLAIM_ERROR_CODE_DORMANT = 'claim_dormant';
+export const CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED = 'claim_justification_required';
 export const PROMOTION_VAT_RATE_PERCENT = 24;
 
 export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];

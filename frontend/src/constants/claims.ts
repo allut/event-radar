@@ -48,14 +48,6 @@ export const CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS: ReadonlySet<ClaimVerifi
   CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
 ]);
 
-// Mirrors backend ERROR_CLAIM_JUSTIFICATION_REQUIRED (app/constants/claims.py) — the
-// one claim-creation error the UI reacts to structurally (revealing the
-// justification field, #428) rather than just displaying; matched by exact
-// string since claim creation has no structured error-code contract.
-export const CLAIM_JUSTIFICATION_REQUIRED_ERROR =
-  'A justification is required for a series claim (no specific promoter' +
-  ' could be identified for this listing).';
-
 // CLAIM_STATUS_REVOKED is a real admin revoke of a granted claim (row deleted
 // server-side): the backend only reports it for the AdminAction-built
 // tombstone. CLAIM_STATUS_DECLINED is a declined pending claim, admin or auto

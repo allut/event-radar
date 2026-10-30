@@ -12,9 +12,9 @@ import {
   LOCALES,
   DEFAULT_LOCALE_CODE,
   TALLINN_TZ,
+  CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
 } from './_generated/sharedConstants';
 import { API, QUERY_KEYS } from './constants/api';
-import { CLAIM_JUSTIFICATION_REQUIRED_ERROR } from './constants/claims';
 import {
   NUMERIC_ROUTE_ID_RE,
   CARD_ANIMATION_DELAY_STEP_MS,
@@ -136,9 +136,9 @@ export function apiErrorMessage(err: unknown, fallback: string): string {
  * (#428's Series-claim gate) — the one claim-creation error ClaimEventPicker/
  * ClaimStrip react to structurally (reveal the reason field) rather than
  * just display, so both share this check instead of duplicating the
- * ApiError/message comparison. */
+ * ApiError.code comparison. */
 export function isClaimJustificationRequiredError(err: unknown): boolean {
-  return err instanceof ApiError && err.message === CLAIM_JUSTIFICATION_REQUIRED_ERROR;
+  return err instanceof ApiError && err.code === CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED;
 }
 
 /** { value, label } options for every CATEGORIES slug, localized — callers

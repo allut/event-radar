@@ -10,6 +10,7 @@ from fastapi import HTTPException
 
 from app.claims.lifecycle import ClaimError
 from app._generated.shared_constants import (
+    CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
@@ -20,6 +21,7 @@ from app._generated.shared_constants import (
 from app.constants.auth import DETAIL_MAGIC_LINK_SENT
 from app.constants.claims import (
     ERROR_CLAIM_EVENTS_NOT_PUBLISHER,
+    ERROR_CLAIM_JUSTIFICATION_REQUIRED,
     ERROR_CLAIM_NOT_FOUND,
     ERROR_CLAIM_OWN_SUBMISSION,
     ERROR_DAILY_CLAIM_LIMIT,
@@ -177,6 +179,39 @@ class TestCreateOwnClaim:
 
         assert exc.value.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
         assert exc.value.detail == ERROR_CLAIM_OWN_SUBMISSION
+
+    @pytest.mark.asyncio
+    async def test_missing_justification_carries_its_code(
+        self, mock_db, make_request, make_organizer
+    ):
+        """The UI reveals the justification field off `code`, not the English message."""
+        from app.routers.organizer_claims import CreateClaimBody, create_own_claim
+
+        organizer = make_organizer(organizer_id=5)
+
+        with patch(
+            "app.routers.organizer_claims.create_claim",
+            new_callable=AsyncMock,
+            side_effect=ClaimError(
+                http.HTTPStatus.UNPROCESSABLE_ENTITY,
+                ERROR_CLAIM_JUSTIFICATION_REQUIRED,
+                code=CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
+            ),
+        ):
+            with pytest.raises(HTTPException) as exc:
+                await create_own_claim(
+                    CreateClaimBody(event_id=10),
+                    make_request(method="POST", path="/organizer/claims"),
+                    response=MagicMock(),
+                    current_organizer=organizer,
+                    db=mock_db,
+                )
+
+        assert exc.value.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
+        assert exc.value.detail == {
+            "message": ERROR_CLAIM_JUSTIFICATION_REQUIRED,
+            "code": CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
+        }
 
 
 class TestCancelOwnClaim:
@@ -830,6 +865,43 @@ class TestVerifyClaimLink:
 
         assert result["organizer"]["id"] == 5
         assert result["claim"]["status"] == CLAIM_STATUS_APPROVED
+
+    @pytest.mark.asyncio
+    async def test_series_claim_needing_justification_still_signs_in(
+        self, mock_db, make_request, make_organizer
+    ):
+        """The link is spent, so a series claim without a justification returns
+        the sign-in with no claim instead of raising (#428)."""
+        from app.auth.tokens import generate_organizer_claim_link_token
+        from app.routers.organizer_claims import ClaimLinkVerifyBody, verify_claim_link
+
+        organizer = make_organizer(organizer_id=5)
+        token, _, _ = generate_organizer_claim_link_token(organizer_id=5, event_id=10)
+
+        execute_result = MagicMock()
+        execute_result.fetchone.return_value = (5,)
+        mock_db.execute.return_value = execute_result
+        mock_db.get.return_value = organizer
+
+        with patch(
+            "app.routers.organizer_claims.create_claim",
+            new_callable=AsyncMock,
+            side_effect=ClaimError(
+                http.HTTPStatus.UNPROCESSABLE_ENTITY,
+                ERROR_CLAIM_JUSTIFICATION_REQUIRED,
+                code=CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
+            ),
+        ):
+            result = await verify_claim_link(
+                make_request(method="POST", path="/organizer/claims/verify-link"),
+                ClaimLinkVerifyBody(token=token),
+                response=MagicMock(),
+                db=mock_db,
+            )
+
+        assert result["organizer"]["id"] == 5
+        assert result["claim"] is None
+        assert result["needs_justification"] is True
 
     @pytest.mark.asyncio
     async def test_already_used_token_rejected(self, mock_db, make_request):

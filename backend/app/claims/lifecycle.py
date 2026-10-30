@@ -32,6 +32,7 @@ from app.config import settings
 from app._generated.shared_constants import (
     CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
     CLAIM_DISCOVERY_STATUS_CLAIMED,
+    CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
     CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
@@ -89,10 +90,16 @@ class ClaimError(Exception):
     onto an HTTPException in the router, so these functions stay importable
     (and directly testable) without a FastAPI dependency."""
 
-    def __init__(self, status_code: int, detail: str) -> None:
+    def __init__(self, status_code: int, detail: str, code: str | None = None) -> None:
         super().__init__(detail)
         self.status_code = status_code
         self.detail = detail
+        self.code = code
+
+    @property
+    def http_detail(self) -> str | dict[str, str]:
+        """The HTTPException detail: `{message, code}` when the UI acts on a code (#444)."""
+        return {"message": self.detail, "code": self.code} if self.code else self.detail
 
 
 async def representative_event_source(
@@ -630,7 +637,11 @@ async def create_claim(
 
     justification_clean = justification.strip() if justification else None
     if target.kind == CLAIM_KIND_SERIES and not justification_clean:
-        raise ClaimError(HTTPStatus.UNPROCESSABLE_ENTITY, ERROR_CLAIM_JUSTIFICATION_REQUIRED)
+        raise ClaimError(
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            ERROR_CLAIM_JUSTIFICATION_REQUIRED,
+            code=CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
+        )
 
     claim = Claim(
         organizer_id=organizer.id,
