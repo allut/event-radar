@@ -82,8 +82,8 @@ PROMOTION_MIN_LEAD_DAYS = 1
 # check-and-insert (the cap is global, so one key covers it).
 PROMOTION_CAP_LOCK_KEY = 6_000_597
 
-# Manual invoice references live in the PROMOTION_INVOICE_PREFIX (ER-M-)
-# series. Callers use fullmatch.
+# Manual invoice references live in the PROMOTION_INVOICE_PREFIX series.
+# Callers use fullmatch.
 PROMOTION_INVOICE_REFERENCE_RE = re.compile(
     re.escape(PROMOTION_INVOICE_PREFIX) + r"[A-Za-z0-9][A-Za-z0-9/_-]{0,39}"
 )
@@ -140,8 +140,7 @@ PROMOTION_ERROR_CLEARANCE_NOTE_REQUIRED = "restriction_clearance_note_required"
 PROMOTION_ERROR_CLEARANCE_NOT_NEEDED = "restriction_not_flagged"
 
 # Request-path rule codes beyond the grant ones (the frontend's are shared).
-# Both paths: the Organizer confirms the registry code is its own business
-# (PROMOTION_ERROR_BUSINESS_ATTESTATION, shared).
+# Both paths: the Organizer confirms the registry code is its own business.
 PROMOTION_BUSINESS_ATTESTATION_MESSAGE = "Confirm that the registry code is your own business."
 PROMOTION_ERROR_REQUEST_NOT_PENDING = "request_not_pending"
 PROMOTION_ERROR_REQUEST_OWNER_CHANGED = "request_owner_changed"
@@ -231,10 +230,6 @@ PROMOTION_BOT_USER_AGENT_RE = re.compile(
     re.IGNORECASE,
 )
 
-# The named not-showing reasons, PROMOTION_NOT_SHOWING_* (shared), are one per
-# failing fill-gate clause: the console, the portal and the daily stats row
-# share them.
-
 # `events.promotion_restriction`: `None` = unassessed, `none` = clear.
 PROMOTION_RESTRICTION_NONE = "none"
 PROMOTION_RESTRICTIONS = ("tobacco", "gambling", "alcohol", "political", "weapons")
@@ -245,7 +240,6 @@ ADMIN_PROMOTIONS_PATH = "/admin/promotions"
 
 # Content snapshots (#601): what a Promotion displayed, taken when it becomes
 # paid and on every edit or re-point while scheduled or live. Never pruned.
-# The PROMOTION_SNAPSHOT_TRIGGER_* values are shared.
 PROMOTION_SNAPSHOT_DESCRIPTION_MAX_CHARS = 300
 # The caption on a Sponsored slot card.
 PROMOTION_LABEL_TEXT_TEMPLATE = "REKLAAM · {advertiser}"

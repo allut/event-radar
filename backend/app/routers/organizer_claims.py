@@ -220,7 +220,7 @@ async def _get_own_claim_or_tombstone(
             .limit(1)
         )
         if admin_action is None or admin_action.result.get("organizer_id") != organizer.id:
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+            raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
         return _revoked_tombstone(claim_id, admin_action)
     return _serialize(claim)
 
@@ -261,7 +261,7 @@ async def cancel_own_claim(
     try:
         claim = await cancel_claim(db, current_organizer, claim_id)
     except ClaimError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
     return _serialize(claim)
 
 
@@ -277,7 +277,7 @@ async def recheck_own_claim(
         try:
             claim = await recheck_claim(db, client, current_organizer, claim_id)
         except ClaimError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+            raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
     return _serialize(claim)
 
 
@@ -808,7 +808,7 @@ async def _own_publisher_claim_or_404(
     try:
         claim = await own_claim_or_404(db, claim_id, organizer_id)
     except ClaimError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
     if (
         claim.kind != CLAIM_KIND_PUBLISHER
         or claim.publisher_id is None

@@ -23,14 +23,14 @@ from app._generated.shared_constants import (
 VALID_CLAIM_KINDS = frozenset({CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES})
 
 # CLAIM_STATUS_DECLINED is API-facing only (#447), never stored, so this set
-# leaves it out. A DB row's CLAIM_STATUS_REVOKED
-# always means admin_decline_claim/auto_decline_other_pending_claims flipped
-# a *pending* claim, since a real admin revoke of a *granted* claim
-# (admin_revoke_claim) deletes the row outright rather than leaving it with
-# this status. organizer_claims.py's serializers translate the stored value
-# to this one for any row that still exists; the one case that legitimately
-# reports CLAIM_STATUS_REVOKED is the tombstone built from the deleted
-# claim's AdminAction audit row.
+# leaves it out. A DB row's CLAIM_STATUS_REVOKED always means
+# admin_decline_claim/auto_decline_other_pending_claims flipped a *pending*
+# claim, since a real admin revoke of a *granted* claim (admin_revoke_claim)
+# deletes the row outright rather than leaving it with this status.
+# organizer_claims.py's serializers translate the stored value to
+# CLAIM_STATUS_DECLINED for any row that still exists; the one case that
+# legitimately reports CLAIM_STATUS_REVOKED is the tombstone built from the
+# deleted claim's AdminAction audit row.
 VALID_CLAIM_STATUSES = frozenset(
     {
         CLAIM_STATUS_PENDING,
@@ -109,7 +109,8 @@ CLAIM_EMAIL_SEND_CONCURRENCY: int = 8
 # persisted. Feeds the public event page's "is this your event?" CTA and the
 # search/suggestions surfaces' exclusion filter.
 # CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE (#445): a direct organizer submission
-# has no ingested EventSource, so it can never be claimed — distinct from "unclaimed" (claimable, nobody has yet).
+# has no ingested EventSource, so it can never be claimed — distinct from
+# "unclaimed" (claimable, nobody has yet).
 VALID_CLAIM_DISCOVERY_STATUSES = frozenset(
     {
         CLAIM_DISCOVERY_STATUS_UNCLAIMED,

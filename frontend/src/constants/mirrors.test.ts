@@ -1,8 +1,9 @@
 // Ratchet (docs/frontend.md, shared/ table): a frontend constant that mirrors a
 // backend one drifts silently, so cross-stack values belong in shared/. This
 // counts the comments in constants/*.ts that say "mirrors backend" or name a
-// backend constant ("backend PROMOTION_ERROR_*") and pins each file's count. A rise means a new mirror: put the value in shared/ instead. A drop
-// means one moved: lower the baseline, so the count only ever tightens.
+// backend constant ("backend PROMOTION_ERROR_*") and pins each file's count.
+// A rise means a new mirror: put the value in shared/ instead. A drop means
+// one moved: lower the baseline, so the count only ever tightens.
 /// <reference types="node" />
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

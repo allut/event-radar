@@ -158,7 +158,7 @@ async def _own_granted_claim_or_404(db: AsyncSession, claim_id: int, organizer_i
     try:
         claim = await own_claim_or_404(db, claim_id, organizer_id)
     except ClaimError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
     if claim.status != CLAIM_STATUS_APPROVED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
