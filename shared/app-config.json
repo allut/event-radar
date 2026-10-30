@@ -38,6 +38,7 @@
     "ADMIN_DEDUP_GROUPS_PAGE_SIZE": 50,
     "ADMIN_REVIEW_QUEUE_PAGE_SIZE": 50,
     "ADMIN_CLAIMS_QUEUE_PAGE_SIZE": 50,
+    "ADMIN_PROMOTIONS_PAGE_SIZE": 50,
     "CLAIM_EVENTS_PAGE_SIZE": 20,
     "ORGANIZER_OWN_CLAIMS_PAGE_SIZE": 20,
     "PROMOTION_MAX_DAYS": 14,
@@ -120,8 +121,7 @@
     "PROMOTION_SNAPSHOT_TRIGGER_MARK_PAID": "mark_paid",
     "PROMOTION_SNAPSHOT_TRIGGER_EDIT": "edit",
     "PROMOTION_SNAPSHOT_TRIGGER_REPOINT": "repoint",
-    "PROMOTION_CHECKOUT_PATH_SUCCESS": "/organizer/promotions/checkout/success",
-    "ADMIN_PROMOTIONS_PAGE_SIZE": 50
+    "PROMOTION_CHECKOUT_PATH_SUCCESS": "/organizer/promotions/checkout/success"
   },
   "promotion_vat_rate_percent": "24.00",
   "organizer_max_categories": 3,
