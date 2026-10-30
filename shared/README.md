@@ -27,7 +27,8 @@ committed generated modules — no runtime cross-directory imports, no deploy-co
 
 To move an existing backend constant into `scalars`, run
 `python scripts/move_to_shared.py <domain> NAME [NAME ...]` (add `--dry-run` to preview).
-It adds the value, removes the backend definition and any same-named frontend copy,
+It adds the value after the last key sharing its leading words (so `ADMIN_*` keys stay
+together), removes the backend definition and any same-named frontend copy,
 regenerates, and repoints both stacks' imports. It prints the comments that sat above
 each removed definition for you to place, flags changed gitignored files, and lists
 frontend constants with the same value under another name, which it leaves alone.

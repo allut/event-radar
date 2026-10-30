@@ -116,25 +116,49 @@ def _definitions(tree: ast.Module) -> dict[str, ast.Assign | ast.AnnAssign]:
 # ---------------------------------------------------------------------------
 
 
+def _group_anchor(keys: list[str], name: str) -> str | None:
+    """The last of `keys` sharing the most leading `_`-separated words with `name`, so a
+    new key joins its name group; None when no key shares even the first word."""
+    words = name.split("_")
+
+    def shared(key: str) -> int:
+        count = 0
+        for a, b in zip(key.split("_"), words):
+            if a != b:
+                break
+            count += 1
+        return count
+
+    best = max((shared(k) for k in keys), default=0)
+    return [k for k in keys if shared(k) == best][-1] if best else None
+
+
 def _add_scalars(text: str, additions: dict[str, object]) -> str:
-    """Append `additions` to the `scalars` block, keeping the file's hand formatting."""
-    if not additions:
-        return text
-    lines = text.splitlines(keepends=True)
-    start = next(i for i, line in enumerate(lines) if line.strip() == '"scalars": {')
-    indent = lines[start][: len(lines[start]) - len(lines[start].lstrip())]
-    close = next(i for i in range(start + 1, len(lines)) if lines[i].startswith(indent + "}"))
-    last = max(i for i in range(start + 1, close) if lines[i].strip())
-    body = lines[last].rstrip("\n")
-    if not body.endswith(","):
-        lines[last] = body + ",\n"
-    entries = [f"{indent}  {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}" for k, v in additions.items()]
-    lines[close:close] = [entry + ",\n" for entry in entries[:-1]] + [entries[-1] + "\n"]
-    result = "".join(lines)
-    scalars = json.loads(result)["scalars"]
+    """Add each of `additions` to the `scalars` block after its name group (or at the
+    end), keeping the file's hand formatting."""
+    for name, value in additions.items():
+        lines = text.splitlines(keepends=True)
+        start = next(i for i, line in enumerate(lines) if line.strip() == '"scalars": {')
+        indent = lines[start][: len(lines[start]) - len(lines[start].lstrip())]
+        close = next(i for i in range(start + 1, len(lines)) if lines[i].startswith(indent + "}"))
+        key_re = re.compile(rf'{re.escape(indent)}  "([^"]+)":')
+        key_lines = {m.group(1): i for i in range(start + 1, close) if (m := key_re.match(lines[i]))}
+        keys = list(key_lines)
+        entry = f"{indent}  {json.dumps(name)}: {json.dumps(value, ensure_ascii=False)}"
+        anchor = _group_anchor(keys, name)
+        if anchor is not None and anchor != keys[-1]:
+            lines.insert(key_lines[keys[keys.index(anchor) + 1]], entry + ",\n")
+        else:
+            last = max(i for i in range(start + 1, close) if lines[i].strip())
+            body = lines[last].rstrip("\n")
+            if not body.endswith(","):
+                lines[last] = body + ",\n"
+            lines.insert(close, entry + "\n")
+        text = "".join(lines)
+    scalars = json.loads(text)["scalars"]
     if any(scalars.get(k) != v for k, v in additions.items()):
         raise RuntimeError("shared/app-config.json: the added scalars didn't read back; is `scalars` hand-formatted?")
-    return result
+    return text
 
 
 # ---------------------------------------------------------------------------

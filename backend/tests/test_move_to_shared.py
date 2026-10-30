@@ -429,3 +429,33 @@ def test_numeric_separators_count_as_a_literal_copy(repo: Path) -> None:
 
     assert _read(repo, FRONTEND_CONSTANTS) == "export const FIXTURE_OTHER = 1;\n"
     assert _read(repo, "frontend/src/constants/fixture.test.ts") == "export const FIXTURE_X = 7;\n"
+
+
+def test_new_key_lands_after_the_last_key_sharing_its_longest_name_prefix(repo: Path) -> None:
+    config = json.loads(_read(repo, "shared/app-config.json"))
+    config["scalars"] = {
+        "ADMIN_A_PAGE_SIZE": 1,
+        "ADMIN_B_PAGE_SIZE": 2,
+        "OTHER_LIST": ["x", "y"],
+        "PROMO_X": "p",
+    }
+    (repo / "shared/app-config.json").write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    _write(repo, {
+        BACKEND_CONSTANTS: """
+            ADMIN_FIXTURE_PAGE_SIZE = 3
+            OTHER_EXTRA = "e"
+            ZED_NEW = 4
+        """,
+    })
+
+    assert _run(repo, "fixture", "ADMIN_FIXTURE_PAGE_SIZE", "OTHER_EXTRA", "ZED_NEW") == 0
+
+    assert list(_scalars(repo)) == [
+        "ADMIN_A_PAGE_SIZE",
+        "ADMIN_B_PAGE_SIZE",
+        "ADMIN_FIXTURE_PAGE_SIZE",
+        "OTHER_LIST",
+        "OTHER_EXTRA",
+        "PROMO_X",
+        "ZED_NEW",
+    ]
