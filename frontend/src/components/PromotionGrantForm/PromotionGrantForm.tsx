@@ -1,12 +1,12 @@
 import { useId, useMemo, useState, type FormEvent } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
+import { PROMOTION_INVOICE_PREFIX } from '../../_generated/sharedConstants';
 import { API, QUERY_KEYS } from '../../constants/api';
 import { UI_STATE } from '../../constants/core';
 import {
   PROMOTION_COPY,
   PROMOTION_ERROR_START_CODES,
-  PROMOTION_INVOICE_PREFIX,
   PROMOTION_NOTE_ROWS,
   PROMOTION_REGISTRY_CODE_RE,
   PROMOTION_REQUEST_COPY as REQUEST_COPY,

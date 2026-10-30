@@ -2,7 +2,12 @@
 
 import re
 
-from app._generated.shared_constants import ORGANIZER_TERMS_VERSION, PROMOTION_MAX_DAYS
+from app._generated.shared_constants import (
+    ORGANIZER_TERMS_VERSION,
+    PROMOTION_INVOICE_PREFIX,
+    PROMOTION_MAX_DAYS,
+    PROMOTION_REGISTRY_CODE_PATTERN,
+)
 
 # Stored statuses are commercial only. Scheduled, live and finished are
 # computed from the window and today's Tallinn date, never stored.
@@ -53,12 +58,16 @@ PROMOTION_MIN_LEAD_DAYS = 1
 # check-and-insert (the cap is global, so one key covers it).
 PROMOTION_CAP_LOCK_KEY = 6_000_597
 
-# Manual invoice references live in the ER-M- series. Callers use fullmatch.
-PROMOTION_INVOICE_PREFIX = "ER-M-"
-PROMOTION_INVOICE_REFERENCE_RE = re.compile(r"ER-M-[A-Za-z0-9][A-Za-z0-9/_-]{0,39}")
+# Manual invoice references live in the PROMOTION_INVOICE_PREFIX (ER-M-)
+# series. Callers use fullmatch.
+PROMOTION_INVOICE_REFERENCE_RE = re.compile(
+    re.escape(PROMOTION_INVOICE_PREFIX) + r"[A-Za-z0-9][A-Za-z0-9/_-]{0,39}"
+)
 # Estonian business registry codes (Äriregister) are 8 ASCII digits. Callers
 # use fullmatch: `\d` would take Unicode digits and `$` a trailing newline.
-PROMOTION_REGISTRY_CODE_RE = re.compile(r"[0-9]{8}")
+# The frontend anchors the same shared pattern; both run
+# shared/fixtures/promotion_registry_codes.json.
+PROMOTION_REGISTRY_CODE_RE = re.compile(PROMOTION_REGISTRY_CODE_PATTERN)
 
 PROMOTION_ADVERTISER_NAME_MAX_CHARS = 255
 PROMOTION_BILLING_EMAIL_MAX_CHARS = 255

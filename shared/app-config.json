@@ -78,7 +78,9 @@
       "spam_or_scam", "sexual_or_explicit", "not_an_event", "hateful_or_violent",
       "misleading_info", "event_ended_or_cancelled", "wrong_location", "other"
     ],
-    "REPORT_REASON_OTHER": "other"
+    "REPORT_REASON_OTHER": "other",
+    "PROMOTION_INVOICE_PREFIX": "ER-M-",
+    "PROMOTION_REGISTRY_CODE_PATTERN": "[0-9]{8}"
   },
   "promotion_vat_rate_percent": "24.00",
   "organizer_max_categories": 3,

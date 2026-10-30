@@ -73,6 +73,8 @@ export const CLAIM_ERROR_CODE_DORMANT = 'claim_dormant';
 export const CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED = 'claim_justification_required';
 export const REPORT_REASONS = ['spam_or_scam', 'sexual_or_explicit', 'not_an_event', 'hateful_or_violent', 'misleading_info', 'event_ended_or_cancelled', 'wrong_location', 'other'] as const;
 export const REPORT_REASON_OTHER = 'other';
+export const PROMOTION_INVOICE_PREFIX = 'ER-M-';
+export const PROMOTION_REGISTRY_CODE_PATTERN = '[0-9]{8}';
 export const PROMOTION_VAT_RATE_PERCENT = 24;
 
 export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];

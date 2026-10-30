@@ -24,7 +24,7 @@ const isMirrorComment = (line: string): boolean =>
 // waiting on its own domain commit.
 const BASELINE: Readonly<Record<string, number>> = {
   'organizerPromotions.ts': 4,
-  'promotions.ts': 6,
+  'promotions.ts': 5,
   'routes.ts': 1,
 };
 

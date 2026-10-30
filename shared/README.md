@@ -14,6 +14,7 @@ committed generated modules — no runtime cross-directory imports, no deploy-co
 | `calendar.json` | `day_names` and `month_names` per locale (backend email only) |
 | `personas.json` | Persona slugs, emojis, display names, and vibes per locale |
 | `app-config.json` | Cross-stack scalars: TTLs, weights, locale list, locale_code_map, signal/category/vibe taxonomies |
+| `fixtures/*.json` | Test cases both suites run, so a shared pattern behaves the same in Python and JS (not generated) |
 
 ## Workflow
 

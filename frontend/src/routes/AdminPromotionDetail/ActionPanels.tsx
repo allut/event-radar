@@ -1,11 +1,11 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import DatePicker from '../../components/DatePicker';
+import { PROMOTION_INVOICE_PREFIX } from '../../_generated/sharedConstants';
 import { ADMIN_LOCALE } from '../../constants/admin';
 import { API } from '../../constants/api';
 import {
   PROMOTION_DETAIL_COPY as COPY,
   PROMOTION_EDIT_SCOPE,
-  PROMOTION_INVOICE_PREFIX,
   PROMOTION_REASON_ROWS,
   PROMOTION_REGISTRY_CODE_RE,
 } from '../../constants/promotions';

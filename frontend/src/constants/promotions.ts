@@ -2,6 +2,8 @@
 // Admin console is English-only, so these are plain strings (no shared/i18n).
 // .js extensions required: Cloudflare Pages Functions import constants as unbundled ESM.
 
+import { PROMOTION_INVOICE_PREFIX, PROMOTION_REGISTRY_CODE_PATTERN } from '../_generated/sharedConstants.js';
+
 export const ADMIN_PROMOTIONS_PAGE_SIZE = 50;
 
 // URL param carrying the list's state filter; omitted for "All".
@@ -29,10 +31,11 @@ export const ADMIN_PROMOTIONS_STATE_FILTERS = [
 
 export type PromotionPillTone = 'live' | 'scheduled' | 'finished' | 'attention';
 
-// Mirrors backend PROMOTION_INVOICE_PREFIX / PROMOTION_REGISTRY_CODE_RE: the
-// form pre-checks these for instant feedback; the server stays authoritative.
-export const PROMOTION_INVOICE_PREFIX = 'ER-M-';
-export const PROMOTION_REGISTRY_CODE_RE = /^\d{8}$/;
+// The form pre-checks the invoice prefix (PROMOTION_INVOICE_PREFIX,
+// _generated/sharedConstants.ts) and the registry code for instant feedback;
+// the server stays authoritative. The code pattern is shared and anchored here
+// as the backend's fullmatch is; both run shared/fixtures/promotion_registry_codes.json.
+export const PROMOTION_REGISTRY_CODE_RE = new RegExp(`^(?:${PROMOTION_REGISTRY_CODE_PATTERN})$`);
 export const PROMOTION_NOTE_ROWS = 2;
 
 // Rule-violation codes (backend PROMOTION_ERROR_*) that flag the start date
