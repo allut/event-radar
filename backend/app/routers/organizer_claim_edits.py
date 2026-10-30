@@ -26,13 +26,15 @@ from app.claims.pinning import (
     price_mismatch,
     scaled_claim_edit_cap,
 )
-from app._generated.shared_constants import ORGANIZER_MAX_CATEGORIES
-from app.constants.claims import (
-    CLAIM_UNPIN_KEY_MAX_LEN,
-    CLAIM_UNPIN_MAX_ITEMS,
+from app._generated.shared_constants import (
     CLAIM_ERROR_CODE_DORMANT,
     CLAIM_ERROR_CODE_NOT_GRANTED,
     CLAIM_STATUS_APPROVED,
+    ORGANIZER_MAX_CATEGORIES,
+)
+from app.constants.claims import (
+    CLAIM_UNPIN_KEY_MAX_LEN,
+    CLAIM_UNPIN_MAX_ITEMS,
     ERROR_CLAIM_DORMANT,
     ERROR_CLAIM_EDIT_URL_DOMAIN,
     ERROR_CLAIM_EVENT_NOT_FOUND,

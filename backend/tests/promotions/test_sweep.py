@@ -10,7 +10,7 @@ from app.constants.admin import (
     ADMIN_ACTION_PROMOTION_SYSTEM_END,
     ADMIN_ACTION_PROMOTION_SYSTEM_VOID,
 )
-from app.constants.claims import CLAIM_STATUS_REVOKED
+from app._generated.shared_constants import CLAIM_STATUS_REVOKED
 from app.constants.promotions import (
     PROMOTION_STATUS_ENDED_EARLY,
     PROMOTION_STATUS_PAID,

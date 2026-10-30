@@ -12,10 +12,12 @@ from bs4 import BeautifulSoup
 from sqlalchemy import ColumnElement, and_, false, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants.claims import (
+from app._generated.shared_constants import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
+)
+from app.constants.claims import (
     ORGANIZER_CLAIM_EDIT_CAP_CEILING,
     ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT,
     ORGANIZER_DAILY_CLAIM_EDIT_CAP,

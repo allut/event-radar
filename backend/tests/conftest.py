@@ -18,11 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engin
 from starlette.requests import Request
 
 from app._generated.shared_constants import (
+    CLAIM_KIND_PUBLISHER,
+    CLAIM_KIND_SERIES,
+    CLAIM_STATUS_APPROVED,
     DEFAULT_CURRENCY,
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
 )
-from app.constants.claims import CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES, CLAIM_STATUS_APPROVED
 from app.constants.core import TALLINN_TZ
 from app.constants.events import TALLINN_CENTER_LAT, TALLINN_CENTER_LNG
 from app.models.models import Claim, Event, EventSource, Organizer, Publisher, Source, Venue

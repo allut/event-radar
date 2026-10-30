@@ -14,14 +14,13 @@ import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';
 import Pager from '../../components/Pager';
 import SeoTags from '../../components/SeoTags';
-import { ORGANIZER_OWN_CLAIMS_PAGE_SIZE } from '../../_generated/sharedConstants';
-import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
 import {
   CLAIM_KIND_PUBLISHER,
   CLAIM_STATUS_APPROVED,
-  type ClaimKind,
-  type ClaimStatus,
-} from '../../constants/claims';
+  ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
+} from '../../_generated/sharedConstants';
+import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
+import { type ClaimKind, type ClaimStatus } from '../../constants/claims';
 import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
 import styles from './OrganizerClaims.module.css';

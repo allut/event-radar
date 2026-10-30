@@ -27,12 +27,11 @@ import TopBar from '../../components/TopBar';
 import { useFeedback } from '../../hooks/useFeedback';
 import { API, QUERY_KEYS } from '../../constants/api';
 import {
+  CLAIM_DISCOVERY_STATUS_CLAIMED,
+  CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
   CLAIM_STATUS_PENDING,
-  EVENT_CLAIM_STATUS_CLAIMED,
-  EVENT_CLAIM_STATUS_NOT_CLAIMABLE,
-  type ClaimStatus,
-  type EventClaimStatus,
-} from '../../constants/claims';
+} from '../../_generated/sharedConstants';
+import { type ClaimStatus, type EventClaimStatus } from '../../constants/claims';
 import { UI_STATE } from '../../constants/core';
 import { EXPLORE_PARAM } from '../../constants/explore';
 import { EVENT_PRICE_TESTID, PRICE_DATA_ATTR } from '../../constants/prerender';
@@ -236,13 +235,13 @@ export default function EventDetail() {
                   {ti('ends_at', locale, { time: formatHourMinute(data.ends_at, locale) })}
                 </span>
               )}
-              {data.claim_status === EVENT_CLAIM_STATUS_CLAIMED && (
+              {data.claim_status === CLAIM_DISCOVERY_STATUS_CLAIMED && (
                 <ClaimPill status="claimed" locale={locale} />
               )}
               {/* (#451) Claimant-only: the public claim_status never carries
                   "pending" — only the caller's own claim, fetched via the
                   organizer-scoped for-event lookup, can show this. */}
-              {data.claim_status !== EVENT_CLAIM_STATUS_CLAIMED && ownClaim?.claim?.status === CLAIM_STATUS_PENDING && (
+              {data.claim_status !== CLAIM_DISCOVERY_STATUS_CLAIMED && ownClaim?.claim?.status === CLAIM_STATUS_PENDING && (
                 <ClaimPill status="pending" locale={locale} />
               )}
             </div>
@@ -326,8 +325,8 @@ export default function EventDetail() {
                 a claim is actually approved. #445: a direct organizer
                 submission has no ingested EventSource to ever claim, so the
                 CTA never renders for it. */}
-            {data.claim_status !== EVENT_CLAIM_STATUS_CLAIMED &&
-              data.claim_status !== EVENT_CLAIM_STATUS_NOT_CLAIMABLE && (
+            {data.claim_status !== CLAIM_DISCOVERY_STATUS_CLAIMED &&
+              data.claim_status !== CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE && (
                 <ClaimPanel eventId={data.id} locale={locale} />
               )}
           </div>

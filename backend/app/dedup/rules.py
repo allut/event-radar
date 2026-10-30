@@ -23,7 +23,7 @@ from sqlalchemy import Integer, cast, column, func, or_, select, update, values
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, load_only, selectinload
 
-from app.constants.claims import CLAIM_STATUS_APPROVED
+from app._generated.shared_constants import CLAIM_STATUS_APPROVED
 from app.constants.core import SQL_IN_CHUNK_SIZE, SECONDS_PER_HOUR, TALLINN_TZ
 from app.constants.dedup import (
     DEDUP_BULK_UPDATE_CHUNK_SIZE,

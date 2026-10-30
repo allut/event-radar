@@ -2,9 +2,11 @@ import { StatusCodes } from 'http-status-codes';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../api/client';
-import { ORGANIZER_MAX_CATEGORIES } from '../_generated/sharedConstants';
+import {
+  CLAIM_ERROR_CODE_DORMANT,
+  ORGANIZER_MAX_CATEGORIES,
+} from '../_generated/sharedConstants';
 import { API, QUERY_KEYS } from '../constants/api';
-import { CLAIM_ERROR_CODE_DORMANT } from '../constants/claims';
 import { t } from '../i18n';
 import { useOrganizerImageUpload } from './useOrganizerImageUpload';
 import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, toggleCapped, type LocalizedTextFields } from '../utils';

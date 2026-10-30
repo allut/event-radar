@@ -19,9 +19,8 @@ from app.claims.pinning import (
     representative_event_for_claim,
     scaled_claim_edit_cap,
 )
+from app._generated.shared_constants import CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES
 from app.constants.claims import (
-    CLAIM_KIND_PUBLISHER,
-    CLAIM_KIND_SERIES,
     ORGANIZER_CLAIM_EDIT_CAP_CEILING,
     ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT,
     ORGANIZER_DAILY_CLAIM_EDIT_CAP,

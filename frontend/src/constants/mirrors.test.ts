@@ -23,7 +23,7 @@ const isMirrorComment = (line: string): boolean =>
 // Files left out of the map have a baseline of 0. What remains here is
 // waiting on its own domain commit.
 const BASELINE: Readonly<Record<string, number>> = {
-  'claims.ts': 5,
+  'claims.ts': 1,
   'feedback.ts': 1,
   'organizerPromotions.ts': 4,
   'promotions.ts': 6,

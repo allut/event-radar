@@ -9,7 +9,7 @@ from app.constants.admin import (
     ADMIN_ACTION_PROMOTION_REQUEST_DECLINE,
     ADMIN_ACTION_PROMOTION_REQUEST_GRANT,
 )
-from app.constants.claims import CLAIM_STATUS_REVOKED
+from app._generated.shared_constants import CLAIM_STATUS_REVOKED
 from app.constants.promotions import PROMOTION_LIVE_CAP
 from app.models.models import AdminAction, Event, Promotion, PromotionRequest
 from app.promotions.grant import GrantRequest, grant_promotion

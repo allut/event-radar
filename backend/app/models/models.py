@@ -26,8 +26,12 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import UserDefinedType
 
-from app._generated.shared_constants import DEFAULT_USER_CITY, DEFAULT_USER_LOCALE
-from app.constants.claims import CLAIM_STATUS_APPROVED, CLAIM_STATUS_PENDING
+from app._generated.shared_constants import (
+    CLAIM_STATUS_APPROVED,
+    CLAIM_STATUS_PENDING,
+    DEFAULT_USER_CITY,
+    DEFAULT_USER_LOCALE,
+)
 from app.constants.events import (
     EVENT_SEARCH_TEXT_SQL,
     EVENT_STATUS_CLASSIFIED,

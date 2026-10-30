@@ -10,7 +10,7 @@ from collections.abc import Sequence
 from sqlalchemy import false, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants.claims import (
+from app._generated.shared_constants import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,

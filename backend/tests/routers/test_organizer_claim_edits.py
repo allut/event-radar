@@ -14,12 +14,14 @@ from pydantic import ValidationError
 
 from app.claims.lifecycle import ClaimError
 from app.claims.pinning import FreshPrice
-from app.constants.claims import (
+from app._generated.shared_constants import (
     CLAIM_ERROR_CODE_DORMANT,
     CLAIM_ERROR_CODE_NOT_GRANTED,
     CLAIM_KIND_PUBLISHER,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
+)
+from app.constants.claims import (
     ERROR_CLAIM_DORMANT,
     ERROR_CLAIM_EDIT_URL_DOMAIN,
     ERROR_CLAIM_NOT_GRANTED,

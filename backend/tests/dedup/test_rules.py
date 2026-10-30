@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from rapidfuzz.fuzz import token_set_ratio
 
-from app.constants.claims import CLAIM_STATUS_APPROVED
+from app._generated.shared_constants import CLAIM_STATUS_APPROVED
 from app.constants.core import TALLINN_TZ
 from app.constants.dedup import (
     DEDUP_LOOKBACK_DAYS,

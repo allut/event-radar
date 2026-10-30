@@ -13,7 +13,7 @@ from app.constants.admin import (
     ADMIN_ACTION_GRANT_CLAIM,
     ADMIN_ACTION_REVOKE_CLAIM,
 )
-from app.constants.claims import (
+from app._generated.shared_constants import (
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
@@ -22,8 +22,8 @@ from app.constants.claims import (
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
-    ERROR_CLAIM_TARGET_ALREADY_APPROVED,
 )
+from app.constants.claims import ERROR_CLAIM_TARGET_ALREADY_APPROVED
 from app.constants.core import APP_ENV_DEVELOPMENT
 from tests.conftest import build_event
 from tests.routers.conftest import (

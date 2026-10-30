@@ -2,7 +2,15 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
-import { ADMIN_CLAIMS_QUEUE_PAGE_SIZE } from '../../_generated/sharedConstants';
+import {
+  ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
+  CLAIM_KIND_PUBLISHER,
+  CLAIM_KIND_SERIES,
+  CLAIM_STATUS_APPROVED,
+  CLAIM_STATUS_PENDING,
+  CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+  CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
+} from '../../_generated/sharedConstants';
 import {
   ADMIN_CLAIMS_TAB_PARAM,
   ADMIN_GENERIC_ERROR,
@@ -14,12 +22,6 @@ import {
   ADMIN_CLAIM_ACTION_TAGS,
   ADMIN_CLAIM_MECHANISM_LABELS,
   CLAIM_DNS_VERIFICATION_MECHANISMS,
-  CLAIM_KIND_PUBLISHER,
-  CLAIM_KIND_SERIES,
-  CLAIM_STATUS_APPROVED,
-  CLAIM_STATUS_PENDING,
-  CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
-  CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
   type AdminClaimActionKind,
   type ClaimKind,
   type ClaimVerificationMechanism,

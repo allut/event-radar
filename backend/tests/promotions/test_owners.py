@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.constants.claims import CLAIM_STATUS_PENDING
+from app._generated.shared_constants import CLAIM_STATUS_PENDING
 from app.promotions.owners import resolve_owner_ids
 from tests.conftest import count_statements
 
