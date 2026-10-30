@@ -43,8 +43,8 @@ uvicorn app.main:app --reload # dev server (port 8000)
 bash scripts/scratch-test.sh  # all tests, throwaway DB
 bash scripts/scratch-test.sh tests/path/test_foo.py::TestClass::test_name  # single test
 bash scripts/scratch-test.sh --cov --cov-report=term-missing  # coverage (backend/.coveragerc)
-python -m mypy app            # type-check (requirements-dev.txt)
-python -m ruff check .        # lint
+python -m mypy app ../scripts # type-check (requirements-dev.txt)
+python -m ruff check . ../scripts  # lint
 ```
 
 ```bash

@@ -12,25 +12,27 @@ if staged '^(shared/|backend/app/_generated/|frontend/src/_generated/)'; then
 fi
 
 # The backend checks read files from disk, so with unstaged or untracked backend
-# changes they would pass on the working tree while the commit itself is broken.
+# or scripts/ changes they would pass on the working tree while the commit itself
+# is broken.
 # Check a copy of the index instead; its mypy cache persists under .git.
 backend=backend
 mypy_cache=()
-if staged '^(backend/|shared/)' \
-  && { ! git diff --quiet -- backend/ || [ -n "$(git ls-files --others --exclude-standard -- backend/)" ]; }; then
+if staged '^(backend/|shared/|scripts/)' \
+  && { ! git diff --quiet -- backend/ scripts/ || [ -n "$(git ls-files --others --exclude-standard -- backend/ scripts/)" ]; }; then
   snapshot="$(git rev-parse --absolute-git-dir)/precommit-snapshot"
   rm -rf "$snapshot"
-  git ls-files -z -- backend/ | git checkout-index -z --stdin --prefix="$snapshot/"
+  git ls-files -z -- backend/ scripts/ | git checkout-index -z --stdin --prefix="$snapshot/"
   backend="$snapshot/backend"
   mypy_cache=(--cache-dir "$(git rev-parse --absolute-git-dir)/precommit-mypy-cache")
   echo "pre-commit: unstaged backend changes, checking the staged snapshot"
 fi
 
-if staged '^(backend/|shared/)'; then
+# ../scripts holds the repo-root scripts (generate_shared.py and the rest).
+if staged '^(backend/|shared/|scripts/)'; then
   echo "pre-commit: ruff"
-  (cd "$backend" && python -m ruff check .)
+  (cd "$backend" && python -m ruff check . ../scripts)
   echo "pre-commit: mypy"
-  (cd "$backend" && python -m mypy app "${mypy_cache[@]}")
+  (cd "$backend" && python -m mypy app ../scripts "${mypy_cache[@]}")
 fi
 
 if staged '^backend/'; then
