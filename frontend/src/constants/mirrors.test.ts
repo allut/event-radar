@@ -9,18 +9,25 @@ import { join } from 'node:path';
 
 const MIRROR_COMMENT = /\bmirror(s|ing)?\b.*\bbackend\b/i;
 const BACKEND_NAME_COMMENT = /\b[Bb]ackend\s+[A-Z][A-Z0-9]*_[A-Z0-9_]/;
-const isMirrorComment = (line: string): boolean => MIRROR_COMMENT.test(line) || BACKEND_NAME_COMMENT.test(line);
+
+// Backend names whose frontend copy is frontend-only by nature, so a comment
+// naming one never counts. Each value says why shared/ can't hold it.
+const FRONTEND_ONLY: Readonly<Record<string, string>> = {
+  PROMOTIONS_SLOTS_ENABLED: 'a deploy-time switch, set per deploy in wrangler.toml [vars] and the backend env',
+};
+
+const isMirrorComment = (line: string): boolean =>
+  (MIRROR_COMMENT.test(line) || BACKEND_NAME_COMMENT.test(line)) &&
+  !Object.keys(FRONTEND_ONLY).some(name => new RegExp(`\\b${name}\\b`).test(line));
 
 // Files left out of the map have a baseline of 0. What remains here is
-// frontend-only by nature or waiting on its own domain commit.
+// waiting on its own domain commit.
 const BASELINE: Readonly<Record<string, number>> = {
   'claims.ts': 5,
   'feedback.ts': 1,
-  'organizer.ts': 1,
   'organizerPromotions.ts': 4,
   'promotions.ts': 6,
   'routes.ts': 1,
-  'sponsored.ts': 1,
 };
 
 const counts = Object.fromEntries(

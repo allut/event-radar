@@ -11,7 +11,7 @@ export const ORGANIZER_PROFILE_NUDGE_DISMISSED_KEY = 'organizer_profile_nudge_di
 
 // ─── Organizer submission ────────────────────────────────────────────────────
 // ORGANIZER_IMAGE_ALLOWED_MIME (_generated/sharedConstants.ts) is sourced from
-// shared/app-config.json, mirroring the backend's IMAGE_UPLOAD_ALLOWED_MIME.
+// shared/app-config.json, the same source as the backend's IMAGE_UPLOAD_ALLOWED_MIME.
 // The server re-validates the MIME type itself and is the actual security
 // boundary — this only lets the picker reject an obviously-wrong file before
 // spending a network round trip on it.
