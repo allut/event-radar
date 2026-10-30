@@ -122,7 +122,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 
 - **Production builds from `release`, not `master`.** `master` is the CI/PR branch. A Cloudflare Pages build of any other branch skips the prerender pass (`PRERENDER_CADENCE_GIT_BRANCH`, `frontend/src/constants/prerender.ts`).
 - **CI's `lint` job and `.githooks/pre-commit` run ruff, mypy, eslint and type-check.** Ruff's config is `backend/ruff.toml`; there is no `backend/pyproject.toml`. The devcontainer enables the hook (`git config core.hooksPath .githooks`). Elsewhere, enable it yourself, or run the four checks by hand before committing.
-- **Edit translations and shared values in `shared/`, then run `python scripts/generate_shared.py`.** Commit the JSON and the regenerated `_generated/` files together, and leave `_generated/` to the script. `backend/tests/test_generated_sync.py` fails on drift.
+- **Edit translations and shared values in `shared/`, then run `python scripts/generate_shared.py`.** Commit the JSON and the regenerated `_generated/` files together, and leave `_generated/` to the script. `backend/tests/test_generated_sync.py` fails on drift. To move an existing backend constant there, run `python scripts/move_to_shared.py <domain> NAME` (`--dry-run` first).
 - **The three auth tracks never mix.** Consumer, organizer and admin sessions use separate signing salts and cookies, and consumer and organizer accounts live in separate tables. `CONTEXT.md` names them and `docs/security.md` has the flows.
 
 ## Agent skills
