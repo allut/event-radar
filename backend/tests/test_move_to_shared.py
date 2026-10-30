@@ -459,3 +459,48 @@ def test_new_key_lands_after_the_last_key_sharing_its_longest_name_prefix(repo: 
         "PROMO_X",
         "ZED_NEW",
     ]
+
+
+def test_hand_copies_are_same_named_literals_in_both_stacks(repo: Path) -> None:
+    _write(repo, {
+        BACKEND_CONSTANTS: """
+            FIXTURE_COPIED = 25
+            FIXTURE_DRIFTED = "a"
+            FIXTURE_DERIVED = 3
+            FIXTURE_SET = frozenset({"x"})
+        """,
+        FRONTEND_CONSTANTS: """
+            import { BROWSE_PAGE_SIZE } from '../_generated/sharedConstants.js';
+
+            export const FIXTURE_COPIED = 25;
+            export const FIXTURE_DRIFTED = 'b';
+            export const FIXTURE_DERIVED = BROWSE_PAGE_SIZE;
+            export const FIXTURE_SET = new Set(['x']);
+        """,
+        "frontend/src/constants/fixture.test.ts": "export const FIXTURE_COPIED = 25;\n",
+    })
+
+    copies = mover.find_hand_copies(repo)
+
+    assert [(c.name, c.backend, c.frontend, c.backend_value, c.frontend_value) for c in copies] == [
+        ("FIXTURE_COPIED", BACKEND_CONSTANTS, f"{FRONTEND_CONSTANTS}:3", 25, 25),
+        ("FIXTURE_DRIFTED", BACKEND_CONSTANTS, f"{FRONTEND_CONSTANTS}:4", "a", "b"),
+    ]
+
+
+# A same-named literal that stays in both stacks, with the reason it stays.
+_DERIVED_IN_FILE = "its backend constants file derives another value from it, so move_to_shared.py refuses the move"
+HAND_COPIES_ALLOWED: dict[str, str] = {
+    "LOCALE_ET": _DERIVED_IN_FILE,  # LOCALE_URL_PREFIX_CODES
+    "PROMOTION_RESTRICTION_NONE": _DERIVED_IN_FILE,  # VALID_PROMOTION_RESTRICTION_VALUES
+}
+
+
+def test_no_constant_is_copied_by_hand_across_stacks() -> None:
+    copies = [c for c in mover.find_hand_copies(REPO) if c.name not in HAND_COPIES_ALLOWED]
+
+    assert copies == [], (
+        "a literal defined under the same name in both stacks; move it into shared/ with "
+        "`python scripts/move_to_shared.py <domain> NAME`, or allowlist it in HAND_COPIES_ALLOWED with the reason:\n"
+        + "\n".join(f"  {c.name}: {c.backend} = {c.backend_value!r}, {c.frontend} = {c.frontend_value!r}" for c in copies)
+    )

@@ -52,6 +52,20 @@ if staged '^frontend/src/(.*\.css$|constants/)'; then
   (cd frontend && npx vitest run src/cssRules.test.ts src/constants/mirrors.test.ts src/displayTokens.test.ts)
 fi
 
+if staged '^(backend/app/constants/|frontend/src/constants/|shared/)'; then
+  echo "pre-commit: cross-stack hand copies"
+  # The test reads both stacks' constants, so it needs the whole tree, not the
+  # backend snapshot; with unstaged or untracked changes, a checkout of the index.
+  copies_root=.
+  if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    copies_root="$(git rev-parse --absolute-git-dir)/precommit-copies-snapshot"
+    rm -rf "$copies_root"
+    git checkout-index -a --prefix="$copies_root/"
+  fi
+  out=$(bash "$copies_root/backend/scripts/scratch-test.sh" --no-db \
+    tests/test_move_to_shared.py::test_no_constant_is_copied_by_hand_across_stacks -q 2>&1) || { echo "$out"; exit 1; }
+fi
+
 if staged '^(CLAUDE\.md|README\.md|docs/)'; then
   echo "pre-commit: docs style"
   # The guard reads docs and the code they cite from disk; with unstaged or

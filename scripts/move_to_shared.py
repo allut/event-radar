@@ -507,6 +507,14 @@ def _ts_definitions(ws: Workspace, path: Path) -> list[_TsDef]:
     return defs
 
 
+def _ts_constants_files(root: Path) -> list[Path]:
+    """The frontend constants files; the tests beside them aren't constants."""
+    constants_dir = root / FRONTEND_CONSTANTS
+    if not constants_dir.is_dir():
+        return []
+    return sorted(p for p in constants_dir.glob("*.ts") if not p.name.endswith(".test.ts"))
+
+
 def _frontend_files(root: Path) -> list[Path]:
     files: list[Path] = []
     for top in FRONTEND_ROOTS:
@@ -662,6 +670,45 @@ def _remove_ts_definitions(ws: Workspace, path: Path, defs: list[_TsDef], report
 
 
 # ---------------------------------------------------------------------------
+# Hand copies
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class HandCopy:
+    """A constant defined as a literal under the same name in both stacks."""
+
+    name: str
+    backend: str  # repo-relative path
+    frontend: str  # repo-relative path:line
+    backend_value: object
+    frontend_value: object
+
+
+def find_hand_copies(root: Path = REPO) -> list[HandCopy]:
+    """Literals a backend `app/constants/` module and a frontend constants file both define
+    under one name: the copies a move into shared/ retires. A frontend value built from
+    `_generated/` isn't a literal, so it never counts."""
+    ws = Workspace(root.resolve())
+    backend: dict[str, tuple[str, object]] = {}
+    for path in sorted((ws.root / "backend" / "app" / "constants").glob("*.py")):
+        for name, node in _definitions(ast.parse(ws.read(path))).items():
+            if node.value is None:
+                continue
+            try:
+                backend[name] = (ws.rel(path), _scalar_value(node.value))
+            except ValueError:
+                continue
+    copies = []
+    for path in _ts_constants_files(ws.root):
+        for d in _ts_definitions(ws, path):
+            if d.name in backend and d.value is not None:
+                rel, value = backend[d.name]
+                copies.append(HandCopy(d.name, rel, f"{ws.rel(path)}:{d.line}", value, d.value))
+    return copies
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -726,8 +773,7 @@ def _plan(ws: Workspace, domain: str, names: list[str], report: Report) -> None:
     reasons.extend(_backend_refusals(ws, backend_files, module, requested))
 
     frontend_files = _frontend_files(root)
-    constants_dir = root / FRONTEND_CONSTANTS
-    ts_constants = sorted(p for p in constants_dir.glob("*.ts") if not p.name.endswith(".test.ts")) if constants_dir.is_dir() else []
+    ts_constants = _ts_constants_files(root)
     ts_copies: dict[Path, list[_TsDef]] = {}
     for path in ts_constants:
         for d in _ts_definitions(ws, path):
