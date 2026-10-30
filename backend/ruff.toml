@@ -1,4 +1,6 @@
 line-length = 88
+# One line per finding; `--fix` or `--output-format full` shows the fix diffs.
+output-format = "concise"
 extend-exclude = ["app/_generated"]
 preview = true
 
