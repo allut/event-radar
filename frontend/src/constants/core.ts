@@ -6,6 +6,8 @@ import {
   DEFAULT_LOCALE_CODE as _DEFAULT_LOCALE_CODE,
   LOCALE_CODE_MAP as _LOCALE_CODE_MAP,
   LOCALES,
+  LOCALE_EN,
+  LOCALE_RU,
 } from '../_generated/sharedConstants.js';
 
 // Re-export PERSONAS under the original name so all import sites are unchanged.
@@ -69,9 +71,7 @@ export const LOCALES_BY_CODE: Map<string, (typeof LOCALES)[number]> = new Map(
 );
 export const COPYRIGHT_YEAR = String(new Date().getFullYear());
 
-export const LOCALE_EN = 'en' as const;
 export const LOCALE_ET = 'et' as const;
-export const LOCALE_RU = 'ru' as const;
 
 export function toLocaleCode(locale: string): string {
   return _LOCALE_CODE_MAP[locale] ?? _DEFAULT_LOCALE_CODE;

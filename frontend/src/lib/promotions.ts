@@ -1,6 +1,6 @@
 import { StatusCodes } from 'http-status-codes';
 import { grossCents } from './organizerPromotions';
-import { TALLINN_TZ } from '../_generated/sharedConstants';
+import { PROMOTION_INVOICE_SOURCE_STRIPE, TALLINN_TZ } from '../_generated/sharedConstants';
 import { ApiError } from '../api/client';
 import { MS_PER_DAY } from '../constants/core';
 import { apiErrorMessage } from '../utils';
@@ -9,7 +9,6 @@ import {
   PROMOTION_DAILY_STAT_LABELS,
   PROMOTION_GATE_REASON_LABELS,
   PROMOTION_PILL_LABEL,
-  PROMOTION_INVOICE_SOURCE_STRIPE,
   PROMOTION_RESTRICTION_NONE,
   PROMOTION_SLOT_WITHDRAWAL_SOURCES,
   PROMOTION_SLOTS_STILL_ENABLED_CODE,

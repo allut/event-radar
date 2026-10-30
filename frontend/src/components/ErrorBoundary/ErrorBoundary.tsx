@@ -2,7 +2,7 @@ import { Component, type ReactNode } from 'react';
 import { getLocale } from '../../lib/auth';
 import { t } from '../../i18n';
 import styles from './ErrorBoundary.module.css';
-import { LOCALE_EN } from '../../constants/core';
+import { LOCALE_EN } from '../../_generated/sharedConstants';
 
 interface Props { children: ReactNode }
 interface State { hasError: boolean }

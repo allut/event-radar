@@ -5,7 +5,8 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.constants.core import LOCALE_ET, LOCALE_EN, LOCALE_RU
+from app._generated.shared_constants import LOCALE_EN, LOCALE_RU
+from app.constants.core import LOCALE_ET
 from app.constants.promotions import (
     PROMOTION_LABEL_TEXT_TEMPLATE,
     PROMOTION_SNAPSHOT_DESCRIPTION_MAX_CHARS,

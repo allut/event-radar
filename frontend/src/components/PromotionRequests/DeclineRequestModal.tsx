@@ -1,10 +1,9 @@
 import { useId, useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
-import { PROMOTION_DECLINE_REASON_MAX_CHARS } from '../../_generated/sharedConstants';
+import { LOCALE_EN, PROMOTION_DECLINE_REASON_MAX_CHARS } from '../../_generated/sharedConstants';
 import { ADMIN_GENERIC_ERROR } from '../../constants/admin';
 import { API, QUERY_KEYS } from '../../constants/api';
-import { LOCALE_EN } from '../../constants/core';
 import {
   PROMOTION_DECLINE_ROWS,
   PROMOTION_REQUEST_COPY as COPY,

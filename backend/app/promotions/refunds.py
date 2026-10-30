@@ -5,9 +5,9 @@ from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from app.constants.core import TALLINN_TZ
+from app._generated.shared_constants import PROMOTION_INVOICE_SOURCE_STRIPE
 from app.constants.promotions import (
     PROMOTION_GATE_OUTCOME_PAUSED,
-    PROMOTION_INVOICE_SOURCE_STRIPE,
     PROMOTION_STATUS_ENDED_EARLY,
     PROMOTION_STATUS_PAID,
 )

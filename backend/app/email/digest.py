@@ -21,7 +21,6 @@ from app.constants.core import (
     EVENTS_PATH,
     HOME_PATH,
     LOCALE_ET,
-    LOCALE_RU,
     SETTINGS_PATH,
     TALLINN_TZ,
     UNSUBSCRIBE_PATH,
@@ -40,7 +39,7 @@ from app.constants.email import (
 )
 from app.constants.http import AUTHORIZATION_HEADER, BEARER_PREFIX
 from app.constants.log_events import LOG_EVENT_EMAIL_SEND_FAILED
-from app._generated.shared_constants import PROMOTION_REF_DIGEST_AD
+from app._generated.shared_constants import LOCALE_RU, PROMOTION_REF_DIGEST_AD
 from app.constants.promotions import PROMOTION_STAT_DIGEST_SENT
 from app.constants.ranking import DAILY_5_COUNT, FEED_BUILD_USER_BATCH_SIZE
 from app.email.links import frontend_url

@@ -10,6 +10,7 @@ import {
   CLAIM_STATUS_PENDING,
   CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
   CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
+  LOCALE_EN,
 } from '../../_generated/sharedConstants';
 import {
   ADMIN_CLAIMS_TAB_PARAM,
@@ -26,7 +27,7 @@ import {
   type ClaimKind,
   type ClaimVerificationMechanism,
 } from '../../constants/claims';
-import { LOCALE_EN, UI_STATE } from '../../constants/core';
+import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
 import { apiErrorMessage, relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';

@@ -58,7 +58,6 @@ VALID_PROMOTION_STATES = frozenset(
     {PROMOTION_STATE_SCHEDULED, PROMOTION_STATE_LIVE, PROMOTION_STATE_FINISHED}
 )
 
-PROMOTION_INVOICE_SOURCE_MANUAL = "manual"
 # `end_reason` for an admin-ended or admin-voided Promotion; the free-text
 # reason (the P2B statement of reasons) is stored in `end_note`.
 PROMOTION_END_REASON_ADMIN = "admin"
@@ -371,7 +370,6 @@ VALID_PROMOTION_REQUEST_STATUSES = frozenset(
 )
 # Sold-out days are listed for this many days after the earliest start.
 PROMOTION_UNAVAILABLE_HORIZON_DAYS = 90
-ADMIN_PROMOTION_REQUESTS_PAGE_SIZE = 50
 
 # What the Organizer's Promotions list calls each row (plain-word labels are
 # frontend strings keyed by these codes).
@@ -391,7 +389,6 @@ ERROR_PROMOTION_REQUEST_INVALID_STATUS = (
     "status must be one of pending, granted, declined, withdrawn, expired"
 )
 # Card checkout and the Stripe webhook (#617, #618, #619).
-PROMOTION_INVOICE_SOURCE_STRIPE = "stripe"
 # `end_reason` of an `unpaid` hold voided because Stripe could not open a session.
 PROMOTION_END_REASON_CHECKOUT_FAILED = "checkout_failed"
 # Stripe rejects an expiry under 30 minutes from the moment it receives the

@@ -203,7 +203,6 @@ export const PROMOTION_DETAIL_COPY = {
 } as const;
 
 // Request queue (#615): status tabs, row copy and the not-grantable reasons.
-export const ADMIN_PROMOTION_REQUESTS_PAGE_SIZE = 50;
 // URL param that opens the queue on a non-pending status; omitted while pending.
 export const ADMIN_PROMOTION_REQUESTS_PARAM = 'requests';
 export const PROMOTION_REQUEST_STATUS = {
@@ -282,8 +281,6 @@ export const PROMOTION_REQUEST_COPY = {
 } as const;
 
 // Stripe look in the list and the detail (#618, #619).
-export const PROMOTION_INVOICE_SOURCE_STRIPE = 'stripe';
-export const PROMOTION_INVOICE_SOURCE_MANUAL = 'manual';
 export const PROMOTION_STRIPE_COPY = {
   datesLocked: "A card-paid Promotion's dates cannot change. End it early or refund part of it instead.",
   chip: 'Stripe',

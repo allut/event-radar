@@ -1,7 +1,8 @@
 // Organizer Promotions (#614, #616, #617, #618): response shapes and the pure
 // helpers the list, the form and the success page share. Dates are Tallinn
 // calendar days (`YYYY-MM-DD`), formatted in UTC so the browser zone can't move them.
-import { LOCALE_EN, toLocaleCode } from '../constants/core';
+import { toLocaleCode } from '../constants/core';
+import { LOCALE_EN } from '../_generated/sharedConstants';
 import {
   PROMOTION_PAUSE_REASON_FALLBACK,
   PROMOTION_PAUSE_REASONS,

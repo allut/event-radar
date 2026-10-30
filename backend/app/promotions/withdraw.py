@@ -18,10 +18,10 @@ from datetime import date, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app._generated.shared_constants import PROMOTION_INVOICE_SOURCE_STRIPE
 from app.constants.promotions import (
     PROMOTION_END_REASON_FEATURE_WITHDRAWN,
     PROMOTION_ERROR_REFUND_PROVIDER,
-    PROMOTION_INVOICE_SOURCE_STRIPE,
     PROMOTION_STATUS_PAID,
     PROMOTION_WITHDRAWN_NOTE,
     PROMOTION_WITHDRAWN_REFUND_NOTE,

@@ -13,6 +13,8 @@ import {
   DEFAULT_LOCALE_CODE,
   TALLINN_TZ,
   CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
+  LOCALE_EN,
+  LOCALE_RU,
 } from './_generated/sharedConstants';
 import { API, QUERY_KEYS } from './constants/api';
 import {
@@ -32,9 +34,7 @@ import {
   MAX_MINUTE,
   TIME_FIELD_MAX_LENGTH,
   LOCALES_BY_CODE,
-  LOCALE_EN,
   LOCALE_ET,
-  LOCALE_RU,
   type LocaleCode,
   MS_PER_HOUR,
   HOURS_PER_DAY,

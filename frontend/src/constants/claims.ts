@@ -19,8 +19,10 @@ import {
   CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
   CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
   CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+  LOCALE_EN,
+  LOCALE_RU,
 } from '../_generated/sharedConstants.js';
-import { LOCALE_EN, LOCALE_ET, LOCALE_RU } from './core.js';
+import { LOCALE_ET } from './core.js';
 import { EXPLORE_SEARCH_DEBOUNCE_MS } from './explore.js';
 
 // Claim kinds, statuses, verification mechanisms, discovery statuses and the

@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
-import { ADMIN_REPORTS_QUEUE_PAGE_SIZE } from '../../_generated/sharedConstants';
+import { ADMIN_REPORTS_QUEUE_PAGE_SIZE, LOCALE_EN } from '../../_generated/sharedConstants';
 import {
   ADMIN_GENERIC_ERROR,
   ADMIN_QUEUE_DETAIL_LINK_LABEL,
@@ -14,7 +14,7 @@ import {
 } from '../../constants/admin';
 import { API, PAGE_PARAM, PAGE_QUERY_PARAM, QUERY_KEYS } from '../../constants/api';
 import { ADMIN_RESOLUTION_MESSAGES } from '../../constants/claims';
-import { LOCALE_EN, UI_STATE } from '../../constants/core';
+import { UI_STATE } from '../../constants/core';
 import { REPORT_REASONS_BY_VALUE } from '../../constants/feedback';
 import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';

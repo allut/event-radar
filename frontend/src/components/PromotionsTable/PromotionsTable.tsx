@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
-import { PROMOTION_INVOICE_SOURCE_MANUAL, PROMOTION_STRIPE_COPY } from '../../constants/promotions';
+import { PROMOTION_STRIPE_COPY } from '../../constants/promotions';
+import { PROMOTION_INVOICE_SOURCE_MANUAL } from '../../_generated/sharedConstants';
 import { formatWindow, isStripePaid, promotionPill, promotionPriceLabel, type PromotionRow } from '../../lib/promotions';
 import styles from './PromotionsTable.module.css';
 

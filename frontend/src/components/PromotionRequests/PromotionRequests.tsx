@@ -3,10 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { adminApi } from '../../api/client';
 import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
-import { PROMOTION_NOT_SHOWING_NOT_OWNED } from '../../_generated/sharedConstants';
-import { UI_STATE } from '../../constants/core';
 import {
   ADMIN_PROMOTION_REQUESTS_PAGE_SIZE,
+  PROMOTION_NOT_SHOWING_NOT_OWNED,
+} from '../../_generated/sharedConstants';
+import { UI_STATE } from '../../constants/core';
+import {
   ADMIN_PROMOTION_REQUESTS_PARAM,
   PROMOTION_REQUEST_COPY as COPY,
   PROMOTION_REQUEST_REASON_LABELS,

@@ -47,8 +47,6 @@ ADS_OFF_PATH = "/email-consent-off"
 # Named locale codes for the fixed et/en/ru vocabulary (VALID_LOCALES above) —
 # used where code refers to one specific locale rather than iterating the set.
 LOCALE_ET = "et"
-LOCALE_EN = "en"
-LOCALE_RU = "ru"
 # Locales whose frontend URLs carry a `/en`/`/ru` path prefix — Estonian is the
 # bare (unprefixed) URL locale. Backend mirror of the frontend's
 # LOCALE_URL_PREFIX_CODES (frontend/src/constants/core.ts); used by

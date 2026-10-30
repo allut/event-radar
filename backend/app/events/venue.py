@@ -2,8 +2,7 @@
 ``venue_address``/lat/lng NULL (#176), so every reader resolves them through
 these helpers instead of reading the columns."""
 
-from app._generated.shared_constants import DEFAULT_USER_LOCALE
-from app.constants.core import LOCALE_EN, LOCALE_RU
+from app._generated.shared_constants import DEFAULT_USER_LOCALE, LOCALE_EN, LOCALE_RU
 from app.models.models import Event, Venue
 
 

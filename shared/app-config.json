@@ -39,6 +39,7 @@
     "ADMIN_REVIEW_QUEUE_PAGE_SIZE": 50,
     "ADMIN_CLAIMS_QUEUE_PAGE_SIZE": 50,
     "ADMIN_PROMOTIONS_PAGE_SIZE": 50,
+    "ADMIN_PROMOTION_REQUESTS_PAGE_SIZE": 50,
     "CLAIM_EVENTS_PAGE_SIZE": 20,
     "ORGANIZER_OWN_CLAIMS_PAGE_SIZE": 20,
     "PROMOTION_MAX_DAYS": 14,
@@ -81,6 +82,8 @@
     ],
     "REPORT_REASON_OTHER": "other",
     "PROMOTION_INVOICE_PREFIX": "ER-M-",
+    "PROMOTION_INVOICE_SOURCE_STRIPE": "stripe",
+    "PROMOTION_INVOICE_SOURCE_MANUAL": "manual",
     "PROMOTION_REGISTRY_CODE_PATTERN": "[0-9]{8}",
     "PROMOTION_NOT_SHOWING_SLOTS_DISABLED": "slots_disabled",
     "PROMOTION_NOT_SHOWING_BOT": "bot_user_agent",
@@ -121,7 +124,9 @@
     "PROMOTION_SNAPSHOT_TRIGGER_MARK_PAID": "mark_paid",
     "PROMOTION_SNAPSHOT_TRIGGER_EDIT": "edit",
     "PROMOTION_SNAPSHOT_TRIGGER_REPOINT": "repoint",
-    "PROMOTION_CHECKOUT_PATH_SUCCESS": "/organizer/promotions/checkout/success"
+    "PROMOTION_CHECKOUT_PATH_SUCCESS": "/organizer/promotions/checkout/success",
+    "LOCALE_EN": "en",
+    "LOCALE_RU": "ru"
   },
   "promotion_vat_rate_percent": "24.00",
   "organizer_max_categories": 3,

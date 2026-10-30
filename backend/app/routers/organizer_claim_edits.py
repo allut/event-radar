@@ -30,6 +30,8 @@ from app._generated.shared_constants import (
     CLAIM_ERROR_CODE_DORMANT,
     CLAIM_ERROR_CODE_NOT_GRANTED,
     CLAIM_STATUS_APPROVED,
+    LOCALE_EN,
+    LOCALE_RU,
     ORGANIZER_MAX_CATEGORIES,
 )
 from app.constants.claims import (
@@ -41,7 +43,7 @@ from app.constants.claims import (
     ERROR_CLAIM_NOT_GRANTED,
     ERROR_DAILY_CLAIM_EDIT_LIMIT,
 )
-from app.constants.core import LOCALE_EN, LOCALE_ET, LOCALE_RU, TALLINN_TZ
+from app.constants.core import LOCALE_ET, TALLINN_TZ
 from app.constants.events import (
     ERROR_EVENT_CANCELLED,
     ERROR_EVENT_URL_SCHEME,

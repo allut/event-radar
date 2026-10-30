@@ -19,6 +19,8 @@ from app.config import settings
 from app._generated.shared_constants import (
     DEFAULT_USER_LOCALE,
     GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
+    LOCALE_EN,
+    LOCALE_RU,
     OAUTH_ERROR_QUERY_PARAM,
     ORGANIZER_MAX_CATEGORIES,
     PROMOTION_ERROR_REQUEST_DAILY_LIMIT,
@@ -40,7 +42,7 @@ from app.constants.claims import (
     CLAIM_DNS_VERIFICATION_MECHANISMS,
     ERROR_CLAIM_EDIT_CATEGORIES_CAP,
 )
-from app.constants.core import LOCALE_EN, LOCALE_ET, LOCALE_RU, TALLINN_TZ
+from app.constants.core import LOCALE_ET, TALLINN_TZ
 from app.constants.events import (
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,

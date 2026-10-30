@@ -5,7 +5,8 @@ import { useState } from 'react';
 import { makeTestQueryClient, renderWithProviders } from '../../test/utils';
 import VenuePicker, { type VenuePickerValue } from './VenuePicker';
 import { QUERY_KEYS } from '../../constants/api';
-import { LOCALE_EN, LOCALE_ET, type ContentLang } from '../../constants/core';
+import { LOCALE_ET, type ContentLang } from '../../constants/core';
+import { LOCALE_EN } from '../../_generated/sharedConstants';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
