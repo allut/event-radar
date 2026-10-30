@@ -1,6 +1,7 @@
 // Drift guard (docs/design-system.md §7, §10): rules the stylesheets must keep
 // that neither ESLint nor tsc can see. Runs over every .module.css plus index.css.
-import { SRC_DIR, atRuleBlocks, cssModules, readCss, rules } from './test/cssSheets';
+import { SRC_DIR, atRuleBlocks, composedTies, cssModules, readCss, rules } from './test/cssSheets';
+import { COMPOSED_TIE_BASELINE } from './test/composedTieBaseline';
 
 const indexCss = readCss(`${SRC_DIR}/index.css`);
 const sheets = [
@@ -98,5 +99,20 @@ describe('stylesheet rules', () => {
         return `${files.join(' + ')}${shared.length ? ` (shared: ${shared.join(', ')})` : ''}`;
       });
     expect(dupes, 'compose from a shared module instead of copying the block').toEqual([]);
+  });
+
+  describe('overrides of a composed property', () => {
+    const ties = composedTies(cssModules(SRC_DIR));
+    const baseline = new Set(COMPOSED_TIE_BASELINE);
+
+    it('out-rank the shared rule', () => {
+      const added = ties.filter(tie => !baseline.has(tie));
+      expect(added, 'double or qualify the local selector (docs/design-system.md §7)').toEqual([]);
+    });
+
+    it('keep the baseline down to ties that still exist', () => {
+      const fixed = COMPOSED_TIE_BASELINE.filter(tie => !ties.includes(tie));
+      expect(fixed, 'fixed: delete these lines from test/composedTieBaseline.ts').toEqual([]);
+    });
   });
 });
