@@ -65,12 +65,6 @@ SCORE_WEIGHT_LOCALITY: float = 0.05
 SCORE_WEIGHT_ANON_RECENCY: float = 0.25
 SCORE_WEIGHT_ANON_QUALITY: float = 0.125
 SCORE_WEIGHT_ANON_LOCALITY: float = 0.0625
-# _time_slots_for_event() memoization cap (ranking/score.py) — bounds an lru_cache keyed
-# on distinct starts_at values so repeated calls across users scoring the same event
-# don't redo the astimezone conversion. Comfortably above the number of distinct
-# starts_at values in one DAILY_5_LOOKAHEAD_DAYS candidate window.
-TIME_SLOTS_CACHE_MAXSIZE = 4096
-
 # Chunk size for the bulk pg_insert(...).on_conflict_do_update(...) upserts in
 # build_daily_feeds (_persist_new_scores / _persist_daily_feeds). The Postgres
 # wire protocol caps bind parameters at 32767 (int16); with 4 params/row and a
@@ -83,40 +77,32 @@ SCORE_INSERT_CHUNK_SIZE = 1000
 # GET /explore (app/routers/browse.py) — event discovery / search page.
 # BROWSE_PAGE_SIZE itself is cross-stack (shared/app-config.json → app._generated.shared_constants).
 BROWSE_MAX_PAGE_SIZE: int = 60
-# ?q= keyword search — _keyword_filter builds a %...% pattern against two
+# ?q= keyword search — keyword_filter builds a %...% pattern against two
 # trigram GIN indexes; an unbounded string is cheap to send and expensive to
 # scan, and RATE_LIMIT_BROWSE alone doesn't bound the per-request cost.
-BROWSE_QUERY_MAX_LEN: int = 200
 
 # Shared pagination validation floors — every `limit`/`offset` Query() across
 # admin.py/browse.py/feedback.py enforces the same lower bound; centralized so
 # it can't drift per-endpoint.
 PAGINATION_MIN_LIMIT: int = 1
 PAGINATION_MIN_OFFSET: int = 0
-# Ceiling on `offset` across every paginated list endpoint (browse.py, feedback.py,
-# admin.py, organizer_events.py) — `ge=` alone leaves offset unbounded, so an
-# offset like 5_000_000 makes Postgres walk and discard that many rows on every
-# request at the endpoint's full rate limit. Every consumer is infinite scroll
-# from offset=0 at BROWSE_PAGE_SIZE-ish increments, so 5_000 already covers far
-# more depth than any legitimate session reaches while still bounding the
-# LIMIT/OFFSET seq-scan-and-discard cost an authenticated caller can force.
-PAGINATION_MAX_OFFSET: int = 5_000
-# Opaque keyset cursor (`GET /explore` date sort, `GET /feedback/events`) —
-# base64url of `[iso_timestamp, row_id]`, so ~60 chars in practice; the cap
-# only bounds what an attacker can make the decoder chew on.
-PAGINATION_CURSOR_MAX_LEN: int = 200
-# Candidate cap for the Python-scored path (Path B: for_you=True OR sort=relevance —
-# so also date/price/quality sort *under* for_you=True, not just relevance). Sorted
-# soonest-first before capping, so the cap policy is a deliberate soonest-bias, not
-# an arbitrary truncation: a date sort still yields globally-correct soonest-first
-# results, but price/quality sort under for_you=True is only a true sort within the
-# soonest BROWSE_RELEVANCE_MAX_CANDIDATES matches, not a global one — an accepted
-# Path-B approximation at MVP scale (`total` in the response reflects at most this
-# many rows when the cap is hit; see browse.py docstring).
-BROWSE_RELEVANCE_MAX_CANDIDATES: int = 300
+# The matching offset ceiling, PAGINATION_MAX_OFFSET, is cross-stack
+# (shared/app-config.json → app._generated.shared_constants): `ge=` alone
+# leaves offset unbounded, so an offset like 5_000_000 makes Postgres walk and
+# discard that many rows on every request at the endpoint's full rate limit.
+# The numbered pager (spec #551) caps its last reachable page at the same
+# value, so a deep list shows "… of N+" instead of linking to a 422.
+# Candidate ceiling for the Python-scored path (Path B: for_you=True OR sort=relevance —
+# so also date/price/quality sort *under* for_you=True, not just relevance). The
+# candidate query fetches ceiling + 1 rows ordered soonest-first (`starts_at`, `id`):
+# when it overflows, only the soonest BROWSE_RELEVANCE_CEILING are scored and the
+# response sets `total_is_lower_bound`, so the cap is a deliberate soonest-bias, not an
+# arbitrary truncation. Below the ceiling every matching event is ranked. Each overflow
+# logs LOG_EVENT_EXPLORE_CEILING_OVERFLOW so Axiom shows when volume outgrows it.
+BROWSE_RELEVANCE_CEILING: int = 2000
 # _browse_scored_path scores+sorts the full (capped) candidate pool on every
-# call, then slices a page — so /explore's "Load more" infinite scroll pays
-# O(candidates) again per page even though the ranked order didn't change.
+# call, then slices a page — so every page of /explore pays
+# O(candidates) again even though the ranked order didn't change.
 # Memoizing the scored-and-sorted id list keyed by (user, filters, sort) turns
 # an N-page read into one scoring pass. Short TTL bounds staleness (a like/
 # dislike made mid-scroll takes up to this long to affect ranking); small
@@ -126,9 +112,13 @@ BROWSE_SCORE_CACHE_TTL_SECONDS: float = 30.0
 # Raised from 512 (Big-O audit M10): at "hundreds of active users" toggling
 # facets within one 30s TTL window, 512 distinct (user, filter) keys thrashed
 # the LRU toward a near-zero hit rate. Each entry is a scored id list bounded
-# by BROWSE_RELEVANCE_MAX_CANDIDATES (300), so this is still a small,
-# single-process, bounded cache — not a per-row cost.
+# by BROWSE_RELEVANCE_CEILING and stored at BROWSE_SCORE_CACHE_ID_BYTES per id, so a
+# full cache stays around 32 MB — small, single-process, bounded, not a per-row cost.
 BROWSE_SCORE_CACHE_MAX_ENTRIES: int = 2048
+# Ranked ids are cached as array("q") (signed 64-bit), not a list of int objects.
+# Event.id is a BigInteger, so a 32-bit typecode would overflow past 2**32.
+BROWSE_SCORE_CACHE_ID_TYPECODE: str = "q"
+BROWSE_SCORE_CACHE_ID_BYTES: int = 8
 # Fixed sentinel in place of a real user id for the anonymous-caller cache key
 # (#234) — anonymous /explore traffic shares one cache entry per filter/sort
 # combination rather than one per caller. Never collides with a real User.id
@@ -229,7 +219,6 @@ TIME_MORNING_START = 6
 
 # routers/browse.py, routers/feedback.py
 ERROR_INVALID_SORT = "sort must be one of {sorts}"
-ERROR_INVALID_CURSOR = "cursor is malformed"
 ERROR_INVALID_SIGNAL = "Invalid signal. Must be one of: {signals}"
 ERROR_INVALID_PREFERENCE_SIGNAL = "signal must be one of: {signals}"
 

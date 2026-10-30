@@ -22,12 +22,21 @@ Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). B
 - **Google sign-in needs `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET`, not `GOOGLE_CLIENT_*`.** `GOOGLE_SIGNIN_CONSUMER_ENABLED` and `GOOGLE_SIGNIN_ORGANIZER_ENABLED` default to `false`.
 - **The `CLOUDINARY_*` trio backs organizer image upload.** See [organizer-portal.md](organizer-portal.md)'s Image Upload section.
 - **`ADMIN_TOTP_SECRET` comes from `backend/scripts/admin_totp_enroll.py`.** See Maintenance Scripts.
+- **`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `STRIPE_TAX_RATE_ID` back card checkout,** and `PROMOTIONS_INVOICE_FOOTER` carries the Operator's VAT number. `ARIREGISTER_BASE_URL`, `ARIREGISTER_USERNAME` and `ARIREGISTER_PASSWORD` back the company lookup. An empty value fails closed. See Stripe Setup.
 - **`EDGE_SHARED_SECRET` must match the Cloudflare Pages Secret of the same name.** See API Proxy.
+
+### Stripe Setup
+
+- **Never create invoices by hand in the Stripe Dashboard.** Checkout creates every `ER-` invoice. A hand-made one breaks the sequence the accountant expects, and off-platform invoices use the `ER-M-` series instead.
+- **Set the `ER` prefix and starting number in Invoice settings with account-level sequencing.** A per-customer prefix would repeat numbers across customers.
+- **Create the 24% Tax Rate as exclusive, and put its id in `STRIPE_TAX_RATE_ID`.** Checkout sends the net price, so Stripe adds the VAT.
+- **Point one webhook endpoint at `/api/webhooks/stripe`** with `checkout.session.completed`, `checkout.session.expired` and `charge.dispute.created`. Its signing secret is `STRIPE_WEBHOOK_SECRET`.
+- **Test the account in Stripe test mode before the offer flag goes on.** `PROMOTIONS_CHECKOUT_ENABLED` does nothing while `PROMOTIONS_OFFER_ENABLED` is off.
 
 ### Cloudflare Pages Frontend
 
 - **`frontend/wrangler.toml` is the build config's source of truth**, as `render.yaml` is for the backend. Pages serves the static Vite build from `dist`.
-- **Non-secret build vars live in `wrangler.toml`'s `[vars]`**: `NODE_VERSION`, the `VITE_GOOGLE_SIGNIN_*` flags and `PRERENDER_RENDER_BUDGET_MINUTES`.
+- **Non-secret build vars live in `wrangler.toml`'s `[vars]`**: `NODE_VERSION`, the `VITE_GOOGLE_SIGNIN_*` flags, `VITE_PROMOTIONS_SLOTS_ENABLED` and `PRERENDER_RENDER_BUDGET_MINUTES`.
 - **Anything credential-shaped is a Pages Secret**, set in the dashboard or with `wrangler pages secret put`. `wrangler.toml` is checked in, so a secret never goes in `[vars]`.
 - **`frontend/public/_routes.json` keeps static assets off the Functions path**, so serving them never invokes a Function.
 - **Exact-path Functions win over the catch-all automatically.** `functions/api/seo-audit.ts` and `functions/api/prerender-cadence.ts` match ahead of `functions/api/[[path]].ts`, so there's no exclusion pattern to keep in sync.
@@ -47,6 +56,7 @@ Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). B
 - **`frontend/functions/[[path]].ts` tries `env.ASSETS.fetch()` on the real request first.** A prerendered route, a built `/assets/*` file or any other real `dist/` file wins. Only a genuine 404 falls through to `app-shell.html`.
 - **That fetch-first order is load-bearing.** Pages' documented precedence, static asset before any Function, didn't hold in production. The catch-all served the app shell for every request, built JS and CSS included.
 - **It requests the shell at its extensionless path.** `env.ASSETS.fetch()` applies Pages' `.html`-stripping redirect, which would otherwise hand the browser a visible 308.
+- **`/explore?page=N` with N of 2 or more skips the fetch-first step.** It gets the shell straight away, because the prerendered page-1 snapshot would carry the wrong canonical. See [seo.md](seo.md)'s SPA Fallback Shell section.
 
 ### SPA Security Headers
 
@@ -59,12 +69,12 @@ Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). B
 |---|---|---|
 | `img-src` | `'self' https: data:` | event images from arbitrary source hosts |
 | `style-src` | `'self' 'unsafe-inline'` | React inline styles |
-| `script-src` | `'self'`, Google Analytics, one `sha256-…` hash | GA, and `index.html`'s pre-paint theme script |
-| `connect-src` | `'self'`, Google Analytics | GA beacons |
+| `script-src` | `'self'`, one `sha256-…` hash | `index.html`'s pre-paint theme script |
+| `connect-src` | `'self'` | the same-origin `/api/*` proxy |
 | `font-src` | `'self'` | the `@fontsource` faces bundled in `src/main.tsx` |
 
-- **Moving a resource off-origin breaks it silently unless the CSP widens to match.** A CDN font host or an off-platform analytics beacon are the likely cases.
-- **The hash, its drift guard and the GA entries are in [security.md](security.md)'s Frontend CSP section.**
+- **Moving a resource off-origin breaks it silently unless the CSP widens to match.** A CDN font host is the likely case.
+- **The hash and its drift guard are in [security.md](security.md)'s Frontend CSP section.**
 - **The document block applies to `/*`, then un-sets each header on `/api/*` with the `!` prefix.** `_headers` has no negative lookahead. API responses carry only the backend's own `app/main.py::add_security_headers` headers.
 - **`/api/seo-audit` and `/api/prerender-cadence` get their own locked-down block** (`default-src 'none'`, `Cache-Control: no-store`). Their own Functions answer them, so they never reach the backend proxy.
 
@@ -113,6 +123,21 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 
 - **Every `/admin/*` route takes only the console's session cookie** (`app/auth/dependencies.py::get_current_admin`). A script that needs a job or a PII view signs in through `POST /admin/auth/login` and reuses the cookie.
 - **`/admin/pipeline` triggers every job with a live result stream.** It asks for confirmation before an expensive or destructive run, such as a digest send or a cleanup delete.
+- **`/admin/promotions/{id}/daily-stats` serves the per-day delivery table.** The lifespan also flushes the Promotion counters on shutdown.
+- **`/admin/promotions`, `/admin/promotions/cap-strip` and `/admin/events/{id}/promotion-context|promotions[/validate]` back the Promotion console.** A grant writes a `promotion_grant` audit row in its own transaction. See [data-model.md](data-model.md)'s Promotions section.
+- **`POST /admin/promotions/{id}/clear-restriction` records a Restriction clearance** (`note` required) for a scheduled or live Promotion whose event became restricted, and the gate resumes it. The grant body takes `restriction_clearance_confirmed` and `restriction_clearance_note`, required when the event is restricted.
+- **`sweep_promotions` (`app/promotions/sweep.py`) runs every minute and acts as the system.** It voids an `unpaid` Promotion at its start date (Tallinn), and ends a `paid` one when its event is cancelled (`end_reason` is the cancellation cause) or its claim is gone (`claim_revoked`). Each change writes a `promotion_system_void` or `promotion_system_end` audit row.
+- **The sweep also voids an `unpaid` card checkout an hour after its session expiry** (`checkout_expires_at`, `PROMOTION_CHECKOUT_SWEEP_GRACE_SECONDS`), as `checkout_expired`. Abandoned checkouts are never emailed or listed to the Organizer.
+- **The sweep emails the Organizer after its commit for every automatic end, never for the void.** The notes are in `PROMOTION_AUTO_END_NOTES`. A dormant claim or a lost dedup collision never ends a Promotion. The query count stays fixed however many Promotions exist.
+- **`POST /admin/promotions/{id}/refund` records or issues a refund.** An off-platform payment is only recorded. A Stripe-paid one makes the credit note (reversing the VAT) and the card refund in one adapter call, then stores the refunded cents; Stripe refusing answers 502 and records nothing. The detail's `refund_prefill` suggests (unused + paused days) × the price paid per day.
+- **`GET /admin/promotions/{id}` is the Promotion detail,** and `POST .../{id}/mark-paid|repoint|end|void|refund` plus `PATCH .../{id}` are its commands. Each runs under the cap lock, writes its audit row in the same transaction (409 for a state conflict, 422 for bad input, 404 for a missing row) and returns the refreshed detail.
+- **`GET /admin/promotions/trust` is the Trust panel, and `POST /admin/promotions/complaints` logs a complaint.** `POST .../{id}/withdraw` and `POST /admin/promotions/withdraw-all` run Withdraw. See Promotions: Trust Review and Withdrawal.
+- **`GET /admin/promotion-requests` is the request queue** (`status` defaults to `pending`). It returns `pending_count`, and each pending row carries `not_eligible_reason` and its event's `promotion_restriction`. The path avoids `/promotions/requests`, which `/promotions/{id}` would shadow.
+- **`POST /admin/promotion-requests/{id}/grant` takes the grant body,** with dates editable. It creates the Promotion and marks the request `granted` in one transaction and audits `promotion_request_grant`. It emails no one.
+- **`POST /admin/promotion-requests/{id}/decline` needs a `reason`,** emails it to the Organizer in their locale after the commit and audits `promotion_request_decline`.
+- **`sweep_promotions` also expires pending requests,** without email. See [organizer-portal.md](organizer-portal.md)'s Promotions section.
+- **`PROMOTIONS_OFFER_ENABLED` stays off until the switchover checklist is done.** It gates the organizer routes only.
+- **End and void email the Organizer's reason after the commit.** A failed send is logged and never undoes the command.
 - **Every `/admin/*` route is rate-limited.** See [security.md](security.md)'s Rate Limiting section.
 
 ### Job Triggers
@@ -140,8 +165,30 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 
 ### Pagination
 
-- **Unbounded admin lists page with `limit`/`offset`**, capped by `ADMIN_*_PAGE_SIZE` and `ADMIN_*_MAX_PAGE_SIZE` in `app/constants/admin.py`. Give a new admin list endpoint the same pattern.
+- **Unbounded admin lists page with `limit`/`offset`**, capped by `ADMIN_*_MAX_PAGE_SIZE` in `app/constants/admin.py`. The default `ADMIN_*_PAGE_SIZE` values are cross-stack, under `scalars` in `shared/app-config.json`. Give a new admin list endpoint the same pattern.
 - **Pages count logical units, such as dedup groups, not rows**, so one noisy cluster can't fill a page.
+- **A paged list returns `total`, `limit` and `offset` on every request**, beside its own item key such as `groups`. The numbered pager derives its last page and past-end clamp from `total`, so it can't be skipped past offset 0. `has_more` stays on the wire, but the client never reads it.
+- **Every paged sort ends on a unique tie-breaker**, such as `GET /admin/submissions`' `created_at desc, id desc`. Without one, rows that share a sort value can repeat or vanish between offset pages.
+- **`GET /admin/reports?report=<event_id>` locates a row** (the admin email deep link). It ignores `offset`, finds the row's position with one `ROW_NUMBER()` over the same four-key sort (`has_illegal desc, report_count desc, oldest asc, event_id`), and returns that page with its real `offset`. A row no longer in the queue gets page 1 and `report_not_found: true`.
+- **Explore's relevance path caps its ranked pool at a ceiling and flags it with `total_is_lower_bound`.** The envelope rule, keyset removal and that ceiling are described in [pipeline.md](pipeline.md)'s Pagination section.
+- **`PAGINATION_MAX_OFFSET` (5,000) is cross-stack**, in `shared/app-config.json`. A deeper offset gets a 422, or a clamp on `GET /organizer/events`. The frontend pager caps its last page at the same value, so it never links past it.
+
+### Promotions: Trust Review and Withdrawal
+
+- **Three environment flags gate Promotions, all off by default.** `PROMOTIONS_SLOTS_ENABLED` is the master gate on every fill path, the Email ad consent toggle and the `#paid-slots` disclosure. `PROMOTIONS_OFFER_ENABLED` gates the organizer offer and request path. `PROMOTIONS_CHECKOUT_ENABLED` gates card checkout, and only counts while the offer flag is on.
+- **A flag flip is a Render dashboard edit plus a restart, with no deploy.** Nothing flips a flag automatically. The operator decides from the figures below.
+- **Review weekly for the first 4 weeks after the first sale.** After that, fold it into the 3-month price review on the same date.
+- **The Trust panel on `/admin/promotions` carries the figures.** It shows the rolling 4 weeks and since launch next to live Promotions, slots served and current consenters. Slot dislikes are admin-only and never reach an Organizer.
+- **Log every complaint about the ads by hand,** from email or the contact form, with the complainant's name or address. The logger writes a `promotion_complaint` audit row, and the panel counts it.
+- **Stop selling when any of these holds over the rolling 4 weeks.** Email ad consent withdrawals through the slot link or the toggle outnumber new consents, with at least 3 withdrawals. Slot dislikes outnumber web opens from the slot, with at least 3 dislikes.
+- **Also stop selling on complaints or reports.** At least 2 complaints about the ads from different people, or at least 2 upheld reports on promoted events, which suggests the eligibility bar is too loose.
+- **Withdraw at once on a regulator contact** (TTJA or AKI) about ad disclosure, or on a disclosure or dark-pattern problem we find ourselves. Also withdraw when a Stop-selling condition still holds 4 weeks after a fix.
+- **Stop selling:** set `PROMOTIONS_OFFER_ENABLED` and `PROMOTIONS_CHECKOUT_ENABLED` off and restart. Slots keep filling and live or scheduled Promotions run to the end of their window, so nothing is owed. Decline pending requests by hand with a reason.
+- **Withdraw, step one:** do Stop selling, then set `PROMOTIONS_SLOTS_ENABLED` off and restart. Slots stop on every surface at once, and the frontend `VITE_PROMOTIONS_SLOTS_ENABLED` can stay on, so `/ranking#paid-slots` keeps saying what may appear.
+- **Withdraw, step two:** end each paid Promotion with `POST /admin/promotions/{id}/withdraw`, or all at once with `POST /admin/promotions/withdraw-all`. Both return 409 `slots_still_enabled` until step one is done.
+- **Withdraw ends a Promotion with `feature_withdrawn` and records a full refund of its unused whole days.** Today counts as used, a scheduled Promotion is refunded in full and a complimentary one has nothing to refund. Each Organizer gets the P2B email, and each end and refund writes an audit row.
+- **Withdraw refunds a card-paid Promotion through Stripe.** It refunds first and ends only on success; a Stripe refusal is a 502, or `refund_provider_failed` in `skipped` for withdraw-all, and the Promotion stays paid. A bank-paid refund is recorded only. Each withdraw-all Promotion commits on its own.
+- **Resume selling only after a written change that addresses the cause,** recorded on a new issue. A problem with one Promotion, such as an upheld report, is already handled by `report_takedown` ending it early.
 
 ## Scheduled Jobs
 
@@ -149,30 +196,35 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 
 | Cadence | Job |
 |---|---|
+| Every minute | `flush_promotion_counters`, `sweep_promotions` |
 | Hourly | `ingest_all_sources` (job id; the callable is `ingest_all_enabled`) |
 | Every 6h | `dedup_pass`, `classify_pending`, `publish_pending`, `geocode_pending`, `backfill_publisher_ids` |
 | Daily 04:30 | `refetch_event_details` |
 | Daily 05:00 | `expire_stale_claims` |
 | Daily 06:00 | `build_daily_feeds` |
 | Daily 07:00 | `send_daily_digests` |
-| Sun 03:00 | `sync_fienta_organizers` |
-| Sun 03:30 | `cleanup_stale_data` |
+| Sun 02:00 | `sync_fienta_organizers` |
+| Sun 02:30 | `cleanup_stale_data` |
 
 - **The daily jobs run in a fixed order.** Refetch reconciles source detail pages, stale claims expire, then the feed build reads the result an hour before the digest sends it.
+- **Register every job in `_register_scheduled_jobs()`.** The DST guard in `tests/test_main_scheduler.py` and the cadence-table check read the scheduler from there only.
+- **No cron job runs in the 03:00 hour.** It happens twice on the October fall-back Sunday and not at all in March, so APScheduler fires the job twice or shifts it. `tests/test_main_scheduler.py` fails when one lands there.
 - **`backfill_publisher_ids` and `expire_stale_claims` are scheduler-only.** Neither has an admin trigger. The publisher backfill has a CLI instead (see Maintenance Scripts).
 - **`ENABLE_SCHEDULER` turns the scheduler off in the devcontainer.** A `--reload` server left running overnight then can't arm live scrapes, LLM spend or digest email on a timer.
 - **`app/main.py::_start_scheduler()` honours `ENABLE_SCHEDULER=false` only when `APP_ENV=development`.** The var is absent from `render.yaml`, so production always runs the scheduler.
 
 ## CI
 
-- **`.github/workflows/tests.yml` runs on every push and PR to `master`.** It runs `pytest --cov` on Python 3.12, `npm run test:coverage` on Node 24, and a `migrations` job. The two test jobs run no Postgres, because backend tests mock the DB.
+- **`.github/workflows/tests.yml` runs on every push and PR to `master`.** It runs `scratch-test.sh --cov` on Python 3.12 against a Postgres 16 service, `npm run test:coverage` on Node 24, and a `migrations` job. The frontend job runs no Postgres.
 - **The `migrations` job round-trips the alembic chain against a `postgres:16` service.** It runs `upgrade head`, `downgrade base`, `upgrade head`, then `alembic check`, which fails when a model changed without a matching migration.
 - **That job exists because of a prod incident.** Code shipped the `admin_actions` model and its migration, but the deployed DB never ran it, so every audited admin action returned 500.
-- **Ruff, mypy, eslint and the TypeScript type-check don't run in CI.** Run them locally before committing. The dependency CVE audit is described in [security.md](security.md)'s Dependency Audit section.
+- **The `lint` job runs ruff, mypy, eslint and the TypeScript type-check.** Ruff and mypy also cover the repo-root `scripts/`. `.githooks/pre-commit` runs the same checks on the staged areas, plus the docs style test and the backend and frontend guard tests. The dependency CVE audit is described in [security.md](security.md)'s Dependency Audit section.
+- **A partly staged commit is checked as committed.** With unstaged or untracked backend changes, the hook runs the backend checks on a copy of the index under `.git`.
+- **`.githooks/commit-msg` trims each message to its subject line.** It keeps any `Closes`, `Refs` or `Fixes #N` it finds below, one per line, and drops the rest, `Co-Authored-By` included, so a commit needs no later reword.
 
 ## Data Retention & Cleanup
 
-`app/cleanup.py::cleanup_stale_data()` runs weekly, Sunday 03:30, right after the organizer sync. It prunes aged rows with one bulk `DELETE` per table.
+`app/cleanup.py::cleanup_stale_data()` runs weekly, Sunday 02:30, right after the organizer sync. It prunes aged rows with one bulk `DELETE` per table.
 
 - **`events` rows are never deleted.** Only satellite data goes, which preserves event history and the `user_event_feedback` signal indefinitely.
 
@@ -185,6 +237,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 | `ingestion_runs` | `INGESTION_RUNS_RETENTION_DAYS` (90) |
 | `raw_inbound_emails` | `RAW_INBOUND_EMAILS_RETENTION_DAYS` (90) |
 | `daily_feeds` | `DAILY_FEEDS_RETENTION_DAYS` (30) |
+| `daily_sponsored_slots` | `DAILY_FEEDS_RETENTION_DAYS` (30) |
 | `users`, unverified only | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) |
 | `organizers`, unverified only | `UNVERIFIED_ACCOUNT_RETENTION_DAYS` (30) |
 
@@ -225,8 +278,8 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 
 - **`reset_events.py` wipes all event and pipeline data and resets IDs to 1.** It runs `TRUNCATE ... RESTART IDENTITY CASCADE` over `events`, `raw_events`, `event_sources`, `event_classifications`, `user_event_feedback`, `daily_feeds`, `ingestion_runs`, `llm_calls` and `raw_inbound_emails`.
 - **It then resets `sources.last_run_at` and `last_status` to `NULL`**, so ingestion re-fetches from scratch.
-- **Users, organizers, personas, sources, publishers and claims are preserved.** Only the sources' run state is cleared.
-- **`CASCADE` also empties `event_reports`**, and claim edits pinned onto the wiped events go with them.
+- **Users, organizers, personas, sources, publishers and claims are preserved.** Promotions are not; see the `CASCADE` bullet. Only the sources' run state is cleared.
+- **`CASCADE` also empties every table that references a wiped one:** `event_reports`, `promotions`, `promotion_requests`, `promotion_daily_stats`, `promotion_snapshots` and `daily_sponsored_slots`. Claim edits pinned onto the wiped events go with them.
 - **It's a dry run by default**, printing the masked `DATABASE_URL` and per-table counts. `--yes` truncates, then warns on any table that isn't empty afterwards.
 - **The truncate can't be undone.** It's for resetting a dev or staging DB or clearing bad ingested data, not routine use.
 
@@ -235,6 +288,12 @@ cd backend                              # venv active
 python scripts/reset_events.py          # dry run: target DB + row counts
 python scripts/reset_events.py --yes    # actually truncate (irreversible)
 ```
+
+### scratch-test.sh
+
+- **`scratch-test.sh` runs pytest against a throwaway Postgres database.** It creates the database, exports `DATABASE_URL` and a `SECRET_KEY`, runs `alembic upgrade head` and `pytest "$@"`, then always drops the database.
+- **`--no-db` skips the database and the migration.** Use it for tests that never query, such as `tests/test_docs_style.py`. It works with Postgres down and saves only a second or two, because pytest's app import dominates the run.
+- **The shell `DATABASE_URL` beats `backend/.env`.** That is why the script exports it, and why `tests/conftest.py` aborts the run when it still names the dev `eventradar` database.
 
 ### Other Scripts
 

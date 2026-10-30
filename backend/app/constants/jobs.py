@@ -7,22 +7,22 @@ from app.constants.admin import (
 )
 
 # Scheduler cadence (see docs/backend-ops.md "Scheduled Jobs" for the full cron schedule)
-ORGANIZER_SYNC_HOUR = 3  # weekly Sunday 03:00 Europe/Tallinn
+ORGANIZER_SYNC_HOUR = 2  # weekly on Sunday; never hour 3 (it repeats on fall-back day, #633)
 ORGANIZER_SYNC_MINUTE = 0
-CLEANUP_HOUR = 3  # weekly Sunday 03:30 Europe/Tallinn, after organizer sync
+CLEANUP_HOUR = 2  # weekly on Sunday, after ORGANIZER_SYNC_HOUR:ORGANIZER_SYNC_MINUTE
 CLEANUP_MINUTE = 30
 INGEST_INTERVAL_HOURS = 1
 LLM_PASS_INTERVAL_HOURS = 6  # dedup/classify/publish/geocode
-REFETCH_HOUR = 4  # daily 04:30 Europe/Tallinn, before the 06:00 feed build
+REFETCH_HOUR = 4  # daily, before FEED_BUILD_HOUR
 REFETCH_MINUTE = 30
-FEED_BUILD_HOUR = 6  # daily 06:00 Europe/Tallinn
+FEED_BUILD_HOUR = 6  # daily
 FEED_BUILD_MINUTE = 0
-# Daily 05:00 Europe/Tallinn, between the 04:30 refetch and the 06:00 feed
-# build — cheap DB-only sweep (#413), off-peak like every other cron entry.
+# Daily, between REFETCH_HOUR and FEED_BUILD_HOUR — cheap DB-only sweep (#413),
+# off-peak like every other cron entry.
 EXPIRE_STALE_CLAIMS_HOUR = 5
 EXPIRE_STALE_CLAIMS_MINUTE = 0
 
-DIGEST_SEND_HOUR = 7  # 07:00 Europe/Tallinn, one hour after build_daily_feeds
+DIGEST_SEND_HOUR = 7  # daily, after FEED_BUILD_HOUR's build_daily_feeds
 DIGEST_SEND_MINUTE = 0
 
 # Sub-stages that are also standalone triggers with their own single-flight
@@ -51,6 +51,15 @@ JOB_ID_REFETCH_EVENT_DETAILS = "refetch_event_details"
 JOB_ID_BUILD_DAILY_FEEDS = "build_daily_feeds"
 JOB_ID_SEND_DAILY_DIGESTS = "send_daily_digests"
 JOB_ID_EXPIRE_STALE_CLAIMS = "expire_stale_claims"
+JOB_ID_FLUSH_PROMOTION_COUNTERS = "flush_promotion_counters"
+JOB_ID_SWEEP_PROMOTIONS = "sweep_promotions"
+
+# Per-minute jobs whose successful job_run lines are not shipped to the log
+# drain (73% of volume, ~1 ms per run, issue #637). Error runs still ship, so
+# the "Scheduled job failed" monitor is unaffected. Console logs keep them.
+LOG_SHIP_SUPPRESS_OK_JOBS: frozenset[str] = frozenset(
+    {JOB_ID_FLUSH_PROMOTION_COUNTERS, JOB_ID_SWEEP_PROMOTIONS}
+)
 
 # Scheduler job labels whose runtime string is load-bearing: the "hourly
 # ingest" value is matched verbatim by an Axiom monitor (docs/observability.md

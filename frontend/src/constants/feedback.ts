@@ -1,28 +1,23 @@
 // Feedback signals, saved events, and event report reasons.
 // .js extensions required: Cloudflare Pages Functions import constants as unbundled ESM.
 
+import { REPORT_REASONS } from '../_generated/sharedConstants.js';
+
 // ─── Reports (event_reports, issue #128) ────────────────────────────────────
-// Mirrors the backend's VALID_REPORT_REASONS order (app/constants/reports.py) — labels/
-// descriptions come from the report_reason_<slug>(_description) i18n keys.
-export const REPORT_REASON_OTHER = 'other';
-export const REPORT_REASONS: { value: string; labelKey: string; descriptionKey: string }[] = [
-  { value: 'spam_or_scam', labelKey: 'report_reason_spam_or_scam', descriptionKey: 'report_reason_spam_or_scam_description' },
-  { value: 'sexual_or_explicit', labelKey: 'report_reason_sexual_or_explicit', descriptionKey: 'report_reason_sexual_or_explicit_description' },
-  { value: 'not_an_event', labelKey: 'report_reason_not_an_event', descriptionKey: 'report_reason_not_an_event_description' },
-  { value: 'hateful_or_violent', labelKey: 'report_reason_hateful_or_violent', descriptionKey: 'report_reason_hateful_or_violent_description' },
-  { value: 'misleading_info', labelKey: 'report_reason_misleading_info', descriptionKey: 'report_reason_misleading_info_description' },
-  { value: 'event_ended_or_cancelled', labelKey: 'report_reason_event_ended_or_cancelled', descriptionKey: 'report_reason_event_ended_or_cancelled_description' },
-  { value: 'wrong_location', labelKey: 'report_reason_wrong_location', descriptionKey: 'report_reason_wrong_location_description' },
-  { value: REPORT_REASON_OTHER, labelKey: 'report_reason_other', descriptionKey: 'report_reason_other_description' },
-];
-// Built once — avoids a linear REPORT_REASONS.find() per call (Big-O audit
-// #5, item 3.4), mirroring PERSONAS_BY_SLUG/LOCALES_BY_CODE.
-export const REPORT_REASONS_BY_VALUE: Map<string, (typeof REPORT_REASONS)[number]> = new Map(
-  REPORT_REASONS.map((r) => [r.value, r]),
+// The reasons, in the form's order, and REPORT_REASON_OTHER are cross-stack:
+// _generated/sharedConstants.ts. Labels and descriptions come from the
+// report_reason_<slug>(_description) i18n keys.
+export const REPORT_REASON_OPTIONS: readonly { value: string; labelKey: string; descriptionKey: string }[] =
+  REPORT_REASONS.map((value) => ({
+    value,
+    labelKey: `report_reason_${value}`,
+    descriptionKey: `report_reason_${value}_description`,
+  }));
+// Built once — avoids a linear REPORT_REASON_OPTIONS.find() per call (Big-O
+// audit #5, item 3.4), mirroring PERSONAS_BY_SLUG/LOCALES_BY_CODE.
+export const REPORT_REASONS_BY_VALUE: Map<string, (typeof REPORT_REASON_OPTIONS)[number]> = new Map(
+  REPORT_REASON_OPTIONS.map((r) => [r.value, r]),
 );
-// Mirrors the backend's REPORT_DETAIL_MAX_CHARS (app/constants/reports.py) — client-side
-// validation only, the server re-validates and is the real boundary.
-export const REPORT_DETAIL_MAX_CHARS = 500;
 export const REPORT_DETAIL_TEXTAREA_ROWS = 4;
 
 // ─── Events / feedback ───────────────────────────────────────────────────────
@@ -46,6 +41,8 @@ export const SIGNAL_TO_CLASS: Record<Signal, string> = {
 
 // ─── Saved Events ────────────────────────────────────────────────────────────
 export const SAVED_EVENTS_PAGE_SIZE = 24;
+// The tab /saved opens on, left out of the URL; `?signal=` names any other tab.
+export const SAVED_DEFAULT_SIGNAL: Signal = 'bookmark';
 
 // ─── Saved Events (route-local tab config, mirrors SORT_OPTIONS/DATE_PRESETS) ─
 export const SAVED_TABS: { value: Signal; labelKey: string }[] = [

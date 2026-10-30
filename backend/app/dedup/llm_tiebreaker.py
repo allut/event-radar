@@ -57,6 +57,7 @@ from app.dedup.rules import (
     clear_stale_dedup_groups,
     dedup_window_cutoff,
     is_candidate_pair,
+    lowered_text,
     load_claims_for_events,
     load_dedup_candidate_events,
     load_description_lengths,
@@ -243,6 +244,7 @@ async def _find_llm_survivor_pairs(
     fuzzy title/venue check. Pairs already collapsed by the same-day union are
     skipped (no LLM call needed). Returns (a, b, content_hash) triples."""
     candidate_pair_ids = await candidate_pair_ids_in_window(db, cutoff)
+    lowered = lowered_text(events_by_id.values())
     survivors: list[tuple[Event, Event, str]] = []
     for a_id, b_id in candidate_pair_ids:
         a = events_by_id.get(a_id)
@@ -256,6 +258,7 @@ async def _find_llm_survivor_pairs(
             b,
             bypass_venue_on_near_exact_title=True,
             bypass_title_on_exact_time_and_venue=True,
+            lowered=lowered,
         ):
             continue
         survivors.append((a, b, _dedup_pair_hash(a, b, fragment_cache)))

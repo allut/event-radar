@@ -43,6 +43,8 @@ from app.constants.jobs import (
     JOB_ID_CLEANUP_STALE_DATA,
     JOB_ID_DEDUP_PASS,
     JOB_ID_EXPIRE_STALE_CLAIMS,
+    JOB_ID_FLUSH_PROMOTION_COUNTERS,
+    JOB_ID_SWEEP_PROMOTIONS,
     JOB_ID_GEOCODE_PENDING,
     JOB_ID_INGEST_ALL_SOURCES,
     JOB_ID_PUBLISH_PENDING,
@@ -111,12 +113,19 @@ from app.routers.organizer_claims import router as organizer_claims_router
 from app.routers.organizer_contact import router as organizer_contact_router
 from app.routers.organizer_events import router as organizer_events_router
 from app.routers.organizer_profile import router as organizer_profile_router
+from app.routers.organizer_promotions import router as organizer_promotions_router
 from app.routers.organizer_venues import router as organizer_venues_router
 from app.routers.public import router as public_router
 from app.routers.reports import router as reports_router
 from app.routers.settings import router as settings_router
+from app.email.consent import reset_consent_for_wording_change
 from app.routers.unsubscribe import router as unsubscribe_router
 from app.db import run_in_session
+from app.constants.promotions import PROMOTION_COUNTER_FLUSH_SECONDS, PROMOTION_SWEEP_SECONDS
+from app.promotions.counters import flush as flush_promotion_counters
+from app.promotions.sweep import sweep_promotions
+from app.routers.organizer_promotion_checkout import router as organizer_promotion_checkout_router
+from app.routers.stripe_webhook import router as stripe_webhook_router
 from app.routers.webhooks import router as webhooks_router
 from app.seeds import seed_personas, seed_publishers, seed_sources
 
@@ -212,11 +221,19 @@ _run_send_daily_digests = _scheduled(
 _run_expire_stale_claims = _scheduled(
     JOB_ID_EXPIRE_STALE_CLAIMS, _in_session(expire_stale_claims, commit=False)
 )
+# Promotion delivery counters (#606) flush as one bulk upsert.
+_run_flush_promotion_counters = _scheduled(
+    JOB_ID_FLUSH_PROMOTION_COUNTERS, _in_session(flush_promotion_counters, commit=True)
+)
+# Automatic Promotion void/end sweep (#602) commits internally, then emails.
+_run_sweep_promotions = _scheduled(
+    JOB_ID_SWEEP_PROMOTIONS, _in_session(sweep_promotions, commit=False)
+)
 
 
 def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
     """Wire the full cron schedule (see docs/backend-ops.md "Scheduled Jobs" for the cadence)."""
-    # Organizer discovery — weekly Sunday 03:00 EET
+    # Organizer discovery — weekly Sunday at ORGANIZER_SYNC_HOUR (never hour 3: it repeats on fall-back day, #633)
     scheduler.add_job(
         _run_organizer_sync,
         trigger="cron",
@@ -227,7 +244,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
     )
 
-    # Data retention cleanup — weekly Sunday 03:30 EET (after organizer sync, off-peak)
+    # Data retention cleanup — weekly Sunday at CLEANUP_HOUR (after organizer sync, off-peak)
     scheduler.add_job(
         _run_cleanup,
         trigger="cron",
@@ -247,7 +264,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         replace_existing=True,
     )
 
-    # Every 6h: dedup pass + classify pending
+    # Every LLM_PASS_INTERVAL_HOURS: dedup pass + classify pending
     scheduler.add_job(
         _run_dedup_pass,
         trigger="interval",
@@ -283,9 +300,9 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         id=JOB_ID_BACKFILL_PUBLISHER_IDS,
         replace_existing=True,
     )
-    # Daily 04:30 EET: re-fetch every future event's detail page and reconcile
+    # Daily at REFETCH_HOUR: re-fetch every future event's detail page and reconcile
     # venue/address/coords/price against the source (after hourly ingest, before
-    # the 06:00 feed build). A coord NULLed here on an address change is repaired
+    # the feed build). A coord NULLed here on an address change is repaired
     # by the next geocode_pending interval pass — coords aren't a publish gate.
     scheduler.add_job(
         _run_refetch_details,
@@ -295,7 +312,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         id=JOB_ID_REFETCH_EVENT_DETAILS,
         replace_existing=True,
     )
-    # Daily 06:00 EET: build personalized feeds for all users
+    # Daily at FEED_BUILD_HOUR: build personalized feeds for all users
     scheduler.add_job(
         _run_build_daily_feeds,
         trigger="cron",
@@ -304,7 +321,7 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         id=JOB_ID_BUILD_DAILY_FEEDS,
         replace_existing=True,
     )
-    # Daily 07:00 EET: send digest emails to opted-in users (one hour after feeds are built)
+    # Daily at DIGEST_SEND_HOUR: send digest emails to opted-in users (after feeds are built)
     scheduler.add_job(
         _run_send_daily_digests,
         trigger="cron",
@@ -313,8 +330,25 @@ def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
         id=JOB_ID_SEND_DAILY_DIGESTS,
         replace_existing=True,
     )
-    # Daily 05:00 EET: expire a pending automated-mechanism claim abandoned
-    # for CLAIM_EXPIRY_DAYS (#413) — between the 04:30 refetch and 06:00 feed build.
+    # Every minute: flush the in-process Promotion delivery counters (#606).
+    scheduler.add_job(
+        _run_flush_promotion_counters,
+        trigger="interval",
+        seconds=PROMOTION_COUNTER_FLUSH_SECONDS,
+        id=JOB_ID_FLUSH_PROMOTION_COUNTERS,
+        replace_existing=True,
+    )
+    # Every minute: void unpaid Promotions at their start date, end paid ones
+    # whose event was cancelled or whose claim was revoked (#602).
+    scheduler.add_job(
+        _run_sweep_promotions,
+        trigger="interval",
+        seconds=PROMOTION_SWEEP_SECONDS,
+        id=JOB_ID_SWEEP_PROMOTIONS,
+        replace_existing=True,
+    )
+    # Daily at EXPIRE_STALE_CLAIMS_HOUR: expire a pending automated-mechanism claim
+    # abandoned for CLAIM_EXPIRY_DAYS (#413) — between the refetch and the feed build.
     scheduler.add_job(
         _run_expire_stale_claims,
         trigger="cron",
@@ -593,6 +627,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await seed_sources(db)
         await seed_personas(db)
         await seed_publishers(db)
+        # A material consent-wording bump resets stale consenters to off.
+        await reset_consent_for_wording_change(db)
         await db.commit()
 
     scheduler = _start_scheduler()
@@ -601,6 +637,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     finally:
         if scheduler is not None:
             scheduler.shutdown(wait=False)
+        try:
+            await run_in_session(flush_promotion_counters, commit=True)
+        except Exception:
+            log.exception("promotion counter flush on shutdown failed")
         await engine.dispose()
         shutdown_log_shipping()
 
@@ -759,12 +799,15 @@ app.include_router(organizer_claims_router)
 app.include_router(organizer_contact_router)
 app.include_router(organizer_events_router)
 app.include_router(organizer_profile_router)
+app.include_router(organizer_promotions_router)
 app.include_router(organizer_venues_router)
 app.include_router(public_router)
 app.include_router(reports_router)
 app.include_router(settings_router)
 app.include_router(unsubscribe_router)
 app.include_router(webhooks_router)
+app.include_router(stripe_webhook_router)
+app.include_router(organizer_promotion_checkout_router)
 
 
 @app.get("/health")

@@ -10,10 +10,6 @@
   composes: adminPageTitle from '../../components/shared/Page.module.css';
 }
 
-.subtitle {
-  composes: queueSubtitle from '../../components/shared/AdminQueue.module.css';
-}
-
 .rowTitle {
   composes: queueRowTitle from '../../components/shared/AdminQueue.module.css';
 }

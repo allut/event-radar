@@ -1,6 +1,8 @@
 """Tests for the daily detail-refetch sync (refetch_event_details + reconciliation)."""
 
 import asyncio
+import itertools
+import os
 from datetime import datetime, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -25,12 +27,16 @@ from app.constants.ingestion import (
 from app.claims.pinning import pin_key
 from app.ingestion.locale_urls import locale_from_url_path
 from app.ingestion.refetch import (
+    _cancel_gone_events,
     _is_empty_venue_name,
     _is_suspect_locale_title,
     refetch_event_details,
 )
 from app.ingestion.selectors import KUMU_SITE_NAME_ET, KUMU_SITE_TITLE_SUFFIX
 from app.ingestion.sources.kumu import kumu_localized_text
+from app.email.resend import resend_http_client
+from app.models.models import Event, EventReport, User
+from tests.conftest import count_statements
 
 # --- HTML builders -----------------------------------------------------------
 
@@ -107,6 +113,7 @@ def _future_event(**overrides) -> MagicMock:
     e.status = "published"
     e.is_explicit = False
     e.is_non_event = False
+    e.is_out_of_area = False
     e.detail_refetched_at = None
     e.detail_refetch_count = 0
     e.source_gone_since = None
@@ -277,6 +284,33 @@ class TestPriceReconcile:
         ):
             await refetch_event_details(mock_db)
         store_get.assert_not_called()
+
+
+# --- Tallinn-bbox gate vs geocode self-heal (#635) --------------------------
+
+
+class TestTallinnBboxGate:
+    @pytest.mark.asyncio
+    async def test_in_area_event_ignores_estonia_only_coords(self, mock_db):
+        # Tartu: inside Estonia, outside TALLINN_REGION_BBOX. Self-heal would NULL it.
+        event = _future_event(venue_address="Same Street 1, Tallinn", lat=None, lng=None)
+        summary = await _run(
+            mock_db, event, _event_html(street="Same Street 1", lat=58.378, lng=26.729)
+        )
+        assert event.lat is None
+        assert event.lng is None
+        assert summary["coords_changed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_out_of_area_event_keeps_estonia_gate(self, mock_db):
+        event = _future_event(
+            venue_address="Same Street 1, Tallinn", lat=None, lng=None, is_out_of_area=True
+        )
+        summary = await _run(
+            mock_db, event, _event_html(street="Same Street 1", lat=58.378, lng=26.729)
+        )
+        assert event.lat == 58.378
+        assert summary["coords_changed"] == 1
 
 
 # --- address <-> coords coupling --------------------------------------------
@@ -1138,8 +1172,8 @@ async def _run_failing(
             "app.ingestion.refetch._ids_without_live_sibling",
             new=AsyncMock(return_value=cancelable),
         ),
-        patch("app.ingestion.refetch.cancel_event_and_resolve_reports", new=cancel),
-        patch("app.ingestion.refetch.send_report_resolution_emails", new=emails),
+        patch("app.ingestion.refetch.cancel_events_and_resolve_reports", new=cancel),
+        patch("app.ingestion.refetch.send_report_resolution_emails_bulk", new=emails),
     ):
         summary = await refetch_event_details(mock_db)
     return summary, cancel, emails
@@ -1176,7 +1210,7 @@ class TestSourceGone:
         event = _future_event(source_gone_since=since)
         summary, cancel, emails = await _run_failing(mock_db, event, _status_error(404))
         cancel.assert_awaited_once()
-        assert cancel.await_args.args[1] is event
+        assert cancel.await_args.args[1] == [event]
         assert cancel.await_args.args[2] == EVENT_CANCELLATION_REASON_SOURCE_GONE
         assert summary["cancelled_gone"] == 1
         # reporter emails go out only after the commit that persists the cancel
@@ -1226,10 +1260,10 @@ class TestSourceGone:
                 new=AsyncMock(return_value={event.id}),
             ),
             patch(
-                "app.ingestion.refetch.cancel_event_and_resolve_reports",
-                new=AsyncMock(return_value=[report]),
+                "app.ingestion.refetch.cancel_events_and_resolve_reports",
+                new=AsyncMock(return_value=[(event, [report])]),
             ),
-            patch("app.ingestion.refetch.send_report_resolution_emails", new=emails),
+            patch("app.ingestion.refetch.send_report_resolution_emails_bulk", new=emails),
         ):
             await refetch_event_details(mock_db)
         assert order[-2:] == ["commit", "email"]
@@ -1261,3 +1295,49 @@ class TestSourceGone:
         assert event.detail_refetched_at is None
         assert event.detail_refetch_count == 0
         cancel.assert_not_awaited()
+
+
+# --- Source-gone batch cancel against real Postgres ---------------------------
+
+_gone_seq = itertools.count(1)
+
+
+async def _gone_event_with_report(db, now: datetime) -> Event:
+    n = next(_gone_seq)
+    user = User(email=f"gone-{n}-{os.getpid()}@example.com")
+    event = Event(
+        slug=f"gone-{n}-{os.getpid()}",
+        title_orig=f"Gone {n}",
+        starts_at=now + timedelta(days=7),
+        status="published",
+    )
+    db.add_all([user, event])
+    await db.flush()
+    db.add(EventReport(user_id=user.id, event_id=event.id, reason="spam_or_scam"))
+    await db.flush()
+    return event
+
+
+@pytest.mark.asyncio
+async def test_cancel_gone_events_query_and_client_count_is_fixed(db) -> None:
+    """N gone events cost the same statements and one Resend client, whatever N."""
+    now = datetime.now(TALLINN_TZ)
+
+    async def measured(n: int) -> int:
+        events = [await _gone_event_with_report(db, now) for _ in range(n)]
+        summary = {"cancelled_gone": 0}
+        send = AsyncMock()
+        clients = MagicMock(wraps=resend_http_client)
+        with (
+            patch("app.events.cancellation.send_report_outcome_email", new=send),
+            patch("app.events.cancellation.resend_http_client", new=clients),
+            count_statements(db) as statements,
+        ):
+            await _cancel_gone_events(db, events, summary, now)
+        assert summary["cancelled_gone"] == n
+        assert all(e.status == EVENT_STATUS_CANCELLED for e in events)
+        assert send.await_count == n
+        assert clients.call_count == 1
+        return len(statements)
+
+    assert await measured(1) == await measured(4)

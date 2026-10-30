@@ -63,7 +63,14 @@ LOG_FRAMEWORK_LOGGER_NAMES: tuple[str, ...] = (
 # HTTP client loggers pinned to WARNING: their per-request INFO/DEBUG lines are
 # noise, and — critically — shipping one would make the ship POST itself emit a
 # log that gets shipped, a self-amplifying loop. WARNING severs it at any root level.
-LOG_QUIET_LOGGER_NAMES: tuple[str, ...] = ("httpx", "httpcore")
+LOG_QUIET_LOGGER_NAMES: tuple[str, ...] = (
+    "httpx",
+    "httpcore",
+    # Two INFO lines per job run that duplicate the structured job_run line
+    # from app/main.py::_scheduled. Its ERROR "Job ... raised an exception"
+    # still ships.
+    "apscheduler.executors.default",
+)
 # uvicorn.access paths never worth shipping to the log drain. Render's platform
 # health check hits GET /health every few seconds; shipping each is pure noise.
 # Suppressed on the shipping QueueHandler only — these lines still reach Render's
@@ -83,7 +90,7 @@ LOG_RECORD_RESERVED_ATTRS: frozenset[str] = frozenset(
 # backend/, pinned absolute so the alembic-head guard doesn't depend on cwd.
 ALEMBIC_DIR_NAME = "alembic"
 
-# Data retention — app/cleanup.py::cleanup_stale_data(), weekly Sun 03:30 EET.
+# Data retention — app/cleanup.py::cleanup_stale_data(), weekly at CLEANUP_HOUR.
 # These prune satellite/audit tables only; `events` rows are never deleted.
 MAGIC_LINK_RETENTION_DAYS = 7  # expired/used auth_magic_links rows
 LLM_CALLS_RETENTION_DAYS = 90  # also the dedup/classification cache window

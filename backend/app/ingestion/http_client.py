@@ -11,13 +11,14 @@ import http
 import ipaddress
 import logging
 import socket
+import threading
 import time
 from collections.abc import Callable, Coroutine
 from datetime import UTC
 from email.utils import parsedate_to_datetime
 from typing import Any
 import re
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 import httpx
 from tenacity import (
@@ -30,10 +31,13 @@ from tenacity import (
 )
 
 from app._generated.shared_constants import SAFE_URL_SCHEMES
+from app.config import settings
 from app.constants.http import (
     HEADER_RETRY_AFTER,
     HOST_WWW_PREFIX,
     HTTPS_DEFAULT_PORT,
+    HTTP_MAX_RESPONSE_BYTES,
+    HTTP_RESPONSE_CHUNK_BYTES,
     HTTP_RETRYABLE_STATUS_CODES,
     HTTP_RETRY_AFTER_MAX_SECONDS,
     HTTP_RETRY_JITTER_MAX,
@@ -43,14 +47,23 @@ from app.constants.http import (
     HTTP_RETRY_WAIT_MULTIPLIER,
     URL_SCHEME_HTTPS,
 )
+from app.constants.organizer import CLOUDINARY_DELIVERY_PATH_TEMPLATE
 from app.constants.security import (
+    ALLOWED_IMAGE_HOSTS,
     ALLOWED_SOURCE_HOSTS,
+    DNS_RESOLVE_CACHE_MAX_ENTRIES,
     DNS_RESOLVE_CACHE_TTL_SECONDS,
     SITE_LOCAL_IPV6_CIDR,
     URL_RENDER_FORBIDDEN_RE,
 )
 
 log = logging.getLogger(__name__)
+
+
+class ResponseTooLargeError(httpx.HTTPError):
+    """A response body passed HTTP_MAX_RESPONSE_BYTES. Permanent: not a
+    RequestError or HTTPStatusError, so _is_retryable never retries it, and
+    callers already catching httpx.HTTPError treat it like any failed fetch."""
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -210,10 +223,34 @@ async def http_get(
     params: dict | None = None,
     headers: dict | None = None,
 ) -> httpx.Response:
-    """Shared HTTP GET with exponential-backoff retry for transient failures."""
-    r = await client.get(url, params=params, headers=headers)
-    r.raise_for_status()
-    return r
+    """Shared HTTP GET with exponential-backoff retry for transient failures.
+
+    The body is read in chunks and abandoned with ResponseTooLargeError once it
+    passes HTTP_MAX_RESPONSE_BYTES (decoded bytes, so a compressed bomb counts
+    too); Content-Length is only an early exit, never trusted."""
+    async with client.stream("GET", url, params=params, headers=headers) as r:
+        r.raise_for_status()
+        declared = r.headers.get("Content-Length", "")
+        if declared.isdigit() and int(declared) > HTTP_MAX_RESPONSE_BYTES:
+            raise ResponseTooLargeError(f"response too large: {url}")
+        body = bytearray()
+        async for chunk in r.aiter_bytes(HTTP_RESPONSE_CHUNK_BYTES):
+            body.extend(chunk)
+            if len(body) > HTTP_MAX_RESPONSE_BYTES:
+                raise ResponseTooLargeError(f"response too large: {url}")
+        # Rebuild with the decoded body so callers get a plain buffered
+        # Response; drop the headers describing the original wire encoding.
+        headers_out = httpx.Headers(r.headers)
+        for name in ("content-encoding", "content-length"):
+            headers_out.pop(name, None)
+        return httpx.Response(
+            r.status_code,
+            headers=headers_out,
+            content=bytes(body),
+            request=r.request,
+            extensions=r.extensions,
+            history=r.history,
+        )
 
 
 async def http_get_stored_url(
@@ -316,6 +353,29 @@ def safe_render_url(url: str | None) -> str | None:
     return urlunsplit(parts)
 
 
+def own_cloudinary_url(url: str | None) -> str | None:
+    """``safe_render_url(url)`` when it is one of OUR Cloudinary uploads, else None.
+
+    The host must be the delivery domain (see ALLOWED_IMAGE_HOSTS) AND the
+    path must sit under this account's ``/{cloud_name}/image/upload/`` —
+    res.cloudinary.com serves every Cloudinary account (and remote-fetches
+    other sites), so the host alone would still let an arbitrary third-party
+    image become a tracking pixel once the digest embeds it as an <img>."""
+    safe = safe_render_url(url)
+    cloud_name = settings.CLOUDINARY_CLOUD_NAME
+    if safe is None or not cloud_name:
+        return None
+    parts = urlsplit(safe)
+    path = unquote(parts.path)
+    if (
+        parts.hostname in ALLOWED_IMAGE_HOSTS
+        and path.startswith(CLOUDINARY_DELIVERY_PATH_TEMPLATE.format(cloud_name=cloud_name))
+        and ".." not in path.split("/")
+    ):
+        return safe
+    return None
+
+
 def normalized_hostname(url: str | None) -> str:
     """URL hostname, lowercased with any leading "www." stripped, or "" if none.
 
@@ -344,13 +404,13 @@ def host_is_allowed(hostname: str | None) -> bool:
 
 # host -> (verdict, expires_at monotonic time). A source's event batch shares
 # 1-4 hostnames, so this turns O(N_new) redundant getaddrinfo() calls per
-# ingest run into effectively O(distinct hosts). Not thread-safe against a
-# torn read/write under true multi-threading, but this process is single
-# event-loop asyncio (each caller reaches this via asyncio.to_thread from the
-# same loop), so a stale-by-one-TTL read is the only realistic race — no worse
-# than the TOCTOU window already documented below.
+# ingest run into effectively O(distinct hosts). Callers reach this through
+# asyncio.to_thread, and sources ingest concurrently, so writes and the
+# capped eviction happen under _dns_verdict_lock. A read outside it can only
+# be stale by one TTL — no worse than the TOCTOU window documented below.
 _SITE_LOCAL_IPV6 = ipaddress.ip_network(SITE_LOCAL_IPV6_CIDR)
 _dns_verdict_cache: dict[str | None, tuple[bool, float]] = {}
+_dns_verdict_lock = threading.Lock()
 
 
 def resolves_to_private_ip(hostname: str | None) -> bool:
@@ -400,7 +460,11 @@ def resolves_to_private_ip(hostname: str | None) -> bool:
         if not infos:
             verdict = True
 
-    _dns_verdict_cache[hostname] = (verdict, now + DNS_RESOLVE_CACHE_TTL_SECONDS)
+    with _dns_verdict_lock:
+        _dns_verdict_cache.pop(hostname, None)
+        if len(_dns_verdict_cache) >= DNS_RESOLVE_CACHE_MAX_ENTRIES:
+            _dns_verdict_cache.pop(next(iter(_dns_verdict_cache)))
+        _dns_verdict_cache[hostname] = (verdict, now + DNS_RESOLVE_CACHE_TTL_SECONDS)
     return verdict
 
 

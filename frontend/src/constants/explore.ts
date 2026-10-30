@@ -45,39 +45,17 @@ export const SIGN_IN_TRIGGER_COPY: Record<SignInTrigger, { headingKey: string; b
   for_you: { headingKey: 'sign_in_modal_foryou_heading', bodyKey: 'sign_in_modal_foryou_body' },
 };
 // What an anonymous visitor's blocked feedback click maps to: the
-// explore_upsell_click `action` param, and the SignInTrigger copy variant.
-export const SIGNAL_TO_UPSELL_ACTION: Record<Signal, string> = {
-  bookmark: 'save',
-  like: 'thumbs_up',
-  dislike: 'thumbs_down',
-};
+// SignInTrigger copy variant.
 export const SIGNAL_TO_SIGNIN_TRIGGER: Record<Signal, SignInTrigger> = {
   bookmark: 'save',
   like: 'thumbs',
   dislike: 'thumbs',
 };
-export const UPSELL_ACTION_FOR_YOU = 'for_you';
-// Index in the (0-based) results array after which the persistent upsell
-// card is inserted for anonymous visitors — tuned by eye against the
-// responsive auto-fill grid (Page.module.css's .cardGrid), which has no
-// fixed column count to compute an exact row boundary from.
-export const EXPLORE_UPSELL_CARD_POSITION = 5;
 
-// explore_filter_change's `filter_type` param (issue #235) is a fixed
-// vocabulary — the facet name, or which other control changed — centralized
-// here rather than inlined as string literals at each Explore.tsx call site.
-export const EXPLORE_FILTER_TYPES = {
-  category: 'category',
-  vibe: 'vibe',
-  date: 'date',
-  free: 'free',
-  sort: 'sort',
-  forYou: 'for_you',
-  q: 'q',
-} as const;
-export type ExploreFilterType = (typeof EXPLORE_FILTER_TYPES)[keyof typeof EXPLORE_FILTER_TYPES];
 export const SORT_DEFAULT: SortOption = 'relevance';
 export const DATE_PRESET_DEFAULT: DatePreset = 'any';
+// The preset whose range comes from the user's own from/to dates.
+export const DATE_PRESET_CUSTOM: DatePreset = 'custom';
 export const DATE_PRESET_TODAY: DatePreset = 'today';
 export const DATE_PRESET_WEEKEND: DatePreset = 'weekend';
 // Day-window per short-range date preset — keys mirror DATE_PRESETS' values.
@@ -102,7 +80,6 @@ export const EXPLORE_PARAM = {
   dateTo: 'date_to',
   limit: 'limit',
   offset: 'offset',
-  cursor: 'cursor',
 } as const;
 
 // Query string of the top bar pulse chip's link — the Explore preset whose
@@ -114,5 +91,3 @@ export const EXPLORE_URL_FLAG_TRUE = '1';
 export const EXPLORE_API_FLAG_TRUE = 'true';
 
 // ─── Top bar ─────────────────────────────────────────────────────────────────
-// Mirrors the backend's BROWSE_QUERY_MAX_LEN.
-export const SEARCH_MAX_LEN = 200;

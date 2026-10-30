@@ -1,17 +1,15 @@
 """Shared serialization helpers for event routers."""
 
 import asyncio
-import base64
 import json
 import logging
-from urllib.parse import unquote, urlsplit
 from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import HTTPException, Response, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import ColumnElement, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
@@ -20,16 +18,19 @@ from app.auth.tokens import oauth_state_ttl_seconds
 from app.config import settings
 from app._generated.shared_constants import (
     DEFAULT_USER_LOCALE,
+    GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
+    LOCALE_EN,
+    LOCALE_RU,
+    OAUTH_ERROR_QUERY_PARAM,
     ORGANIZER_MAX_CATEGORIES,
+    PROMOTION_ERROR_REQUEST_DAILY_LIMIT,
     VALID_CATEGORIES,
     VALID_LOCALES,
 )
 from app.constants.admin import ERROR_ADMIN_JOB_ALREADY_RUNNING, ERROR_ADMIN_JOB_FAILED
 from app.constants.auth import (
-    GOOGLE_SIGNIN_RESULT_QUERY_PARAM,
     IDENTITY_PROVIDER_GOOGLE,
     MAGIC_LINK_RESEND_COOLDOWN_SECONDS,
-    OAUTH_ERROR_QUERY_PARAM,
     OAUTH_STATE_COOKIE_SAMESITE,
     SESSION_COOKIE_HTTPONLY,
     SESSION_COOKIE_SAMESITE,
@@ -41,33 +42,32 @@ from app.constants.claims import (
     CLAIM_DNS_VERIFICATION_MECHANISMS,
     ERROR_CLAIM_EDIT_CATEGORIES_CAP,
 )
-from app.constants.core import LOCALE_EN, LOCALE_ET, LOCALE_RU, TALLINN_TZ
+from app.constants.core import LOCALE_ET, TALLINN_TZ
 from app.constants.events import (
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
+    PRICE_MAX_VALUE,
 )
 from app.constants.log_events import (
     LOG_EVENT_ADMIN_ACTION,
     LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED,
 )
 from app.constants.organizer import (
-    CLOUDINARY_DELIVERY_PATH_TEMPLATE,
     ERROR_IMAGE_HOST_NOT_ALLOWED,
     ERROR_VENUE_NOT_FOUND,
 )
 from app.constants.ranking import (
-    ERROR_INVALID_CURSOR,
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
 )
+from app.constants.promotions import PROMOTION_CONFLICT_ERROR_CODES
 from app.constants.reports import (
     ERROR_INVALID_REPORT_REASON,
     REPORT_STATUS_OPEN,
     VALID_REPORT_REASONS,
 )
 from app.constants.security import (
-    ALLOWED_IMAGE_HOSTS,
     ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS,
     ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS,
 )
@@ -85,9 +85,10 @@ from app.events.venue import (
     resolve_venue_name,
 )
 from app.ingestion.content_filters import content_flags, localized_text_values
-from app.ingestion.http_client import safe_render_url
+from app.ingestion.http_client import own_cloudinary_url
 from app.ingestion.pricing import normalize_currency
 from app.ingestion.sanitize import sanitize_html
+from app.promotions.grant import PromotionRefused
 from app.models.models import (
     AdminAction,
     Event,
@@ -110,6 +111,12 @@ class RequestLinkBody(BaseModel):
 
     email: EmailStr
     locale: str | None = None
+
+
+PriceField = Annotated[float, Field(ge=0, lt=PRICE_MAX_VALUE, allow_inf_nan=False)]
+"""Every request-body price_* field. events.price_* are Numeric(10,2), so an
+unbounded float (or JSON's Infinity) overflows into a DataError 500 — the same
+bound ingest enforces through parse_bounded_price (OWASP audit M-6)."""
 
 
 class VerifyTokenBody(BaseModel):
@@ -398,38 +405,6 @@ def log_admin_action(
 
 
 
-
-
-def encode_page_cursor(ts: datetime, row_id: int) -> str:
-    """Opaque keyset cursor for a `(timestamp, id)` sort key."""
-    raw = json.dumps([ts.isoformat(), row_id]).encode()
-    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
-
-
-def decode_page_cursor(cursor: str) -> tuple[datetime, int]:
-    """Inverse of `encode_page_cursor`; any malformed value is a 422."""
-    try:
-        padded = cursor + "=" * (-len(cursor) % 4)
-        ts_raw, row_id = json.loads(base64.urlsafe_b64decode(padded))
-        ts = datetime.fromisoformat(ts_raw)
-        if ts.tzinfo is None or isinstance(row_id, bool) or not isinstance(row_id, int):
-            raise ValueError(cursor)
-    except (ValueError, TypeError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=ERROR_INVALID_CURSOR,
-        ) from exc
-    return ts, row_id
-
-
-def escape_ilike_pattern(q: str) -> str:
-    """Escape SQL LIKE wildcards in user-supplied search text, wrapped as a
-    ``%...%`` substring pattern — otherwise a literal ``%``/``_`` in the
-    search box would wildcard-match. Shared by browse.py's keyword search and
-    organizer_claims.py's claim-discovery search (#414); pass the result to
-    ``.ilike(pattern, escape="\\\\")``."""
-    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    return f"%{escaped}%"
 
 
 async def is_identity_linked(
@@ -940,32 +915,38 @@ def claim_dns_record_name(mechanism: str | None, domain: str | None) -> str | No
 
 
 def check_image_host(image_url: str | None) -> str | None:
-    """Reject an organizer-submission image_url that isn't one of OUR signed
-    Cloudinary uploads and return its re-serialized form (None for empty).
-
-    The host must be the delivery domain (see ALLOWED_IMAGE_HOSTS) AND the
-    path must sit under this account's ``/{cloud_name}/image/upload/`` —
-    res.cloudinary.com serves every Cloudinary account (and remote-fetches
-    other sites), so the host alone would still let an arbitrary third-party
-    image become a tracking pixel once the digest embeds it as an <img> (see
-    app/email/digest.py). Parser-differential spellings (``\\``, userinfo,
+    """Reject an organizer-submission or claim-edit image_url that isn't one of OUR signed
+    Cloudinary uploads (``own_cloudinary_url``) and return its re-serialized
+    form (None for empty). Parser-differential spellings (``\\``, userinfo,
     ports) are refused up front by ``safe_render_url`` and the stored value is
     its re-serialized form (OWASP audit M-1)."""
     if not image_url:
         return None
-    safe = safe_render_url(image_url)
-    cloud_name = settings.CLOUDINARY_CLOUD_NAME
+    safe = own_cloudinary_url(image_url)
     if safe is not None:
-        parts = urlsplit(safe)
-        path = unquote(parts.path)
-        if (
-            parts.hostname in ALLOWED_IMAGE_HOSTS
-            and cloud_name
-            and path.startswith(CLOUDINARY_DELIVERY_PATH_TEMPLATE.format(cloud_name=cloud_name))
-            and ".." not in path.split("/")
-        ):
-            return safe
+        return safe
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=ERROR_IMAGE_HOST_NOT_ALLOWED,
+    )
+
+
+def promotion_refusal(refused: PromotionRefused) -> HTTPException:
+    """409 when the state of things forbids the command, 429 for the daily
+    request ceiling, 422 for bad input; `detail.errors` lists every rule
+    broken."""
+    codes = [v.code for v in refused.violations]
+    if any(c in PROMOTION_CONFLICT_ERROR_CODES for c in codes):
+        code = status.HTTP_409_CONFLICT
+    elif PROMOTION_ERROR_REQUEST_DAILY_LIMIT in codes:
+        code = status.HTTP_429_TOO_MANY_REQUESTS
+    else:
+        code = status.HTTP_422_UNPROCESSABLE_CONTENT
+    return HTTPException(
+        status_code=code,
+        detail={
+            "code": refused.violations[0].code,
+            "message": refused.violations[0].message,
+            "errors": [v.as_dict() for v in refused.violations],
+        },
     )

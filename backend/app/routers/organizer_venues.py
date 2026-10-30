@@ -12,17 +12,19 @@ from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app._generated.shared_constants import (
+    ORGANIZER_VENUE_ADDRESS_MAX_LEN,
+    ORGANIZER_VENUE_NAME_MAX_LEN,
+    PAGINATION_MAX_OFFSET,
+)
 from app.constants.core import TALLINN_TZ
 from app.constants.organizer import (
     ERROR_DAILY_VENUE_CREATION_LIMIT,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DAILY_VENUE_CREATION_CAP,
-    ORGANIZER_VENUE_ADDRESS_MAX_LEN,
-    ORGANIZER_VENUE_NAME_MAX_LEN,
 )
 from app.constants.ranking import (
     BROWSE_MAX_PAGE_SIZE,
-    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
 )
@@ -33,6 +35,7 @@ from app.models.models import Organizer, Venue
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
+    PriceField,
     own_venue_or_404,
     remoderate_venue_linked_events,
     validate_price_ordering,
@@ -46,8 +49,8 @@ class VenueBody(BaseModel):
     name_en: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     name_ru: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
-    price_min: float | None = Field(None, ge=0)
-    price_max: float | None = Field(None, ge=0)
+    price_min: PriceField | None = None
+    price_max: PriceField | None = None
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
 
     @model_validator(mode="after")
@@ -61,8 +64,8 @@ class VenuePatchBody(BaseModel):
     name_en: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     name_ru: str | None = Field(None, max_length=ORGANIZER_VENUE_NAME_MAX_LEN)
     address: str | None = Field(None, max_length=ORGANIZER_VENUE_ADDRESS_MAX_LEN)
-    price_min: float | None = Field(None, ge=0)
-    price_max: float | None = Field(None, ge=0)
+    price_min: PriceField | None = None
+    price_max: PriceField | None = None
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
 
     @model_validator(mode="after")

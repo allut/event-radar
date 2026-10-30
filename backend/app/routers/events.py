@@ -10,17 +10,25 @@ from app.claims.lifecycle import (
     claiming_organizer_name,
     resolve_claim_for_event,
 )
-from app._generated.shared_constants import DEFAULT_USER_LOCALE
-from app.constants.claims import (
+from app._generated.shared_constants import (
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
+    DEFAULT_USER_LOCALE,
+    PROMOTION_REF_AD,
+    PROMOTION_REF_DIGEST_AD,
 )
 from app.constants.events import ERROR_EVENT_NOT_FOUND
+from app.constants.promotions import (
+    PROMOTION_STAT_DIGEST_OPENS,
+    PROMOTION_STAT_WEB_OPENS,
+)
 from app.constants.rate_limits import RATE_LIMIT_EVENTS_DETAIL
 from app.auth.dependencies import get_optional_user
 from app.db import get_db
 from app.models.models import Event, User
-from app.rate_limit import limiter
+from app.promotions.counters import record_ref_hit
+from app.promotions.fill import is_bot_user_agent
+from app.rate_limit import client_key, limiter
 from app.routers.utils import (
     load_user_reported_events,
     load_user_signals,
@@ -38,6 +46,7 @@ async def get_event(
     event_id: int,
     request: Request,
     locale_query: str | None = Query(None, alias="locale"),
+    ref: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_optional_user),
 ) -> dict:
@@ -58,6 +67,18 @@ async def get_event(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
         )
+
+    # A slot card link carries ?ref=ad (#606): one anonymous per-day count for
+    # the event's live Promotion. Never read by ranking or the persona. The
+    # counts reach paying advertisers, so bots don't count and a client counts
+    # once a day.
+    if ref in (PROMOTION_REF_AD, PROMOTION_REF_DIGEST_AD) and not is_bot_user_agent(
+        request.headers.get("user-agent")
+    ):
+        column = (
+            PROMOTION_STAT_WEB_OPENS if ref == PROMOTION_REF_AD else PROMOTION_STAT_DIGEST_OPENS
+        )
+        await record_ref_hit(db, event.id, column, client=client_key(request))
 
     # get_optional_user already resolved the caller (None when signed out, or
     # for an expired/invalid/revoked token — a revoked token, post logout-all,

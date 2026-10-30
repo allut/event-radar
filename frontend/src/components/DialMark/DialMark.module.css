@@ -13,11 +13,11 @@
 .intro .hand {
   transform-box: view-box;
   transform-origin: 12px 12px;
-  animation: dialTurn 1.4s var(--easing-landing) backwards;
+  animation: dialTurn var(--anim-dial-turn) var(--easing-landing) backwards;
 }
 
 .intro .rim {
-  animation: rimDraw 0.9s var(--easing-landing) backwards;
+  animation: rimDraw var(--anim-rim-draw) var(--easing-landing) backwards;
 }
 
 @keyframes dialTurn {

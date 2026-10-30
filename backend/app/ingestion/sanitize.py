@@ -280,4 +280,7 @@ def html_to_text(text: str | None) -> str | None:
     """
     if not text:
         return text
+    if "<" not in text and "&" not in text:
+        # No tag or entity to strip: the parse would only strip the ends.
+        return text.strip() or None
     return BeautifulSoup(text, HTML_PARSER).get_text(separator=" ", strip=True) or None

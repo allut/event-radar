@@ -4,6 +4,7 @@ import type { EventData } from '../components/EventCard';
 // functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
 import { t } from '../i18n.js';
 import { EVENT_PRICE_SELECTOR, PRICE_DATA_ATTR } from '../constants/prerender.js';
+import { SPONSORED_SLOT_ATTR } from '../_generated/sharedConstants.js';
 import {
   CANONICAL_LINK_SELECTOR,
   ICON_LINK_SELECTOR,
@@ -43,6 +44,9 @@ export interface ParsedSnapshot {
   /** Raw price fields off the event-detail price marker (see EventDetail.tsx),
    * present only when the page actually rendered a price. */
   price: EventPriceSnapshot | null;
+  /** A Sponsored slot card is in the DOM (SPONSORED_SLOT_ATTR). A snapshot must
+   * never freeze a paid placement (issue #603). */
+  hasSponsoredSlot: boolean;
 }
 
 export interface EventPriceSnapshot {
@@ -90,7 +94,9 @@ export function parseSnapshotHtml(html: string): ParsedSnapshot {
       }
     : null;
 
-  return { title, canonical, hreflangs, robots, iconHref, jsonLd, jsonLdRaw, price };
+  const hasSponsoredSlot = document.querySelector(`[${SPONSORED_SLOT_ATTR}]`) !== null;
+
+  return { title, canonical, hreflangs, robots, iconHref, jsonLd, jsonLdRaw, price, hasSponsoredSlot };
 }
 
 function isNonEmptyString(value: unknown): value is string {
@@ -315,6 +321,10 @@ export function validateSnapshotStructure(
   // surfaces as unparseable JSON-LD below instead (OWASP audit #1).
   if (parsed.jsonLdRaw.some((raw) => raw.includes('<'))) {
     issues.push('jsonLd: script body contains an unescaped "<" — possible markup injection');
+  }
+
+  if (parsed.hasSponsoredSlot) {
+    issues.push('a Sponsored slot card is in the snapshot — the prerender must never request or freeze one');
   }
 
   if (kind === 'page') {

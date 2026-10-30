@@ -9,8 +9,10 @@ import { useLocalePath } from '../../hooks/useLocalePath';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import { FAQ_LOADERS } from '../../content/faq/loaders';
 import type { FaqBlock, FaqDoc, FaqInline } from '../../content/faq/types';
-import { SAFE_URL_SCHEMES } from '../../_generated/sharedConstants';
-import { LOCALE_EN, MAILTO_SCHEME, UI_STATE } from '../../constants/core';
+import { resolveSlotsGate } from '../../content/slotsGate';
+import { isPromotionsSlotsEnabled } from '../../constants/sponsored';
+import { LOCALE_EN, SAFE_URL_SCHEMES } from '../../_generated/sharedConstants';
+import { MAILTO_SCHEME, UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
 import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN } from '../../constants/seo';
 import { REDUCED_MOTION_QUERY } from '../../constants/theme';
@@ -58,9 +60,11 @@ function isFaqAnchor(doc: FaqDoc, id: string): boolean {
 
 function renderBlock(block: FaqBlock, localePath: (to: string) => string): React.ReactNode {
   if (block.kind === 'ul') {
+    // The doc is resolved before rendering, so every item is a bare inline run.
+    const items = block.items as FaqInline[][];
     return (
-      <ul key={`ul:${inlineText(block.items[0] ?? [])}`} className={styles.list}>
-        {block.items.map((item) => (
+      <ul key={`ul:${inlineText(items[0] ?? [])}`} className={styles.list}>
+        {items.map((item) => (
           <li key={inlineText(item)}>{renderInline(item, localePath)}</li>
         ))}
       </ul>
@@ -98,11 +102,11 @@ export default function Faq() {
     const own = FAQ_LOADERS[locale];
     const loadDoc = async (): Promise<FaqDoc> => {
       try {
-        return (await (own ?? FAQ_LOADERS[FALLBACK_LOCALE])()).default;
+        return resolveSlotsGate((await (own ?? FAQ_LOADERS[FALLBACK_LOCALE])()).default, isPromotionsSlotsEnabled());
       } catch (err) {
         // No own chunk means English was the one that just failed.
         if (!own || locale === FALLBACK_LOCALE) throw err;
-        return (await FAQ_LOADERS[FALLBACK_LOCALE]()).default;
+        return resolveSlotsGate((await FAQ_LOADERS[FALLBACK_LOCALE]()).default, isPromotionsSlotsEnabled());
       }
     };
     loadDoc()

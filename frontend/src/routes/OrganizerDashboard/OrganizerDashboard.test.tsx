@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import OrganizerDashboard from './OrganizerDashboard';
-import { renderWithProviders } from '../../test/utils';
+import { LocationProbe, renderWithProviders } from '../../test/utils';
 
 vi.mock('../../lib/auth', () => ({
   getLocale: vi.fn(() => 'en'),
@@ -24,9 +24,17 @@ const sampleEvents = {
     { id: 1, slug: 'jazz-night', title: 'Jazz Night', starts_at: '2026-08-01T18:00:00Z', status: 'published', needs_review: true },
     { id: 2, slug: 'art-show', title: 'Art Show', starts_at: '2026-08-05T10:00:00Z', status: 'classified', needs_review: true },
   ],
+  total: 2,
   limit: 24,
   offset: 0,
+  has_more: false,
 };
+
+/** GET /organizer/claims?limit=1 as the dashboard's summary line reads it:
+ * only `total` and `pending_count` matter. */
+function claimsSummary(total: number, pending: number) {
+  return { claims: [], total, pending_count: pending, limit: 1, offset: 0, has_more: total > 1 };
+}
 
 // OrganizerDashboard renders OrganizerProfileNudge, which fires its own
 // organizerApi.get('/organizer/profile') call — route by path instead of
@@ -42,7 +50,7 @@ function mockOrganizerGet(
   eventsResponse: unknown,
   profileResponse: unknown = { name: 'Test Organizer' },
   claimSuggestionsResponse: unknown = { events: [] },
-  ownClaimsResponse: unknown = { claims: [] },
+  ownClaimsResponse: unknown = claimsSummary(0, 0),
 ) {
   mockGet.mockImplementation((path: string) => {
     if (path.includes('/organizer/profile')) return Promise.resolve(profileResponse);
@@ -51,6 +59,42 @@ function mockOrganizerGet(
     return Promise.resolve(eventsResponse);
   });
 }
+
+/** Serves `total` own events (ids 1..total), sliced by the request's
+ * limit/offset, the way GET /organizer/events pages them. */
+function ownEventsPage(url: string, total: number) {
+  const params = new URL(url, 'http://x').searchParams;
+  const limit = Number(params.get('limit'));
+  const offset = Number(params.get('offset'));
+  const events = [];
+  for (let id = offset + 1; id <= Math.min(offset + limit, total); id++) {
+    events.push({
+      id,
+      slug: `event-${id}`,
+      title: `Event ${id}`,
+      starts_at: '2026-08-01T18:00:00Z',
+      status: 'published',
+      needs_review: false,
+    });
+  }
+  return { events, total, limit, offset, has_more: offset + events.length < total };
+}
+
+/** Like mockOrganizerGet, but Your events is a paged list of `total` rows.
+ * `hold(offset)` may return a promise that delays that page's response. */
+function mockPagedEvents(total: number, hold?: (offset: number) => Promise<void> | undefined) {
+  mockGet.mockImplementation(async (path: string) => {
+    if (path.includes('/organizer/profile')) return { name: 'Test Organizer' };
+    if (path.includes('/organizer/claims/suggestions')) return { events: [] };
+    if (path.startsWith('/organizer/claims?')) return claimsSummary(0, 0);
+    const offset = Number(new URL(path, 'http://x').searchParams.get('offset'));
+    await hold?.(offset);
+    return ownEventsPage(path, total);
+  });
+}
+
+const eventRequests = () =>
+  mockGet.mock.calls.map(([url]) => url).filter((url) => url.startsWith('/organizer/events?'));
 
 beforeEach(() => {
   mockGet.mockReset();
@@ -66,17 +110,16 @@ describe('OrganizerDashboard', () => {
     expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('/organizer/events?limit='));
   });
 
-  it('sends locale= on the events and own-claims requests (#454)', async () => {
-    mockOrganizerGet(sampleEvents, undefined, undefined, { claims: [] });
+  it('sends locale= on the events request (#454)', async () => {
+    mockOrganizerGet(sampleEvents);
     renderWithProviders(<OrganizerDashboard />);
     await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
 
     expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/\/organizer\/events\?.*[?&]locale=en/));
-    expect(mockGet).toHaveBeenCalledWith(expect.stringMatching(/^\/organizer\/claims\?locale=en/));
   });
 
   it('shows an empty state when there are no events', async () => {
-    mockOrganizerGet({ events: [], limit: 24, offset: 0 });
+    mockOrganizerGet({ events: [], total: 0, limit: 24, offset: 0, has_more: false });
     renderWithProviders(<OrganizerDashboard />);
     await waitFor(() => expect(screen.getByText(/no events yet/i)).toBeInTheDocument());
   });
@@ -110,55 +153,179 @@ describe('OrganizerDashboard', () => {
     confirmSpy.mockRestore();
   });
 
-  it('shows a "Your claims" section with status and shortcuts, hidden when there are none', async () => {
-    mockOrganizerGet(sampleEvents, undefined, undefined, {
-      claims: [
-        {
-          id: 1,
-          kind: 'publisher',
-          status: 'approved',
-          verification_mechanism: 'fienta_token',
-          dormant: false,
-          publisher_name: 'Jazzkaar',
-          event_id: 42,
-          event_title: 'Jazzkaar Festival Night',
-          created_at: '2026-08-01T00:00:00Z',
-          resolved_at: '2026-08-02T00:00:00Z',
-        },
-        {
-          id: 2,
-          kind: 'series',
-          status: 'declined',
-          verification_mechanism: null,
-          dormant: false,
-          publisher_name: null,
-          event_id: null,
-          event_title: null,
-          created_at: '2026-08-01T00:00:00Z',
-          resolved_at: '2026-08-03T00:00:00Z',
-        },
-      ],
-    });
+  it('summarises the organizer\'s claims with a link to Your claims', async () => {
+    mockOrganizerGet(sampleEvents, undefined, undefined, claimsSummary(37, 3));
     renderWithProviders(<OrganizerDashboard />);
 
-    await waitFor(() => expect(screen.getByText('Your claims')).toBeInTheDocument());
-    expect(screen.getByText('Jazzkaar Festival Night')).toBeInTheDocument();
-    expect(screen.getByText('Granted')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Edit event' })).toHaveAttribute(
-      'href',
-      expect.stringContaining('/organizer/claims/1/edit'),
-    );
-    expect(screen.getByText('Declined')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: 'View status' })[0]).toHaveAttribute(
-      'href',
-      expect.stringContaining('/organizer/claims/2/pending'),
-    );
+    const summary = await screen.findByRole('region', { name: 'Your claims' });
+    expect(summary).toHaveTextContent('You have 37 claims (3 pending)');
+    expect(within(summary).getByRole('link', { name: /View/ })).toHaveAttribute('href', '/organizer/claims');
+    // Only the counts are needed: one row, and no claim rows on the dashboard.
+    expect(mockGet).toHaveBeenCalledWith('/organizer/claims?limit=1');
+    expect(screen.queryByRole('list', { name: 'Your claims' })).not.toBeInTheDocument();
   });
 
-  it('hides the "Your claims" section when the organizer has no claims', async () => {
-    mockOrganizerGet(sampleEvents);
+  it('leaves the pending part out when no claim is pending, and uses the singular for one', async () => {
+    mockOrganizerGet(sampleEvents, undefined, undefined, claimsSummary(1, 0));
+    renderWithProviders(<OrganizerDashboard />);
+
+    const summary = await screen.findByRole('region', { name: 'Your claims' });
+    expect(summary).toHaveTextContent('You have 1 claim');
+    expect(summary).not.toHaveTextContent('pending');
+  });
+
+  it('hides the claims summary when the organizer has no claims', async () => {
+    mockOrganizerGet(sampleEvents, undefined, undefined, claimsSummary(0, 0));
     renderWithProviders(<OrganizerDashboard />);
     await waitFor(() => expect(screen.getByText('Jazz Night')).toBeInTheDocument());
-    expect(screen.queryByText('Your claims')).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Your claims' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/You have/)).not.toBeInTheDocument();
+  });
+
+  describe('Your events paging', () => {
+    it('pages Your events at 24, mapping ?page to the request offset', async () => {
+      mockPagedEvents(58);
+      renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard?page=2' });
+
+      await waitFor(() => expect(screen.getByText('Event 25')).toBeInTheDocument());
+      expect(screen.getByText('Event 48')).toBeInTheDocument();
+      expect(screen.queryByText('Event 49')).not.toBeInTheDocument();
+      expect(eventRequests()).toEqual(['/organizer/events?limit=24&offset=24&locale=en']);
+    });
+
+    it('shows the pager under the list with the range label', async () => {
+      mockPagedEvents(58);
+      const { container } = renderWithProviders(<OrganizerDashboard />, {
+        route: '/organizer/dashboard',
+      });
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+
+      const list = screen.getByRole('list', { name: 'Your events' });
+      const nav = screen.getByRole('navigation', { name: 'Pages' });
+      expect(list.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(within(nav).getByRole('link', { name: 'Page 3' })).toHaveAttribute(
+        'href',
+        '/organizer/dashboard?page=3',
+      );
+      expect(container.textContent).toContain('1–24 of 58');
+    });
+
+    it('after a page change focuses the Your events heading and instant-scrolls to it', async () => {
+      mockPagedEvents(58);
+      renderWithProviders(
+        <>
+          <OrganizerDashboard />
+          <LocationProbe />
+        </>,
+        { route: '/organizer/dashboard' },
+      );
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+
+      await userEvent.click(screen.getByRole('link', { name: 'Page 2' }));
+
+      await waitFor(() => expect(screen.getByText('Event 25')).toBeInTheDocument());
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole('heading', { level: 1, name: 'Your events' })),
+      );
+      expect(window.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'instant' }));
+      expect(screen.getByTestId('location-probe')).toHaveTextContent('/organizer/dashboard?page=2');
+    });
+
+    it('marks the list aria-busy while the previous page shows as placeholder data', async () => {
+      let release: () => void = () => {};
+      const page2 = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      mockPagedEvents(58, (offset) => (offset === 24 ? page2 : undefined));
+      renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard' });
+      await waitFor(() => expect(screen.getByText('Event 1')).toBeInTheDocument());
+      const list = screen.getByRole('list', { name: 'Your events' });
+      expect(list).toHaveAttribute('aria-busy', 'false');
+
+      await userEvent.click(screen.getByRole('link', { name: 'Page 2' }));
+
+      await waitFor(() => expect(list).toHaveAttribute('aria-busy', 'true'));
+      expect(screen.getByText('Event 1')).toBeInTheDocument();
+      release();
+      await waitFor(() => expect(screen.getByText('Event 25')).toBeInTheDocument());
+      expect(screen.getByRole('list', { name: 'Your events' })).toHaveAttribute('aria-busy', 'false');
+    });
+
+    it('keeps the current page after deleting an event (cancelled rows stay listed)', async () => {
+      mockPagedEvents(58);
+      mockDelete.mockResolvedValueOnce({ id: 30, status: 'cancelled' });
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+      renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard?page=2' });
+      await waitFor(() => expect(screen.getByText('Event 25')).toBeInTheDocument());
+
+      await userEvent.click(screen.getAllByRole('button', { name: /delete/i })[0]);
+
+      await waitFor(() => expect(eventRequests()).toHaveLength(2));
+      expect(eventRequests()[1]).toBe('/organizer/events?limit=24&offset=24&locale=en');
+      confirmSpy.mockRestore();
+    });
+  });
+});
+
+describe('OrganizerDashboard Promotions row action (#614)', () => {
+  const promoRows = {
+    ...sampleEvents,
+    events: [
+      { ...sampleEvents.events[0], promotion: { promotable: true, badge: null } },
+      { ...sampleEvents.events[1], promotion: { promotable: false, badge: 'awaiting_payment' } },
+      { id: 3, slug: 'old', title: 'Old Show', starts_at: '2026-06-01T10:00:00Z', status: 'published', needs_review: false, promotion: { promotable: false, badge: null } },
+    ],
+    total: 3,
+  };
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('shows a quiet Promote link after Edit on a promotable row', async () => {
+    mockOrganizerGet(promoRows);
+    renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard' });
+
+    const promote = await screen.findByRole('link', { name: 'Promote Jazz Night' });
+    expect(promote).toHaveTextContent('Promote');
+    expect(promote).toHaveAttribute('href', '/organizer/promotions/new?event_id=1');
+    const actions = promote.parentElement as HTMLElement;
+    const order = within(actions).getAllByRole('link').map((a) => a.textContent);
+    expect(order).toEqual(['Edit', 'Promote']);
+  });
+
+  it('puts the Promotion badge in place of Promote, linking to Promotions for that event', async () => {
+    mockOrganizerGet(promoRows);
+    renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard' });
+
+    const badge = await screen.findByRole('link', { name: 'Awaiting payment: Art Show. Open Promotions.' });
+    expect(badge).toHaveAttribute('href', '/organizer/promotions?event=2');
+    expect(screen.queryByRole('link', { name: 'Promote Art Show' })).not.toBeInTheDocument();
+  });
+
+  it('offers nothing on a row that cannot be promoted', async () => {
+    mockOrganizerGet(promoRows);
+    renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard' });
+
+    await screen.findByText('Old Show');
+    expect(screen.queryByRole('link', { name: 'Promote Old Show' })).not.toBeInTheDocument();
+  });
+
+  it('hides every Promotions action while the offer is off (rows have no promotion key)', async () => {
+    mockOrganizerGet(sampleEvents);
+    renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard' });
+
+    await screen.findByText('Jazz Night');
+    expect(screen.queryByRole('link', { name: /^Promote / })).not.toBeInTheDocument();
+    expect(localStorage.getItem('organizer_promotions_offer')).toBe('0');
+  });
+
+  it('remembers that the offer is on so the top bar can show its nav item', async () => {
+    mockOrganizerGet(promoRows);
+    renderWithProviders(<OrganizerDashboard />, { route: '/organizer/dashboard' });
+
+    await screen.findByRole('link', { name: 'Promote Jazz Night' });
+    expect(localStorage.getItem('organizer_promotions_offer')).toBe('1');
+    expect(within(screen.getByRole('navigation', { name: 'Your events' })).getByRole('link', { name: 'Promotions' })).toHaveAttribute('href', '/organizer/promotions');
   });
 });

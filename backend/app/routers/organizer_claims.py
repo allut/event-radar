@@ -38,7 +38,19 @@ from app.claims.lifecycle import (
 )
 from app.claims.pinning import bulk_resolve_series_events
 from app.ingestion.http_client import host_matches_domain
-from app._generated.shared_constants import VALID_LOCALES
+from app._generated.shared_constants import (
+    BROWSE_QUERY_MAX_LEN,
+    CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
+    CLAIM_EVENTS_PAGE_SIZE,
+    CLAIM_KIND_PUBLISHER,
+    CLAIM_STATUS_APPROVED,
+    CLAIM_STATUS_DECLINED,
+    CLAIM_STATUS_PENDING,
+    CLAIM_STATUS_REVOKED,
+    ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
+    PAGINATION_MAX_OFFSET,
+    VALID_LOCALES,
+)
 from app.constants.admin import ADMIN_ACTION_REVOKE_CLAIM
 from app.constants.auth import (
     AUTH_TOKEN_MAX_LEN,
@@ -51,37 +63,25 @@ from app.constants.auth import (
     ORGANIZER_SESSION_TTL_DAYS,
 )
 from app.constants.claims import (
-    ORGANIZER_OWN_CLAIMS_LIST_LIMIT,
     CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
     CLAIM_EVENTS_MAX_PAGE_SIZE,
-    CLAIM_EVENTS_PAGE_SIZE,
     CLAIM_JUSTIFICATION_MAX_CHARS,
-    CLAIM_KIND_PUBLISHER,
     CLAIM_SEARCH_CANDIDATE_MULTIPLIER,
     CLAIM_SEARCH_QUERY_MIN_LENGTH,
     CLAIM_SEARCH_RESULT_LIMIT,
-    CLAIM_STATUS_APPROVED,
-    CLAIM_STATUS_DECLINED,
-    CLAIM_STATUS_PENDING,
-    CLAIM_STATUS_REVOKED,
     CLAIM_SUGGESTIONS_LIMIT,
     ERROR_CLAIM_EVENTS_NOT_PUBLISHER,
-    ERROR_CLAIM_JUSTIFICATION_REQUIRED,
     ERROR_CLAIM_SEARCH_QUERY_TOO_SHORT,
     FREE_EMAIL_PROVIDER_DOMAINS,
     ORGANIZER_CLAIM_VERIFY_PATH,
+    ORGANIZER_OWN_CLAIMS_MAX_PAGE_SIZE,
 )
 from app.constants.core import SECONDS_PER_DAY, TALLINN_TZ
 from app.constants.events import EVENT_SEARCH_TEXT_SQL, ERROR_EVENT_NOT_FOUND
 from app.constants.http import HTTP_TIMEOUT_SECONDS
 from app.constants.log_events import LOG_EVENT_AUTH_FAILED
 from app.constants.organizer import ERROR_ORGANIZER_NOT_FOUND
-from app.constants.ranking import (
-    BROWSE_QUERY_MAX_LEN,
-    PAGINATION_MAX_OFFSET,
-    PAGINATION_MIN_LIMIT,
-    PAGINATION_MIN_OFFSET,
-)
+from app.constants.ranking import PAGINATION_MIN_LIMIT, PAGINATION_MIN_OFFSET
 from app.constants.rate_limits import (
     RATE_LIMIT_AUTH_REQUEST_LINK,
     RATE_LIMIT_AUTH_VERIFY,
@@ -89,12 +89,13 @@ from app.constants.rate_limits import (
     RATE_LIMIT_CLAIM,
 )
 from app.db import get_db
+from app.events.queries import escape_ilike_pattern
 from app.models.models import AdminAction, Claim, Event, EventSource, Organizer, OrganizerMagicLink
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
+from app.promotions.organizer_view import promotion_flags_for
 from app.routers.utils import (
     claim_dns_record_name,
-    escape_ilike_pattern,
     get_or_create_organizer,
     recent_unused_link_exists,
     resolve_locale_param,
@@ -122,8 +123,8 @@ class CreateClaimBody(BaseModel):
     event_id: int
     # Required only when the event resolves to a Series claim (#428) — the
     # kind isn't known until create_claim resolves it server-side, so this
-    # stays optional here and create_claim itself raises
-    # ERROR_CLAIM_JUSTIFICATION_REQUIRED when it's needed and missing.
+    # stays optional here and create_claim itself raises a ClaimError coded
+    # CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED when it's needed and missing.
     justification: str | None = Field(default=None, max_length=CLAIM_JUSTIFICATION_MAX_CHARS)
 
 
@@ -219,7 +220,7 @@ async def _get_own_claim_or_tombstone(
             .limit(1)
         )
         if admin_action is None or admin_action.result.get("organizer_id") != organizer.id:
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+            raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
         return _revoked_tombstone(claim_id, admin_action)
     return _serialize(claim)
 
@@ -239,7 +240,7 @@ async def create_own_claim(
                 db, client, current_organizer, body.event_id, body.justification
             )
         except ClaimError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+            raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
     if not created:
         # (#448) Re-claiming your own already-pending target returns that
         # existing claim rather than a new row — 200, not 201, since nothing
@@ -260,7 +261,7 @@ async def cancel_own_claim(
     try:
         claim = await cancel_claim(db, current_organizer, claim_id)
     except ClaimError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
     return _serialize(claim)
 
 
@@ -276,7 +277,7 @@ async def recheck_own_claim(
         try:
             claim = await recheck_claim(db, client, current_organizer, claim_id)
         except ClaimError as exc:
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+            raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
     return _serialize(claim)
 
 
@@ -414,7 +415,7 @@ async def verify_claim_link(
         try:
             claim, _created = await create_claim(db, client, organizer, event_id)
         except ClaimError as exc:
-            if exc.detail == ERROR_CLAIM_JUSTIFICATION_REQUIRED:
+            if exc.code == CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED:
                 # (#428 review finding) This listing resolves to a Series
                 # claim, which the signed-out email-capture step never had a
                 # chance to collect a justification for — the magic link is
@@ -436,7 +437,7 @@ async def verify_claim_link(
                     "claim": None,
                     "needs_justification": True,
                 }
-            raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+            raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
 
     return {
         "organizer": {
@@ -675,29 +676,47 @@ def _serialize_own_claim_summary(
 async def list_own_claims(
     request: Request,
     locale: str | None = Query(None),
+    limit: int = Query(
+        ORGANIZER_OWN_CLAIMS_PAGE_SIZE,
+        ge=PAGINATION_MIN_LIMIT,
+        le=ORGANIZER_OWN_CLAIMS_MAX_PAGE_SIZE,
+    ),
+    offset: int = Query(
+        PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
+    ),
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """#446's "Your claims" dashboard section: every claim this organizer has
-    ever made (any status), newest first — the daily-cap-bounded per-organizer
-    row count (ORGANIZER_DAILY_CLAIM_CAP) keeps this small enough that a
-    bulk-then-scan mix (Publisher claims bulk-resolved in two fixed queries;
-    Series claims resolved by one shared bounded scan,
-    bulk_resolve_series_events) doesn't need admin_list_claims'
-    series-skips-to-null tradeoff."""
-    claims = (
-        (
-            await db.execute(
-                select(Claim)
-                .options(selectinload(Claim.publisher))
-                .where(Claim.organizer_id == current_organizer.id)
-                .order_by(Claim.created_at.desc())
-                .limit(ORGANIZER_OWN_CLAIMS_LIST_LIMIT)
-            )
+    """The Your claims page (#446, paged by spec #551): every claim this
+    organizer has ever made (any status), newest first, with the paging
+    envelope (total/limit/offset/has_more) on every page. `pending_count`
+    backs the dashboard's "You have N claims (M pending)" summary.
+
+    Per page, Publisher claims bulk-resolve in two fixed queries and Series
+    claims share one bounded scan (bulk_resolve_series_events), so the
+    query count stays fixed whatever the page holds."""
+    own = Claim.organizer_id == current_organizer.id
+    total, pending_count = (
+        await db.execute(
+            select(
+                func.count(Claim.id),
+                func.count(Claim.id).filter(Claim.status == CLAIM_STATUS_PENDING),
+            ).where(own)
         )
-        .scalars()
-        .all()
-    )
+    ).one()
+    total = total or 0
+    claims = (
+        await db.scalars(
+            select(Claim)
+            .options(selectinload(Claim.publisher))
+            .where(own)
+            # id breaks created_at ties so a row never repeats or vanishes
+            # between pages.
+            .order_by(Claim.created_at.desc(), Claim.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
 
     effective_locale = resolve_locale_param(locale, current_organizer.locale)
     publisher_ids = {c.publisher_id for c in claims if c.publisher_id is not None}
@@ -724,7 +743,14 @@ async def list_own_claims(
                 else None
             )
         results.append(_serialize_own_claim_summary(claim, event, effective_locale))
-    return {"claims": results}
+    return {
+        "claims": results,
+        "total": total,
+        "pending_count": pending_count or 0,
+        "limit": limit,
+        "offset": offset,
+        "has_more": offset + len(claims) < total,
+    }
 
 
 @router.get("/for-event/{event_id}")
@@ -782,7 +808,7 @@ async def _own_publisher_claim_or_404(
     try:
         claim = await own_claim_or_404(db, claim_id, organizer_id)
     except ClaimError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
     if (
         claim.kind != CLAIM_KIND_PUBLISHER
         or claim.publisher_id is None
@@ -812,41 +838,38 @@ async def list_claim_events(
     """Every event this approved Publisher claim currently covers (#436) —
     not just the one representative_event_for_claim() picks for the
     single-event editor. Bulk-loaded off one EventSource.publisher_id match
-    (fixed query count regardless of row count), paginated with the same
-    limit/offset/has_more/total shape as the admin queues (routers/admin.py),
-    sized down for organizer-portal use via CLAIM_EVENTS_PAGE_SIZE."""
+    (fixed query count regardless of row count), with the paging envelope
+    (total/limit/offset/has_more) on every page for the numbered pager
+    (spec #551), sized for organizer-portal use via CLAIM_EVENTS_PAGE_SIZE."""
     claim = await _own_publisher_claim_or_404(db, claim_id, current_organizer.id)
     effective_locale = resolve_locale_param(locale, current_organizer.locale)
 
-    matching_event_ids = publisher_claim_event_ids(claim.publisher_id)
+    covered = Event.id.in_(publisher_claim_event_ids(claim.publisher_id))
 
-    # total only on the first page — see admin.py's admin_list_submissions.
-    total: int | None = None
-    if offset == 0:
-        total = (
-            await db.scalar(
-                select(func.count(Event.id)).where(Event.id.in_(matching_event_ids))
-            )
-        ) or 0
-
+    total = (await db.scalar(select(func.count(Event.id)).where(covered))) or 0
     stmt = (
         select_events_with_classification()
-        .where(Event.id.in_(matching_event_ids))
-        .order_by(Event.starts_at.desc())
-        .limit(limit + 1)
+        .where(covered)
+        # id breaks starts_at ties so a row never repeats or vanishes
+        # between pages.
+        .order_by(Event.starts_at.desc(), Event.id.desc())
+        .limit(limit)
         .offset(offset)
     )
-    events = list((await db.scalars(stmt)).all())
-    has_more = len(events) > limit
-    events = events[:limit]
+    events = (await db.scalars(stmt)).all()
+    flags = await promotion_flags_for(db, current_organizer.id, events)
 
     return {
         "total": total,
         "limit": limit,
         "offset": offset,
-        "has_more": has_more,
+        "has_more": offset + len(events) < total,
         "events": [
-            {**serialize_event(e, locale=effective_locale), "status": e.status}
+            {
+                **serialize_event(e, locale=effective_locale),
+                "status": e.status,
+                **flags.get(e.id, {}),
+            }
             for e in events
         ],
     }

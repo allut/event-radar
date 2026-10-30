@@ -1,12 +1,11 @@
 import { useState } from 'react';
 import { api } from '../../api/client';
 import { t, ti } from '../../i18n';
+import { REPORT_DETAIL_MAX_CHARS, REPORT_REASON_OTHER } from '../../_generated/sharedConstants';
 import { API } from '../../constants/api';
 import {
-  REPORT_DETAIL_MAX_CHARS,
   REPORT_DETAIL_TEXTAREA_ROWS,
-  REPORT_REASON_OTHER,
-  REPORT_REASONS,
+  REPORT_REASON_OPTIONS,
 } from '../../constants/feedback';
 import { apiErrorMessage } from '../../utils';
 import Modal from '../Modal';
@@ -85,7 +84,7 @@ export default function ReportModal({ open, onClose, eventId, locale, onSubmitte
         <form onSubmit={handleSubmit}>
           <fieldset className={styles.reasonGroup}>
             <legend className={styles.label}>{t('report_modal_reason_label', locale)}</legend>
-            {REPORT_REASONS.map((r) => (
+            {REPORT_REASON_OPTIONS.map((r) => (
               <label key={r.value} className={styles.reasonOption}>
                 <input
                   type="radio"

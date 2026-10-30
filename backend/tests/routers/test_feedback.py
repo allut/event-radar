@@ -176,78 +176,96 @@ class TestDeleteFeedback:
 TS = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
 
 
-class TestListFeedbackEventsKeyset:
-    @pytest.mark.asyncio
-    async def test_has_more_emits_cursor_of_last_returned_row(
-        self, mock_db, make_user, make_event, make_request
-    ):
+class TestListFeedbackEventsPaging:
+    """Spec #551: Saved events pages by offset with the full envelope on
+    every request; there is no keyset cursor."""
+
+    @staticmethod
+    async def _list_page(mock_db, make_request, user, offset, rows, total, limit=2):
+        """One saved-events page: `rows` from the page query, `total` from the COUNT."""
         from app.routers.feedback import list_feedback_events
-        from app.routers.utils import decode_page_cursor
 
-        mock_db.scalar.return_value = 3
-        mock_db.execute.side_effect = [execute_rows([(make_event(1), TS, 30), (make_event(2), TS, 20), (make_event(3), TS, 10)]), execute_rows([])]
-
-        result = await list_feedback_events(
+        mock_db.scalar.return_value = total
+        mock_db.execute.reset_mock()
+        mock_db.execute.side_effect = [execute_rows(rows), execute_rows([])]
+        return await list_feedback_events(
             request=make_request(method="GET", path="/feedback/events"),
             signal="bookmark",
-            limit=2,
-            offset=0,
-            cursor=None,
-            current_user=make_user(),
+            limit=limit,
+            offset=offset,
+            current_user=user,
             db=mock_db,
         )
 
-        assert result["has_more"] is True
-        assert [e["id"] for e in result["events"]] == [1, 2]
-        assert decode_page_cursor(result["next_cursor"]) == (TS, 20)
-
     @pytest.mark.asyncio
-    async def test_cursor_page_filters_keyset_skips_total(
+    async def test_returns_paging_envelope_on_every_page(
         self, mock_db, make_user, make_event, make_request
     ):
-        from app.routers.feedback import list_feedback_events
-        from app.routers.utils import encode_page_cursor
-
-        mock_db.execute.side_effect = [execute_rows([(make_event(1), TS, 5)]), execute_rows([])]
-
-        result = await list_feedback_events(
-            request=make_request(method="GET", path="/feedback/events"),
-            signal="bookmark",
-            limit=2,
-            offset=40,
-            cursor=encode_page_cursor(TS, 20),
-            current_user=make_user(),
-            db=mock_db,
+        user = make_user()
+        envelope = ("total", "limit", "offset", "has_more")
+        first = await self._list_page(
+            mock_db, make_request, user, 0,
+            [(make_event(1), TS, 5), (make_event(2), TS, 4), (make_event(3), TS, 3)], 5,
+        )
+        middle = await self._list_page(
+            mock_db, make_request, user, 2,
+            [(make_event(3), TS, 3), (make_event(4), TS, 2), (make_event(5), TS, 1)], 5,
+        )
+        last = await self._list_page(
+            mock_db, make_request, user, 4, [(make_event(5), TS, 1)], 5
         )
 
-        sql = str(
-            mock_db.execute.call_args_list[0].args[0].compile(
-                compile_kwargs={"literal_binds": True}
-            )
-        )
-        assert "(user_event_feedback.created_at, user_event_feedback.id) <" in sql
-        assert "user_event_feedback.created_at DESC, user_event_feedback.id DESC" in sql
-        mock_db.scalar.assert_not_called()
-        assert result["total"] is None
-        assert result["offset"] == 0
-        assert result["next_cursor"] is None
+        assert {k: first[k] for k in envelope} == {
+            "total": 5, "limit": 2, "offset": 0, "has_more": True,
+        }
+        assert {k: middle[k] for k in envelope} == {
+            "total": 5, "limit": 2, "offset": 2, "has_more": True,
+        }
+        assert {k: last[k] for k in envelope} == {
+            "total": 5, "limit": 2, "offset": 4, "has_more": False,
+        }
+        assert [e["id"] for e in middle["events"]] == [3, 4]
+        for page in (first, middle, last):
+            assert "next_cursor" not in page
 
     @pytest.mark.asyncio
-    async def test_malformed_cursor_422(self, mock_db, make_user, make_request):
-        from fastapi import HTTPException
+    async def test_empty_list_has_zero_total(self, mock_db, make_user, make_request):
+        result = await self._list_page(mock_db, make_request, make_user(), 0, [], None)
+        assert (result["total"], result["has_more"], result["events"]) == (0, False, [])
+
+    def test_endpoint_takes_no_cursor(self):
+        import inspect
         from app.routers.feedback import list_feedback_events
 
-        with pytest.raises(HTTPException) as exc_info:
-            await list_feedback_events(
-                request=make_request(method="GET", path="/feedback/events"),
-                signal="bookmark",
-                limit=2,
-                offset=0,
-                cursor="garbage!!",
-                current_user=make_user(),
-                db=mock_db,
-            )
-        assert exc_info.value.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
+        assert "cursor" not in inspect.signature(list_feedback_events).parameters
+
+    @pytest.mark.asyncio
+    async def test_pages_share_a_created_at_then_id_order(
+        self, mock_db, make_user, make_request
+    ):
+        """Tie-breaker stability across pages: two signals given in the same
+        instant must never swap between pages, so every page query orders by
+        created_at desc then feedback id desc, and only OFFSET differs."""
+        user = make_user()
+        sqls = []
+        for offset in (0, 2):
+            await self._list_page(mock_db, make_request, user, offset, [], 3)
+            stmt = mock_db.execute.call_args_list[0].args[0]
+            sqls.append(str(stmt.compile(compile_kwargs={"literal_binds": True})))
+
+        for sql in sqls:
+            assert "ORDER BY user_event_feedback.created_at DESC, user_event_feedback.id DESC" in sql
+        assert "LIMIT 3 OFFSET 0" in sqls[0]
+        assert "LIMIT 3 OFFSET 2" in sqls[1]
+        assert sqls[0].replace("OFFSET 0", "OFFSET 2") == sqls[1]
+
+    @pytest.mark.asyncio
+    async def test_count_matches_the_page_filter(self, mock_db, make_user, make_request):
+        await self._list_page(mock_db, make_request, make_user(), 4, [], 0)
+        count_stmt = mock_db.scalar.call_args.args[0]
+        sql = str(count_stmt.compile(compile_kwargs={"literal_binds": True}))
+        assert "count(" in sql.lower()
+        assert "user_event_feedback.signal = 'bookmark'" in sql
 
 
 class TestListFeedbackEvents:
@@ -263,7 +281,6 @@ class TestListFeedbackEvents:
             signal="bookmark",
             limit=24,
             offset=0,
-            cursor=None,
             current_user=make_user(),
             db=mock_db,
         )
@@ -314,7 +331,6 @@ class TestListFeedbackEvents:
             signal="like",
             limit=10,
             offset=0,
-            cursor=None,
             current_user=make_user(),
             db=mock_db,
         )

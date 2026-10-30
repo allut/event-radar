@@ -2,16 +2,7 @@
   composes: page from '../../components/shared/Page.module.css';
 }
 
-.main {
-  flex: 1 0 auto;
-  width: 100%;
-  max-width: var(--page-max-organizer);
-  margin: 0 auto;
-  padding: var(--space-8) var(--space-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-}
+.main { composes: pageMainOrganizer from '../../components/shared/Page.module.css'; }
 
 .eyebrow {
   font-size: var(--fs-xs);
@@ -22,6 +13,7 @@
 }
 
 .title {
+  composes: settleTarget from '../../components/shared/PageSettle.module.css';
   font-family: var(--font-display);
   font-size: var(--heading-xl);
   font-weight: var(--fw-semibold);
@@ -35,13 +27,6 @@
   max-width: var(--measure-prose);
 }
 
-.summary {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
-  border-bottom: var(--border-w-hair) solid var(--border);
-  padding-bottom: var(--space-3);
-}
-
 .list {
   list-style: none;
   padding: 0;
@@ -53,22 +38,47 @@
 
 .row {
   composes: card from '../../components/shared/Card.module.css';
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  text-decoration: none;
-  color: inherit;
   transition: background var(--transition), border-color var(--transition);
 }
 
 .row:hover,
-.row:focus-visible {
+.row:has(.rowLink:focus-visible) {
   background: var(--bg-card-hover);
   border-color: var(--accent-border);
+}
+
+/* The title link stretches over the whole row, so the row stays one click
+   target; the Promote action sits above it. */
+.rowLink {
+  color: inherit;
+  text-decoration: none;
   outline: none;
+}
+
+/* Global gold a:hover would otherwise recolor the title. */
+a.rowLink:hover {
+  color: inherit;
+}
+
+.rowLink::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+.rowActions {
+  position: relative;
+  z-index: var(--z-card-control);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .rowMain {
@@ -130,14 +140,8 @@
   background: var(--danger-faint);
 }
 
-.loadMore {
-  composes: btnOutline from '../../components/shared/Button.module.css';
-  align-self: center;
-  padding: var(--space-0-625) var(--space-5);
-  font-size: var(--fs-sm);
-}
-
-.loadMore:disabled {
-  opacity: var(--opacity-disabled);
-  cursor: not-allowed;
+/* The pager sits under the list behind a rule, as on Your events. */
+.pager {
+  padding-top: var(--space-4);
+  border-top: var(--rule);
 }

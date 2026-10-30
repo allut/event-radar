@@ -14,6 +14,7 @@ import hashlib
 import http
 import json
 import logging
+from collections.abc import Iterable
 from typing import Any
 
 import httpx
@@ -21,15 +22,48 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.constants.core import SQL_IN_CHUNK_SIZE
 from app.constants.http import AUTHORIZATION_HEADER, BEARER_PREFIX
-from app.constants.llm import LLM_MAX_TOKENS, LLM_PROVIDERS, LLM_REQUEST_TIMEOUT_SECONDS
+from app.constants.llm import (
+    LLM_FAILURE_BAD_SHAPE,
+    LLM_FAILURE_HTTP_ERROR,
+    LLM_FAILURE_NETWORK_ERROR,
+    LLM_FAILURE_PARSE_ERROR,
+    LLM_FAILURE_RATE_LIMITED,
+    LLM_FAILURE_TRUNCATED,
+    LLM_FINISH_REASON_LENGTH,
+    LLM_LOG_CONTENT_SNIPPET_CHARS,
+    LLM_MAX_TOKENS,
+    LLM_PROVIDERS,
+    LLM_REQUEST_TIMEOUT_SECONDS,
+)
 from app.constants.log_events import LOG_EVENT_LLM_DEGRADED
+from app.ingestion.http_client import AsyncRateLimiter
 
 log = logging.getLogger(__name__)
 
 
+# Per-provider pacing gates, created lazily for providers that set
+# ``min_interval_seconds``. Safe as module state: one process runs every job.
+_provider_limiters: dict[str, AsyncRateLimiter] = {}
+
+
+def _provider_limiter(provider: dict[str, Any]) -> AsyncRateLimiter | None:
+    interval = provider.get("min_interval_seconds")
+    if not interval:
+        return None
+    limiter = _provider_limiters.get(provider["name"])
+    if limiter is None:
+        limiter = _provider_limiters[provider["name"]] = AsyncRateLimiter(interval)
+    return limiter
+
+
 class LLMError(Exception):
     """Raised when all configured LLM providers fail."""
+
+
+class _TruncatedResponse(Exception):
+    """A completion stopped at ``max_tokens`` (``finish_reason == "length"``)."""
 
 
 def _content_hash(text: str) -> str:
@@ -54,10 +88,56 @@ def strict_bool(value: Any, default: bool) -> bool:
     return default
 
 
+def _parse_json_content(content: str) -> dict[str, Any]:
+    """``json.loads`` tolerant of a code fence or prose around the object.
+
+    Tries the raw text first, then the outermost ``{...}`` span (which also
+    strips a surrounding fence). Raises ``json.JSONDecodeError`` if neither parses.
+    """
+    try:
+        return json.loads(content)  # type: ignore[no-any-return]
+    except json.JSONDecodeError as exc:
+        start, end = content.find("{"), content.rfind("}")
+        if start == -1 or end <= start:
+            raise
+        try:
+            return json.loads(content[start : end + 1])  # type: ignore[no-any-return]
+        except json.JSONDecodeError:
+            raise exc from None
+
+
 def content_hash(text: str) -> str:
     """Public delegate for ``_content_hash`` — lets other modules derive the
     identical cache key ``llm_json`` stores in ``llm_calls.content_hash``."""
     return _content_hash(text)
+
+
+async def prefetch_llm_cache(
+    db: AsyncSession, prompts: Iterable[str]
+) -> dict[str, tuple[dict[str, Any], str]]:
+    """Bulk-load the ``llm_calls`` cache for a batch of prompts, keyed by
+    content hash, newest successful row winning — the ``prefetched_cache`` a
+    fan-out caller hands ``llm_json``. Without it each concurrent ``llm_json``
+    runs its own cache ``SELECT`` on the shared session, which an
+    ``AsyncSession`` refuses. One query per ``SQL_IN_CHUNK_SIZE`` hashes."""
+    from app.models.models import LlmCall
+
+    hashes = list(dict.fromkeys(_content_hash(p) for p in prompts))
+    cache: dict[str, tuple[dict[str, Any], str]] = {}
+    for i in range(0, len(hashes), SQL_IN_CHUNK_SIZE):
+        rows = (
+            await db.execute(
+                select(LlmCall.content_hash, LlmCall.response_json, LlmCall.provider, LlmCall.model)
+                .where(
+                    LlmCall.content_hash.in_(hashes[i : i + SQL_IN_CHUNK_SIZE]),
+                    LlmCall.response_json.is_not(None),
+                )
+                .order_by(LlmCall.created_at)
+            )
+        ).all()
+        for row_hash, response_json, provider, model in rows:
+            cache[row_hash] = (response_json, f"{provider}/{model}")
+    return cache
 
 
 def _provider_base_url(provider: dict[str, Any]) -> str:
@@ -118,7 +198,7 @@ async def llm_json(
         event_id: Optional event FK for audit traceability.
         prefetched_cache: Optional bulk-loaded cache map from a batch caller —
             when provided, skips the per-call cache ``SELECT`` entirely (see
-            ``classify_pending``'s ``_prefetch_classify_cache``).
+            ``prefetch_llm_cache``). Required under ``asyncio.gather`` on one session.
         http_client: Optional shared ``httpx.AsyncClient`` from a batch caller —
             when provided, reused instead of opening a fresh connection pool /
             TLS context per call.
@@ -156,7 +236,8 @@ async def llm_json(
 
     errors: list[str] = []
 
-    def _record_attempt_failure(record: LlmCall, msg: str) -> None:
+    def _record_attempt_failure(record: LlmCall, reason: str, msg: str) -> None:
+        record.failure_reason = reason
         db.add(record)
         errors.append(msg)
 
@@ -182,6 +263,10 @@ async def llm_json(
         }
         payload.update(provider.get("params", {}))
 
+        limiter = _provider_limiter(provider)
+        if limiter is not None:
+            await limiter.acquire()
+
         try:
             # Not routed through the shared retrying http_post: the provider
             # fallback chain (LLM_PROVIDERS, tried in order below) IS the retry
@@ -206,19 +291,45 @@ async def llm_json(
                 log.warning(
                     "llm rate-limited: provider=%s task=%s", provider["name"], task
                 )
-                _record_attempt_failure(record, f"{provider['name']}: 429 rate-limited")
+                _record_attempt_failure(
+                    record, LLM_FAILURE_RATE_LIMITED, f"{provider['name']}: 429 rate-limited"
+                )
                 continue
 
             resp.raise_for_status()
             data = resp.json()
             usage = data.get("usage", {})
-            content = data["choices"][0]["message"].get("content")
-            if not content:
-                raise KeyError("content")
-            result: dict[str, Any] = json.loads(content)
-
+            choice = data["choices"][0]
+            finish_reason = choice.get("finish_reason")
+            content = choice["message"].get("content")
             record.prompt_tokens = usage.get("prompt_tokens")
             record.completion_tokens = usage.get("completion_tokens")
+            truncated = finish_reason == LLM_FINISH_REASON_LENGTH
+            if not content:
+                if truncated:
+                    raise _TruncatedResponse("no content before max_tokens")
+                raise KeyError("content")
+            try:
+                result: dict[str, Any] = _parse_json_content(content)
+            except json.JSONDecodeError as exc:
+                snippet = content[:LLM_LOG_CONTENT_SNIPPET_CHARS]
+                log.warning(
+                    "llm response parse failed: provider=%s finish_reason=%s "
+                    "error=%s content=%r",
+                    provider["name"],
+                    finish_reason,
+                    exc,
+                    snippet,
+                )
+                if truncated:
+                    raise _TruncatedResponse(str(exc)) from exc
+                _record_attempt_failure(
+                    record,
+                    LLM_FAILURE_PARSE_ERROR,
+                    f"{provider['name']}: JSON parse error — {exc}",
+                )
+                continue
+
             record.response_json = result
             db.add(record)
             model_label = f"{provider['name']}/{provider['model']}"
@@ -231,11 +342,16 @@ async def llm_json(
             )
             return result, model_label
 
-        except json.JSONDecodeError as exc:
+        except _TruncatedResponse as exc:
             log.warning(
-                "llm response parse failed: provider=%s error=%s", provider["name"], exc
+                "llm response truncated: provider=%s task=%s completion_tokens=%s",
+                provider["name"],
+                task,
+                record.completion_tokens,
             )
-            _record_attempt_failure(record, f"{provider['name']}: JSON parse error — {exc}")
+            _record_attempt_failure(
+                record, LLM_FAILURE_TRUNCATED, f"{provider['name']}: truncated — {exc}"
+            )
         except httpx.HTTPStatusError as exc:
             log.warning(
                 "llm HTTP error: provider=%s status=%s",
@@ -243,19 +359,25 @@ async def llm_json(
                 exc.response.status_code,
             )
             _record_attempt_failure(
-                record, f"{provider['name']}: HTTP {exc.response.status_code}"
+                record,
+                LLM_FAILURE_HTTP_ERROR,
+                f"{provider['name']}: HTTP {exc.response.status_code}",
             )
         except httpx.HTTPError as exc:
             log.warning(
                 "llm network error: provider=%s error=%s", provider["name"], exc
             )
-            _record_attempt_failure(record, f"{provider['name']}: network error — {exc}")
+            _record_attempt_failure(
+                record, LLM_FAILURE_NETWORK_ERROR, f"{provider['name']}: network error — {exc}"
+            )
         except (KeyError, IndexError) as exc:
             log.warning(
                 "llm response shape error: provider=%s error=%s", provider["name"], exc
             )
             _record_attempt_failure(
-                record, f"{provider['name']}: unexpected response shape — {exc}"
+                record,
+                LLM_FAILURE_BAD_SHAPE,
+                f"{provider['name']}: unexpected response shape — {exc}",
             )
 
     raise LLMError(

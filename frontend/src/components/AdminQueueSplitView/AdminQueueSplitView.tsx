@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useState, type Ref } from 'react';
 import { cx } from '../../utils';
 import styles from './AdminQueueSplitView.module.css';
 
@@ -15,6 +15,14 @@ interface AdminQueueSplitViewProps<T> {
   /** Open the detail panel on mobile from first render (e.g. a caller that
    * seeded `selectedId` from a deep link, where the row was never clicked). */
   initialDetailOpen?: boolean;
+  /** Bottom of the list column, outside the list's own scroll area (the
+   * queue's <Pager>); it hides with the list while the mobile detail panel
+   * is open. */
+  listFooter?: React.ReactNode;
+  /** The list's scroll container, whose children are the row buttons —
+   * useAdminQueuePage resets its scroll and focuses the first row on a page
+   * change. */
+  listRef?: Ref<HTMLDivElement>;
 }
 
 interface QueueRowListProps<T> {
@@ -25,7 +33,7 @@ interface QueueRowListProps<T> {
   currentId: number;
   onSelect: (id: number) => void;
   renderRow: (item: T) => React.ReactNode;
-  hiddenMobile: boolean;
+  listRef?: Ref<HTMLDivElement>;
 }
 
 // Split out and memo'd so the row list (up to a full page of items) skips
@@ -41,10 +49,10 @@ function QueueRowListInner<T>({
   currentId,
   onSelect,
   renderRow,
-  hiddenMobile,
+  listRef,
 }: QueueRowListProps<T>) {
   return (
-    <div className={`${styles.list} ${hiddenMobile ? styles.listHiddenMobile : ''}`}>
+    <div ref={listRef} className={styles.list}>
       {items.map((item) => {
         const id = getId(item);
         const resolved = isResolved(item);
@@ -53,6 +61,7 @@ function QueueRowListInner<T>({
             key={id}
             type="button"
             className={cx(styles.row, id === currentId && styles.rowActive, resolved && styles.rowResolved)}
+            aria-current={id === currentId ? 'true' : undefined}
             onClick={() => onSelect(id)}
           >
             {renderRow(item)}
@@ -82,6 +91,8 @@ export default function AdminQueueSplitView<T>({
   renderDetail,
   emptyLabel,
   initialDetailOpen = false,
+  listFooter,
+  listRef,
 }: AdminQueueSplitViewProps<T>) {
   const [mobileDetailOpen, setMobileDetailOpen] = useState(initialDetailOpen);
 
@@ -104,16 +115,19 @@ export default function AdminQueueSplitView<T>({
 
   return (
     <div className={styles.wrap}>
-      <QueueRowList
-        items={items}
-        getId={getId}
-        isResolved={isResolved}
-        resolvedTag={resolvedTag}
-        currentId={currentId}
-        onSelect={select}
-        renderRow={renderRow}
-        hiddenMobile={mobileDetailOpen}
-      />
+      <div className={cx(styles.listCol, mobileDetailOpen && styles.listHiddenMobile)}>
+        <QueueRowList
+          items={items}
+          getId={getId}
+          isResolved={isResolved}
+          resolvedTag={resolvedTag}
+          currentId={currentId}
+          onSelect={select}
+          renderRow={renderRow}
+          listRef={listRef}
+        />
+        {listFooter}
+      </div>
       <div className={`${styles.detail} ${mobileDetailOpen ? styles.detailShownMobile : ''}`}>
         <button type="button" className={styles.backBtn} onClick={() => setMobileDetailOpen(false)}>
           ← Back to list

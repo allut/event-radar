@@ -19,9 +19,8 @@ from app.claims.pinning import (
     representative_event_for_claim,
     scaled_claim_edit_cap,
 )
+from app._generated.shared_constants import CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES
 from app.constants.claims import (
-    CLAIM_KIND_PUBLISHER,
-    CLAIM_KIND_SERIES,
     ORGANIZER_CLAIM_EDIT_CAP_CEILING,
     ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT,
     ORGANIZER_DAILY_CLAIM_EDIT_CAP,
@@ -214,9 +213,7 @@ class TestRepresentativeEventForClaim:
         matching.series_key = "balti jaama turg\x1fkultuurikatel"
         claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key=matching.series_key)
 
-        execute_result = MagicMock()
-        execute_result.scalars.return_value.all.return_value = [matching]
-        mock_db.execute.return_value = execute_result
+        mock_db.scalars.return_value.all.return_value = [matching]
 
         result = await representative_event_for_claim(mock_db, claim)
         assert result is matching
@@ -225,12 +222,40 @@ class TestRepresentativeEventForClaim:
     async def test_series_claim_no_match_returns_none(self, mock_db):
         claim = MagicMock(kind=CLAIM_KIND_SERIES, event_series_key="nope\x1fnope")
 
-        execute_result = MagicMock()
-        execute_result.scalars.return_value.all.return_value = []
-        mock_db.execute.return_value = execute_result
+        mock_db.scalars.return_value.all.return_value = []
 
         result = await representative_event_for_claim(mock_db, claim)
         assert result is None
+
+
+class TestBulkResolveSeriesEventsRealDb:
+    @pytest.mark.asyncio
+    async def test_one_earliest_event_per_key(self, db, make):
+        from datetime import timedelta
+
+        from app.claims.pinning import bulk_resolve_series_events
+        from tests.conftest import EVENT_START, count_statements
+
+        events = [
+            await make.event(
+                title_orig=title,
+                venue_name="Kultuurikatel",
+                starts_at=EVENT_START + timedelta(days=days),
+                ends_at=None,
+            )
+            for title, days in [("Daily Tour", 3), ("Daily Tour", 1), ("Daily Tour", 2), ("Quiz Night", 5)]
+        ]
+        tour, quiz = events[1], events[3]
+        db.expunge_all()
+
+        with count_statements(db) as statements:
+            resolved = await bulk_resolve_series_events(db, {tour.series_key, quiz.series_key})
+
+        assert {k: e.id for k, e in resolved.items()} == {
+            tour.series_key: tour.id,
+            quiz.series_key: quiz.id,
+        }
+        assert "DISTINCT ON" in statements[0]
 
 
 class TestClearClaimPins:
@@ -466,7 +491,7 @@ class TestBulkResolveSeriesEvents:
         from app.claims.pinning import bulk_resolve_series_events
 
         assert await bulk_resolve_series_events(mock_db, set()) == {}
-        mock_db.execute.assert_not_awaited()
+        mock_db.scalars.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_one_indexed_query_resolves_every_key_earliest_match_wins(
@@ -475,23 +500,25 @@ class TestBulkResolveSeriesEvents:
         from app.claims.pinning import bulk_resolve_series_events
 
         first_a = make_event(1, title="Market A", venue_name="Hall")
-        later_a = make_event(2, title="Market A", venue_name="Hall")
         only_b = make_event(3, title="Market B", venue_name="Hall")
-        first_a.series_key = later_a.series_key = "a\x1fhall"
+        first_a.series_key = "a\x1fhall"
         only_b.series_key = "b\x1fhall"
 
-        scalars = MagicMock()
-        scalars.all.return_value = [first_a, later_a, only_b]
-        mock_db.execute.return_value.scalars.return_value = scalars
+        # DISTINCT ON returns one row per key; the real-Postgres test below
+        # covers which row wins.
+        mock_db.scalars.return_value.all.return_value = [first_a, only_b]
 
         result = await bulk_resolve_series_events(
             mock_db, {"a\x1fhall", "b\x1fhall", "ghost\x1fhall"}
         )
 
         assert result == {"a\x1fhall": first_a, "b\x1fhall": only_b}
-        mock_db.execute.assert_awaited_once()
-        query = str(mock_db.execute.await_args.args[0])
+        mock_db.scalars.assert_awaited_once()
+        from sqlalchemy.dialects import postgresql
+
+        query = str(mock_db.scalars.await_args.args[0].compile(dialect=postgresql.dialect()))
         assert "events.series_key IN" in query
+        assert "DISTINCT ON (events.series_key)" in query
         # M-3: cross-tenant guard.
         assert "submitted_by_organizer_id IS NULL" in query
         assert "events.status !=" in query

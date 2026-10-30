@@ -1,0 +1,70 @@
+{
+  "_comment": "Shared cases for PROMOTION_REGISTRY_CODE_PATTERN: the backend (fullmatch) and the frontend (anchored RegExp) must agree on every one.",
+  "cases": [
+    {
+      "code": "12345678",
+      "valid": true,
+      "why": "8 ASCII digits"
+    },
+    {
+      "code": "00000000",
+      "valid": true,
+      "why": "leading zeros"
+    },
+    {
+      "code": "1234567",
+      "valid": false,
+      "why": "7 digits"
+    },
+    {
+      "code": "123456789",
+      "valid": false,
+      "why": "9 digits"
+    },
+    {
+      "code": "1234567a",
+      "valid": false,
+      "why": "a letter"
+    },
+    {
+      "code": "",
+      "valid": false,
+      "why": "empty"
+    },
+    {
+      "code": " 12345678",
+      "valid": false,
+      "why": "leading space"
+    },
+    {
+      "code": "12345678 ",
+      "valid": false,
+      "why": "trailing space"
+    },
+    {
+      "code": "1234 5678",
+      "valid": false,
+      "why": "inner space"
+    },
+    {
+      "code": "12345678\n",
+      "valid": false,
+      "why": "trailing newline"
+    },
+    {
+      "code": "\n12345678",
+      "valid": false,
+      "why": "leading newline"
+    },
+    {
+      "code": "١٢٣٤٥٦٧٨",
+      "valid": false,
+      "why": "Arabic-Indic digits"
+    },
+    {
+      "code": "１２３４５６７８",
+      "valid": false,
+      "why": "full-width digits"
+    }
+  ]
+}

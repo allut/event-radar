@@ -47,6 +47,9 @@ TRUSTED_HOST_REJECT_BODY = b"Invalid host header"
 # TOCTOU-racy against httpx's own re-resolution (see resolves_to_private_ip's
 # docstring), so this doesn't weaken that existing trade-off.
 DNS_RESOLVE_CACHE_TTL_SECONDS: float = 300.0
+# Distinct hostnames whose verdict stays cached; the oldest goes first. An
+# allowlisted domain's subdomains are scraped input, so the key space is open.
+DNS_RESOLVE_CACHE_MAX_ENTRIES = 256
 
 ALLOWED_SOURCE_HOSTS: frozenset[str] = frozenset(
     {

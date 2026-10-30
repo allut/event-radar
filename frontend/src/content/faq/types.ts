@@ -4,22 +4,28 @@
  * per locale, with inline links as structured data (never raw HTML), so the
  * page renders without dangerouslySetInnerHTML or a sanitization pass.
  */
-import type { LegalInline } from '../legal/types';
+import type { LegalLinkInline, SlotsGate } from '../legal/types';
 
-/** LegalInline plus an internal route link. `to` is a bare ROUTES.* path (optionally
- * with a #hash); the page renders it as a router <Link> through localePath(), so
- * /ru/faq links to /ru/privacy. LegalInline's `href` stays for mailto:/https: only. */
-export type FaqInline = LegalInline | { text: string; to: string };
+/** The legal inline runs. Their `to` form is an internal route link: a bare
+ * ROUTES.* path (optionally with a #hash) that the page renders as a router
+ * <Link> through localePath(), so /ru/faq links to /ru/privacy. `href` stays
+ * for mailto:/https: only. */
+export type FaqInline = LegalLinkInline;
+
+/** A list item: bare inline runs, or runs carrying a gate. */
+export type FaqItemRuns = FaqInline[] | { content: FaqInline[]; gate: SlotsGate };
 
 export type FaqBlock =
-  | { kind: 'p'; content: FaqInline[] }
-  | { kind: 'ul'; items: FaqInline[][] };
+  | { kind: 'p'; content: FaqInline[]; gate?: SlotsGate }
+  | { kind: 'ul'; items: FaqItemRuns[]; gate?: SlotsGate };
 
 export interface FaqItem {
   /** Stable English slug, the same in every locale (`/faq#is-it-free` = `/ru/faq#is-it-free`). */
   id: string;
   question: string;
   answer: FaqBlock[];
+  /** Paid-slot items exist only while the slots flag is on (see SlotsGate). */
+  gate?: SlotsGate;
 }
 
 export interface FaqSection {

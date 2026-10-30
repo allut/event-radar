@@ -21,6 +21,24 @@ function makeWrapper() {
 }
 
 describe('useFeedback', () => {
+  it('sends the ref marker with a dislike when given one', async () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1, { ref: 'ad' }), { wrapper });
+    await act(async () => {
+      await result.current.sendFeedback('dislike');
+    });
+    expect(mockPost).toHaveBeenLastCalledWith('/feedback', { event_id: 1, signal: 'dislike', ref: 'ad' });
+  });
+
+  it('omits ref on a dislike without one, and on non-dislike signals', async () => {
+    const { wrapper } = makeWrapper();
+    const { result } = renderHook(() => useFeedback(1, { ref: 'ad' }), { wrapper });
+    await act(async () => {
+      await result.current.sendFeedback('like');
+    });
+    expect(mockPost).toHaveBeenLastCalledWith('/feedback', { event_id: 1, signal: 'like' });
+  });
+
   it('happy path: sets activeSignal and calls onChange', async () => {
     const onChange = vi.fn();
     const { wrapper } = makeWrapper();
@@ -160,12 +178,14 @@ describe('useFeedback', () => {
     expect(result.current.pending).toBe(false);
   });
 
-  it('patches my_signal into cached feed/explore/event payloads without a multi-page Explore refetch', async () => {
+  it('patches my_signal into cached feed/explore/event payloads without refetching Explore', async () => {
     const { wrapper, queryClient } = makeQueryWrapper();
     queryClient.setQueryData(['feed', 'et'], { events: [{ id: 1, my_signal: null }, { id: 2, my_signal: null }] });
-    queryClient.setQueryData(['explore', 'et', {}], {
-      pages: [{ events: [{ id: 2, my_signal: null }] }, { events: [{ id: 1, my_signal: null }] }],
-      pageParams: [0, 1],
+    // Explore caches one page per query (spec #551), keyed by its page.
+    queryClient.setQueryData(['explore', 'et', {}, 2], {
+      events: [{ id: 2, my_signal: null }, { id: 1, my_signal: null }],
+      total: 30,
+      offset: 24,
     });
     queryClient.setQueryData(['event', '1', 'et'], { id: 1, my_signal: null });
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
@@ -178,9 +198,11 @@ describe('useFeedback', () => {
     expect(queryClient.getQueryData(['feed', 'et'])).toEqual({
       events: [{ id: 1, my_signal: 'like' }, { id: 2, my_signal: null }],
     });
-    expect(queryClient.getQueryData<{ pages: { events: unknown[] }[] }>(['explore', 'et', {}])?.pages[1].events).toEqual([
-      { id: 1, my_signal: 'like' },
-    ]);
+    expect(queryClient.getQueryData(['explore', 'et', {}, 2])).toEqual({
+      events: [{ id: 2, my_signal: null }, { id: 1, my_signal: 'like' }],
+      total: 30,
+      offset: 24,
+    });
     expect(queryClient.getQueryData(['event', '1', 'et'])).toEqual({ id: 1, my_signal: 'like' });
     const byKey = Object.fromEntries(invalidateSpy.mock.calls.map((c) => [String(c[0]?.queryKey), c[0]?.refetchType]));
     expect(byKey.saved).toBeUndefined();

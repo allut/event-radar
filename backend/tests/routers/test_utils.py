@@ -879,28 +879,3 @@ class TestOrganizerSharedHelpers:
         event.important_info = None
         assert apply_moderation_flags(event, "Hall") is True
         assert event.is_explicit is True
-
-
-class TestPageCursor:
-    def test_round_trip(self):
-        from app.routers.utils import decode_page_cursor, encode_page_cursor
-
-        ts = datetime(2026, 5, 1, 12, 30, tzinfo=timezone.utc)
-        assert decode_page_cursor(encode_page_cursor(ts, 42)) == (ts, 42)
-
-    @pytest.mark.parametrize(
-        "bad",
-        [
-            "not-base64!!",
-            "e30",  # {}
-            "WzEsMl0",  # [1, 2] — ts not a string
-            "WyIyMDI2LTA1LTAxVDEyOjAwOjAwIiwgMV0",  # naive ts
-            "WyIyMDI2LTA1LTAxVDEyOjAwOjAwKzAwOjAwIiwgdHJ1ZV0",  # bool id
-        ],
-    )
-    def test_malformed_cursor_raises_422(self, bad):
-        from app.routers.utils import decode_page_cursor
-
-        with pytest.raises(HTTPException) as exc_info:
-            decode_page_cursor(bad)
-        assert exc_info.value.status_code == 422

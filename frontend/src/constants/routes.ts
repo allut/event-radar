@@ -1,6 +1,8 @@
 // Client routes and the nav/menu item lists built from them.
 // .js extensions required: Cloudflare Pages Functions import constants as unbundled ESM.
 
+import { PROMOTION_CHECKOUT_PATH_SUCCESS } from '../_generated/sharedConstants.js';
+
 // ─── Routes ──────────────────────────────────────────────────────────────────
 // Every <Route> path, `navigate()` target and `<Link to>` in App.tsx / the
 // consumer + organizer nav chrome resolves through this map so the two stay
@@ -18,13 +20,19 @@ export const ROUTES = {
   eventDetailPattern: '/events/:id',
   settings: '/settings',
   unsubscribe: '/unsubscribe',
+  // Email ad consent withdrawal page. Not named for ads: filter lists hide such paths.
+  consentOff: '/email-consent-off',
   privacy: '/privacy',
   terms: '/terms',
+  ranking: '/ranking',
+  // Organizer terms (#613): a public legal page, noindex, not prerendered.
+  organizerTerms: '/organizer-terms',
   contact: '/contact',
   faq: '/faq',
   organizerLogin: '/organizer/login',
   organizerVerify: '/organizer/verify',
   organizerClaimVerify: '/organizer/claims/verify',
+  organizerClaims: '/organizer/claims',
   organizerDashboard: '/organizer/dashboard',
   organizerClaimPending: (id: number | string) => `/organizer/claims/${id}/pending`,
   organizerClaimPendingPattern: '/organizer/claims/:id/pending',
@@ -35,6 +43,13 @@ export const ROUTES = {
   organizerSubmit: '/organizer/submit',
   organizerSettings: '/organizer/settings',
   organizerContact: '/organizer/contact',
+  organizerPromotions: '/organizer/promotions',
+  organizerPromotionRequest: '/organizer/promotions/new',
+  // Stripe's success_url (shared with the backend); the cancel url is
+  // organizerPromotions.
+  organizerPromotionSuccess: PROMOTION_CHECKOUT_PATH_SUCCESS,
+  // The form's content-policy link: the Organizer terms page's own section.
+  organizerContentPolicy: '/organizer-terms#content-policy',
   organizerEventEdit: (id: number | string) => `/organizer/events/${id}/edit`,
   organizerEventEditPattern: '/organizer/events/:id/edit',
   // Admin console (issue #154) — registered entirely outside App.tsx's
@@ -55,6 +70,10 @@ export const ROUTES = {
   adminEventDetailPrefix: '/admin/events/',
   adminPipeline: '/admin/pipeline',
   adminDedup: '/admin/dedup',
+  adminPromotions: '/admin/promotions',
+  adminPromotionDetail: (id: number | string) => `/admin/promotions/${id}`,
+  // Path-prefix form for AdminApp's manual pathname dispatch.
+  adminPromotionDetailPrefix: '/admin/promotions/',
 } as const;
 
 // The FAQ's Organizers section anchor (FaqSection.id 'organizers') —
@@ -70,6 +89,7 @@ export const ADMIN_NAV_ITEMS = [
   { route: ROUTES.adminReports, label: 'Reports' },
   { route: ROUTES.adminSubmissions, label: 'Submissions' },
   { route: ROUTES.adminClaims, label: 'Claims' },
+  { route: ROUTES.adminPromotions, label: 'Promotions' },
   { route: ROUTES.adminPipeline, label: 'Pipeline' },
   { route: ROUTES.adminDedup, label: 'Dedup groups' },
 ] as const;
@@ -110,7 +130,11 @@ export const SIGNED_OUT_NAV_ITEMS: readonly NavItem[] = [
 // Settings/Contact live in ORGANIZER_ACCOUNT_MENU_ITEMS.
 export const ORGANIZER_NAV_ITEMS: readonly NavItem[] = [
   { route: ROUTES.organizerDashboard, labelKey: 'organizer_dashboard_title' },
+  { route: ROUTES.organizerClaims, labelKey: 'dashboard_claims_title' },
 ];
+
+// Appended by OrganizerTopBar only while the Promotions offer is on.
+export const ORGANIZER_PROMOTIONS_NAV_ITEM: NavItem = { route: ROUTES.organizerPromotions, labelKey: 'promo_nav' };
 
 export const ORGANIZER_ACCOUNT_MENU_ITEMS: readonly NavItem[] = [
   { route: ROUTES.organizerSettings, labelKey: 'organizer_settings_nav' },

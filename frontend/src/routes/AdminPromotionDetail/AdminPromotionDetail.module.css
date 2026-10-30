@@ -1,0 +1,234 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.back {
+  composes: accentLink from '../../components/shared/Link.module.css';
+  margin-top: 0;
+  font-size: var(--fs-2xs);
+}
+
+.link {
+  composes: accentLink from '../../components/shared/Link.module.css';
+  margin-top: 0;
+  font-size: var(--fs-2xs);
+}
+
+.head {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  flex-wrap: wrap;
+  border-bottom: var(--border-w-hair) solid var(--border);
+  padding-bottom: var(--space-3);
+}
+
+.title {
+  composes: adminPageTitle from '../../components/shared/Page.module.css';
+  margin: 0;
+}
+
+.pill { composes: pill from '../../components/shared/AdminCommerce.module.css'; }
+.pillLive { composes: pillLive from '../../components/shared/AdminCommerce.module.css'; }
+.pillScheduled { composes: pillScheduled from '../../components/shared/AdminCommerce.module.css'; }
+.pillFinished { composes: pillFinished from '../../components/shared/AdminCommerce.module.css'; }
+.pillAttention { composes: pillAttention from '../../components/shared/AdminCommerce.module.css'; }
+
+.window {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.reason {
+  width: 100%;
+  color: var(--accent-ink);
+  font-size: var(--fs-2xs);
+}
+
+.sub {
+  width: 100%;
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+}
+
+.section { min-width: 0; }
+
+.sectionTitle { composes: sectionTitle from '../../components/shared/AdminCommerce.module.css'; }
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.muted { color: var(--text-muted); }
+
+.note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+/* Actions and inline panels */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.plainButton { composes: plainButton from '../../components/shared/AdminCommerce.module.css'; }
+.primaryButton { composes: primaryButton from '../../components/shared/AdminCommerce.module.css'; }
+.dangerButton { composes: dangerButton from '../../components/shared/AdminCommerce.module.css'; }
+
+.panel { composes: panel from '../../components/shared/AdminCommerce.module.css'; }
+
+.panelTitle {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+
+.panelFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.panelButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.field {
+  composes: field from '../../components/shared/AdminCommerce.module.css';
+  flex: 1 1 var(--admin-promotion-field-min);
+}
+
+.label {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-soft);
+}
+
+.input { composes: input inputFieldSize from '../../components/shared/AdminCommerce.module.css'; }
+
+.error { composes: error from '../../components/shared/AdminCommerce.module.css'; }
+
+/* Commercial record */
+.record {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-5);
+  margin: 0;
+  border-top: var(--border-w-hair) solid var(--border);
+  font-size: var(--fs-sm);
+}
+
+.recordRow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: var(--border-w-hair) solid var(--border);
+  min-width: 0;
+}
+
+.recordTerm { color: var(--text-muted); }
+
+.recordValue {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Per-day table */
+.tableScroll {
+  overflow-x: auto;
+  border-top: var(--border-w-hair) solid var(--border);
+}
+
+.table { composes: table from '../../components/shared/AdminCommerce.module.css'; }
+
+/* Overrides of AdminCommerce's .table rules out-rank them (design-system.md §7):
+   that module can land after this file in the bundle. */
+.table.table {
+  min-width: var(--admin-promotion-days-min);
+}
+
+.table.table th { text-align: right; }
+
+.table.table td {
+  padding: var(--space-2) var(--space-3);
+  vertical-align: middle;
+  text-align: right;
+}
+
+.table th.left,
+.table td.left { text-align: left; }
+
+.table td.nowrap { white-space: nowrap; }
+
+.table .paused td { color: var(--text-muted); }
+
+.total td {
+  font-weight: var(--fw-bold);
+  border-top: var(--border-w-hair) solid var(--text-muted);
+}
+
+/* Snapshots and audit */
+.snapshots {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.snapshot {
+  display: grid;
+  gap: var(--space-0-125);
+  padding: var(--space-3);
+  background: var(--bg-card);
+  border: var(--border-w-hair) solid var(--border);
+  font-size: var(--fs-sm);
+  overflow-wrap: anywhere;
+}
+
+.audit {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: var(--border-w-hair) solid var(--border);
+  font-size: var(--fs-sm);
+}
+
+.auditRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: var(--border-w-hair) solid var(--border);
+}
+
+@media (max-width: 640px) {
+  .record { grid-template-columns: 1fr; }
+}
+
+.chip { composes: chip from '../../components/shared/AdminCommerce.module.css'; }
+.chipStripe { composes: chipStripe from '../../components/shared/AdminCommerce.module.css'; }
+.docLink { composes: docLink from '../../components/shared/AdminCommerce.module.css'; }
+
+.calc {
+  composes: alert from '../../components/shared/AdminCommerce.module.css';
+  flex: 1 1 100%;
+}
+.calcTitle { composes: alertTitle from '../../components/shared/AdminCommerce.module.css'; }
+.calcHint {
+  composes: hint from '../../components/shared/AdminCommerce.module.css';
+}
+.refundAmount { flex: 1 1 var(--admin-promotion-field-min); }
+.refundNote { flex: 2 1 var(--admin-promotion-field-min); }
+.fieldHint {
+  composes: hint from '../../components/shared/AdminCommerce.module.css';
+}

@@ -52,6 +52,9 @@
   color: var(--danger);
 }
 
-.subtitle { composes: queueSubtitle from '../../components/shared/AdminQueue.module.css'; }
 
-.loadMoreBtn { composes: queueLoadMore from '../../components/shared/AdminQueue.module.css'; }
+/* Placeholder page while the next one loads (keep-previous-data). */
+.queue[aria-busy='true'] {
+  opacity: var(--opacity-disabled);
+  transition: opacity var(--transition);
+}

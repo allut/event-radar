@@ -1,6 +1,6 @@
 # Frontend
 
-What's in here: folder conventions, routing and locale prefixes, the admin console, the FAQ page, the API client and auth hints, tests, the i18n pipeline, brand assets and email.
+What's in here: folder conventions, routing and locale prefixes, the admin console, Organizer Promotions, paged lists, the FAQ page, the API client, auth hints, tests, i18n, brand assets and email.
 
 ## Frontend Structure
 
@@ -26,6 +26,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **`App.tsx`'s `Home` picks `Landing` or `Feed` from `useAuth()`, a live subscription.** A one-shot `isAuthenticated()` read would leave a stale Feed on screen after signing out on `/`.
 - **Organizer routes sit behind `OrganizerProtected`.** It mirrors `Protected` but reads `useOrganizerAuth()` and redirects to `/organizer/login`. The auth tracks never share a guard; see [security.md](security.md)'s Track Separation section.
 - **Trigger-button popovers build on `hooks/useDropdown.ts`.** It owns open and close, outside-click, Escape, focus and the mobile flip. `FacetMenu`, `SelectMenu`, `DatePicker` and `EventOverflowMenu` all use it.
+- **`DatePicker` takes `dateOnly`, `max`, `isDayDisabled` and `invalid`.** `dateOnly` swaps the value to `YYYY-MM-DD`, hides the time fields and closes on pick. Out-of-range or disabled days grey out, skip on arrow keys and are rejected when typed. Never use `<input type="date">`.
 - **Each card list resolves `useEventCardNav()` once and passes the result as `EventCard`'s `nav` prop.** That way no card subscribes to the router or the auth store itself.
 
 ### Top Bar Behaviour
@@ -33,13 +34,85 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **The account identity loads when the menu or drawer opens, never on mount.** That's `GET /auth/me`, or `GET /organizer/profile` on the organizer bar.
 - **The bar condenses on every route through `useBarScrolled()`:** past 24px, and back under 4px. It starts unscrolled, so prerendered HTML shows the unscrolled bar.
 - **`Footer` labels follow the URL's locale through `usePathLocale()`, never the saved preference.** Its FAQ link always goes to the public `/faq`, organizer pages included.
+- **Sponsored slot (`components/SponsoredSlot/`, `constants/sponsored.ts`):** `EventCard`'s optional `sponsored` prop (`{ advertiser, explanation }`) renders the caption, the "Why?" panel, the slot marker, `rel="sponsored"` on the stretched link and `rel="sponsored noopener noreferrer"` on the ticket link. The `explanation` is `filters`, `none` (Explore, from the API) or `daily5`. The strings (`sponsored_*`) and the marker attribute are in `shared/`.
+- **The "Why?" link stays a plain `/ranking#paid-slots` link** (`SPONSORED_RANKING_TARGET`). Explore and Daily 5 both render the card through `EventCard`. Never name an anchor or id `ads`.
+- **Daily 5 (`routes/Feed/`) renders the `sponsored_slot` after the `<ol>`,** in its own `<section>` with a hairline `--rule`, a small `sponsored_daily5_caption` line and no numeral. The `RankingLink` follows it. The card is passed `explanation: 'daily5'` by the API.
+- **A sponsored card's links carry `?ref=ad`, and its dislike sends `ref: 'ad'`.** `EventDetail` passes a known `ref` on its first request only, then strips it from the URL, so a reload or share can't count again.
+- **Explore opts in with `sponsored_slot=true` unless `isPrerenderRender()`.** It reads the `PRERENDER_RUNTIME_FLAG` window flag that `scripts/prerender.ts` sets with `addInitScript`.
+- **Page 1 inserts the payload card at the 1-based `tile`.** That makes it the 4th event card, with 3 organic cards before it; the sign-up strip does not count. Only organic `events` feed the `ItemList` and the range label, so positions skip the slot. The pager reads `page1_has_slot` through `slotRows`.
+- **`/ranking` is a `LegalPage` doc, and `RankingLink` is its entry point.** Explore's results header, the Daily 5 list and the `Footer` link to it in every state. A `LegalSection.id` becomes the anchor, scrolled to once the lazy doc loads.
 
 ### Admin Console
 
 - **`routes/AdminApp/` dispatches admin screens on `pathname`, outside `ROUTE_DEFS` and the locale-prefix loop.** It's reached by typed URL or bookmark only.
 - **It loads behind one `React.lazy` chunk,** so a signed-out visit to a public route never downloads it.
 - **The admin console is English-only and skips the shared/i18n workflow.** Its strings are literals, such as `utils.ts::relativeTimeFromNow()`.
+- **`<Pager>` is the exception: admin renders it from shared/i18n with `LOCALE_EN`.** One component serves every list, so its strings live in the catalogue rather than in a second English copy.
+- **Resolving queues page through `hooks/useAdminQueuePage.ts` and `AdminQueueSplitView`.** Each row-removing action tags its row in place and refetches the current page once, so rows pulled up from the next page append at the bottom and paging on never skips a row.
+- **An action passes `tagRow` the `actionSpot(item)` it captured when triggered:** the page offset and the row's slot. One that resolves after the admin changed page only refetches, and leaves the new page's note draft alone. On the same page it always tags, at the captured slot if a refetch already dropped the row.
+- **A 409 or 404 on an action means another admin got there first.** `onError` calls `resyncAfterFailedAction`, which refetches the page and `/admin/counts` so the stale row drops out; the error toast still shows.
+- **A queue page holds while it has tagged rows**, so clearing a last page leaves the no-items label, not a clamp. A page change selects and focuses the first row, marks it `aria-current="true"`, resets the list scroll and clears the tags. The pager sits in the split view's `listFooter`, outside the scroll area.
+- **A silent clamp onto another page resets the queue without moving focus.** It selects the first row, clears the tags and resets the note.
+- **Admin Reports sends `report=<id>` to the server only while the URL has no `page`.** The server-placed offset syncs through `usePagedQuery`'s silent replace, silently. Page links drop `report` (`dropOnPageChange`); a located row on page 1 keeps it. A gone row shows a gold "already resolved" callout linking to the event, except right after this screen resolved it.
+- **The locate runs once per link.** A row located on page 1 leaves no `page` in the URL, so later refetches ask for the plain page and keep the first not-found flag. Re-locating would jump pages once the row moved.
+- **"Already located" is this mount's record or the locate query's cached data.** The cache covers a remount; the record covers a long mount whose inactive locate entry was garbage-collected.
+- **Admin Reports invalidates the whole `[adminReports]` prefix** (`invalidateKey`) on an action or a 409/404. The plain pages go stale even in locate mode; only the mounted query refetches.
+- **Admin Claims keeps its tab in the URL as `?status=approved`** (pending omitted), written through `setListParams` so a switch is one push to page 1. The queue is keyed by tab, so the selection, note draft and tags never leak across tabs.
+- **Admin Claims keeps the toast in the unkeyed parent** and passes `showToast` down, so an action that fails after a tab switch still reports. An action invalidates the whole claims prefix (`invalidateKey`), refetching whichever tab is mounted.
+- **Promotions (#600) live in two places, both English literals from `constants/promotions.ts`.** `/admin/promotions` shows the 14-day `PromotionCapStrip` and a `PromotionsTable` list filtered by `?state=` (all, live, scheduled, finished). Granting happens on the event's detail page, in its Promotions tab (`PromotionsPanel`).
+- **`PromotionGrantForm` validates dates against the server, never locally.** `GET /admin/events/{id}/promotions/validate` returns the window, overlap and cap errors and the price, so the form carries no copy of those rules. It pre-checks only the field rules it can (registry code of 8 digits, `ER-M-` invoice prefix, a note for complimentary). The strip highlights the picked window.
+- **A row's pill is computed in `lib/promotions.ts::promotionPill()`** from the computed state and the stored status (awaiting payment, ended early, void), with the not-showing reason under it. A cap-day count comes from the API, so the strip needs no constant for the cap.
+- **A live paid Promotion the fill gate pauses carries `paused_reason`** and reads "Paused" in the admin list and detail, as the Organizer view does.
+- **The Promotion detail (#601, #606) is `/admin/promotions/:id`, reached from a row's Manage link.** `AdminApp` dispatches it by path prefix. One `GET /admin/promotions/{id}` feeds the header, record, snapshots and audit; the per-day table has its own `daily-stats` query.
+- **Detail action buttons follow the API's `actions` flags and never recompute a rule.** Each opens an inline panel, never a modal. A command's refusal shows inside its panel, and any command error refetches the detail.
+- **Clear restriction (#612) is a detail action, gated by `actions.clear_restriction`.** Its panel needs a note and posts `{note}` to `clear-restriction`. `detailPill()` reads "Paused" for any `paused_reason`, and `newlyFlaggedTag()` supplies the restriction copy. The record lists the restriction and the clearance.
+- **The grant form tags the event with its restriction in both modes.** A restricted event asks for a tick and a note, sent only then; an unassessed one shows a notice and needs neither. Admin Reports tags rows and detail with a "Promoted" chip from `is_promoted`; the server sorts them first.
+- **A command's response is the refreshed detail, written straight into the query cache.** The list, cap strip, grant context and per-day table are invalidated. Edit sends only the changed fields, and a live edit sends just `end_date`.
+- **The per-day table lists complete days only and always shows the note that served is not seen.** Totals are summed client-side from the rows; gate labels come from `PROMOTION_GATE_REASON_LABELS`.
+- **`/admin/promotions` stacks the cap strip, the request queue, the list and the Trust review.** `PromotionRequests` shows while requests are pending or a history tab is picked (`?requests=granted`), and otherwise collapses to a header with a Show history button.
+- **Granting a request reuses `PromotionGrantForm` with its `request` prop.** Dates and advertiser fields start from the request and stay editable, the event's restriction asks for a clearance tick and note, and the grant posts to the request endpoint. The server emails no one.
+- **Decline is the shared admin `Modal`, never a hand-rolled overlay.** An empty reason is refused client side. A 409 or 404 shows inside the dialog and refetches the queue.
+- **`not_eligible_reason` codes are worded in `PROMOTION_REQUEST_REASON_LABELS`.** Only `organizer_not_owner` (dormant claim) says it stays pending; every other code points at editing the dates.
+- **Stripe payments show as a chip, a hosted-invoice link and an Awaiting checkout pill.** Mark paid is hidden while a checkout is open. A Stripe-paid refund is issued, not recorded, and its amount starts from the server's `refund_prefill`.
+- **Trust review (`components/PromotionTrust/`) is read only apart from the complaint logger and Withdraw.** The four stop-selling tripwires are worked out client side from the rolling 4 weeks, with thresholds in `constants/promotions.ts` mirroring docs/backend-ops.md.
+- **Withdraw buttons stay clickable whatever the slots flag.** The client cannot see it, so the server's 409 `slots_still_enabled` is worded by `withdrawErrorMessage()`. The table's unused days and refund mirror `withdraw.py`, and are an estimate until the server answers.
 - **`AdminShell/` is the nav-rail chrome every signed-in admin screen renders inside.** `AdminLogin` renders outside it. The console replaces curl calls to `/admin/*`; see [backend-ops.md](backend-ops.md)'s Admin Endpoints section.
+
+### Organizer Promotions
+
+- **Strings are `promo_*` keys in `shared/`, in all three locales.** Counts use `tn()` with `promo_days_*` and `promo_people_*`. Prices format through `lib/organizerPromotions.ts::formatMoney()`, which drops whole-euro cents and uses a comma outside English.
+- **A paused reason maps through `promo_why_<code>`.** Each gate code has a long and a `_short` form, and an unknown code falls back to `promo_why_unknown`, so a new backend code never shows raw text.
+- **The top bar's Promotions item follows the offer hint in `lib/organizerPromotionsOffer.ts`.** It is stored as `'1'` (on) or `'0'` (off); a missing key means unknown. Event rows and the Promotions list refresh it.
+- **While the hint is unknown, `usePromotionsOffer()` reads `promotions_offer` from `GET /organizer/profile`.** A first visit straight to Settings or Contact then shows the item. The query shares its key with Settings and the dashboard nudge, so those pages add no request, and a known hint costs none.
+- **`PromotionBadge/` and `PromotionRowAction/` serve both event lists.** The badge is the one square status look for rows and the Promotions list, one tone per status.
+- **`PromotionResultCard/` is the centred result card** for a sent request, a confirmed payment and the confirming state.
+- **The sponsored caption on the preview reuses `sponsored_label`.** The form renders `EventCard` read-only with the `sponsored` prop, so it never posts feedback.
+
+## Paged Lists
+
+Every list pages with a numbered pager and a `?page` URL param. There is no Load more button and no `useInfiniteQuery`. Backend rules are in [backend-ops.md](backend-ops.md)'s Pagination section.
+
+### Composing a List
+
+- **A list composes three pieces: `hooks/usePageParam.ts`, `hooks/usePagedQuery.ts` and `components/Pager/`.** Change paging behaviour there, never per route.
+- **`usePageParam` owns `?page` and `setListParams`.** It reads and normalizes `?page` (page 1 omits it, a malformed value replaces to page 1). `setListParams` is the one writer for filter, sort, search and tab params: it drops `page` and default-valued params in a single push.
+- **`setListParams` skips a write where only `page` would change**, such as re-picking the active tab, sort or preset. It returns false then.
+- **`usePagedQuery` owns the fetch.** Give it `queryKey`, `pageSize`, `fetchPage` and a `select` that maps the response to `{ items, total, offset }`. It keeps the previous page while the next loads, clamps a past-end page, syncs a server-placed offset and calls `onPageSettled`.
+- **`select` may also return `slotRows` (0 or 1) for a list whose page 1 carries a row beside the counted items.** `lastPage` becomes `ceil((total + slotRows) / pageSize)`, and the hook returns `firstRowOffset`, where this page's counted rows begin (later pages start `slotRows` earlier).
+- **`pagerProps.offset` and the announcement use `firstRowOffset`,** so the range label covers counted rows only. Explore uses it for the Sponsored slot.
+- **`<Pager {...pagerProps} />` renders the links and the live-region announcement**, with `pagerProps` returned by `usePagedQuery`. The caller adds `locale`, `liveNoun` (`events` or `items`), a `className` for placement and, if needed, `dropOnPageChange`. Its strings come from shared/i18n.
+- **The request carries `limit` and `offset` only.** `PAGE_PARAM` in `constants/api.ts` names them, and `?page` is never sent to the backend. Each list's page size is a constant in `frontend/src/constants/`.
+- **Pass `enabled` to hold the fetch** until a prerequisite such as a claim id or tab is known.
+
+### Behaviour
+
+- **`usePagedQuery` caps the last page at the backend's `PAGINATION_MAX_OFFSET`** (shared/app-config.json). Past it the label reads "... of N+" over the reachable count, and a deeper link replaces to the deepest reachable page without fetching.
+- **Only a pager-link push or a back/forward POP counts as a page change.** `usePagedQuery` reads `useNavigationType()`, and every `<Pager>` link pushes with router state `PAGER_NAV_STATE`. Any other push that lands on a different page, from a `setListParams` filter change to a nav link or preset chip, stays silent. Every `replace` (normalizing, clamping, server-placed offset) skips `onPageSettled` and the announcement.
+- **A pending page change belongs to its history entry.** A filter push before its data lands stays silent, even on a later Back. When a counted change lands on an emptied page, the clamp's target settles instead, so focus never drops to `<body>`.
+- **A clamp's target settles only on fresh data.** The clamp marks the list stale, and a cached copy older than the emptied response never settles or announces.
+- **Consumer and organizer lists settle a page change with `hooks/usePageSettledFocus.ts`.** Pass its `onPageSettled` to `usePagedQuery`: it instant-scrolls to the results heading and focuses it with `preventScroll`. The heading composes `PageSettle.module.css`'s `.settleTarget`, and the results container sets `aria-busy={isPlaceholderData}`.
+- **A list whose `h1` sits above its filters gets a visually hidden results `h2`.** Explore puts a focusable "Events" `h2` (`srOnly` plus `.settleTarget`) directly above the grid, so focus after a page change lands below the filters and the next Tab reaches the first new card.
+- **Admin queues wrap `usePagedQuery` in `hooks/useAdminQueuePage.ts`.** See the Admin Console section below.
 
 ## Locale-Prefixed Routing
 
@@ -50,6 +123,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 - **An unrecognized `:locale` segment, such as `/xx/...`, renders Estonian without redirecting.**
 - **`usePathLocale()` reads the locale from the pathname,** so it also works outside `<Routes>`. The `Footer`, `useLocaleMutation` and the switcher-less pages (login, verify, unsubscribe, `NotFound`) use it, so a page and its footer always share a language.
 - **Internal links go through `useLocalePath()`, and programmatic navigation through `useLocaleNavigate()`.** Both prefix the target against the current URL.
+- **The Email ad consent UI never uses `ad` or `ads` as an element id or class name.** Ad blockers hid it in the prototype, so names say `consent`. The Settings toggle shows only while `email_ad_consent_available` is true.
 - **`useLocaleMutation` switches locale by navigating to the equivalent prefixed path.** It also persists to `localStorage` and `PATCH /users/me`. It takes the locale from the URL segment, else the stored preference, or Estonian for `publicRoute: true` callers.
 
 ## FAQ Page
@@ -86,6 +160,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 ## Tests
 
 - **Tests sit beside their subject as `Name.test.tsx` or `Name.test.ts`.** Shared helpers live in `frontend/src/test/`. The stack is Vitest, Testing Library and jsdom.
+- **Seed the offer hint when a route test queues `organizerApi.get` responses by position.** `OrganizerTopBar` mounts on every Organizer page and asks `GET /organizer/profile` while the hint is unknown, which takes a queued response. Call `test/utils.tsx::seedPromotionsOfferHint()`, or route mocks by path as `OrganizerDashboard.test.tsx` does.
 - **`frontend/functions/` stays free of test files.** Cloudflare's file-based routing would claim a `.test.ts` there as a route. Pages Functions tests live in `frontend/tests/functions/`, mirroring that tree.
 - **`npm run lint` covers `src`, `scripts`, `functions` and `tests`.**
 
@@ -105,9 +180,19 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 3. Commit the JSON and the regenerated `_generated/` files together.
 
 - **`_generated/` belongs to the script.** `backend/tests/test_generated_sync.py` runs the generator into a temp dir and fails on any byte of drift.
-- **The frontend reads strings through `frontend/src/i18n.ts`** (`t`, `ti`, `personaName`, `personaVibe`) over `_generated/i18nData.ts`. `constants.ts` takes `LOCALES`, `PERSONAS`, TTLs and weight thresholds from `_generated/sharedConstants.ts`.
-- **The backend reads strings through `backend/app/i18n.py`** (`t`, `ti`, `day_name`, `month_name`) over `_generated/i18n_data.py`. `app/constants.py` takes cross-stack scalars and frozensets from `_generated/shared_constants.py`.
+- **`python scripts/generate_shared.py --check` writes nothing** and exits 1 naming each stale file. The pre-commit hook runs it when `shared/` or an `_generated/` directory is staged.
+- **An int, a string or a list of strings with the same name in both stacks goes under `scalars` in `app-config.json`.** The generator emits it to both `_generated/` files, and the backend and frontend import it from there. A list becomes an ordered tuple in Python and an `as const` array in TypeScript.
+- **`python scripts/move_to_shared.py <domain> NAME` moves an existing backend constant into `scalars`.** It also removes any same-named frontend copy, regenerates, and repoints both stacks' imports. A value or consumer it can't rewrite stops the run before anything is written. `shared/README.md` describes the report it prints, and `--dry-run` previews the edits.
+- **`constants/mirrors.test.ts` keeps hand-copied backend values out.** It counts the comments in each `constants/*.ts` file that say "mirrors backend" or name a backend constant ("backend PROMOTION_ERROR_*"). Every file is at 0, so a new copy fails. A frontend-only value named after a backend one goes in its `FRONTEND_ONLY` map with the reason.
+- **`backend/tests/test_move_to_shared.py::test_no_constant_is_copied_by_hand_across_stacks` catches copies with no comment.** It fails when a backend constants module and a frontend constants file define a literal under one name. Move the value with `move_to_shared.py`, or put it in `HAND_COPIES_ALLOWED` with the reason it stays.
+- **The frontend reads strings through `frontend/src/i18n.ts`** (`t`, `ti`, `tn`, `personaName`, `personaVibe`) over `_generated/i18nData.ts`. The `frontend/src/constants/` files, such as `core.ts`, import `LOCALES`, TTLs and weight thresholds from `_generated/sharedConstants.ts`, and `PERSONAS` from `_generated/i18nData.ts`.
+- **A count-dependent string uses `tn()` and one key per plural category**, `{key}_one`/`_other`, plus `_few`/`_many` in `ru.json`. `Intl.PluralRules` picks the category, so each locale needs every category its rule returns.
+- **The backend reads strings through `backend/app/i18n.py`** (`t`, `ti`, `day_name`, `month_name`) over `_generated/i18n_data.py`. The `app/constants/` files, such as `core.py`, import cross-stack scalars and frozensets from `_generated/shared_constants.py`.
 - **Legal and FAQ copy isn't in `shared/`.** Each is a per-locale TypeScript module under `frontend/src/content/legal/` or `content/faq/`.
+- **Paid-slot copy carries `gate: 'slotsOn'` or `'slotsOff'`** on a block, list item, section or FAQ item. `content/slotsGate.ts` drops the non-matching ones before render, and `LegalDoc.lastUpdatedSlots` replaces the date while on. The Ranking `paid-slots` section, the FAQ `paid-*` items and the Privacy additions use it.
+- **`isPromotionsSlotsEnabled()` reads the build-time `VITE_PROMOTIONS_SLOTS_ENABLED`.** It mirrors the backend `PROMOTIONS_SLOTS_ENABLED` and only decides whether the legal pages carry the copy. The backend flag stays authoritative for serving slots, so flip both.
+- **`/organizer-terms` is a `LegalPage` doc (`organizerTerms`) with a DRAFT notice** until `ORGANIZER_TERMS_IS_DRAFT` in `constants/operator.ts` goes false. Its version label comes from `organizer_terms_version` in `shared/app-config.json`, which the backend records on acceptance.
+- **Operator facts live in `constants/operator.ts` as `OPERATOR_IDENTITY`.** A `null` field renders as a highlighted placeholder (an inline `{ operator }` run); fill the value once and every legal page updates.
 
 ## Brand Assets
 
@@ -134,6 +219,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 
 - **`digest.py` formats, assembles and sends the digest,** filling `EMAIL_DOCUMENT` with `DIGEST_HEADER` and `DIGEST_FOOTER`. Subjects, labels and day and month names come from `app/i18n.py`.
 - **Each event block shows its escaped `image_url`, or a plain color band when there's none.** The header carries an "open feed" button (`feed_url`).
+- **A consenting user's digest may end with a framed Sponsored block** (`DIGEST_SPONSORED_BLOCK`): sharp corners, a gold tint, the "Ad" label in Cormorant italic, the advertiser, the unchanged event block, the explanation and a "Stop ads in this email" link to `ADS_OFF_PATH` (`/email-consent-off`) with the `generate_ads_off_token` token. Its class hook is `e-sponsor-label`; never name a hook `ad` or `ads`.
 - **The digest is HTML only, with no plain-text part.**
 - **It sends from a scheduled batch job, so it goes through the retrying `http_post()`.**
 

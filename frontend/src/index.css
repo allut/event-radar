@@ -302,16 +302,26 @@
   --bp-desktop-gate: 1024px;      /* shared/DesktopGate.module.css */
   --bp-landing-stats: 900px;      /* Landing.module.css */
   --bp-onboarding-narrow: 560px;  /* Onboarding.module.css */
+  /* Pager.module.css's @container widths (the pager's own width, not the
+     viewport): the range label stacks over the buttons, then the p±1
+     siblings drop to first/current/last (340px admin column, 390px phone). */
+  --bp-pager-stack: 560px;
+  --bp-pager-collapse: 440px;
   /* Wide band (docs/design-system.md §10): floor where page widths jump to the
      1760px wrap and the card grid locks to 6 columns. Above a 1920px
      laptop viewport (2880×1620 @150%), below a 2560px monitor. */
   --bp-wide: 2000px;
+  /* One-off max-width @media breakpoints, documentation only like the rest. */
+  --bp-promotion-trust: 760px;    /* PromotionTrust.module.css */
+  --bp-bar-wide: 1280px;          /* shared/Bar.module.css (@media max-width: 1279px) */
   /* Side inset that aligns full-bleed chrome content (TopBar, Landing ticker)
      to the --page-max-wide wrap. `100%` is substituted at the use site, so it
      resolves against each consumer's own containing block. Wide band only. */
   --wrap-inset: max(var(--space-6), calc((100% - var(--page-max-wide)) / 2 + var(--space-6)));
 
   /* Component max/min-widths */
+  --promo-summary-width: 340px;   /* Promotion request form: preview and price column */
+  --promo-lock-icon-size: 12px;   /* Promotion request form: padlock beside "fixed" notes */
   --card-max-narrow: 400px;       /* shared/Card.module.css .cardPage */
   --explore-search-max: 480px;    /* Explore search field cap in the wide-band toolbar */
   --modal-max-width: 480px;       /* Modal panel */
@@ -325,6 +335,8 @@
 
   /* Form controls */
   --control-height-lg: 48px;
+  --checkbox-size: 22px;        /* Onboarding digest opt-in box */
+  --checkbox-mark-size: 14px;   /* its check glyph */
   --textarea-height-sm: 100px;  /* EventSubmit description */
   --textarea-height-md: 120px;  /* Contact message */
 
@@ -345,6 +357,12 @@
   --admin-tile-min: 220px;              /* AdminDashboard stat tile grid */
   --admin-trigger-min: 240px;           /* AdminPipeline trigger card grid */
   --admin-image-preview-max: 320px;     /* AdminEventDetail image field thumbnail */
+  --admin-cap-bar-height: 72px;         /* PromotionCapStrip day bar */
+  --admin-cap-swatch: 10px;             /* PromotionCapStrip legend swatch */
+  --admin-cap-gap-phone: 2px;           /* PromotionCapStrip day gap on a phone */
+  --admin-promotions-table-min: 640px;  /* PromotionsTable scroll width */
+  --admin-promotion-days-min: 720px;    /* Promotion detail per-day table scroll width */
+  --admin-promotion-field-min: 160px;   /* Promotion detail action panel field basis */
 
   /* Heading scale */
   --heading-2xl: 2.5rem;
@@ -385,6 +403,8 @@
   --anim-breathe: 3s; /* Animations.module.css .breathe fallback duration */
   --anim-hero-rise: 1.15s;     /* Animations.module.css .heroRise > span */
   --anim-hairline-draw: 1.4s;  /* Animations.module.css .hairlineDraw */
+  --anim-dial-turn: 1.4s;      /* DialMark.module.css .intro .hand */
+  --anim-rim-draw: 0.9s;       /* DialMark.module.css .intro .rim */
   --anim-poster-drift: 26s;    /* Animations.module.css .posterDrift */
   --anim-ticker: 42s;          /* Animations.module.css .tickerSlide */
   --rise-distance: 8px;

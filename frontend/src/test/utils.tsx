@@ -1,9 +1,37 @@
 import { createElement, type ReactNode } from 'react';
 import { render, type RenderResult } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, type DefaultOptions } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { type EventData } from '../components/EventCard';
+import { QUERY_KEYS, QUERY_STALE_TIME } from '../constants/api';
+import { ORGANIZER_PROMOTIONS_OFFER_KEY } from '../constants/organizer';
+
+/** A QueryClient for tests: no retries on queries or mutations. `queries` overrides
+ * individual query defaults (e.g. `{ staleTime }`). */
+export function makeTestQueryClient(queries: DefaultOptions['queries'] = {}): QueryClient {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false, ...queries }, mutations: { retry: false } },
+  });
+}
+
+/** The organizer-claims list page `clientWithCachedClaimsList` seeds. */
+export const CACHED_CLAIMS_KEY = [QUERY_KEYS.organizerClaims, 'en', 1];
+
+/** A query client holding a cached organizer-claims list page, to observe
+ * whether a claim mutation marks the list (and dashboard summary) stale. */
+export function clientWithCachedClaimsList(): QueryClient {
+  const queryClient = makeTestQueryClient({ staleTime: QUERY_STALE_TIME });
+  queryClient.setQueryData(CACHED_CLAIMS_KEY, { claims: [], total: 0, offset: 0 });
+  return queryClient;
+}
+
+/** Marks the Promotions offer as known, so `OrganizerTopBar` skips its
+ * first-visit `GET /organizer/profile`. Call it in a route test's `beforeEach`
+ * when the test queues `organizerApi.get` responses by position. */
+export function seedPromotionsOfferHint(offered = false): void {
+  localStorage.setItem(ORGANIZER_PROMOTIONS_OFFER_KEY, offered ? '1' : '0');
+}
 
 /** Renders the current router location as text (`pathname + search + hash`)
  * under `data-testid="location-probe"` — mount alongside `children` in a
@@ -20,9 +48,7 @@ export function makeQueryWrapper(): {
   wrapper: ({ children }: { children: ReactNode }) => ReactNode;
   queryClient: QueryClient;
 } {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  const queryClient = makeTestQueryClient();
   const wrapper = ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client: queryClient }, children);
   return { wrapper, queryClient };
@@ -51,9 +77,7 @@ export function makeRouterQueryWrapper({
 } {
   const queryClient =
     providedQueryClient ??
-    new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
+    makeTestQueryClient();
   function Wrapper({ children }: { children: ReactNode }) {
     const content = withLocationProbe ? <>{children}<LocationProbe /></> : <>{children}</>;
     return (
@@ -92,12 +116,7 @@ export function renderWithProviders(
 ): RenderResult {
   const queryClient =
     providedQueryClient ??
-    new QueryClient({
-      defaultOptions: {
-        queries: { retry: false, gcTime: 0, staleTime: 0 },
-        mutations: { retry: false },
-      },
-    });
+    makeTestQueryClient({ gcTime: 0, staleTime: 0 });
   return render(
     <HelmetProvider>
       <QueryClientProvider client={queryClient}>

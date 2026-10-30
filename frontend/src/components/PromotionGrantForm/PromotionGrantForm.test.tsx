@@ -1,0 +1,234 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import PromotionGrantForm from './PromotionGrantForm';
+import { renderWithProviders } from '../../test/utils';
+
+vi.mock('../../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../api/client')>()),
+  adminApi: { get: vi.fn(), post: vi.fn() },
+}));
+
+import { adminApi, ApiError } from '../../api/client';
+const mockGet = vi.mocked(adminApi.get);
+const mockPost = vi.mocked(adminApi.post);
+
+function context(overrides: Record<string, unknown> = {}) {
+  return {
+    event_id: 42,
+    event_title: 'Tallinn Jazz Night',
+    owner: { organizer_id: 9, name: 'Jazzklubi MTÜ', email: 'info@jazzklubi.ee' },
+    prefill: { advertiser_legal_name: 'Jazzklubi MTÜ', billing_email: 'info@jazzklubi.ee' },
+    today: '2026-10-17',
+    earliest_start: '2026-10-18',
+    event_last_day: '2026-10-30',
+    rules: { min_days: 3, max_days: 14, cap: 5, cap_strip_days: 14 },
+    pricing: { day_price_cents: 500, vat_rate_percent: '24.00' },
+    promotions: [],
+    ...overrides,
+  };
+}
+
+const capStrip = {
+  today: '2026-10-17',
+  cap: 5,
+  days: Array.from({ length: 14 }, (_, i) => ({
+    date: `2026-10-${String(17 + i).padStart(2, '0')}`,
+    reserved: 0,
+    paid: 0,
+    unpaid: 0,
+    live: 0,
+    cap: 5,
+    free: 5,
+  })),
+};
+
+function validation(overrides: Record<string, unknown> = {}) {
+  return {
+    valid: true,
+    errors: [],
+    days: 7,
+    price: { net_cents: 3500, vat_cents: 840, gross_cents: 4340 },
+    ...overrides,
+  };
+}
+
+function setup(ctx: unknown = context(), validate: (path: string) => unknown = () => validation(), strip: unknown = capStrip) {
+  mockGet.mockImplementation(async (path: string) => {
+    if (path.includes('/promotion-context')) return ctx;
+    if (path.includes('/promotions/validate')) return validate(path);
+    if (path.startsWith('/admin/promotions/cap-strip')) return strip;
+    throw new Error(`unexpected ${path}`);
+  });
+  const onNotify = vi.fn();
+  renderWithProviders(<PromotionGrantForm eventId="42" onNotify={onNotify} />);
+  return { onNotify };
+}
+
+async function pickDates(start = '2026-10-20', end = '2026-10-26') {
+  await userEvent.type(await screen.findByLabelText('Start date'), start);
+  await userEvent.type(screen.getByLabelText('End date'), end);
+}
+
+beforeEach(() => {
+  mockGet.mockReset();
+  mockPost.mockReset();
+});
+
+describe('PromotionGrantForm', () => {
+  it('greys out full days and days outside the earliest start and event end in the date picker', async () => {
+    const full = { ...capStrip, days: capStrip.days.map((d) => (d.date === '2026-10-22' ? { ...d, free: 0 } : d)) };
+    setup(context(), () => validation(), full);
+    const input = await screen.findByLabelText('Start date');
+    await waitFor(() => expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('cap-strip')));
+    await userEvent.type(input, '2026-10-22');
+    await userEvent.tab();
+    expect(input).toHaveValue('');
+    const calendar = screen.getAllByRole('button', { name: /open calendar/i })[0];
+    await userEvent.click(calendar);
+    const cell = (day: number) => document.querySelector(`[data-date="${new Date(2026, 9, day).toDateString()}"]`) as HTMLElement;
+    expect(cell(22)).toBeDisabled();
+    expect(cell(17)).toBeDisabled();
+    expect(cell(18)).not.toBeDisabled();
+    expect(cell(30)).not.toBeDisabled();
+    expect(cell(31)).toBeDisabled();
+  });
+
+  it('explains why an unowned event cannot be promoted and renders no form', async () => {
+    setup(context({ owner: null, prefill: { advertiser_legal_name: null, billing_email: null } }));
+    expect(await screen.findByText(/no owning Organizer/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Start date')).toBeNull();
+  });
+
+  it('prefills the advertiser from the owner and shows the live price for valid dates', async () => {
+    setup();
+    await pickDates();
+    expect(screen.getByLabelText('Advertiser legal name')).toHaveValue('Jazzklubi MTÜ');
+    expect(screen.getByLabelText('Billing email')).toHaveValue('info@jazzklubi.ee');
+    expect(await screen.findByText('Dates are available.')).toBeInTheDocument();
+    expect(screen.getByText('€35.00 + €8.40 VAT = €43.40')).toBeInTheDocument();
+    expect(screen.getByText('7 days × €5.00 net · VAT 24%')).toBeInTheDocument();
+  });
+
+  it('shows the server rule message and blocks submit when the window breaks a rule', async () => {
+    setup(context(), () =>
+      validation({
+        valid: false,
+        errors: [{ code: 'cap_exceeded', message: 'More than 5 Promotions would be live on a day in this window.', dates: ['2026-10-24'] }],
+      }),
+    );
+    await pickDates();
+    expect(await screen.findByText(/More than 5 Promotions/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Grant Promotion' })).toBeDisabled();
+  });
+
+  it('requires a registry code of 8 digits', async () => {
+    setup();
+    await pickDates();
+    await screen.findByText('Dates are available.');
+    await userEvent.type(screen.getByLabelText('Registry code'), '123');
+    expect(screen.getByText('Registry code must be 8 digits.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Grant Promotion' })).toBeDisabled();
+  });
+
+  it('reveals a required note for a complimentary grant and shows the free price', async () => {
+    setup();
+    await pickDates();
+    await userEvent.type(screen.getByLabelText('Registry code'), '80123456');
+    await userEvent.click(screen.getByLabelText('Complimentary (€0)'));
+    expect(await screen.findByText('Complimentary grants need a note.')).toBeInTheDocument();
+    expect(screen.getByText('Complimentary · €0.00')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Grant Promotion' })).toBeDisabled();
+    await userEvent.type(screen.getByLabelText('Note (required)'), 'Pilot partner');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Grant Promotion' })).toBeEnabled());
+    expect(mockGet).toHaveBeenCalledWith(expect.stringContaining('is_complimentary=true'));
+  });
+
+  it('posts the grant and notifies on success', async () => {
+    mockPost.mockResolvedValue({ id: 5 });
+    const { onNotify } = setup();
+    await pickDates();
+    await userEvent.type(screen.getByLabelText('Registry code'), '80123456');
+    await userEvent.type(screen.getByLabelText('Invoice reference'), 'ER-M-0001');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Grant Promotion' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: 'Grant Promotion' }));
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith('/admin/events/42/promotions', {
+        start_date: '2026-10-20',
+        end_date: '2026-10-26',
+        advertiser_legal_name: 'Jazzklubi MTÜ',
+        advertiser_registry_code: '80123456',
+        billing_email: 'info@jazzklubi.ee',
+        is_complimentary: false,
+        complimentary_note: null,
+        invoice_reference: 'ER-M-0001',
+      }),
+    );
+    await waitFor(() => expect(onNotify).toHaveBeenCalledWith('success', 'Promotion granted.'));
+  });
+
+  it('reports a refused grant through onNotify', async () => {
+    mockPost.mockRejectedValue(new ApiError(409, 'The window overlaps another Promotion on this event.'));
+    const { onNotify } = setup();
+    await pickDates();
+    await userEvent.type(screen.getByLabelText('Registry code'), '80123456');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Grant Promotion' })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: 'Grant Promotion' }));
+    await waitFor(() =>
+      expect(onNotify).toHaveBeenCalledWith('error', 'The window overlaps another Promotion on this event.'),
+    );
+  });
+
+  describe('Promotion restriction (#612)', () => {
+    it('tags the event, shows the notice and blocks the grant until the box and note are filled', async () => {
+      setup(context({ promotion_restriction: 'alcohol' }));
+      await pickDates();
+      await userEvent.type(screen.getByLabelText('Registry code'), '80123456');
+      expect(await screen.findByText('Dates are available.')).toBeInTheDocument();
+      expect(screen.getByText('Alcohol')).toBeInTheDocument();
+      expect(screen.getByText('This event carries the alcohol restriction')).toBeInTheDocument();
+      const submit = screen.getByRole('button', { name: 'Grant Promotion' });
+      expect(submit).toBeDisabled();
+      await userEvent.click(screen.getByLabelText(/I reviewed this event and clear it/));
+      expect(submit).toBeDisabled();
+      await userEvent.type(screen.getByLabelText('Clearance note (required)'), 'Licensed venue.');
+      expect(submit).toBeEnabled();
+    });
+
+    it('sends the clearance with the grant', async () => {
+      setup(context({ promotion_restriction: 'alcohol' }));
+      mockPost.mockResolvedValue({});
+      await pickDates();
+      await userEvent.type(screen.getByLabelText('Registry code'), '80123456');
+      await screen.findByText('Dates are available.');
+      await userEvent.click(screen.getByLabelText(/I reviewed this event and clear it/));
+      await userEvent.type(screen.getByLabelText('Clearance note (required)'), ' Licensed venue. ');
+      await userEvent.click(screen.getByRole('button', { name: 'Grant Promotion' }));
+      expect(mockPost).toHaveBeenCalledWith(
+        '/admin/events/42/promotions',
+        expect.objectContaining({ restriction_clearance_confirmed: true, restriction_clearance_note: 'Licensed venue.' }),
+      );
+    });
+
+    it('shows no notice for a clear event and sends no clearance', async () => {
+      setup(context({ promotion_restriction: 'none' }));
+      mockPost.mockResolvedValue({});
+      await pickDates();
+      await userEvent.type(screen.getByLabelText('Registry code'), '80123456');
+      await screen.findByText('Dates are available.');
+      expect(screen.queryByText(/restriction/i)).toBeNull();
+      await userEvent.click(screen.getByRole('button', { name: 'Grant Promotion' }));
+      expect(mockPost.mock.calls[0][1]).not.toHaveProperty('restriction_clearance_confirmed');
+    });
+
+    it('tells the admin an unassessed event is saved but stays empty, and the grant still works', async () => {
+      setup(context({ promotion_restriction: null }));
+      await pickDates();
+      await userEvent.type(screen.getByLabelText('Registry code'), '80123456');
+      expect(await screen.findByText('This event has not been assessed yet')).toBeInTheDocument();
+      expect(screen.getByText('Not assessed')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Clearance note (required)')).toBeNull();
+      expect(await screen.findByRole('button', { name: 'Grant Promotion' })).toBeEnabled();
+    });
+  });
+});

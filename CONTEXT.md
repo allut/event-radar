@@ -49,7 +49,7 @@ the consumer track and is never interchangeable with it.
 _Avoid_: portal auth, submitter auth
 
 **Admin track**:
-The authentication track for the operator console. Password + required TOTP
+The authentication track for the admin console. Password + required TOTP
 rather than a magic link, with its own cookie name, path, and lifetime. Never
 interchangeable with the consumer or organizer tracks.
 _Avoid_: staff auth, ops login, superuser
@@ -140,6 +140,86 @@ the row is never deleted or revoked, and `status` (which still gates
 duplicate-claim creation) is untouched. Reactivates automatically the next
 dedup pass in which its target is canonical again.
 _Avoid_: revoked claim, suspended claim, inactive claim
+
+## Operator
+
+**Operator**:
+The legal person that runs Event Radar: it sells Promotions, controls the
+personal data of consumers and Organizers, and is the party to the Terms and
+the Organizer terms. There is exactly one at any time, and every published
+identity (imprint, invoices, Privacy notice) names it. A person who signs in to
+the admin console is an *admin*, not the Operator.
+_Avoid_: owner, company, seller, platform, sole trader
+
+## Promotions
+
+**Promotion**:
+A placement, sold for a set window, of one event the Organizer owns:
+either an event they submitted or one covered by an approved claim that is not
+dormant. A Promotion buys Sponsored slots only. It never changes where the
+event ranks in any organic list. It is always sold to the Organizer's own
+business, never to another business through them. A complimentary Promotion, granted at no
+charge, is still a Promotion: it is labelled, rotated and counted exactly like
+one that was paid for.
+_Avoid_: boost, bump, ad campaign, featured
+
+**Promotion window**:
+The whole Tallinn days, first and last included, during which a paid Promotion
+may fill Sponsored slots. It never runs past the event's last day. Being inside
+its window doesn't guarantee a Promotion shows: if the event stops being
+eligible, the Promotion pauses and resumes by itself, and the days it loses are
+never added back automatically.
+_Avoid_: campaign, flight, run
+
+**Promotion request**:
+An Organizer's request for a Promotion on one event they own, with the dates
+they want and their own business, which would pay. It is not a Promotion: nothing has
+been sold, and it holds no days against the cap. An admin either grants it,
+which creates the Promotion (possibly on other dates agreed with the
+Organizer), or declines it with a reason. Otherwise it is withdrawn by the
+Organizer, or expires once its event can no longer be promoted or its start
+date arrives.
+_Avoid_: promotion order, booking, pending promotion
+
+**Promotion restriction**:
+A kind of event content that may be listed but not promoted without an admin's
+review: tobacco, gambling, alcohol-led, political, or a weapons sale. It never
+affects whether or where the event lists organically. An admin who grants a
+Promotion despite it gives a *Restriction clearance*, which belongs to that
+Promotion, not to the event, and covers only the restriction it was given for.
+_Avoid_: restricted category, banned event, unpromotable
+
+**Sponsored slot**:
+A labelled position on a public surface that shows one Promotion's event as
+advertising and names the paying Organizer by the legal name of their business.
+It sits beside the organic results,
+outside them, and is never counted as one. Its Promotion is chosen by context
+(the surface and the viewer's active filters), never by the viewer's tastes; a
+viewer's own signals can only exclude a Promotion. When no Promotion is
+eligible, the slot collapses and is never filled with something else.
+_Avoid_: featured slot, promoted result, ad unit
+
+**Ranking disclosure**:
+The public statement of what decides which events can appear and in what order
+the organic lists show them, giving the main signals and their relative
+importance but never their weights. It also says how Sponsored slots relate to
+those lists. It is owed to consumers whether or not any Promotion exists, and
+it is part of the Organizer terms, so a change in substance is a change to
+those terms.
+_Avoid_: ranking page, how-it-works page, transparency page, algorithm
+
+**Email ad consent**:
+A digest subscriber's separate, affirmative agreement to receive a Sponsored
+slot in their Daily Five email, and in no other email. Subscribing to the
+digest is not this consent, and it starts off. It ends when the subscriber
+withdraws it, unsubscribes from the digest, or its wording changes in
+substance; it never expires on its own.
+_Avoid_: marketing consent, sponsored consent, ad opt-in
+
+**Featured** (reserved):
+Kept for a future editorial pick that nobody pays for. Never use it for paid
+placement.
+_Avoid_: featured (for anything a Promotion bought)
 
 ## Theming
 

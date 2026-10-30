@@ -1,22 +1,49 @@
+import itertools
 import os
 
 # Must be set before any app module import so pydantic-settings can validate Settings.
 os.environ.setdefault("SECRET_KEY", "test-secret-not-for-production-32chars")
 
-from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import pytest_asyncio
+from sqlalchemy import event as sa_event
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from starlette.requests import Request
 
 from app._generated.shared_constants import (
+    CLAIM_KIND_PUBLISHER,
+    CLAIM_KIND_SERIES,
+    CLAIM_STATUS_APPROVED,
     DEFAULT_CURRENCY,
     DEFAULT_USER_CITY,
     DEFAULT_USER_LOCALE,
 )
+from app.constants.core import TALLINN_TZ
 from app.constants.events import TALLINN_CENTER_LAT, TALLINN_CENTER_LNG
+from app.models.models import Claim, Event, EventSource, Organizer, Publisher, Source, Venue
+
+
+DEV_DB_NAME = "eventradar"
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Refuse to run against the dev database; DB-backed tests write to it."""
+    from app.config import settings  # resolves the shell value, then backend/.env
+
+    db_name = settings.DATABASE_URL.split("?")[0].rsplit("/", 1)[-1]
+    if db_name == DEV_DB_NAME:
+        pytest.exit(
+            f"DATABASE_URL names the dev database '{DEV_DB_NAME}'. "
+            "Run bash backend/scripts/scratch-test.sh [pytest args] instead.",
+            returncode=2,
+        )
 
 
 @pytest.fixture
@@ -64,6 +91,8 @@ def make_user():
         u.locale = locale
         u.home_city = DEFAULT_USER_CITY
         u.email_digest_opt_in = opt_in
+        u.email_ad_consent = False
+        u.email_ad_consent_version = None
         u.email_verified = email_verified
         u.created_at = MagicMock()
         u.created_at.isoformat.return_value = "2026-05-13T06:00:00+00:00"
@@ -306,3 +335,170 @@ def assert_hardened_cookie(
     assert f"Path={path}" in set_cookie
     if cleared:
         assert "Max-Age=0" in set_cookie
+
+
+# --- Real Postgres ------------------------------------------------------------
+# For SQL-shaped behaviour a mock can't show: locks, constraints, and the
+# fixed query counts that "Batch jobs bulk-load" asks for. Skips when no
+# migrated database is reachable (`scratch-test.sh --no-db`).
+
+
+@pytest_asyncio.fixture
+async def engine() -> AsyncIterator[AsyncEngine]:
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        pytest.skip("DATABASE_URL not set")
+    eng = create_async_engine(url)
+    try:
+        async with eng.connect() as conn:
+            ok = await conn.scalar(text("SELECT to_regclass('public.alembic_version')"))
+    except Exception:
+        await eng.dispose()
+        pytest.skip("Postgres unreachable")
+    if not ok:
+        await eng.dispose()
+        pytest.skip("DB not migrated")
+    yield eng
+    await eng.dispose()
+
+
+@pytest_asyncio.fixture
+async def db(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
+    """A session inside an outer transaction that is rolled back, so nothing a
+    test writes (commits included) survives it."""
+    async with engine.connect() as conn:
+        outer = await conn.begin()
+        session = AsyncSession(
+            bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False
+        )
+        try:
+            yield session
+        finally:
+            await session.close()
+            await outer.rollback()
+
+
+@contextmanager
+def count_statements(db: AsyncSession) -> Iterator[list[str]]:
+    """Collect every SQL statement run on `db`'s engine inside the block, from
+    any session. A fixed-query-count test runs the job at two sizes and
+    compares `len()` of the two lists. Savepoint statements are the `db`
+    fixture's transaction plumbing, not queries, so they are left out."""
+    statements: list[str] = []
+
+    def tap(conn: Any, cursor: Any, statement: str, *_: Any) -> None:
+        if not statement.lstrip().upper().startswith(("SAVEPOINT", "RELEASE", "ROLLBACK")):
+            statements.append(statement)
+
+    sync_engine = db.bind.sync_engine
+    sa_event.listen(sync_engine, "before_cursor_execute", tap)
+    try:
+        yield statements
+    finally:
+        sa_event.remove(sync_engine, "before_cursor_execute", tap)
+
+
+# Rows for real-Postgres tests. Dates sit in 2090 so rows left in a shared dev
+# database never touch live windows, caps or feeds.
+_factory_counter = itertools.count(1)
+
+
+def at_tallinn(y: int, m: int, d: int, hh: int = 12, mm: int = 0, ss: int = 0) -> datetime:
+    return datetime(y, m, d, hh, mm, ss, tzinfo=TALLINN_TZ)
+
+
+EVENT_START = at_tallinn(2090, 2, 1, 19)
+EVENT_END = at_tallinn(2090, 2, 28, 22)
+
+
+class Factory:
+    """Flushed rows on the `db` session: organizers, venues, events, claims."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.db = session
+
+    async def organizer(self, name: str | None = "Acme Events") -> Organizer:
+        n = next(_factory_counter)
+        org = Organizer(email=f"factory-{n}-{os.getpid()}@example.com", name=name)
+        self.db.add(org)
+        await self.db.flush()
+        return org
+
+    async def venue(self, organizer: Organizer, name: str = "Kultuurikatel") -> Venue:
+        venue = Venue(organizer_id=organizer.id, name=name)
+        self.db.add(venue)
+        await self.db.flush()
+        return venue
+
+    async def event(
+        self,
+        *,
+        submitted_by: Organizer | None = None,
+        starts_at: datetime = EVENT_START,
+        ends_at: datetime | None = EVENT_END,
+        title: str = "Promo Show",
+        venue_name: str | None = None,
+        status: str = "published",
+        **kw: Any,
+    ) -> Event:
+        """`title` gets a unique suffix; pass `title_orig` for an exact title
+        (several dates of one series)."""
+        n = next(_factory_counter)
+        ev = Event(
+            slug=f"factory-{n}-{os.getpid()}",
+            title_orig=kw.pop("title_orig", f"{title} {n}"),
+            starts_at=starts_at,
+            ends_at=ends_at,
+            venue_name=venue_name or f"Hall {n}",
+            status=status,
+            submitted_by_organizer_id=submitted_by.id if submitted_by else None,
+            **kw,
+        )
+        self.db.add(ev)
+        await self.db.flush()
+        await self.db.refresh(ev)  # series_key is trigger-maintained
+        return ev
+
+    async def publisher_claim(
+        self, event: Event, organizer: Organizer, *, dormant: bool = False, status: str = CLAIM_STATUS_APPROVED
+    ) -> Claim:
+        n = next(_factory_counter)
+        source = Source(slug=f"factory-src-{n}-{os.getpid()}", kind="html", config={})
+        self.db.add(source)
+        await self.db.flush()
+        pub = Publisher(source_id=source.id, external_id=str(n), name=f"Pub {n}")
+        self.db.add(pub)
+        await self.db.flush()
+        self.db.add(EventSource(event_id=event.id, source_id=source.id, publisher_id=pub.id))
+        claim = Claim(
+            organizer_id=organizer.id,
+            kind=CLAIM_KIND_PUBLISHER,
+            publisher_id=pub.id,
+            status=status,
+            proof_token="tok",
+            dormant=dormant,
+        )
+        self.db.add(claim)
+        await self.db.flush()
+        return claim
+
+    async def series_claim(
+        self, event: Event, organizer: Organizer, *, dormant: bool = False, status: str = CLAIM_STATUS_APPROVED
+    ) -> Claim:
+        claim = Claim(
+            organizer_id=organizer.id,
+            kind=CLAIM_KIND_SERIES,
+            event_series_key=event.series_key,
+            status=status,
+            proof_token="tok",
+            justification="mine",
+            dormant=dormant,
+        )
+        self.db.add(claim)
+        await self.db.flush()
+        return claim
+
+
+@pytest.fixture
+def make(db: AsyncSession) -> Factory:
+    return Factory(db)

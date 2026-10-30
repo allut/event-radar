@@ -1,6 +1,7 @@
 // .js extensions required: this module is also imported (transitively) by
 // functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
-import { LOCALE_EN, LOCALE_ET, LOCALE_RU } from './constants/core.js';
+import { LOCALE_ET } from './constants/core.js';
+import { LOCALE_EN, LOCALE_RU } from './_generated/sharedConstants';
 import { PERSONA_TRANSLATIONS, TRANSLATIONS } from './_generated/i18nData.js';
 import { PERSONAS_EN } from './_generated/i18nData.js';
 
@@ -41,4 +42,22 @@ export function ti(key: string, locale: string, vars: Record<string, string>): s
     str = str.replaceAll(`{${k}}`, v);
   }
   return str;
+}
+
+// Built once at module load: tn() runs per row per render (promotion lists).
+const PLURAL_RULES: Record<string, Intl.PluralRules> = {
+  [LOCALE_EN]: new Intl.PluralRules(LOCALE_EN),
+  [LOCALE_ET]: new Intl.PluralRules(LOCALE_ET),
+  [LOCALE_RU]: new Intl.PluralRules(LOCALE_RU),
+};
+
+/** Plural-aware ti(): picks `{key}_{category}` by the locale's plural rule
+ * for `count` (Intl.PluralRules). Each locale's catalogue holds every
+ * category its rule can return: `one`/`other` for en and et, plus
+ * `few`/`many` for ru. `vars` fills the placeholders, so pass the
+ * locale-formatted count in it. */
+export function tn(key: string, locale: string, count: number, vars: Record<string, string>): string {
+  const loc = locale in TRANSLATIONS ? locale : LOCALE_EN;
+  const category = PLURAL_RULES[loc].select(count);
+  return ti(`${key}_${category}`, loc, vars);
 }

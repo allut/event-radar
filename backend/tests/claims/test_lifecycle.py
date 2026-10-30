@@ -24,14 +24,13 @@ from app.claims.lifecycle import (
 from app.claims.target_resolution import ClaimTarget
 from app.claims.verification import VerificationResult
 from app._generated.shared_constants import (
+    CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
     CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
-    CLAIM_EXPIRY_DAYS,
-)
-from app.constants.claims import (
     CLAIM_DISCOVERY_STATUS_CLAIMED,
     CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
+    CLAIM_EXPIRY_DAYS,
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
@@ -41,6 +40,8 @@ from app.constants.claims import (
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
     CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+)
+from app.constants.claims import (
     CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
     ERROR_CLAIM_NOT_CLAIMABLE,
@@ -375,6 +376,7 @@ class TestCreateClaim:
                 await create_claim(mock_db, AsyncMock(), organizer, event_id=10, justification="   ")
 
         assert exc.value.status_code == 422
+        assert exc.value.code == CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED
         mock_db.add.assert_not_called()
 
     @pytest.mark.asyncio
@@ -559,7 +561,7 @@ class TestRunVerificationSsrfGuard:
         raise out of verification, and not be fetched."""
         from app.claims.lifecycle import _run_verification
         from app.claims.verification import series_claim_result
-        from app.constants.claims import CLAIM_KIND_PUBLISHER
+        from app._generated.shared_constants import CLAIM_KIND_PUBLISHER
 
         es = fake_event_source(publisher_id=33, source_slug=SOURCE_SLUG_PILETILEVI)
         event = make_event()

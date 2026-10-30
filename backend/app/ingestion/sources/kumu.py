@@ -167,10 +167,11 @@ class KumuAdapter(HtmlListingAdapter):
 
     def parse_date(self, card: dict[str, Any]) -> datetime | None:
         try:
-            naive = datetime.strptime(card.get("date_str") or "", KUMU_DATE_FORMAT)
+            return datetime.strptime(
+                card.get("date_str") or "", KUMU_DATE_FORMAT
+            ).replace(tzinfo=TALLINN_TZ)
         except ValueError:
             return None
-        return naive.replace(tzinfo=TALLINN_TZ)
 
     def extract_localized_text(
         self, soup: BeautifulSoup

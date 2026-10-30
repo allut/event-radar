@@ -57,6 +57,29 @@ WEBHOOK_SEEN_IDS_MAX_ENTRIES = 4096
 # so a stale click carries low risk.
 UNSUBSCRIBE_TOKEN_TTL_DAYS = 365
 
+# Email ad consent (app/email/consent.py). Bump the version only for a material
+# change to what the toggle's wording covers: the bump resets everyone to off.
+EMAIL_AD_CONSENT_WORDING_VERSION = 1
+CONSENT_SOURCE_SETTINGS = "settings"
+CONSENT_SOURCE_EMAIL_LINK = "email_link"
+CONSENT_SOURCE_EMAIL_LINK_UNDO = "email_link_undo"
+CONSENT_SOURCE_DIGEST_UNSUBSCRIBE = "digest_unsubscribe"
+CONSENT_SOURCE_WORDING_CHANGE = "wording_change"
+CONSENT_SOURCE_ACCOUNT_DELETION = "account_deletion"
+VALID_CONSENT_SOURCES = frozenset(
+    {
+        CONSENT_SOURCE_SETTINGS,
+        CONSENT_SOURCE_EMAIL_LINK,
+        CONSENT_SOURCE_EMAIL_LINK_UNDO,
+        CONSENT_SOURCE_DIGEST_UNSUBSCRIBE,
+        CONSENT_SOURCE_WORDING_CHANGE,
+        CONSENT_SOURCE_ACCOUNT_DELETION,
+    }
+)
+ERROR_AD_CONSENT_UNAVAILABLE = (
+    "Email ads can only be turned on while the digest and Sponsored slots are on."
+)
+
 # Contact form (routers/contact.py)
 CONTACT_NAME_MAX_LEN = 100
 CONTACT_MESSAGE_MAX_LEN = 2000

@@ -7,9 +7,13 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **`frontend/src/hooks/useSeoMeta.ts::useSeoMeta` sets every route's `<title>`, `<html lang>` and default `noindex`.** Landing, `/explore`, `/events/:id` and `/faq` pass `indexable: true`. That adds OG tags, a self-referential canonical and hreflang alternates (`en`/`et`/`ru` + `x-default`).
 - **`/faq` turns `indexable` on only once its `FaqDoc` has loaded.** Until then it stays `noindex` with no canonical, which the prerender's readiness wait relies on.
 - **Every other route goes through the thin `useStaticSeoMeta` wrapper.**
+- **The legal pages (`/privacy`, `/terms`, `/ranking`, `/organizer-terms`) stay `noindex`.** They aren't prerendered, in the sitemap or in the robots allowlist. The draft Organizer terms must never become indexable by accident.
+- **An unfiltered, default-sort `/explore?page=N` with N of 2 or more is self-canonical.** `useSeoMeta`'s `page` input appends `?page=N` to the canonical, every hreflang href and `og:url`. Page 1 stays the bare URL, so the prerender's canonical checks are unchanged.
+- **A filtered, sorted or searched Explore view passes no `page`.** Its canonical stays `/explore` on every page.
+- **The canonical follows the URL after a past-end clamp.** Explore holds `indexable` off while a page is empty but `total` is positive, and while a previous page shows as placeholder data. There is no JS `noindex` and no empty state for a past-end page.
 - **`buildSeoMeta` is the pure builder behind the hook.** Tests assert on plain tag and link data instead of `react-helmet-async`'s DOM side effects.
 - **`frontend/src/components/SeoTags/` is a thin, untested `react-helmet-async` render shell.** The unit tests for `buildSeoMeta` and the structured-data builders cover the data it renders.
-- **Every JSON-LD body goes through `frontend/src/lib/jsonLd.ts::serializeJsonLd()`**, which escapes each `<` to `<`. `SeoTags` and the prerender's change-marker re-save both use it. A bare `JSON.stringify` would let event text containing `</script` break out of the tag.
+- **Every JSON-LD body goes through `frontend/src/lib/jsonLd.ts::serializeJsonLd()`**, which escapes each `<` to `\u003c`. `SeoTags` and the prerender's change-marker re-save both use it. A bare `JSON.stringify` would let event text containing `</script` break out of the tag.
 
 ## Structured Data
 
@@ -20,9 +24,12 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **`priceCurrency` falls back to `DEFAULT_CURRENCY`.** A free event can lose its currency at ingest, and the validator requires `priceCurrency` once `lowPrice` is present. Dropping it would silently cost the offer its rich-result eligibility.
 - **`image` falls back to the same asset as `og:image`.** The two must never pick different fallbacks.
 - **`buildWebsiteJsonLd` (Landing) carries only `name`, `url` and `inLanguage`.**
-- **`buildExploreItemListJsonLd` emits one `ListItem` per rendered `/explore` card**, with `position` matching render order. Each `item` is the full `buildEventJsonLd` payload, so there is one field-mapping policy.
+- **`buildExploreItemListJsonLd` emits one `ListItem` per event on the current `/explore` page**, with `position` 1 to n in render order, the same signed in or out (the sign-up strip is not an item). Each `item` is the full `buildEventJsonLd` payload, so there is one field-mapping policy.
 - **Each list `item` adds a top-level `url` to the locale-matched detail page.** It is distinct from `offers.url`, which is the external ticket link.
 - **The `ItemList` omits `numberOfItems` and `itemListOrder`.** schema.org defines `numberOfItems` as the count for the entire list, which would be wrong on a one-page snapshot, and Google doesn't ask for either.
+- **The `ItemList` never includes the Sponsored slot.** `Explore` passes `events` (organic rows) only, so `position` stays contiguous 1 to n and a paid placement never poses as a result. The slot tile is rendered from `sponsored_slot`, outside `events`.
+- **Paid links carry `rel="sponsored"`.** The slot card's stretched link is `sponsored` and its ticket link `sponsored noopener noreferrer` (`SPONSORED_LINK_REL`, `SPONSORED_TICKET_REL`). The promoted event's own page, its JSON-LD, the sitemap and the `?page=N` canonicals are unchanged.
+- **The prerender never requests a slot.** `Explore` omits `sponsored_slot=true` while `isPrerenderRender()` (`PRERENDER_RUNTIME_FLAG`) is true, so no snapshot freezes a paid tile. `validateSnapshotStructure` is the backstop (see Structural Checks).
 - **`/faq` emits no JSON-LD.**
 
 ## Build-Time Prerender
@@ -57,6 +64,7 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 
 - **`npm run build` copies `dist/index.html` to `dist/app-shell.html` before the prerender runs.** The Estonian Landing snapshot later overwrites `dist/index.html`, and the copy exists even if the script dies midway.
 - **`frontend/functions/[[path]].ts` serves `app-shell.html` for every route that isn't prerendered.** `/saved`, `/settings` and the rest get the untouched CSR shell, never a mismatched snapshot. Its fetch-first order is in [backend-ops.md](backend-ops.md)'s SPA Fallback section.
+- **`/explore?page=N` with N of 2 or more also gets the shell**, in all three locales. The page-1 snapshot would carry a static page-1 canonical and `ItemList`. Page 1, a malformed `page` and any other query string keep the snapshot. Only page 1 is prerendered, and the sitemap has no page entries by design.
 
 ### Change Detection and Copy-Forward
 
@@ -79,8 +87,12 @@ What's in here: meta tags and hreflang, JSON-LD structured data, the build-time 
 - **First real Cloudflare burst (2026-10-03, 5,442 routes, `PRERENDER_RENDER_BUDGET_MINUTES=10`):** three rounds rendered 1,012, 1,012 and 334 routes, each validating clean. Rendering ran at about 100 routes a minute, and the rounds took about 16, 20 and 11 minutes.
 - **Resumed rounds spend 5–6 minutes in copy-forward and about 3 validating.** Round 1's copy-forward took 84 s. Each round logs `prerender: peak RSS`, which covers the node process only, not Chromium.
 - **Single-round burst (2026-10-10, 5,610 routes, Node 24):** copy-forward of 4,710 routes took 4 min 7 s, rendering 900 took 8 min 16 s, validation about 3 min. Peak RSS was 1,582 MiB.
+- **Fused change detection (2026-10-12, 5,685 routes):** classify plus copy-forward of 5,472 routes took 3 min 34 s, about 39 ms a route against 52 ms on 2026-10-10. Finalize was 85 s of that; fetch dominates. Peak RSS was 1,242 MiB.
+- **A release that changes asset hashes skips JSDOM for no copy.** That run logged 0/5,472. The fast path pays off on a rebuild of the same commit.
 - **Classify and copy-forward share one pool.** Each route's live HTML is written and released as soon as its fetch returns, so fetches overlap JSDOM work and the round never holds every body at once.
 - **`finalizeSnapshotHtml` skips JSDOM for a copy that is already final.** `isAlreadyFinalized` string-checks that the `<head>` asset tags equal the shell's JSDOM-serialized tags, in order, and that `<html>` has no `data-theme`. Any mismatch takes the JSDOM path. A JSDOM pass costs 25–40 ms per page; the check costs about 0.01 ms.
+- **Eager PUTs on a `done` round stalled its summary (2026-10-12).** About 5.7k chain-state PUTs at roughly 12 a second held `wrote` → `round summary` for 1 min 55 s, then were deleted. Held PUTs fix that; see Chain-State Manifest's Write Path.
+- **Each round logs `prerender: chain-state drain took` and `chain-state finalize … took`.** They split the end-of-build time between the PUT drain and the index write or prefix delete.
 - **Each round logs a `prerender: change detection took` line.** It splits fetch time (summed across workers) from finalize time and counts the copies that skipped JSDOM.
 - **The other cost trims stay in place.** `extractChangeMarker` regex-scans the first JSON-LD script instead of re-parsing the DOM, and the live-API staleness check runs for the default locale only.
 
@@ -127,7 +139,10 @@ An optimization layer over the `RoundMarker` chain. It gives resumed rounds per-
 - **A target earns an entry only with finalized HTML in hand**: on copy-forward, or after a successful `snapshotTarget` render. `persistChainStateTarget` writes the index entry only after the content PUT succeeds.
 - **The stale-fallback write never earns an entry.** Budget-skipped content still owes a real render; marking it resolved would skip it for the rest of the burst.
 - **A target already sourced from the manifest isn't re-PUT.**
-- **Content objects are PUT eagerly; the index is PUT once**, at the end of `main()` beside `commitRoundMarker`. Concurrent read-modify-write on one shared object would race. PUTs drain with `Promise.allSettled` after the pools.
+- **The index is PUT once**, at the end of `main()` beside `commitRoundMarker`. Concurrent read-modify-write on one shared object would race.
+- **Content PUTs start held (`frontend/scripts/prerender.ts::createChainStatePersister()`).** Only a `continuing` round's chain state is read back, and a `done` round deletes the prefix, so a `done` round makes no PUTs. A held target keeps no HTML; its bytes already sit in `dist/`.
+- **`frontend/src/lib/prerenderChain.ts::predictRoundContinues()` releases them after change detection** when the render queue exceeds the budget × `PRERENDER_ROUTES_PER_MINUTE` × `PRERENDER_CONTINUE_PREDICTION_MARGIN`. Released PUTs re-read `dist/` and overlap rendering, and later records PUT straight from memory.
+- **After rendering, the real marker status decides.** A `continuing` round flushes anything still held; a `done` round drops it. A wrong `done` guess costs only that late flush, so the margin sits below 1. PUTs drain with `Promise.allSettled` before the round summary.
 
 ### Cleanup
 
@@ -165,8 +180,9 @@ An optimization layer over the `RoundMarker` chain. It gives resumed rounds per-
 - **`validateSnapshotStructure` requires a non-default `<title>` and a canonical on `PRODUCTION_ORIGIN`.** It also needs every `SEO_HREFLANG_CODES` alternate, `<meta name="robots" content="index, follow">`, and exactly one valid JSON-LD script.
 - **The JSON-LD check depends on `kind`: `'event'`, `'website'`, `'list'` or `'page'`.** `'page'` (`/faq`) requires zero JSON-LD scripts instead of one.
 - **`assertEventJsonLd` checks Google's required Event fields** (`name`, `startDate`, `location`) and its "image or offers" recommendation. It never checks `eventStatus`, `organizer` or `offers.availability`, matching the builder. Price fields are checked only once `lowPrice` is present.
+- **`validateSnapshotStructure` fails any snapshot containing the Sponsored slot marker (`SPONSORED_SLOT_ATTR`).** The prerender sets `PRERENDER_RUNTIME_FLAG` so Explore never requests a slot, and the validator catches a regression of that gate.
 - **`assertListJsonLd` checks the `ItemList` shape, `position` running exactly `1..n`, and each `item` through `assertEventJsonLd`.** Each `item.url` must be unique, on `PRODUCTION_ORIGIN` and fragment-free, and each `item.image` present.
-- **The `≥3 items` check is skipped when the live catalog itself is thinner.** `fetchLiveExploreCount` re-queries `GET /explore` and subtracts one for the anonymous upsell card (`Explore.tsx`'s `gridItems`). Prerender is always anonymous, so the raw total would fail every 3-event catalog.
+- **The `≥3 items` check is skipped when the live catalog itself is thinner.** `fetchLiveExploreCount` re-queries `GET /explore` and returns `min(total, BROWSE_PAGE_SIZE)`. The anonymous sign-up strip sits above the grid and takes no event's slot, so the snapshot lists every fetched event.
 - **A literal `<` in a JSON-LD body fails the snapshot** (`ParsedSnapshot.jsonLdRaw`). A full `</script` breakout truncates the body and fails the JSON parse instead.
 
 ### Staleness Checks

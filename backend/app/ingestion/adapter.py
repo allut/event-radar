@@ -200,6 +200,18 @@ def coords_in_tallinn(lat: float, lng: float) -> bool:
     return lat_min <= lat <= lat_max and lng_min <= lng <= lng_max
 
 
+def coords_in_event_area(lat: float, lng: float, *, out_of_area: bool) -> bool:
+    """Return True when a source coord may be stored on an event.
+
+    An in-area event takes the Tallinn bbox, the gate geocode's self-heal applies
+    (anything outside it is NULLed again); an out-of-area event keeps the looser
+    Estonia bbox. Every ingest-side coord write goes through here (#635).
+    """
+    if out_of_area:
+        return coords_in_estonia(lat, lng)
+    return coords_in_tallinn(lat, lng)
+
+
 async def insert_normalized_event(
     db: AsyncSession,
     source: Source,

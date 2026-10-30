@@ -24,6 +24,7 @@ Each stage runs as a scheduled job. [backend-ops.md](backend-ops.md)'s Scheduled
 - **Organizer self-submission has no polling adapter.** `POST /organizer/events` inserts on the `user_submission` source through `app/ingestion/adapter.py::insert_normalized_event()`. See [organizer-portal.md](organizer-portal.md).
 - **Telliskivi, Kultuurikatel and Fotografiska are `enabled=False`** in `app/ingestion/registry.py`. Telliskivi's data was unfixably mis-dated. The other two wait for a rewrite onto `HtmlListingAdapter`.
 - **Eventbrite was never added.** Its API closed to non-partners before integration.
+- **The hourly run ingests up to `INGEST_SOURCE_CONCURRENCY` (3) sources at once** (`app/ingestion/jobs.py::ingest_all_enabled`). Each source keeps its own session and its own host's rate limit.
 
 ### Fienta Detail Merge
 
@@ -35,7 +36,7 @@ For each new Fienta event, one not yet in `event_sources`, the adapter also fetc
 |---|---|
 | `venue_name` | Listing wins; detail fills when missing |
 | `venue_address` | The side carrying a 5-digit postal code; else listing wins, detail fills when empty |
-| `lat` / `lng` | Detail JSON-LD only, gated to Estonia by `coords_in_estonia` |
+| `lat` / `lng` | Detail JSON-LD only, gated by `adapter.coords_in_event_area`: the `TALLINN_REGION_BBOX` that geocode self-heal applies for in-area events, the Estonia bbox for `is_out_of_area` ones in refetch (#635) |
 | `price_min` / `price_max` | Listing's `app/ingestion/pricing.py::parse_price_from_string` baseline; a present detail offer price overrides each bound |
 
 - **A missing `_detail` degrades to listing-only.** The merge never blocks ingest on a failed detail fetch.
@@ -126,6 +127,20 @@ The LLM classifies each event against a fixed category and vibe taxonomy (`VALID
 - **`feedback_signal` maps the raw `[-1, 1]` feedback score to `[0, 1]` before weighting**, as `(fb + 1.0) / 2.0`.
 - **Signed-out reads redistribute the dropped feedback weight.** Explore without a session has no feedback and no persona. The three remaining differentiating terms scale by `1/0.80` to absorb feedback's 0.20.
 
+### Ranking Disclosure
+
+The public `/ranking` page states the signals and their order, never the weights. Its copy is `frontend/src/content/legal/ranking.{en,et,ru}.ts`; `CONTEXT.md` defines the **Ranking disclosure**.
+
+- **Edit the page and bump `lastUpdated` in all three locales for any of these:**
+  - a new or removed score term;
+  - a change in weight order;
+  - a new publish-gate criterion;
+  - a new hard exclude;
+  - a new Daily 5 diversity or cooldown rule.
+- **A reweight that keeps the order needs no page edit.**
+- **Two tests catch the order drift.** `backend/tests/ranking/test_ranking_disclosure_sync.py` sorts `SCORE_WEIGHT_*` and `SCORE_WEIGHT_ANON_*` into tiers and compares them with `ranking_tiers` in `shared/app-config.json`. `content/legal/ranking.test.ts` checks each locale's Relevance lists against the same tiers.
+- **A changed tier means editing `ranking_tiers`, then the page copy,** then `python scripts/generate_shared.py`.
+
 ## Feedback Decay
 
 - **Feedback decays as `FEEDBACK_DECAY_BASE ** days_since_feedback`** (0.9 per day, `app/ranking/score.py`). Recent signals weigh more than old ones.
@@ -135,6 +150,7 @@ The LLM classifies each event against a fixed category and vibe taxonomy (`VALID
 
 - **The builder scores events starting in the next 14 days and writes `daily_feeds`.** MMR-lite diversity caps each category at `DAILY_5_MAX_PER_CATEGORY` (2).
 - **Its candidate window uses the publish gate's `event_not_ended_filter()`.** An ongoing event stays a candidate until it ends.
+- **A user with no feedback is scored from their persona mix alone.** `_SharedFeedContext.persona_only_scores` keeps one score list per mix, so later users with the same mix reuse it. Scoring yields to the event loop between users.
 
 ### Series Collapse
 
@@ -201,7 +217,7 @@ The LLM classifies each event against a fixed category and vibe taxonomy (`VALID
 
 ### Venue-Name Extract
 
-- **An LLM moves street addresses glued into `venue_name` into `venue_address`.** A Python prefilter (digit, comma, direction keyword, length) sends only suspect names to the LLM.
+- **An LLM moves street addresses glued into `venue_name` into `venue_address`.** A prefilter (ASCII digit, comma, direction keyword, length), pushed into SQL with a collation-independent twin, sends only suspect names to the LLM.
 - **Decisions are cached in `llm_calls` by content hash.** Fresh calls per run are capped at `VENUE_EXTRACT_MAX_FRESH_LLM_CALLS_PER_RUN`.
 - **A "no address" answer stamps `venue_extract_attempted_at`.** The event is skipped for `VENUE_EXTRACT_RETRY_INTERVAL_DAYS`, so it can't starve newer candidates.
 
@@ -244,7 +260,7 @@ The LLM classifies each event against a fixed category and vibe taxonomy (`VALID
 - **A detail page answering 404 or 410 (`REFETCH_GONE_STATUS_CODES`) means the source removed the event.** It isn't counted in `failed`. The run stamps `events.source_gone_since` on the first sighting and marks the event synced, so it moves to the back of the queue.
 - **Any other status, a `RequestError` or an SSRF-guard `ValueError` is transient.** It counts in `failed` and leaves the event untouched.
 - **A later successful fetch clears `source_gone_since`.**
-- **An event gone for `REFETCH_GONE_CANCEL_AFTER_DAYS` is cancelled** with `cancellation_reason = source_gone`, through `app/events/cancellation.py::cancel_event_and_resolve_reports()` like every other cancel path. The wait keeps one bad response from the source from cancelling a live event.
+- **An event gone for `REFETCH_GONE_CANCEL_AFTER_DAYS` is cancelled** with `cancellation_reason = source_gone`, through `app/events/cancellation.py::cancel_events_and_resolve_reports()`, the batch form of every other cancel path. One UPDATE resolves the open reports of every event cancelled in a run, and `send_report_resolution_emails_bulk()` sends the reporter emails on one client. The wait keeps one bad response from the source from cancelling a live event.
 - **A dedup representative with a live sibling is spared** (`no_live_dedup_sibling_clause()`) and retried next run.
 - **Cancellations run once after the host walk, in one batched sibling query.** The run commits, then sends the reporter emails, so no one is told about a cancel that rolled back. The summary counts `source_gone` and `cancelled_gone`.
 
@@ -255,27 +271,91 @@ Four user-facing surfaces read `published` events, plus two auxiliary public rea
 ### Daily 5 Feed
 
 - **`GET /feed` serves the pre-built `daily_feeds` snapshot.** It requires a session. See Daily 5 Builder.
+- **With `PROMOTIONS_SLOTS_ENABLED` on, a non-stale response may carry `sponsored_slot`** after `events`: the card data, `advertiser` and `explanation = "daily5"`. The key is absent when there is no slot. The five in `events` are identical with or without it.
+
+### Daily 5 Sponsored slot
+
+- **The slot is one separate card after a full five, never one of the five.** `build_daily_feeds` picks it only for users who got `DAILY_5_COUNT` events, after persisting the five, so the five can't depend on it. `app/promotions/daily5.py` owns the whole flow.
+- **The pick stores a row in `daily_sponsored_slots`** (one per user per Tallinn day), apart from `daily_feeds` so no consent-free path can pick it up. It is pruned on `DAILY_FEEDS_RETENTION_DAYS`. A rebuild keeps today's row.
+- **Eligibility is the shared fill gate plus the Daily 5 context.** The event starts within `DAILY_5_LOOKAHEAD_DAYS` (14), the builder's window, and is never matched to the five's categories.
+- **Per user, the pick skips** the five's events, dedup groups and series, anything the viewer's own signals exclude (`fill.viewer_excluded_promotions`), and any Promotion stored for them in the last `PROMOTION_DAILY5_COOLDOWN_DAYS` (3) days. The pick is the lowest `rotation_pick` hash, seeded with user id and Tallinn date.
+- **The cooldown never relaxes.** When nothing survives, the slot collapses and no row is written.
+- **The read path re-runs the gate on the stored pick.** If it fails, the next eligible Promotion in the same user-day order replaces it: `is_swap` is set and `replaced_promotion_id` records the old one. The replacement sticks for the day. The same bans apply to it.
+- **The swap happens once.** If nothing is left, or the replacement later fails too, `promotion_id` becomes NULL and the collapse sticks. The write is a compare-and-set on the stored Promotion, so two requests can't both swap. A digest already sent is unaffected.
+- **Bots get no slot, and a stale feed (a prior day's) never carries one.**
+- **The daily build writes each live Promotion's gate outcome** (`shown` or `paused`, with the `PROMOTION_NOT_SHOWING_*` reason) to `promotion_daily_stats` for today. With the flag off the rows say `slots_disabled` and nothing is picked.
+- **`daily5_placed` counts nightly picks and swaps** through `counters.bump()`. The build flushes the dict at its end.
+- **Daily 5 reach is `promotions.daily5_reach`,** the distinct users stored for the window. One `UPDATE` recomputes it nightly for every window that has started and ended no earlier than yesterday. A window's value is frozen once it is two nights past its end.
+- **The build keeps a fixed query count:** the live Promotions and their gate load once per run, and each user page adds a fixed number of queries (cooldown, exclusions, the five's events, one insert). `tests/promotions/test_daily5_slot.py` asserts it as users and Promotions grow.
 
 ### Explore
 
 - **`GET /explore` (`app/routers/browse.py`) is optional-auth** (`get_optional_user`). Signed-out callers get the signed-out weights; signed-in callers get personalization. It is rate-limited by `RATE_LIMIT_BROWSE`.
 - **It has two execution paths.** `_browse_sql_path` serves the non-personalized `date`/`price`/`quality` sorts in SQL. `_browse_scored_path` reuses `ranking/score.py` for `for_you` or `relevance`, since persona affinity and the feedback soft-filter can't be a SQL `ORDER BY`.
 - **`q` is capped at `BROWSE_QUERY_MAX_LEN`.** `_keyword_filter` matches `%...%` against two trigram GIN indexes, so an unbounded string is cheap to send and expensive to scan.
-- **Only the SQL `date` sort uses a keyset cursor**, on `(starts_at, id)`. A cursor request returns `next_cursor` and skips `offset` and `total`. Other paths stay on OFFSET and ignore the cursor.
-- **Paginate any new list output the same way:** `limit`/`offset` with a cap (`BROWSE_PAGE_SIZE`, `BROWSE_MAX_PAGE_SIZE`).
+- **Both paths page on `limit`/`offset` and return an exact `total` on every request.** There is no cursor. Each SQL sort ends in an `id` tie-breaker, so tied rows keep one order across pages. The frontend shows a numbered pager at `BROWSE_PAGE_SIZE`.
+
+### Digest Sponsored slot
+
+- **The digest carries the slot only when four things hold:** `PROMOTIONS_SLOTS_ENABLED` is on, the user's `email_ad_consent` is on, they have `DAILY_5_COUNT` picks that still load, and a `daily_sponsored_slots` row exists for today. `app/promotions/digest_slot.py::load_digest_slots()` reads it, and `send_daily_digests` queries nothing while the flag is off.
+- **The digest never picks a Promotion.** It re-runs the gate on the stored one and drops the slot if it fails; there is no swap. The block sits below the picks and never touches the subject or preheader. Its event links carry `?ref=digest-ad`.
+- **Reads are fixed-count per page:** one for the stored rows, one for the Promotions, and the gate's five. `send_digest_email` bumps `digest_sent` after a successful send.
+- **There is no open pixel,** and the provider's open tracking stays off.
+
+### Explore Sponsored slot
+
+- **The slot sits beside the organic results and never inside the ranking.** `GET /explore?sponsored_slot=true` opts in; the client never sends it under the prerender. Without the param the response is exactly the organic response, with no slot keys.
+- **The fill gate lives in `app/promotions/fill.py` and nowhere else.** A Promotion may fill a slot only when all of these hold, each failing clause with a named `PROMOTION_NOT_SHOWING_*` reason:
+  1. `PROMOTIONS_SLOTS_ENABLED` is on (`slots_disabled`).
+  2. The user agent isn't a self-declared bot, matched by `PROMOTION_BOT_USER_AGENT_RE` (`bot_user_agent`).
+  3. Status is `paid` and the Tallinn date is inside the window (`not_paid`, `outside_window`).
+  4. The event is public, canonical and not ended (`event_not_public`, `event_not_canonical`, `event_ended`), using the shared `public_event_filter()`, `canonical_event_filter()` and `event_not_ended_filter()`.
+  5. The Organizer still owns the event, through `resolve_owner_ids()`, so a dormant or revoked claim pauses it (`organizer_not_owner`).
+  6. `promotion_restriction` is `none` or the restriction the Promotion's Restriction clearance covers (`restriction_unassessed` for `null`, `restriction_flagged` otherwise).
+- **Explore adds its facets.** The event must pass every active facet and `q` through `facet_conditions()`, the builder the organic query uses, joined to the classification like the organic query (`filters_mismatch`). The sort doesn't matter, and `for_you` isn't a facet.
+- **The classifier sets `events.promotion_restriction` on every classification, the way it sets `explicit`.** Values are `none` or one of `tobacco`, `gambling`, `alcohol`, `political`, `weapons`. A valid answer overwrites, so a false positive can clear. A missing or malformed answer keeps the old value, and `null` stays unassessed.
+- **The field never feeds the publish gate or organic listing.** Only fill gate clause 6 reads it. The prompt is in `app/llm/prompts.py`.
+- **Organizer and claim edits re-assess it** through `app/promotions/restriction.py::reassess_after_edit()`, a stand-alone prompt (`LLM_PROMOTION_RESTRICTION_PROMPT_TEMPLATE`). An LLM outage keeps the previous value.
+- **A newly restricted event pauses its scheduled or live Promotion through the gate, and `notify_newly_restricted()` emails `CONTACT_TO_ADDRESS` with a deep link.** It reads in one query per pass and sends on one Resend client behind `PROMOTION_EMAIL_SEND_CONCURRENCY`. An uncleared Promotion is notified; one already cleared for that restriction is not.
+- **`backend/scripts/backfill_promotion_restriction.py --yes` assesses every owned, not-ended, unassessed event once.** It is idempotent: assessed events are skipped, and an unanswered one is retried next run. Fan-out is bounded by `LLM_BATCH_FANOUT_CONCURRENCY`.
+- **Reports on an event with a live `paid` Promotion are "Promoted".** `GET /admin/reports` sorts them first (`is_promoted`), and the report-notify subject reads "New report on a promoted event". A report never pauses a Promotion.
+- **The gate reads in bulk.** `evaluate_gate()` runs a fixed number of queries whatever the number of live Promotions.
+- **Page 1 needs at least `PROMOTION_EXPLORE_MIN_ORGANIC` (6) organic results.** A slot also never repeats what page 1 already shows: the event, its dedup group or its series key.
+- **Viewer signals only exclude a Promotion, never select one.** A Promotion is skipped when the viewer disliked the event or its dedup group, reported, bookmarked or liked it. The next in rotation order fills the slot, or it collapses (`without_viewer_excluded()`, two queries). The disliked-category filter is not applied.
+- **Rotation is `sha256(seed:promotion_id)` order, equal share.** The seed is `user_id:tallinn_date` signed in, so a user-day is stable, and a random token per request signed out. Persona and feedback never touch it.
+- **With a slot, page 1 returns `limit - 1` organic rows plus `sponsored_slot`** (the card data, `advertiser`, `explanation` = `filters`|`none`, and `tile` = `PROMOTION_EXPLORE_SLOT_TILE`). **Later pages start one organic row earlier** (`offset - 1`) and echo the requested `offset`, so no result is skipped or repeated.
+- **`page1_has_slot` is on every opted-in response, on any page.** It depends only on the eligible set and page 1's organic ids, never on which Promotion a random signed-out pick would choose. `total` stays the organic count, and the pager uses `ceil((total + 1) / limit)` pages when the flag is true.
+- **Organic order is the same with and without Promotions.** The slot only moves the page window by one row. It never reads or writes feedback or the persona.
+- **Delivery counters are anonymous per-day totals in `promotion_daily_stats`** (`app/promotions/counters.py`). `bump()` adds to a module-level dict, so a request never waits on the database.
+- **`flush()` writes the dict as one bulk upsert that adds to the stored totals.** It runs every `PROMOTION_COUNTER_FLUSH_SECONDS` (60) from the `flush_promotion_counters` job and once on shutdown. A crash loses at most a minute, and a failed flush puts the counts back.
+- **Four counters go through the in-process dict:** `explore_served` when page 1 fills a slot, `daily5_placed` when a Daily 5 slot is placed, `web_opens` when `GET /events/{id}?ref=ad` hits an event whose paid Promotion covers today, and `slot_dislikes` when `POST /feedback` sends `signal=dislike` with `ref=ad` (the feedback row is still written).
+- **`digest_opens` counts `ref=digest-ad` the same way as `web_opens`,** and `digest_sent` counts each digest sent with the slot.
+- **The two `?ref=` opens count once per `client_key()`, Promotion, column and Tallinn day, and never for a bot user agent** (`counters.py::first_ref_hit`, `fill.py::is_bot_user_agent`). The dedup set lives in memory for the current day. At `PROMOTION_REF_SEEN_MAX_ENTRIES` it refuses new clients until midnight and logs `promotion_ref_seen_full` once.
+- **The gate columns are written by the daily build** (see Daily 5 Sponsored slot).
+- **Counters never feed ranking, the persona or `user_event_feedback`.** No viewer identifier reaches the database; not counted: ticket clicks, total page views, viewable impressions.
+- **`GET /admin/promotions/{id}/daily-stats` returns one row per complete window day** (today is left out), with zeros where nothing was counted. It reads with one `WHERE promotion_id IN (...)` (`views.load_daily_stats`).
+
+### Pagination
+
+- **Every paged list returns `total`, `limit` and `offset` on every request.** There are no cursors, and `total` is counted every time. The envelope rule for admin lists is in [backend-ops.md](backend-ops.md)'s Pagination section.
+- **Explore's scored path ranks at most `BROWSE_RELEVANCE_CEILING` (2,000) events.** The candidate query fetches the ceiling plus one row, ordered `starts_at, id`. Below the ceiling every match is ranked; one extra row means only the soonest 2,000 are scored.
+- **An overflow sets `total_is_lower_bound: true` on the response and logs `explore_ceiling_overflow`.** The flag is set even when the filters then leave fewer rows, and is absent otherwise. `total` is the reachable count, so it drives the last page; the pager reads "… of 2,000+" and announces "of more than 2,000".
+- **The score cache keeps each ranked id list as an `array("q")`, 8 bytes per id, beside the flag.** Signed 64-bit matches the BigInteger `Event.id`. A full cache stays near 32 MB, and the entry cap and 30 s TTL are unchanged. An overflow logs once per scoring pass, not per cache hit.
 
 ### Saved Events
 
 - **`GET /feedback/events` (`app/routers/feedback.py`) lists the user's events carrying one preference signal**, most recent first. It is rate-limited by `RATE_LIMIT_FEEDBACK`.
 - **The signal must be in `PREFERENCE_SIGNALS`** (like, dislike, bookmark), not the full `VALID_SIGNALS`. Passive `view`/`click_external` rows repeat per event, up to one per UTC day.
-- **It pages by keyset cursor on `(feedback.created_at, feedback.id)`.** `offset` is still accepted for the first page.
+- **It pages by offset and returns the exact `total` on every request.** It orders by `(feedback.created_at, feedback.id)` descending, so signals given in the same instant keep one order across pages.
+- **The `/saved` route keeps the signal tab in `?signal` beside `?page`.** The default `bookmark` tab is omitted, and a tab switch starts again at page 1.
 
 ### Landing Showcase
 
 - **`GET /public/showcase` (`app/routers/public.py`) is the only user-facing list with no auth-dependent behaviour.** Explore is reachable signed out but branches on the user; the showcase never does. Never add a user-scoped field to its response.
-- **It shows `SHOWCASE_EVENT_COUNT` (6) top-quality events this week** (`SHOWCASE_WINDOW_DAYS`). A thin week widens to `SHOWCASE_FALLBACK_WINDOW_DAYS`. It is rate-limited by `RATE_LIMIT_PUBLIC` and cached in-process per locale.
-- **The SQL mirrors `_browse_sql_path`'s quality sort without any personalization.** The query is unlimited, because a LIMIT before the series collapse could drop a series' only surviving row.
+- **It returns `SHOWCASE_EVENT_COUNT` (6) top-quality events this week** (`SHOWCASE_WINDOW_DAYS`). Landing renders only the first `LANDING_SHOWCASE_PLATE_COUNT` (3), as plates. A thin week widens to `SHOWCASE_FALLBACK_WINDOW_DAYS`. It is rate-limited by `RATE_LIMIT_PUBLIC` and cached in-process per locale.
+- **The SQL mirrors `_browse_sql_path`'s quality sort without any personalization.** The query is unlimited, because a LIMIT before the series collapse could drop a series' only surviving row. It selects only the columns the collapse and sort read, and only the six winners are hydrated.
 - **After `collapse_series_duplicates()`, Python re-sorts and slices.** The keys match the SQL `ORDER BY`: narrow window first, `quality_score` descending with nulls last, then `starts_at`. The collapse survivor isn't always the row SQL ranked first.
+- **A cache miss loads once.** Concurrent cold requests wait on `_showcase_lock` and read what the first one cached.
 
 ### Landing Counts
 
@@ -303,7 +383,7 @@ A Fienta organizer here is a ticketing-source id that gets polled. It is not an 
 2. **Skip at ingest** — `fetch_raw()` drops ids in `stale_organizer_ids` from the hourly poll. The weekly sync still re-probes them, so a revival is noticed.
 3. **Revive** — an organizer returning events again has its `stale_since` entry cleared.
 4. **Retire** — after `STALE_ORGANIZER_RETIRE_DAYS` (30) stale, the id moves to `retired_organizer_ids`. `_upsert_fienta` subtracts retired ids on every startup, so a retired seed id never comes back.
-5. **Discover** — a city-filtered scan (`FIENTA_CITY_FILTER`) adds any unknown organizer with at least `ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD` (3) Tallinn events. A retired organizer can rejoin this way.
+5. **Discover** — a city-filtered scan (`FIENTA_CITY_FILTER`) follows `pagination.next_page_url` through every page, host-checked and rate-limited, up to `FIENTA_ORGANIZER_SCAN_MAX_PAGES`. It adds any unknown organizer with at least `ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD` (3) Tallinn events. A retired organizer can rejoin this way.
 
 - **The sync holds no DB connection during its ~2 min HTTP phase.** It rolls back after reading the config, then re-reads the source before writing. A server-side drop during the HTTP phase once killed a whole weekly run, since Neon keeps an idle-in-transaction connection alive but can still restart the compute.
 - **The write phase retries once on a lost connection** (`ORGANIZER_SYNC_DB_WRITE_ATTEMPTS`). Config keys the sync doesn't own survive a concurrent admin edit.
@@ -333,10 +413,12 @@ A Fienta organizer here is a ticketing-source id that gets polled. It is not an 
 |---|---|---|---|
 | 1 | Groq | `openai/gpt-oss-120b` | 30 requests/min burst |
 | 2 | Cloudflare Workers AI | `@cf/openai/gpt-oss-120b` | 10,000 free Neurons/day |
-| 3 | Mistral | `mistral-small-latest` | 1B tokens/month, overnight batch |
+| 3 | Mistral | `mistral-small-latest` | 20,000 tokens/min and 1 request/s (tier read 2026-10-25), overnight batch |
 
 - **Calls are capped at `LLM_MAX_TOKENS` (400)** to avoid quota exhaustion.
-- **The two `gpt-oss-120b` entries use `reasoning_effort=low` and `LLM_REASONING_MAX_TOKENS` (600).** That is the project hard cap. It keeps reasoning tokens from crowding out the JSON answer.
+- **The two `gpt-oss-120b` entries use `reasoning_effort=low` and `LLM_REASONING_MAX_TOKENS` (900).** Reasoning tokens count against the cap, and prod classify answers reached 598 tokens at the old 600 (#636). `scripts/llm_calls_stats.py` shows the live percentiles.
+- **Providers with `min_interval_seconds` (Mistral) are paced by `app/ingestion/http_client.py::AsyncRateLimiter`.** The 5-wide fan-out sends its fallbacks together. `LLM_MISTRAL_MIN_INTERVAL_SECONDS` is 8s because the tier allows 20k tokens/min and a classify call costs about 2.2k tokens (#638). Raise the tier before shortening it. Pacing does not help if the 429s come from an exhausted monthly quota.
+- **`llm_json` parses tolerantly and labels truncation.** It accepts a code fence or prose around the object. A `finish_reason` of `length` is reported as `truncated`, not as a parse error. Every parse failure logs `finish_reason` and the first 120 characters of the content.
 - **Dedup decisions are cached by content hash.** An identical pair never reaches the LLM twice.
 - **The classification batch needs no sleep loop.** Groq's burst limit absorbs it.
 

@@ -6,6 +6,8 @@ import {
   CHAIN_MARKER_PREFIX,
   CHAIN_MAX_ROUNDS,
   CHAIN_STALENESS_TIMEOUT_MINUTES,
+  PRERENDER_CONTINUE_PREDICTION_MARGIN,
+  PRERENDER_ROUTES_PER_MINUTE,
   ROUND_STATUS,
 } from '../constants/prerender.js';
 
@@ -223,6 +225,16 @@ export function resolveRoundContext(
  * cycle. Skipping the push on `done` removes the trigger at its source. */
 export function shouldCommitRoundMarker(marker: RoundMarker): boolean {
   return marker.status === ROUND_STATUS.continuing;
+}
+
+/** Guess, before rendering starts, whether this round will end
+ * `continuing` (issue #537): true when the render queue is longer than the
+ * budget can plausibly render. Only steers when chain-state PUTs start —
+ * buildRoundMarker's real status still decides whether they're kept. */
+export function predictRoundContinues(renderQueueLength: number, round: number, budgetMs: number): boolean {
+  if (isChainDepthExceeded(round) || budgetMs <= 0) return false;
+  const capacity = (budgetMs / MS_PER_MINUTE) * PRERENDER_ROUTES_PER_MINUTE * PRERENDER_CONTINUE_PREDICTION_MARGIN;
+  return renderQueueLength > capacity;
 }
 
 export function buildRoundMarker(

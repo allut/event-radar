@@ -1,7 +1,8 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { organizerApi } from '../../api/client';
-import { API } from '../../constants/api';
-import { EVENT_CLAIM_STATUS_CLAIMED, EVENT_CLAIM_STATUS_PENDING } from '../../constants/claims';
+import { API, QUERY_KEYS } from '../../constants/api';
+import { CLAIM_DISCOVERY_STATUS_CLAIMED, CLAIM_DISCOVERY_STATUS_PENDING } from '../../_generated/sharedConstants';
 import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
@@ -12,7 +13,7 @@ import MagicLinkForm from '../MagicLinkForm';
 import styles from './ClaimStrip.module.css';
 
 interface ClaimPillProps {
-  status: typeof EVENT_CLAIM_STATUS_PENDING | typeof EVENT_CLAIM_STATUS_CLAIMED;
+  status: typeof CLAIM_DISCOVERY_STATUS_PENDING | typeof CLAIM_DISCOVERY_STATUS_CLAIMED;
   locale: string;
 }
 
@@ -31,7 +32,7 @@ interface ClaimPillProps {
 export function ClaimPill({ status, locale }: ClaimPillProps) {
   return (
     <span className={styles.pill}>
-      {t(status === EVENT_CLAIM_STATUS_CLAIMED ? 'claim_pill_claimed' : 'claim_pill_pending', locale)}
+      {t(status === CLAIM_DISCOVERY_STATUS_CLAIMED ? 'claim_pill_claimed' : 'claim_pill_pending', locale)}
     </span>
   );
 }
@@ -53,6 +54,7 @@ interface ClaimPanelProps {
 export function ClaimPanel({ eventId, locale }: ClaimPanelProps) {
   const organizerAuthed = useOrganizerAuth();
   const navigate = useLocaleNavigate();
+  const queryClient = useQueryClient();
   const [state, setState] = useState<'idle' | 'loading' | 'email-form' | 'error' | 'needs-justification'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
   const [justification, setJustification] = useState('');
@@ -65,6 +67,8 @@ export function ClaimPanel({ eventId, locale }: ClaimPanelProps) {
         event_id: eventId,
         justification: withJustification,
       });
+      // Your claims and the dashboard's claims summary count the new claim.
+      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerClaims] });
       navigate(ROUTES.organizerClaimPending(claim.id));
     } catch (err) {
       if (isClaimJustificationRequiredError(err)) {

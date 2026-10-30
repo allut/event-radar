@@ -26,20 +26,24 @@ from app.claims.pinning import (
     price_mismatch,
     scaled_claim_edit_cap,
 )
-from app._generated.shared_constants import ORGANIZER_MAX_CATEGORIES
-from app.constants.claims import (
-    CLAIM_UNPIN_KEY_MAX_LEN,
-    CLAIM_UNPIN_MAX_ITEMS,
+from app._generated.shared_constants import (
     CLAIM_ERROR_CODE_DORMANT,
     CLAIM_ERROR_CODE_NOT_GRANTED,
     CLAIM_STATUS_APPROVED,
+    LOCALE_EN,
+    LOCALE_RU,
+    ORGANIZER_MAX_CATEGORIES,
+)
+from app.constants.claims import (
+    CLAIM_UNPIN_KEY_MAX_LEN,
+    CLAIM_UNPIN_MAX_ITEMS,
     ERROR_CLAIM_DORMANT,
     ERROR_CLAIM_EDIT_URL_DOMAIN,
     ERROR_CLAIM_EVENT_NOT_FOUND,
     ERROR_CLAIM_NOT_GRANTED,
     ERROR_DAILY_CLAIM_EDIT_LIMIT,
 )
-from app.constants.core import LOCALE_EN, LOCALE_ET, LOCALE_RU, TALLINN_TZ
+from app.constants.core import LOCALE_ET, TALLINN_TZ
 from app.constants.events import (
     ERROR_EVENT_CANCELLED,
     ERROR_EVENT_URL_SCHEME,
@@ -48,7 +52,6 @@ from app.constants.events import (
 )
 from app.constants.http import HTTP_TIMEOUT_SECONDS
 from app.constants.organizer import (
-    ERROR_IMAGE_URL_SCHEME,
     ORGANIZER_CURRENCY_MAX_LEN,
     ORGANIZER_DESCRIPTION_MAX_LEN,
     ORGANIZER_TITLE_MAX_LEN,
@@ -56,6 +59,8 @@ from app.constants.organizer import (
 from app.constants.rate_limits import RATE_LIMIT_SUBMIT
 from app.constants.security import URL_MAX_LEN
 from app.db import get_db
+from app.promotions.restriction import reassess_after_edit
+from app.promotions.windows import now_tallinn
 from app.ingestion.http_client import host_matches_domain, safe_render_url
 from app.ingestion.pricing import normalize_currency
 from app.models.models import ClaimEditAttempt, Event, Organizer
@@ -63,8 +68,10 @@ from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (
+    PriceField,
     apply_moderation_flags,
     apply_price_edit,
+    check_image_host,
     fold_legacy_category,
     merged_localized,
     organizer_sanitize,
@@ -101,8 +108,8 @@ class PatchClaimEventBody(BaseModel):
     ends_at: datetime | None = None
     url: str | None = Field(default=None, max_length=URL_MAX_LEN)
     categories: list[str] | None = None
-    price_min: float | None = Field(None, ge=0)
-    price_max: float | None = Field(None, ge=0)
+    price_min: PriceField | None = None
+    price_max: PriceField | None = None
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
     has_free_tier: bool | None = None
     accept_new_price: bool = False
@@ -153,7 +160,7 @@ async def _own_granted_claim_or_404(db: AsyncSession, claim_id: int, organizer_i
     try:
         claim = await own_claim_or_404(db, claim_id, organizer_id)
     except ClaimError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+        raise HTTPException(status_code=exc.status_code, detail=exc.http_detail) from exc
     if claim.status != CLAIM_STATUS_APPROVED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -334,12 +341,7 @@ async def _save_claim_event(
         )
 
     if "image_url" in fields_set:
-        safe_image_url = safe_render_url(body.image_url)
-        if body.image_url and not safe_image_url:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail=ERROR_IMAGE_URL_SCHEME
-            )
-        event.image_url = safe_image_url
+        event.image_url = check_image_host(body.image_url)
         to_pin.add(pin_key("image_url"))
 
     if "starts_at" in fields_set and body.starts_at is not None:
@@ -411,6 +413,8 @@ async def _save_claim_event(
 
     event.status = EVENT_STATUS_CLASSIFIED
     saved_event_id = event.id
+    # Re-assess the Promotion restriction on this edit (#612), best-effort.
+    await reassess_after_edit(db, event, now_tallinn())
     await publish_pending(db, event_ids=[saved_event_id], diagnostics=False)
     final_status = await db.scalar(select(Event.status).where(Event.id == saved_event_id))
     await db.commit()

@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ClaimEventEdit from './ClaimEventEdit';
-import { renderWithProviders } from '../../test/utils';
+import { renderWithProviders, seedPromotionsOfferHint } from '../../test/utils';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
-  organizerApi: { get: vi.fn(), patch: vi.fn() },
+  organizerApi: { get: vi.fn(), patch: vi.fn(), post: vi.fn() },
 }));
 
 vi.mock('../../hooks/useOrganizerLogout', () => ({
@@ -16,6 +16,7 @@ vi.mock('../../hooks/useOrganizerLogout', () => ({
 import { organizerApi, ApiError } from '../../api/client';
 const mockGet = vi.mocked(organizerApi.get);
 const mockPatch = vi.mocked(organizerApi.patch);
+const mockPost = vi.mocked(organizerApi.post);
 
 function baseEvent(overrides: Record<string, unknown> = {}) {
   return {
@@ -50,7 +51,10 @@ function renderEdit(route = '/en/organizer/claims/42/edit') {
 
 beforeEach(() => {
   mockGet.mockReset();
+  // A known offer hint keeps the top bar from asking the profile endpoint.
+  seedPromotionsOfferHint();
   mockPatch.mockReset();
+  mockPost.mockReset();
 });
 
 describe('ClaimEventEdit (#416)', () => {
@@ -127,6 +131,26 @@ describe('ClaimEventEdit (#416)', () => {
     const [path, body] = mockPatch.mock.calls[0];
     expect(path).toBe('/organizer/claims/42/event');
     expect(body).toEqual({ title: 'New title' });
+  });
+
+  it('uploads the chosen image, then saves the returned URL as image_url', async () => {
+    const uploaded = 'https://res.cloudinary.com/demo/image/upload/v1/poster.png';
+    mockGet.mockResolvedValueOnce(baseEvent());
+    mockPost.mockResolvedValueOnce({ url: uploaded });
+    mockPatch.mockResolvedValueOnce(baseEvent({ image_url: uploaded, pinned_fields: ['image_url'] }));
+    renderEdit();
+
+    await screen.findByDisplayValue('Sügisõhtu jazziklubis');
+    const file = new File(['x'], 'poster.png', { type: 'image/png' });
+    await userEvent.upload(document.getElementById('image_url') as HTMLInputElement, file);
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1));
+    expect(mockPost.mock.calls[0][0]).toBe('/organizer/events/image');
+    await screen.findByText('poster.png');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(mockPatch).toHaveBeenCalledTimes(1));
+    expect(mockPatch.mock.calls[0][1]).toEqual({ image_url: uploaded });
   });
 
   it('blocks save with a localized message when the Estonian title is blanked, without sending a request (#452)', async () => {

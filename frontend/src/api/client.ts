@@ -164,6 +164,7 @@ export const organizerApi = {
 export const adminApi = {
   get: <T>(path: string) => api.get<T>(path, { admin: true }),
   post: <T>(path: string, body?: unknown) => api.post<T>(path, body, { admin: true }),
+  patch: <T>(path: string, body?: unknown) => api.patch<T>(path, body, { admin: true }),
 };
 
 export interface NdjsonLine {

@@ -28,7 +28,7 @@ from app.ingestion.selectors import (
 from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
-    coords_in_estonia,
+    coords_in_event_area,
     load_publisher_lookup,
     parse_dt,
 )
@@ -153,12 +153,13 @@ def _merge_venue(
 
 
 def _merge_location(detail: dict[str, Any]) -> tuple[float | None, float | None]:
-    """lat/lng come only from detail JSON-LD, bbox-gated to Estonia; None
-    otherwise (the geocode pass fills them later)."""
+    """lat/lng come only from detail JSON-LD, bbox-gated like an in-area event (a
+    new event is in-area until classified, #635); None otherwise (the geocode
+    pass fills them later)."""
     if detail:
         d_lat: float | None = detail.get("lat")
         d_lng: float | None = detail.get("lng")
-        if d_lat is not None and d_lng is not None and coords_in_estonia(d_lat, d_lng):
+        if d_lat is not None and d_lng is not None and coords_in_event_area(d_lat, d_lng, out_of_area=False):
             return d_lat, d_lng
     return None, None
 

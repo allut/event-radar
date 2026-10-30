@@ -8,6 +8,8 @@ import { patchCachedEvent } from '../utils';
 interface UseFeedbackOptions {
   initialSignal?: Signal | null;
   onChange?: () => void;
+  /** Promotion marker sent with a dislike so the server counts a slot dislike (spec #597). */
+  ref?: string;
 }
 
 export interface UseFeedbackResult {
@@ -30,7 +32,11 @@ export function useFeedback(eventId: number | undefined, opts?: UseFeedbackOptio
         await api.delete(API.feedbackEvent(eventId));
         nextSignal = null;
       } else {
-        await api.post(API.feedback, { event_id: eventId, signal });
+        await api.post(API.feedback, {
+          event_id: eventId,
+          signal,
+          ...(signal === 'dislike' && opts?.ref ? { ref: opts.ref } : {}),
+        });
         nextSignal = signal;
       }
       setActiveSignal(nextSignal);

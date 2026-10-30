@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { GOOGLE_SIGNIN_ERROR_DENIED, GOOGLE_SIGNIN_ERROR_PARAM } from '../constants/auth';
 import { t } from '../i18n';
+import { OAUTH_ERROR_DENIED, OAUTH_ERROR_QUERY_PARAM } from '../_generated/sharedConstants';
 
 /** Login/OrganizerLogin's shared Google-callback error banner: reads
- * GOOGLE_SIGNIN_ERROR_PARAM once at mount (not re-read from searchParams on
+ * OAUTH_ERROR_QUERY_PARAM once at mount (not re-read from searchParams on
  * every render — the effect below strips the param from the URL right
  * after, so a later refresh/revisit on the same history entry doesn't
  * resurface a stale failure banner for a sign-in that already succeeded or
@@ -12,13 +12,13 @@ import { t } from '../i18n';
  * copy to render, or null when there's nothing to show. */
 export function useGoogleSignInError(locale: string): string | null {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [googleError] = useState(() => searchParams.get(GOOGLE_SIGNIN_ERROR_PARAM));
+  const [googleError] = useState(() => searchParams.get(OAUTH_ERROR_QUERY_PARAM));
 
   useEffect(() => {
     if (!googleError) return;
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      next.delete(GOOGLE_SIGNIN_ERROR_PARAM);
+      next.delete(OAUTH_ERROR_QUERY_PARAM);
       return next;
     }, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -26,7 +26,7 @@ export function useGoogleSignInError(locale: string): string | null {
 
   return googleError
     ? t(
-      googleError === GOOGLE_SIGNIN_ERROR_DENIED
+      googleError === OAUTH_ERROR_DENIED
         ? 'auth.googleSignIn.errorCancelled'
         : 'auth.googleSignIn.errorFailed',
       locale,

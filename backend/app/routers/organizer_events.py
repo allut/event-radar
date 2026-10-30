@@ -23,7 +23,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app._generated.shared_constants import BROWSE_PAGE_SIZE, IMAGE_UPLOAD_ALLOWED_MIME
+from app._generated.shared_constants import (
+    BROWSE_PAGE_SIZE,
+    IMAGE_UPLOAD_ALLOWED_MIME,
+    ORGANIZER_VENUE_ADDRESS_MAX_LEN,
+    ORGANIZER_VENUE_NAME_MAX_LEN,
+    PAGINATION_MAX_OFFSET,
+)
 from app.constants.core import TALLINN_TZ
 from app.constants.events import (
     ERROR_EVENT_CANCELLED,
@@ -58,22 +64,22 @@ from app.constants.organizer import (
     ORGANIZER_IMPORTANT_INFO_MAX_LEN,
     ORGANIZER_SUBMISSION_EXTERNAL_ID_PREFIX,
     ORGANIZER_TITLE_MAX_LEN,
-    ORGANIZER_VENUE_ADDRESS_MAX_LEN,
-    ORGANIZER_VENUE_NAME_MAX_LEN,
     WEBP_FOURCC,
     WEBP_FOURCC_OFFSET,
     WEBP_RIFF_MAGIC,
 )
 from app.constants.ranking import (
     BROWSE_MAX_PAGE_SIZE,
-    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
 )
-from app.constants.rate_limits import RATE_LIMIT_SUBMIT
+from app.constants.rate_limits import RATE_LIMIT_BROWSE, RATE_LIMIT_SUBMIT
 from app.constants.reports import REPORT_AUTO_RESOLVE_NOTE
 from app.constants.security import URL_MAX_LEN
 from app.db import get_db
+from app.promotions.organizer_view import promotion_flags_for
+from app.promotions.restriction import reassess_after_edit
+from app.promotions.windows import now_tallinn
 from app.ingestion.adapter import NormalizedEvent, insert_normalized_event
 from app.ingestion.content_filters import content_flags
 from app.ingestion.http_client import http_post, safe_render_url
@@ -94,6 +100,7 @@ from app.events.cancellation import (
     send_report_resolution_emails,
 )
 from app.routers.utils import (
+    PriceField,
     apply_moderation_flags,
     apply_price_edit,
     check_image_host,
@@ -143,8 +150,8 @@ class SubmitEventBody(BaseModel):
     venue_id: int | None = None
     url: str | None = Field(default=None, max_length=URL_MAX_LEN)
     image_url: str | None = Field(default=None, max_length=URL_MAX_LEN)
-    price_min: float | None = Field(None, ge=0)
-    price_max: float | None = Field(None, ge=0)
+    price_min: PriceField | None = None
+    price_max: PriceField | None = None
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
     categories: list[str] | None = None
 
@@ -170,6 +177,17 @@ class SubmitEventBody(BaseModel):
         return self
 
 
+# Edits to these re-run the Promotion restriction assessment (#612).
+_RESTRICTION_REASSESS_FIELDS = frozenset(
+    {
+        "title", "title_en", "title_ru",
+        "description", "description_en", "description_ru",
+        "important_info", "important_info_en", "important_info_ru",
+        "venue_name", "venue_id",
+    }
+)
+
+
 class PatchEventBody(BaseModel):
     title: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
     title_en: str | None = Field(None, max_length=ORGANIZER_TITLE_MAX_LEN)
@@ -193,8 +211,8 @@ class PatchEventBody(BaseModel):
     venue_id: int | None = None
     url: str | None = Field(default=None, max_length=URL_MAX_LEN)
     image_url: str | None = Field(default=None, max_length=URL_MAX_LEN)
-    price_min: float | None = Field(None, ge=0)
-    price_max: float | None = Field(None, ge=0)
+    price_min: PriceField | None = None
+    price_max: PriceField | None = None
     currency: str | None = Field(None, max_length=ORGANIZER_CURRENCY_MAX_LEN)
     categories: list[str] | None = None
 
@@ -524,6 +542,9 @@ async def update_own_event(
     ) and event.status == EVENT_STATUS_PUBLISHED:
         event.status = EVENT_STATUS_CLASSIFIED
 
+    if fields_set & _RESTRICTION_REASSESS_FIELDS:
+        await reassess_after_edit(db, event, now_tallinn())
+
     await db.commit()
     return {"id": event.id, "slug": event.slug, "status": event.status}
 
@@ -550,7 +571,9 @@ async def delete_own_event(
 
 
 @router.get("")
-@limiter.limit(RATE_LIMIT_SUBMIT)
+# Browse rate, not the submit rate (spec #551): the dashboard's numbered
+# pager plus edit round-trips are reads, and 10/minute 429'd quick paging.
+@limiter.limit(RATE_LIMIT_BROWSE)
 async def list_own_events(
     request: Request,
     limit: int = BROWSE_PAGE_SIZE,
@@ -559,23 +582,35 @@ async def list_own_events(
     current_organizer: Organizer = Depends(get_current_organizer),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """List the organizer's own submitted events, most recent first."""
+    """List the organizer's own submitted events, most recent first, with
+    the paging envelope (total/limit/offset/has_more) on every page.
+    Cancelled (soft-deleted) events stay listed."""
     limit = max(PAGINATION_MIN_LIMIT, min(limit, BROWSE_MAX_PAGE_SIZE))
     offset = max(PAGINATION_MIN_OFFSET, min(offset, PAGINATION_MAX_OFFSET))
     effective_locale = resolve_locale_param(locale, current_organizer.locale)
+    own = Event.submitted_by_organizer_id == current_organizer.id
 
+    total = (await db.scalar(select(func.count(Event.id)).where(own))) or 0
     stmt = (
         select_events_with_classification()
-        .where(Event.submitted_by_organizer_id == current_organizer.id)
-        .order_by(Event.created_at.desc())
+        .where(own)
+        # id breaks created_at ties so a row never repeats or vanishes
+        # between pages.
+        .order_by(Event.created_at.desc(), Event.id.desc())
         .limit(limit)
         .offset(offset)
     )
     events = (await db.scalars(stmt)).all()
+    flags = await promotion_flags_for(db, current_organizer.id, events)
     return {
-        "events": [_serialize_own_event(e, effective_locale) for e in events],
+        "events": [
+            {**_serialize_own_event(e, effective_locale), **flags.get(e.id, {})}
+            for e in events
+        ],
+        "total": total,
         "limit": limit,
         "offset": offset,
+        "has_more": offset + len(events) < total,
     }
 
 

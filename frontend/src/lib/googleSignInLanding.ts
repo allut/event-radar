@@ -1,10 +1,6 @@
 import { setSignedInHint } from './auth';
 import { setOrganizerSignedInHint } from './organizerAuth';
-import {
-  GOOGLE_SIGNIN_RESULT_PARAM,
-  GOOGLE_SIGNIN_RESULT_TRACK_ORGANIZER,
-  GOOGLE_SIGNIN_RESULT_TRACK_USER,
-} from '../constants/auth';
+import { AUTH_TRACK_ORGANIZER, AUTH_TRACK_USER, GOOGLE_SIGNIN_RESULT_QUERY_PARAM } from '../_generated/sharedConstants';
 
 // Google sign-in is a server-side redirect: no app JS runs between the
 // backend setting the session cookie and the browser landing on the SPA, so
@@ -16,12 +12,12 @@ import {
 // account, so sign-in has nothing to reconcile.
 export function consumeGoogleSignInLanding(): void {
   const params = new URLSearchParams(window.location.search);
-  const track = params.get(GOOGLE_SIGNIN_RESULT_PARAM);
-  if (track !== GOOGLE_SIGNIN_RESULT_TRACK_USER && track !== GOOGLE_SIGNIN_RESULT_TRACK_ORGANIZER) {
+  const track = params.get(GOOGLE_SIGNIN_RESULT_QUERY_PARAM);
+  if (track !== AUTH_TRACK_USER && track !== AUTH_TRACK_ORGANIZER) {
     return;
   }
 
-  params.delete(GOOGLE_SIGNIN_RESULT_PARAM);
+  params.delete(GOOGLE_SIGNIN_RESULT_QUERY_PARAM);
   const query = params.toString();
   window.history.replaceState(
     {},
@@ -29,7 +25,7 @@ export function consumeGoogleSignInLanding(): void {
     `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`,
   );
 
-  if (track === GOOGLE_SIGNIN_RESULT_TRACK_ORGANIZER) {
+  if (track === AUTH_TRACK_ORGANIZER) {
     setOrganizerSignedInHint();
     return;
   }

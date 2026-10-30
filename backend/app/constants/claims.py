@@ -1,25 +1,36 @@
 """Organizer claiming: claim kinds/statuses, verification mechanisms, DNS checks, search, caps, and claim errors."""
 
-from app._generated.shared_constants import ORGANIZER_MAX_CATEGORIES
+from app._generated.shared_constants import (
+    CLAIM_DISCOVERY_STATUS_CLAIMED,
+    CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
+    CLAIM_DISCOVERY_STATUS_PENDING,
+    CLAIM_DISCOVERY_STATUS_UNCLAIMED,
+    CLAIM_KIND_PUBLISHER,
+    CLAIM_KIND_SERIES,
+    CLAIM_STATUS_APPROVED,
+    CLAIM_STATUS_CANCELLED,
+    CLAIM_STATUS_EXPIRED,
+    CLAIM_STATUS_PENDING,
+    CLAIM_STATUS_REVOKED,
+    CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
+    CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
+    CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+    CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
+    CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+    ORGANIZER_MAX_CATEGORIES,
+)
 
-CLAIM_KIND_PUBLISHER = "publisher"
-CLAIM_KIND_SERIES = "series"
 VALID_CLAIM_KINDS = frozenset({CLAIM_KIND_PUBLISHER, CLAIM_KIND_SERIES})
 
-CLAIM_STATUS_PENDING = "pending"
-CLAIM_STATUS_APPROVED = "approved"
-CLAIM_STATUS_REVOKED = "revoked"
-CLAIM_STATUS_CANCELLED = "cancelled"
-CLAIM_STATUS_EXPIRED = "expired"
-# API-facing only (#447) — never stored. A DB row's CLAIM_STATUS_REVOKED
-# always means admin_decline_claim/auto_decline_other_pending_claims flipped
-# a *pending* claim, since a real admin revoke of a *granted* claim
-# (admin_revoke_claim) deletes the row outright rather than leaving it with
-# this status. organizer_claims.py's serializers translate the stored value
-# to this one for any row that still exists; the one case that legitimately
-# reports CLAIM_STATUS_REVOKED is the tombstone built from the deleted
-# claim's AdminAction audit row.
-CLAIM_STATUS_DECLINED = "declined"
+# CLAIM_STATUS_DECLINED is API-facing only (#447), never stored, so this set
+# leaves it out. A DB row's CLAIM_STATUS_REVOKED always means
+# admin_decline_claim/auto_decline_other_pending_claims flipped a *pending*
+# claim, since a real admin revoke of a *granted* claim (admin_revoke_claim)
+# deletes the row outright rather than leaving it with this status.
+# organizer_claims.py's serializers translate the stored value to
+# CLAIM_STATUS_DECLINED for any row that still exists; the one case that
+# legitimately reports CLAIM_STATUS_REVOKED is the tombstone built from the
+# deleted claim's AdminAction audit row.
 VALID_CLAIM_STATUSES = frozenset(
     {
         CLAIM_STATUS_PENDING,
@@ -39,15 +50,11 @@ CLAIM_ACTIVE_STATUSES = frozenset({CLAIM_STATUS_PENDING, CLAIM_STATUS_APPROVED})
 CLAIM_TOKEN_BYTE_LENGTH = 16  # secrets.token_hex(16) -> 32 lowercase hex chars
 CLAIM_TOKEN_PREFIX = "er-verify-"
 
-CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN = "fienta_token"
-CLAIM_VERIFICATION_MECHANISM_DNS_TXT = "dns_txt"
-CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER = "piletilevi_promoter"
-# (#428) The Piletilevi Publisher fallback tier — a resolved promoter with
+# CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX (#428) is the Piletilevi
+# Publisher fallback tier — a resolved promoter with
 # only a plain contact mailbox (no domain-provable channel): auto-grants on
 # an exact claimant-account-email match, else admin review with both emails
 # shown as evidence (Claim.verification_contact carries the resolved one).
-CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX = "piletilevi_mailbox"
-CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW = "admin_review"
 VALID_CLAIM_VERIFICATION_MECHANISMS = frozenset(
     {
         CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
@@ -101,12 +108,9 @@ CLAIM_EMAIL_SEND_CONCURRENCY: int = 8
 # representative EventSource + any active Claim on its target key, never
 # persisted. Feeds the public event page's "is this your event?" CTA and the
 # search/suggestions surfaces' exclusion filter.
-CLAIM_DISCOVERY_STATUS_UNCLAIMED = "unclaimed"
-CLAIM_DISCOVERY_STATUS_PENDING = "pending"
-CLAIM_DISCOVERY_STATUS_CLAIMED = "claimed"
-# (#445) A direct organizer submission has no ingested EventSource, so it can
-# never be claimed — distinct from "unclaimed" (claimable, nobody has yet).
-CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE = "not_claimable"
+# CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE (#445): a direct organizer submission
+# has no ingested EventSource, so it can never be claimed — distinct from
+# "unclaimed" (claimable, nobody has yet).
 VALID_CLAIM_DISCOVERY_STATUSES = frozenset(
     {
         CLAIM_DISCOVERY_STATUS_UNCLAIMED,
@@ -178,11 +182,11 @@ ORGANIZER_CLAIM_EDIT_CAP_PER_EVENT = 2
 # very large institutional Publisher claim.
 ORGANIZER_CLAIM_EDIT_CAP_CEILING = 100
 
-# Publisher-claim event-list pagination (routers/organizer_claims.py GET
-# /organizer/claims/{claim_id}/events, issue #436) — smaller default/cap than
-# the admin queues (constants/admin.py) since this is one organizer's own claimed events,
-# not an operator-wide queue.
-CLAIM_EVENTS_PAGE_SIZE: int = 20
+# Publisher-claim event-list pagination cap (routers/organizer_claims.py GET
+# /organizer/claims/{claim_id}/events, issue #436) — smaller than the admin queues
+# (constants/admin.py) since this is one organizer's own claimed events, not an
+# operator-wide queue. The default, CLAIM_EVENTS_PAGE_SIZE, is cross-stack
+# (shared/app-config.json).
 CLAIM_EVENTS_MAX_PAGE_SIZE: int = 100
 
 # Claim-link magic links (#415) land on a distinct frontend route from a plain
@@ -192,7 +196,12 @@ CLAIM_EVENTS_MAX_PAGE_SIZE: int = 100
 # (generate_organizer_claim_link_token) but carry different claims.
 ORGANIZER_CLAIM_VERIFY_PATH = "/organizer/claims/verify"
 
-ORGANIZER_OWN_CLAIMS_LIST_LIMIT = 200
+# The organizer's own-claims list (routers/organizer_claims.py GET
+# /organizer/claims, the Your claims page, spec #551) caps at this size. Its default,
+# ORGANIZER_OWN_CLAIMS_PAGE_SIZE, is cross-stack (shared/app-config.json): changing it
+# moves every page boundary and breaks shared ?page=N links.
+ORGANIZER_OWN_CLAIMS_MAX_PAGE_SIZE: int = 100
+
 # Claim-edit `unpin` list bounds (pin_key() shapes are short; OWASP audit L-6).
 CLAIM_UNPIN_MAX_ITEMS = 32
 CLAIM_UNPIN_KEY_MAX_LEN = 64
@@ -235,10 +244,9 @@ ERROR_CLAIM_DORMANT = (
     "This claim is dormant — a duplicate claimed event now takes precedence, "
     "so editing stays locked until that's resolved."
 )
-# Machine-readable companions to the two errors above (#444) — the frontend
-# tells them apart off `code`, not by matching the (English-only) `message`.
-CLAIM_ERROR_CODE_NOT_GRANTED = "claim_not_granted"
-CLAIM_ERROR_CODE_DORMANT = "claim_dormant"
+# Their machine-readable companions, CLAIM_ERROR_CODE_NOT_GRANTED and
+# CLAIM_ERROR_CODE_DORMANT (#444, from shared/), let the frontend tell them
+# apart off `code` rather than the (English-only) `message`.
 ERROR_DAILY_CLAIM_EDIT_LIMIT = "Daily claim-edit limit reached. Try again tomorrow."
 ERROR_CLAIM_EVENT_NOT_FOUND = "No event could be resolved for this claim."
 ERROR_CLAIM_EDIT_URL_DOMAIN = "URL must stay on the domain this claim was verified against."

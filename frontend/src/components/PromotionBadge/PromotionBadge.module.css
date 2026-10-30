@@ -1,0 +1,71 @@
+.badge {
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+  padding: var(--space-0-375) var(--space-0-6);
+  border-radius: 0;
+  border: var(--border-w-hair) solid var(--border);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.link {
+  transition: border-color var(--transition), color var(--transition);
+}
+
+/* Global gold a:hover would otherwise outrank the single-class tone color. */
+a.link:hover {
+  border-color: var(--accent-border);
+}
+
+.tone_live {
+  color: var(--success);
+  border-color: var(--success-border);
+  background: var(--success-faint);
+}
+
+.tone_attention {
+  color: var(--accent-ink);
+  border-color: var(--accent-border);
+  background: var(--accent-subtle);
+}
+
+.tone_scheduled {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.tone_bad {
+  color: var(--danger);
+  border-color: var(--danger-border);
+  background: var(--danger-faint);
+}
+
+.tone_muted {
+  color: var(--text-muted);
+}
+
+a.tone_live:hover {
+  color: var(--success);
+}
+
+a.tone_attention:hover {
+  color: var(--accent-ink);
+}
+
+a.tone_scheduled:hover {
+  color: var(--text);
+}
+
+a.tone_bad:hover {
+  color: var(--danger);
+}
+
+a.tone_muted:hover {
+  color: var(--text-muted);
+}

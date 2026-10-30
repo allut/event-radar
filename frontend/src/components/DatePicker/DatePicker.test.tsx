@@ -5,7 +5,17 @@ import userEvent from '@testing-library/user-event';
 import DatePicker from './DatePicker';
 import { renderWithProviders } from '../../test/utils';
 
-function Harness({ initial = '', min, required = false, disabled = false }: { initial?: string; min?: string; required?: boolean; disabled?: boolean }) {
+interface HarnessProps {
+  initial?: string;
+  min?: string;
+  max?: string;
+  required?: boolean;
+  disabled?: boolean;
+  dateOnly?: boolean;
+  isDayDisabled?: (isoDate: string) => boolean;
+}
+
+function Harness({ initial = '', min, max, required = false, disabled = false, dateOnly = false, isDayDisabled }: HarnessProps) {
   const [value, setValue] = useState(initial);
   return (
     <DatePicker
@@ -14,6 +24,9 @@ function Harness({ initial = '', min, required = false, disabled = false }: { in
       onChange={setValue}
       locale="en"
       min={min}
+      max={max}
+      dateOnly={dateOnly}
+      isDayDisabled={isDayDisabled}
       required={required}
       disabled={disabled}
       ariaLabel="Starts"
@@ -200,5 +213,80 @@ describe('DatePicker', () => {
     const onChange = vi.fn();
     renderWithProviders(<DatePicker id="x" value="" onChange={onChange} locale="en" ariaLabel="X" />);
     expect(screen.getByLabelText('X')).toHaveValue('');
+  });
+
+  describe('dateOnly mode', () => {
+    const cellFor = (container: HTMLElement, y: number, m: number, d: number) =>
+      container.querySelector(`[data-date="${new Date(y, m - 1, d).toDateString()}"]`) as HTMLElement;
+
+    it('hides the time fields, uses a date placeholder and closes on day pick with a bare YYYY-MM-DD value', async () => {
+      const { container } = renderWithProviders(<Harness dateOnly initial="2026-08-01" />);
+      expect(screen.getByLabelText('Starts')).toHaveAttribute('placeholder', 'YYYY-MM-DD');
+      await userEvent.click(screen.getByRole('button', { name: /open calendar/i }));
+      expect(screen.queryByLabelText('Hour')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Minute')).not.toBeInTheDocument();
+      await userEvent.click(cellFor(container, 2026, 8, 15));
+      expect(screen.getByLabelText('Starts')).toHaveValue('2026-08-15');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('disables days before min and after max', async () => {
+      const { container } = renderWithProviders(<Harness dateOnly initial="2026-08-15" min="2026-08-10" max="2026-08-20" />);
+      await userEvent.click(screen.getByRole('button', { name: /open calendar/i }));
+      expect(cellFor(container, 2026, 8, 9)).toBeDisabled();
+      expect(cellFor(container, 2026, 8, 10)).not.toBeDisabled();
+      expect(cellFor(container, 2026, 8, 20)).not.toBeDisabled();
+      expect(cellFor(container, 2026, 8, 21)).toBeDisabled();
+    });
+
+    it('greys out days flagged by isDayDisabled with aria-disabled and ignores clicks on them', async () => {
+      const full = (iso: string) => iso === '2026-08-18';
+      const { container } = renderWithProviders(<Harness dateOnly initial="2026-08-15" isDayDisabled={full} />);
+      await userEvent.click(screen.getByRole('button', { name: /open calendar/i }));
+      const cell = cellFor(container, 2026, 8, 18);
+      expect(cell).toBeDisabled();
+      expect(cell).toHaveAttribute('aria-disabled', 'true');
+      expect(cellFor(container, 2026, 8, 17)).not.toHaveAttribute('aria-disabled');
+      await userEvent.click(cell);
+      expect(screen.getByLabelText('Starts')).toHaveValue('2026-08-15');
+    });
+
+    it('arrow keys skip disabled days and Enter never selects one', async () => {
+      const blocked = new Set(['2026-08-16', '2026-08-17']);
+      const { container } = renderWithProviders(<Harness dateOnly initial="2026-08-15" isDayDisabled={(d) => blocked.has(d)} />);
+      await userEvent.click(screen.getByRole('button', { name: /open calendar/i }));
+      expect(cellFor(container, 2026, 8, 15)).toHaveFocus();
+      await userEvent.keyboard('{ArrowRight}');
+      expect(cellFor(container, 2026, 8, 18)).toHaveFocus();
+      await userEvent.keyboard('{Enter}');
+      expect(screen.getByLabelText('Starts')).toHaveValue('2026-08-18');
+    });
+
+    it('rejects typed dates outside min/max or on a disabled day, reverting on blur', async () => {
+      renderWithProviders(
+        <Harness dateOnly initial="2026-08-15" min="2026-08-10" max="2026-08-20" isDayDisabled={(d) => d === '2026-08-18'} />,
+      );
+      const input = screen.getByLabelText('Starts');
+      for (const bad of ['2026-08-09', '2026-08-21', '2026-08-18']) {
+        // Overtype the selection: clear() would commit '' (a valid empty value).
+        await userEvent.type(input, bad, { initialSelectionStart: 0, initialSelectionEnd: 10 });
+        expect(input).toHaveValue(bad);
+        await userEvent.tab();
+        expect(input).toHaveValue('2026-08-15');
+      }
+      await userEvent.type(input, '2026-08-19', { initialSelectionStart: 0, initialSelectionEnd: 10 });
+      await userEvent.tab();
+      expect(input).toHaveValue('2026-08-19');
+    });
+
+    it('opens on the first selectable day when the empty view would land on a blocked one', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      vi.setSystemTime(new Date(2026, 7, 10, 12));
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+      const { container } = renderWithProviders(<Harness dateOnly isDayDisabled={(d) => d <= '2026-08-11'} />);
+      await user.click(screen.getByRole('button', { name: /open calendar/i }));
+      expect(cellFor(container, 2026, 8, 12)).toHaveFocus();
+      vi.useRealTimers();
+    });
   });
 });

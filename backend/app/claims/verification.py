@@ -16,12 +16,14 @@ import httpx
 from app.claims.dns_txt import verify_dns_txt_token
 from app.claims.fienta_token import verify_fienta_token
 from app.claims.piletilevi_promoter import resolve_promoter_contact
-from app.constants.claims import (
+from app._generated.shared_constants import (
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
     CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+)
+from app.constants.claims import (
     CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
 )

@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ClaimPending from './ClaimPending';
-import { renderWithProviders } from '../../test/utils';
+import { QueryClient } from '@tanstack/react-query';
+import { CACHED_CLAIMS_KEY, clientWithCachedClaimsList, renderWithProviders, seedPromotionsOfferHint } from '../../test/utils';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -17,15 +18,19 @@ import { organizerApi } from '../../api/client';
 const mockGet = vi.mocked(organizerApi.get);
 const mockPost = vi.mocked(organizerApi.post);
 
-function renderPending() {
+function renderPending(queryClient?: QueryClient) {
   return renderWithProviders(<ClaimPending />, {
     route: '/en/organizer/claims/7/pending',
     pathPattern: '/:locale/organizer/claims/:id/pending',
+    queryClient,
   });
 }
 
+
 beforeEach(() => {
   mockGet.mockReset();
+  // A known offer hint keeps the top bar from asking the profile endpoint.
+  seedPromotionsOfferHint();
   mockPost.mockReset();
   vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
@@ -175,6 +180,28 @@ describe('ClaimPending (#415)', () => {
 
     expect(mockPost).toHaveBeenCalledWith('/organizer/claims/7/recheck');
     await waitFor(() => expect(screen.getByText("You're verified")).toBeInTheDocument());
+  });
+
+  it.each([
+    ['check now', 'Check now', 'fienta_token', true],
+    ['cancel', 'Cancel this claim', 'admin_review', false],
+  ])('%s marks the Your claims list and dashboard summary stale', async (_label, button, mechanism, canRecheck) => {
+    const pending = {
+      id: 7,
+      status: 'pending',
+      verification_mechanism: mechanism,
+      dns_record_name: null,
+      dns_record_value: 'er-verify-abc123',
+      can_recheck: canRecheck,
+    };
+    mockGet.mockResolvedValueOnce(pending);
+    mockPost.mockResolvedValueOnce({ ...pending, status: 'cancelled', can_recheck: false });
+    const queryClient = clientWithCachedClaimsList();
+    renderPending(queryClient);
+
+    await userEvent.click(await screen.findByRole('button', { name: button }));
+
+    await waitFor(() => expect(queryClient.getQueryState(CACHED_CLAIMS_KEY)?.isInvalidated).toBe(true));
   });
 
   it('states the 30-day admin-review window on the pending-review hint (#443)', async () => {

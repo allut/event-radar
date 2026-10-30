@@ -244,6 +244,14 @@ class TestNormalize:
         assert result.lat is None
         assert result.lng is None
 
+    def test_detail_coords_rejected_outside_tallinn_region(self):
+        # Tartu: in Estonia but outside TALLINN_REGION_BBOX; geocode self-heal would NULL it (#635).
+        raw = self._raw_with_detail({"lat": 58.378, "lng": 26.729, "venue_name": None, "venue_address": None, "price_min": None, "price_max": None, "currency": None})
+        result = _adapter().normalize(raw)
+        assert result is not None
+        assert result.lat is None
+        assert result.lng is None
+
     def test_detail_price_max_fills_open_ended_listing(self):
         raw = self._raw_with_detail({
             "lat": None, "lng": None, "venue_name": None, "venue_address": None,

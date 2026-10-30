@@ -31,16 +31,12 @@ from app.claims.verification import (
 from app.config import settings
 from app._generated.shared_constants import (
     CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
-    CLAIM_EXPIRY_DAYS,
-)
-from app.constants.claims import (
-    CLAIM_ACTIVE_STATUSES,
-    CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
     CLAIM_DISCOVERY_STATUS_CLAIMED,
+    CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
     CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE,
     CLAIM_DISCOVERY_STATUS_PENDING,
     CLAIM_DISCOVERY_STATUS_UNCLAIMED,
-    CLAIM_EMAIL_SEND_CONCURRENCY,
+    CLAIM_EXPIRY_DAYS,
     CLAIM_KIND_PUBLISHER,
     CLAIM_KIND_SERIES,
     CLAIM_STATUS_APPROVED,
@@ -49,6 +45,11 @@ from app.constants.claims import (
     CLAIM_STATUS_PENDING,
     CLAIM_STATUS_REVOKED,
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
+)
+from app.constants.claims import (
+    CLAIM_ACTIVE_STATUSES,
+    CLAIM_AUTOMATED_VERIFICATION_MECHANISMS,
+    CLAIM_EMAIL_SEND_CONCURRENCY,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
     ERROR_CLAIM_JUSTIFICATION_REQUIRED,
     ERROR_CLAIM_NOT_CLAIMABLE,
@@ -60,7 +61,6 @@ from app.constants.claims import (
     ORGANIZER_DAILY_CLAIM_CAP,
 )
 from app.constants.core import TALLINN_TZ
-from app.constants.email import RESEND_TIMEOUT_SECONDS
 from app.constants.events import ERROR_EVENT_NOT_FOUND, EVENT_STATUS_PUBLISHED
 from app.constants.ingestion import (
     SOURCE_SLUG_ESTONIA_CONCERT_HALL,
@@ -75,6 +75,7 @@ from app.email.claim_resolution import (
     send_claim_granted_email,
     send_claim_self_cancelled_email,
 )
+from app.email.resend import resend_http_client
 from app.ingestion.http_client import http_get_stored_url
 from app.models.models import Claim, Event, EventSource, Organizer
 from app.events.localize import resolve_title
@@ -89,10 +90,16 @@ class ClaimError(Exception):
     onto an HTTPException in the router, so these functions stay importable
     (and directly testable) without a FastAPI dependency."""
 
-    def __init__(self, status_code: int, detail: str) -> None:
+    def __init__(self, status_code: int, detail: str, code: str | None = None) -> None:
         super().__init__(detail)
         self.status_code = status_code
         self.detail = detail
+        self.code = code
+
+    @property
+    def http_detail(self) -> str | dict[str, str]:
+        """The HTTPException detail: `{message, code}` when the UI acts on a code (#444)."""
+        return {"message": self.detail, "code": self.code} if self.code else self.detail
 
 
 async def representative_event_source(
@@ -630,7 +637,11 @@ async def create_claim(
 
     justification_clean = justification.strip() if justification else None
     if target.kind == CLAIM_KIND_SERIES and not justification_clean:
-        raise ClaimError(HTTPStatus.UNPROCESSABLE_ENTITY, ERROR_CLAIM_JUSTIFICATION_REQUIRED)
+        raise ClaimError(
+            HTTPStatus.UNPROCESSABLE_ENTITY,
+            ERROR_CLAIM_JUSTIFICATION_REQUIRED,
+            code=CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
+        )
 
     claim = Claim(
         organizer_id=organizer.id,
@@ -920,7 +931,7 @@ async def _send_claim_expiry_emails(db: AsyncSession, expired: list[Claim]) -> N
                     extra={"event": LOG_EVENT_EMAIL_SEND_FAILED},
                 )
 
-    async with httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS) as http_client:
+    async with resend_http_client() as http_client:
         await asyncio.gather(
             *(_send_one(claim, http_client) for claim in expired),
             return_exceptions=True,

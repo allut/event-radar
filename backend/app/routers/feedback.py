@@ -14,31 +14,35 @@ let a ticket click silently overwrite a user's bookmark.
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
-from sqlalchemy import delete, func, literal, select, text, tuple_
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app._generated.shared_constants import BROWSE_PAGE_SIZE, VALID_SIGNALS
+from app._generated.shared_constants import (
+    BROWSE_PAGE_SIZE,
+    PAGINATION_MAX_OFFSET,
+    PROMOTION_REF_AD,
+    VALID_SIGNALS,
+)
 from app.constants.events import ERROR_EVENT_NOT_FOUND
 from app.constants.ranking import (
     BROWSE_MAX_PAGE_SIZE,
     ERROR_INVALID_PREFERENCE_SIGNAL,
     ERROR_INVALID_SIGNAL,
-    PAGINATION_CURSOR_MAX_LEN,
-    PAGINATION_MAX_OFFSET,
     PAGINATION_MIN_LIMIT,
     PAGINATION_MIN_OFFSET,
     PREFERENCE_SIGNALS,
     PREFERENCE_SIGNALS_SQL_PREDICATE,
+    SIGNAL_DISLIKE,
 )
+from app.constants.promotions import PROMOTION_STAT_SLOT_DISLIKES
 from app.constants.rate_limits import RATE_LIMIT_FEEDBACK
 from app.db import get_db
 from app.models.models import Event, User, UserEventFeedback
+from app.promotions.counters import record_ref_hit
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
 from app.routers.utils import (
-    decode_page_cursor,
-    encode_page_cursor,
     load_user_reported_events,
     resolve_locale_param,
     serialize_event,
@@ -51,6 +55,8 @@ router = APIRouter(prefix="/feedback", tags=["feedback"])
 class FeedbackBody(BaseModel):
     event_id: int
     signal: str
+    # "ad" when the signal came from a Sponsored slot card (#606).
+    ref: str | None = None
 
 
 @router.post("", status_code=status.HTTP_200_OK)
@@ -117,6 +123,9 @@ async def record_feedback(
             .on_conflict_do_nothing()
         )
 
+    if body.signal == SIGNAL_DISLIKE and body.ref == PROMOTION_REF_AD:
+        await record_ref_hit(db, event_id, PROMOTION_STAT_SLOT_DISLIKES)
+
     await db.commit()
     return {"ok": True}
 
@@ -155,7 +164,6 @@ async def list_feedback_events(
     offset: int = Query(
         PAGINATION_MIN_OFFSET, ge=PAGINATION_MIN_OFFSET, le=PAGINATION_MAX_OFFSET
     ),
-    cursor: str | None = Query(None, max_length=PAGINATION_CURSOR_MAX_LEN),
     locale: str | None = Query(None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -167,9 +175,10 @@ async def list_feedback_events(
     click_external can have multiple rows per (user, event), which would
     otherwise return the same event more than once.
 
-    Keyset-paginated on ``(created_at, feedback id)``: ``cursor`` (the previous
-    page's opaque ``next_cursor``) replaces ``offset``, so page N costs the
-    same as page 1 and a signal added mid-scroll can't shift rows between pages.
+    Offset-paged for the numbered pager (spec #551): every request returns
+    the exact ``total`` with ``limit``/``offset``/``has_more``. The order is
+    ``(created_at, feedback id)`` descending, so rows signaled in the same
+    instant keep one order across pages.
     """
     if signal not in PREFERENCE_SIGNALS:
         raise HTTPException(
@@ -179,39 +188,23 @@ async def list_feedback_events(
             ),
         )
 
-    # See browse.py's _browse_sql_path for the rationale: total only on the
-    # first page, has_more via a limit+1 sentinel row instead of total.
-    after = decode_page_cursor(cursor) if cursor else None
-    total: int | None = None
-    if offset == 0 and after is None:
-        total = (
-            await db.scalar(
-                select(func.count(UserEventFeedback.id))
-                .select_from(UserEventFeedback)
-                .join(Event, Event.id == UserEventFeedback.event_id)
-                .where(
-                    UserEventFeedback.user_id == current_user.id,
-                    UserEventFeedback.signal == signal,
-                    public_event_filter(),
-                )
-            )
-        ) or 0
-
     page_conds = [
         UserEventFeedback.user_id == current_user.id,
         UserEventFeedback.signal == signal,
         public_event_filter(),
     ]
-    if after is not None:
-        after_ts, after_id = after
-        page_conds.append(
-            tuple_(UserEventFeedback.created_at, UserEventFeedback.id)
-            < tuple_(literal(after_ts), literal(after_id))
+    total = (
+        await db.scalar(
+            select(func.count(UserEventFeedback.id))
+            .select_from(UserEventFeedback)
+            .join(Event, Event.id == UserEventFeedback.event_id)
+            .where(*page_conds)
         )
-        offset = 0
+    ) or 0
+    # has_more via a limit+1 sentinel row, so it never depends on a COUNT that
+    # can drift from the page query between the two statements.
     page_stmt = (
         select_events_with_classification()
-        .add_columns(UserEventFeedback.created_at, UserEventFeedback.id)
         .join(
             UserEventFeedback,
             UserEventFeedback.event_id == Event.id,
@@ -223,9 +216,7 @@ async def list_feedback_events(
     )
     rows = (await db.execute(page_stmt)).all()
     has_more = len(rows) > limit
-    rows = rows[:limit]
-    events = [row[0] for row in rows]
-    next_cursor = encode_page_cursor(rows[-1][1], rows[-1][2]) if has_more else None
+    events = [row[0] for row in rows[:limit]]
 
     feedback_by_event = {e.id: signal for e in events}
     reported = await load_user_reported_events(
@@ -247,5 +238,4 @@ async def list_feedback_events(
         "limit": limit,
         "offset": offset,
         "has_more": has_more,
-        "next_cursor": next_cursor,
     }

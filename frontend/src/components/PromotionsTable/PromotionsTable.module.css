@@ -1,0 +1,41 @@
+.scroll {
+  overflow-x: auto;
+  border-top: var(--border-w-hair) solid var(--border);
+}
+
+.table { composes: table from '../shared/AdminCommerce.module.css'; }
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.eventLink {
+  composes: accentLink from '../shared/Link.module.css';
+  margin-top: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+
+.pill { composes: pill from '../shared/AdminCommerce.module.css'; }
+.pillLive { composes: pillLive from '../shared/AdminCommerce.module.css'; }
+.pillScheduled { composes: pillScheduled from '../shared/AdminCommerce.module.css'; }
+.pillFinished { composes: pillFinished from '../shared/AdminCommerce.module.css'; }
+.pillAttention { composes: pillAttention from '../shared/AdminCommerce.module.css'; }
+
+.reason {
+  color: var(--accent-ink);
+  font-size: var(--fs-2xs);
+  margin-top: var(--space-0-3);
+}
+
+.srOnly {
+  composes: srOnly from '../shared/Visually.module.css';
+}
+
+.chipRow { margin-top: var(--space-1); }
+
+.chip { composes: chip from '../shared/AdminCommerce.module.css'; }
+.chipStripe { composes: chipStripe from '../shared/AdminCommerce.module.css'; }
+.docLink { composes: docLink from '../shared/AdminCommerce.module.css'; }
+.muted { color: var(--text-muted); }

@@ -11,10 +11,13 @@ Formula (all components normalized to [0, 1]):
 
 from __future__ import annotations
 
+import asyncio
+from array import array
 from dataclasses import dataclass, field
 from collections.abc import Sequence
 from datetime import date, datetime, timedelta
 from functools import cached_property
+from typing import cast
 from heapq import nlargest
 
 from sqlalchemy import or_, select, true
@@ -84,6 +87,7 @@ from app.events.queries import (
     select_events_with_classification,
 )
 from app.events.venue import resolve_venue_coords, resolve_venue_name
+from app.promotions.daily5 import prepare_daily5
 
 # ---------------------------------------------------------------------------
 # Feedback context (precomputed for one user, reused across event scoring)
@@ -272,8 +276,8 @@ def _time_slots_for_event(starts_at: datetime) -> list[str]:
 
 def _affinity_for_vector(
     vector: dict,
-    categories: list[str],
-    vibes: list[str],
+    categories: Sequence[str],
+    vibes: Sequence[str],
     time_slots: Sequence[str] = (),
 ) -> float:
     """
@@ -310,8 +314,8 @@ AffinityCache = dict[tuple[int, tuple[str, ...], tuple[str, ...], tuple[str, ...
 
 def persona_affinity(
     user_persona_weights: list[tuple[float, dict]],
-    categories: list[str],
-    vibes: list[str],
+    categories: Sequence[str],
+    vibes: Sequence[str],
     time_slots: Sequence[str] = (),
     cache: AffinityCache | None = None,
 ) -> float:
@@ -393,16 +397,20 @@ def _indirect_feedback_signal(
 
 def feedback_signal(
     event_id: int,
-    event_categories: list[str],
+    event_categories: Sequence[str],
     event_dedup_group: int | None,
     ctx: FeedbackContext,
     now: datetime,
+    event_cat_set: frozenset[str] | None = None,
 ) -> float:
     """
     Feedback score in [-1, 1] for normal events.
     Returns SCORE_HARD_EXCLUDE (-2.0, deliberately outside the [-1, 1] range so it
     cannot collide with a legitimately disliked event's -1.0) when the event belongs
     to a disliked dedup_group; the caller skips the event entirely.
+
+    ``event_cat_set`` is ``frozenset(event_categories)`` when the caller already
+    holds it (the precomputed per-event factors); omitted, it is built here.
     """
     if event_dedup_group is not None and event_dedup_group in ctx.disliked_groups:
         return SCORE_HARD_EXCLUDE
@@ -412,7 +420,8 @@ def feedback_signal(
     # No-op if already built for this `now` (the normal per-user-per-build
     # case) — self-healing for any caller that forgot to build.
     ctx.build_liked_aggregates(now)
-    event_cat_set = frozenset(event_categories)
+    if event_cat_set is None:
+        event_cat_set = frozenset(event_categories)
     if event_cat_set:
         indirect = _indirect_feedback_signal(event_id, event_cat_set, ctx)
         if indirect:
@@ -435,32 +444,38 @@ def locality_bonus(lat: float | None, lng: float | None) -> float:
     return 0.0
 
 
-_EventFactors = tuple[float, float, float, list[str]]
+# (recency, quality, locality, time_slots, categories, vibes, category_set)
+_EventFactors = tuple[
+    float, float, float, tuple[str, ...], tuple[str, ...], tuple[str, ...], frozenset[str]
+]
 
 
 def _precompute_event_factors(
     event_rows: list[Event], now: datetime
 ) -> dict[int, _EventFactors]:
-    """Per-event (recency, quality, locality, time_slots) — invariant across
-    every user.
+    """Per-event score inputs — invariant across every user.
 
     build_daily_feeds' inner loop calls score_event once per (user, candidate)
-    pair; these four factors depend only on the event and the run's fixed
-    ``now``, so without this they're recomputed identically U times per event
-    at U x E scale. Hoisted once here and threaded through as ``precomputed``
-    (time_slots joined this tuple in Big-O audit #5, item 2.2 — see
-    _time_slots_for_event).
+    pair; these factors depend only on the event and the run's fixed ``now``,
+    so without this they're recomputed identically U times per event at U x E
+    scale. Hoisted once here and threaded through as ``precomputed``. The tag
+    tuples and category frozenset are built here too, so the affinity memo key
+    and the indirect-feedback lookup allocate nothing per call.
     """
     factors: dict[int, _EventFactors] = {}
     for event in event_rows:
         cl = event.classification
         quality = cl.quality_score if cl and cl.quality_score is not None else NEUTRAL_SCORE
         lat, lng = resolve_venue_coords(event)
+        categories = tuple(cl.categories) if cl else ()
         factors[event.id] = (
             recency_boost(event.starts_at, now),
             quality,
             locality_bonus(lat, lng),
-            _time_slots_for_event(event.starts_at),
+            tuple(_time_slots_for_event(event.starts_at)),
+            categories,
+            tuple(cl.vibes) if cl else (),
+            frozenset(categories),
         )
     return factors
 
@@ -477,23 +492,30 @@ def score_event(
     Compute personalized score for one event. Returns None if hard-excluded.
     Score is in [0, 1].
 
-    ``precomputed`` is the (recency, quality, locality, time_slots) tuple from
-    ``_precompute_event_factors`` — pass it from a caller iterating many users
-    over the same candidate pool to skip recomputing these per-event-only
-    values on every call. Callers scoring a single user's events ad hoc (e.g.
-    browse.py) omit it and get the values computed inline, as before.
+    ``precomputed`` is the tuple from ``_precompute_event_factors`` — pass it
+    from a caller iterating many users over the same candidate pool to skip
+    recomputing these per-event-only values on every call. Callers scoring a
+    single user's events ad hoc (e.g. browse.py) omit it and get the values
+    computed inline, as before.
     """
     cl: EventClassification | None = event.classification
-    categories: list[str] = cl.categories if cl else []
-    vibes: list[str] = cl.vibes if cl else []
+    categories: Sequence[str]
+    vibes: Sequence[str]
+    time_slots: Sequence[str]
+    cat_set: frozenset[str] | None = None
+    if precomputed is not None:
+        recency, quality, locality, time_slots, categories, vibes, cat_set = precomputed
+    else:
+        categories = cl.categories if cl else []
+        vibes = cl.vibes if cl else []
 
-    fb = feedback_signal(event.id, categories, event.dedup_group_id, ctx, now)
+    fb = feedback_signal(
+        event.id, categories, event.dedup_group_id, ctx, now, event_cat_set=cat_set
+    )
     if fb == SCORE_HARD_EXCLUDE:
         return None  # hard exclude
 
-    if precomputed is not None:
-        recency, quality, locality, time_slots = precomputed
-    else:
+    if precomputed is None:
         time_slots = _time_slots_for_event(event.starts_at)
         recency = recency_boost(event.starts_at, now)
         quality = (
@@ -689,6 +711,13 @@ class _SharedFeedContext:
     shown_series_key: dict[int, tuple[str, str]] = field(default_factory=dict)
     persona_vectors: dict[int, dict] = field(default_factory=dict)
     affinity_cache: AffinityCache = field(default_factory=dict)
+    # A user with no feedback scores every candidate from their persona mix
+    # alone, so users sharing a mix share one score per candidate. Keyed on
+    # the ordered (weight, id(vector)) pairs; values align with event_rows.
+    # Bounded by the ordered persona picks onboarding allows, not by users.
+    persona_only_scores: dict[tuple[tuple[float, int], ...], array] = field(
+        default_factory=dict
+    )
 
 
 @dataclass
@@ -958,6 +987,37 @@ def _score_user_candidates(
     recent_series = build_ctx.recent_series_by_user.get(user.id, set())
     scored: list[tuple[float, Event]] = []
     cooled_scored: list[tuple[float, Event]] = []
+    if not fb_ctx.rows:
+        # No feedback: no exclusions, and the score depends on the persona
+        # mix alone — reuse the first such user's scores (Big-O audit P2).
+        memo = build_ctx.shared.persona_only_scores
+        key = tuple((w, id(vec)) for w, vec in user_persona_weights)
+        scores = memo.get(key)
+        if scores is None:
+            scores = array(
+                "d",
+                (
+                    cast(
+                        float,
+                        score_event(
+                            user_persona_weights,
+                            fb_ctx,
+                            event,
+                            now,
+                            precomputed=build_ctx.event_factors.get(event.id),
+                            affinity_cache=build_ctx.affinity_cache,
+                        ),
+                    )
+                    for event in build_ctx.event_rows
+                ),
+            )
+            memo[key] = scores
+        for event, s in zip(build_ctx.event_rows, scores):
+            if build_ctx.candidate_series_key[event.id] in recent_series:
+                cooled_scored.append((s, event))
+            else:
+                scored.append((s, event))
+        return scored, cooled_scored
     for event in build_ctx.event_rows:
         # A dislike is a hard exclude (direct or via its dedup group) — not
         # just the -1 feedback term score_event would fold in for an
@@ -992,7 +1052,7 @@ async def _persist_daily_feeds(db: AsyncSession, daily_feed_rows: list[dict]) ->
 
     An ON CONFLICT DO UPDATE — rather than a pre-loaded existing-row lookup
     plus a plain INSERT — so the synchronous onboarding-completion build
-    (`build_daily_feed_for_user`) racing the 06:00 scheduled `build_daily_feeds`
+    (`build_daily_feed_for_user`) racing the scheduled `build_daily_feeds`
     job for the same user resolves atomically at the DB level instead of
     raising a unique-violation on the `(user_id, feed_date)` constraint that
     would roll back the whole batch's single commit.
@@ -1038,7 +1098,7 @@ def _build_one_user_feed(
 async def build_daily_feeds(db: AsyncSession) -> dict:
     """
     Build personalized Daily 5 feeds for all active users.
-    Runs at 06:00 Europe/Tallinn via APScheduler.
+    Runs daily at FEED_BUILD_HOUR via APScheduler.
 
     Pages the full user loop at FEED_BUILD_USER_BATCH_SIZE so memory is
     bounded by a batch size instead of total registered users — candidate
@@ -1054,8 +1114,14 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
     now = datetime.now(TALLINN_TZ)
     today = now.date()
 
+    # Sponsored slot (#607): gate outcome rows for today, then one pick per
+    # user with a full five. The five itself is never touched.
+    daily5 = await prepare_daily5(db, now)
+
     user_ids = await _verified_user_ids(db)
     if not user_ids:
+        await daily5.finish(db)
+        await db.commit()
         return {
             "built": 0,
             "empty": 0,
@@ -1081,6 +1147,9 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             continue
         daily_feed_rows: list[dict] = []
         for user in build_ctx.users:
+            # Scoring is pure CPU; yield between users so one page doesn't
+            # hold the single process's event loop for seconds.
+            await asyncio.sleep(0)
             event_ids = _build_one_user_feed(user, build_ctx, now)
             daily_feed_rows.append(
                 {
@@ -1095,9 +1164,12 @@ async def build_daily_feeds(db: AsyncSession) -> dict:
             else:
                 empty += 1
         await _persist_daily_feeds(db, daily_feed_rows)
+        await daily5.assign(db, {row["user_id"]: row["event_ids"] for row in daily_feed_rows})
         await db.commit()
         total_users += len(build_ctx.users)
 
+    await daily5.finish(db)
+    await db.commit()
     return {
         "built": built,
         "empty": empty,
@@ -1110,8 +1182,8 @@ async def build_daily_feed_for_user(db: AsyncSession, user_id: int) -> dict:
     """Build (or rebuild) today's Daily 5 for one user.
 
     Called synchronously at onboarding completion so a new user sees a
-    populated feed immediately instead of waiting for the 06:00 job. Reuses
-    the same candidate loading, scoring, series-cooldown, and scoring
+    populated feed immediately instead of waiting for the FEED_BUILD_HOUR job.
+    Reuses the same candidate loading, scoring, series-cooldown, and scoring
     logic as `build_daily_feeds` — no duplicated ranking logic. The upsert in
     `_persist_daily_feeds` means this can safely race the scheduled job for
     the same user without either write failing."""

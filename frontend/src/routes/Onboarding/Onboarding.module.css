@@ -64,6 +64,79 @@
   margin-bottom: var(--space-4);
 }
 
+.digest {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: var(--rule);
+}
+
+.digestRow {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  cursor: pointer;
+}
+
+/* Native input stays focusable and in the a11y tree; .digestBox is its sharp visual. */
+.digestInput {
+  position: absolute;
+  opacity: 0;
+}
+
+.digestBox {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  margin-top: var(--space-0-2);
+  border: var(--border-w-hair) solid var(--text-muted);
+  border-radius: 0;
+  background: var(--bg-raised);
+  color: var(--on-accent);
+  transition: border-color var(--transition), background var(--transition);
+}
+
+.digestMark { composes: checkMark from '../../components/shared/Field.module.css'; }
+
+.digestInput:checked + .digestBox {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.digestInput:checked + .digestBox .digestMark {
+  opacity: 1;
+}
+
+.digestInput:focus-visible + .digestBox {
+  outline: var(--border-w-ring) solid var(--accent);
+  outline-offset: var(--space-0-2);
+}
+
+.digestTitle {
+  display: block;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-medium);
+  color: var(--text);
+}
+
+.digestDesc {
+  display: block;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  margin-top: var(--space-0-2);
+}
+
+.digestState {
+  padding-left: calc(var(--checkbox-size) + var(--space-3));
+  font-size: var(--fs-sm);
+  color: var(--accent-ink);
+}
+
 .cta {
   display: flex;
   flex-direction: column;

@@ -23,6 +23,7 @@ from app.constants.ranking import (
 )
 from app.constants.rate_limits import RATE_LIMIT_AUTHENTICATED_WRITE
 from app.db import get_db
+from app.email.subscription import set_digest_subscription
 from app.models.models import Persona, User, UserPersona
 from app.ranking.score import build_daily_feed_for_user
 from app.rate_limit import limiter
@@ -34,6 +35,8 @@ router = APIRouter(prefix="/onboarding", tags=["onboarding"])
 
 class PersonaBody(BaseModel):
     persona_slugs: list[str]
+    # Explicit digest choice from the onboarding checkbox; None leaves it as is.
+    email_digest_opt_in: bool | None = None
 
 
 @router.post("/persona", status_code=status.HTTP_200_OK)
@@ -85,6 +88,9 @@ async def set_persona(
             )
         )
         result.append({"slug": slug, "weight": weight})
+
+    if body.email_digest_opt_in is not None:
+        set_digest_subscription(current_user, body.email_digest_opt_in, db)
 
     await db.commit()
 

@@ -8,6 +8,7 @@ import httpx
 import pytest
 
 from app.constants.core import TALLINN_TZ
+from app.constants.ingestion import TALLINN_REGION_BBOX
 from app.ingestion.geocode import (
     _self_heal_out_of_bbox_coords,
     _sync_venue_linked_coords,
@@ -856,6 +857,19 @@ class TestIsSuspectVenueName:
     def test_in_front_of_flags_suspect(self):
         assert is_suspect_venue_name("in front of the town hall") is True
 
+    def test_non_ascii_digit_not_suspect(self):
+        assert is_suspect_venue_name("Studio²") is False
+
+
+class TestSqlAlternationPattern:
+    def test_non_ascii_letter_spells_both_cases(self):
+        from app.ingestion.patterns import sql_alternation_pattern
+        assert sql_alternation_pattern(frozenset({"kõrval"})) == r"\y(?:k[õÕ]rval)\y"
+
+    def test_ascii_keyword_left_to_case_insensitive_operator(self):
+        from app.ingestion.patterns import sql_alternation_pattern
+        assert sql_alternation_pattern(frozenset({"next to"})) == r"\y(?:next\ to)\y"
+
 
 class TestExtractAddressFromVenueName:
     """Tests for the LLM venue-address extraction pass."""
@@ -1145,6 +1159,8 @@ class TestExtractAddressFromVenueName:
         select_call = mock_db.scalars.call_args
         compiled = str(select_call.args[0])
         assert "geocode_attempted_at" in compiled
+        # Ended events drop out instead of retrying forever.
+        assert "coalesce(events.ends_at, events.starts_at)" in compiled
 
     @pytest.mark.asyncio
     async def test_donor_cache_skips_out_of_bbox_address(self, mock_db, make_event):
@@ -1216,6 +1232,16 @@ class TestSelfHealOutOfBboxCoords:
         await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
         compiled = str(mock_db.execute.call_args.args[0])
         assert "coalesce(events.ends_at, events.starts_at)" in compiled
+
+
+    @pytest.mark.asyncio
+    async def test_statement_bounds_match_ingest_gate(self, mock_db):
+        """Self-heal and ``coords_in_event_area(out_of_area=False)`` must share one
+        bbox, or refetch/ingest and self-heal fight over a coord daily (#635)."""
+        mock_db.execute.return_value = MagicMock(rowcount=0)
+        await _self_heal_out_of_bbox_coords(mock_db, datetime.now(TALLINN_TZ))
+        params = set(mock_db.execute.call_args.args[0].compile().params.values())
+        assert set(TALLINN_REGION_BBOX) <= params
 
 
 class TestGeocodePendingVenues:

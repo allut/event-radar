@@ -44,12 +44,13 @@ describe('Footer', () => {
     ).toBeInTheDocument();
   });
 
-  it('places the FAQ link between Terms and Contact', () => {
+  it('places the FAQ and ranking links between Terms and Contact', () => {
     renderWithProviders(<Footer />, { route: '/en' });
 
     const links = within(screen.getByRole('navigation')).getAllByRole('link');
-    expect(links.map((a) => a.textContent)).toEqual(['Privacy', 'Terms', 'FAQ', 'Contact', 'For organizers']);
+    expect(links.map((a) => a.textContent)).toEqual(['Privacy', 'Terms', 'FAQ', 'How results are ordered', 'Contact', 'For organizers']);
     expect(screen.getByRole('link', { name: 'FAQ' })).toHaveAttribute('href', '/en/faq');
+    expect(screen.getByRole('link', { name: 'How results are ordered' })).toHaveAttribute('href', '/en/ranking');
   });
 
   it('keeps the FAQ link on the public /faq from an organizer-portal page', () => {
@@ -57,7 +58,7 @@ describe('Footer', () => {
     renderWithProviders(<Footer />, { route: '/en/organizer/dashboard' });
 
     const links = within(screen.getByRole('navigation')).getAllByRole('link');
-    expect(links.map((a) => a.textContent)).toEqual(['Privacy', 'Terms', 'FAQ', 'Contact', 'Organizer dashboard']);
+    expect(links.map((a) => a.textContent)).toEqual(['Privacy', 'Terms', 'FAQ', 'How results are ordered', 'Contact', 'Organizer dashboard']);
     expect(screen.getByRole('link', { name: 'FAQ' })).toHaveAttribute('href', '/en/faq');
   });
 
@@ -66,7 +67,7 @@ describe('Footer', () => {
 
     const links = within(screen.getByRole('navigation', { name: 'Подвал' })).getAllByRole('link');
     expect(links.map((a) => a.textContent)).toEqual(
-      ['Конфиденциальность', 'Условия', 'Вопросы и ответы', 'Контакты', 'Организаторам'],
+      ['Конфиденциальность', 'Условия', 'Вопросы и ответы', 'Как упорядочены результаты', 'Контакты', 'Организаторам'],
     );
   });
 
@@ -74,7 +75,7 @@ describe('Footer', () => {
     renderWithProviders(<Footer />, { route: '/contact' });
 
     const links = within(screen.getByRole('navigation', { name: 'Jalus' })).getAllByRole('link');
-    expect(links.map((a) => a.textContent)).toEqual(['Privaatsus', 'Tingimused', 'KKK', 'Kontakt', 'Korraldajatele']);
+    expect(links.map((a) => a.textContent)).toEqual(['Privaatsus', 'Tingimused', 'KKK', 'Kuidas tulemused järjestatakse', 'Kontakt', 'Korraldajatele']);
   });
 
   it('follows the URL over a saved preference that disagrees with it', () => {
@@ -120,6 +121,7 @@ describe('Footer', () => {
     expect(screen.getByRole('link', { name: 'Конфиденциальность' })).toHaveAttribute('href', '/ru/privacy');
     expect(screen.getByRole('link', { name: 'Условия' })).toHaveAttribute('href', '/ru/terms');
     expect(screen.getByRole('link', { name: 'Вопросы и ответы' })).toHaveAttribute('href', '/ru/faq');
+    expect(screen.getByRole('link', { name: 'Как упорядочены результаты' })).toHaveAttribute('href', '/ru/ranking');
     expect(screen.getByRole('link', { name: 'Контакты' })).toHaveAttribute('href', '/ru/contact');
     expect(screen.getByRole('link', { name: 'Организаторам' })).toHaveAttribute('href', '/ru/organizer/login');
   });

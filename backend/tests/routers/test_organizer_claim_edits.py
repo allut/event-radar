@@ -14,12 +14,14 @@ from pydantic import ValidationError
 
 from app.claims.lifecycle import ClaimError
 from app.claims.pinning import FreshPrice
-from app.constants.claims import (
+from app._generated.shared_constants import (
     CLAIM_ERROR_CODE_DORMANT,
     CLAIM_ERROR_CODE_NOT_GRANTED,
     CLAIM_KIND_PUBLISHER,
     CLAIM_STATUS_APPROVED,
     CLAIM_STATUS_PENDING,
+)
+from app.constants.claims import (
     ERROR_CLAIM_DORMANT,
     ERROR_CLAIM_EDIT_URL_DOMAIN,
     ERROR_CLAIM_NOT_GRANTED,
@@ -54,6 +56,7 @@ def _patched(**kwargs):
         "fetch_fresh_price": AsyncMock(return_value=None),
         "publish_pending": AsyncMock(return_value={"published": 1}),
         "prepend_organizer_categories": AsyncMock(),
+        "reassess_after_edit": AsyncMock(),
         # A single covered event scales to exactly the flat baseline (#438),
         # so every pre-existing test that doesn't care about cap scaling
         # keeps seeing the unchanged ORGANIZER_DAILY_CLAIM_EDIT_CAP value.
@@ -619,6 +622,90 @@ class TestUpdateClaimEvent:
                     db=mock_db,
                 )
         assert exc.value.status_code == http.HTTPStatus.BAD_REQUEST
+
+    async def _patch_image(self, mock_db, make_request, make_organizer, make_event, event, body):
+        from app.routers.organizer_claim_edits import update_claim_event
+
+        self._mock_db_for_save(mock_db)
+        stack, _ = _patched(
+            own_claim_or_404=AsyncMock(return_value=_fake_claim()),
+            claim_event_for_id=AsyncMock(return_value=event),
+        )
+        with stack, patch("app.ingestion.http_client.settings") as mock_settings:
+            mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
+            await update_claim_event(
+                1,
+                body,
+                make_request(method="PATCH", path="/organizer/claims/1/event"),
+                current_organizer=make_organizer(organizer_id=5),
+                db=mock_db,
+            )
+
+    @pytest.mark.asyncio
+    async def test_non_cloudinary_image_url_rejected(
+        self, mock_db, make_request, make_organizer, make_event
+    ):
+        from app.constants.organizer import ERROR_IMAGE_HOST_NOT_ALLOWED
+        from app.routers.organizer_claim_edits import PatchClaimEventBody
+
+        event = make_event()
+        event.pinned_fields = []
+        with pytest.raises(HTTPException) as exc:
+            await self._patch_image(
+                mock_db, make_request, make_organizer, make_event, event,
+                PatchClaimEventBody(image_url="https://evil.example.com/pixel.png"),
+            )
+        assert exc.value.status_code == http.HTTPStatus.BAD_REQUEST
+        assert exc.value.detail == ERROR_IMAGE_HOST_NOT_ALLOWED
+        assert "image_url" not in event.pinned_fields
+
+    @pytest.mark.asyncio
+    async def test_own_cloudinary_image_url_saved_and_pinned(
+        self, mock_db, make_request, make_organizer, make_event
+    ):
+        from app.routers.organizer_claim_edits import PatchClaimEventBody
+
+        event = make_event()
+        event.pinned_fields = []
+        url = "https://res.cloudinary.com/demo/image/upload/v1/x.png"
+        await self._patch_image(
+            mock_db, make_request, make_organizer, make_event, event,
+            PatchClaimEventBody(image_url=url),
+        )
+        assert event.image_url == url
+        assert "image_url" in event.pinned_fields
+
+    @pytest.mark.asyncio
+    async def test_empty_image_url_clears_and_pins(
+        self, mock_db, make_request, make_organizer, make_event
+    ):
+        from app.routers.organizer_claim_edits import PatchClaimEventBody
+
+        event = make_event()
+        event.pinned_fields = []
+        event.image_url = "https://res.cloudinary.com/demo/image/upload/v1/x.png"
+        await self._patch_image(
+            mock_db, make_request, make_organizer, make_event, event,
+            PatchClaimEventBody(image_url=None),
+        )
+        assert event.image_url is None
+        assert "image_url" in event.pinned_fields
+
+    @pytest.mark.asyncio
+    async def test_omitting_image_url_leaves_scraped_host_untouched(
+        self, mock_db, make_request, make_organizer, make_event
+    ):
+        from app.routers.organizer_claim_edits import PatchClaimEventBody
+
+        event = make_event()
+        event.pinned_fields = []
+        event.image_url = "https://scraped.example.com/a.jpg"
+        await self._patch_image(
+            mock_db, make_request, make_organizer, make_event, event,
+            PatchClaimEventBody(title="New title"),
+        )
+        assert event.image_url == "https://scraped.example.com/a.jpg"
+        assert "image_url" not in event.pinned_fields
 
     @pytest.mark.asyncio
     async def test_url_on_verified_domain_accepted_and_pinned(

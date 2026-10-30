@@ -95,4 +95,22 @@ describe('buildSeoMeta', () => {
     });
     expect(meta.metaTags).toContainEqual({ property: 'og:image', content: `${PRODUCTION_ORIGIN}/og-fallback.png` });
   });
+
+  describe('paged canonical', () => {
+    it('appends ?page=N to the canonical, every hreflang and og:url for page >= 2', () => {
+      const meta = buildSeoMeta({ title: 't', locale: 'ru', path: '/ru/explore', indexable: true, page: 3 });
+      for (const [hrefLang, path] of [['en', '/en/explore'], ['et', '/explore'], ['ru', '/ru/explore'], ['x-default', '/explore']]) {
+        expect(meta.links).toContainEqual({ rel: 'alternate', href: `${PRODUCTION_ORIGIN}${path}?page=3`, hrefLang });
+      }
+      expect(meta.links).toContainEqual({ rel: 'canonical', href: `${PRODUCTION_ORIGIN}/ru/explore?page=3` });
+
+      expect(meta.metaTags).toContainEqual({ property: 'og:url', content: `${PRODUCTION_ORIGIN}/ru/explore?page=3` });
+    });
+
+    it('leaves page 1 and an omitted page byte-identical to the unpaged URL', () => {
+      const base = buildSeoMeta({ title: 't', locale: 'et', path: '/explore', indexable: true });
+      expect(buildSeoMeta({ title: 't', locale: 'et', path: '/explore', indexable: true, page: 1 })).toEqual(base);
+      expect(base.links).toContainEqual({ rel: 'canonical', href: `${PRODUCTION_ORIGIN}/explore` });
+    });
+  });
 });

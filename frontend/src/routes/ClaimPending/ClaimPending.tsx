@@ -10,20 +10,20 @@ import { t, ti } from '../../i18n';
 import {
   CLAIM_ADMIN_REVIEW_EXPIRY_DAYS,
   CLAIM_EXPIRY_DAYS,
-} from '../../_generated/sharedConstants';
-import { API, QUERY_KEYS } from '../../constants/api';
-import {
-  CLAIM_DNS_VERIFICATION_MECHANISMS,
   CLAIM_KIND_PUBLISHER,
-  CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS,
   CLAIM_STATUS_APPROVED,
   CLAIM_STATUS_CANCELLED,
   CLAIM_STATUS_DECLINED,
   CLAIM_STATUS_EXPIRED,
   CLAIM_STATUS_PENDING,
   CLAIM_STATUS_REVOKED,
-  CLAIM_TERMINAL_STATUSES,
   CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
+} from '../../_generated/sharedConstants';
+import { API, QUERY_KEYS } from '../../constants/api';
+import {
+  CLAIM_DNS_VERIFICATION_MECHANISMS,
+  CLAIM_SELF_SERVICE_VERIFICATION_MECHANISMS,
+  CLAIM_TERMINAL_STATUSES,
   type ClaimKind,
   type ClaimStatus,
   type ClaimVerificationMechanism,
@@ -79,6 +79,8 @@ export default function ClaimPending() {
     onSuccess: (updated) => {
       setActionError('');
       queryClient.setQueryData(queryKey, updated);
+      // Your claims and the dashboard's claims summary show this status.
+      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerClaims] });
     },
     onError: (err) => setActionError(apiErrorMessage(err, t('generic_error', locale))),
   });
@@ -88,6 +90,8 @@ export default function ClaimPending() {
     onSuccess: (updated) => {
       setActionError('');
       queryClient.setQueryData(queryKey, updated);
+      // Your claims and the dashboard's claims summary show this status.
+      void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.organizerClaims] });
     },
     onError: (err) => setActionError(apiErrorMessage(err, t('generic_error', locale))),
   });

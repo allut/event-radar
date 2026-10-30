@@ -56,6 +56,7 @@ from app.constants.llm import (
     LLM_MAX_PROMPT_CHARS,
     LLM_TASK_CLASSIFY,
 )
+from app.promotions.restriction import notify_newly_restricted, parse_promotion_restriction
 from app.constants.organizer import ORGANIZER_SUBMISSION_QUALITY_SCORE_CEILING
 from app.llm.prompts import LLM_CLASSIFY_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.ingestion.pricing import (
@@ -71,12 +72,12 @@ import httpx
 from app.ingestion.content_filters import is_explicit_text
 from app.ingestion.sanitize import html_to_text
 from app.llm.router import (
-    content_hash,
     llm_http_client,
     llm_json_or_none,
+    prefetch_llm_cache,
     strict_bool,
 )
-from app.models.models import Event, EventClassification, LlmCall
+from app.models.models import Event, EventClassification
 from app.ingestion.patterns import alternation_pattern
 from app.events.venue import resolve_venue_name
 from app.events.queries import (
@@ -220,6 +221,7 @@ def _parse_classification(raw: dict[str, Any]) -> dict[str, Any]:
         "price_max": price_max,
         "currency": currency,
         "explicit": explicit,
+        "promotion_restriction": parse_promotion_restriction(raw.get("promotion_restriction")),
         "non_event": non_event,
         "in_target_city": in_target_city,
         "has_free_tier": has_free_tier,
@@ -374,6 +376,10 @@ def _apply_content_flags(event: Event, parsed: dict[str, Any]) -> None:
     event.is_explicit = event.is_explicit or parsed["explicit"]
     event.is_non_event = event.is_non_event or parsed["non_event"]
     event.is_out_of_area = event.is_out_of_area or not parsed["in_target_city"]
+    # Overwrites (a false positive can clear) and never feeds the publish gate
+    # or organic listing; an unassessable answer keeps the previous value.
+    if parsed["promotion_restriction"] is not None:
+        event.promotion_restriction = parsed["promotion_restriction"]
 
 
 async def classify_event(
@@ -503,40 +509,6 @@ async def _prefetch_existing_classifications(
     return {row.event_id: row for row in existing_rows}
 
 
-async def _prefetch_classify_cache(
-    db: AsyncSession, prompts_by_event_id: dict[int, str]
-) -> dict[str, tuple[dict[str, Any], str]]:
-    """Bulk-fetch cached classify LLM responses by content hash — the
-    classify-batch analogue of the dedup tiebreaker's
-    ``_prefetch_cached_decisions``/venue-extract's ``_prefetch_venue_extract_cache``.
-    Passed to ``llm_json`` as ``prefetched_cache`` so each event's cache lookup
-    is a local dict access instead of a per-event ``SELECT``.
-
-    A classify prompt embeds title+description+price, so each hash is
-    effectively unique across events — a batch rarely finds a hit here. Still
-    worth doing for symmetry with the other two LLM passes and because
-    ``LLM_CLASSIFY_BATCH_SIZE`` keeps the ``IN (...)`` list small (no chunking
-    needed, unlike the dedup pass's much larger candidate-pair hash list).
-    """
-    if not prompts_by_event_id:
-        return {}
-    hashes = list({content_hash(p) for p in prompts_by_event_id.values()})
-    rows = (
-        await db.execute(
-            select(LlmCall.content_hash, LlmCall.response_json, LlmCall.provider, LlmCall.model)
-            .where(
-                LlmCall.content_hash.in_(hashes),
-                LlmCall.response_json.is_not(None),
-            )
-            .order_by(LlmCall.created_at)
-        )
-    ).all()
-    return {
-        row_hash: (response_json, f"{provider}/{model}")
-        for row_hash, response_json, provider, model in rows
-    }
-
-
 async def classify_pending(
     db: AsyncSession, *, batch_size: int = LLM_CLASSIFY_BATCH_SIZE
 ) -> dict[str, Any]:
@@ -600,9 +572,10 @@ async def classify_pending(
         for event in events
         if not (event.is_explicit or event.is_non_event)
     }
-    prefetched_cache = await _prefetch_classify_cache(db, prompts_by_event_id)
+    prefetched_cache = await prefetch_llm_cache(db, prompts_by_event_id.values())
 
     semaphore = asyncio.Semaphore(LLM_BATCH_FANOUT_CONCURRENCY)
+    previous_restriction = {event.id: event.promotion_restriction for event in events}
 
     async def _classify_one(event: Event) -> bool:
         async with semaphore:
@@ -633,6 +606,12 @@ async def classify_pending(
             succeeded += 1
         else:
             failed += 1
+
+    # One bulk lookup for every event the pass newly flagged (#612).
+    await db.flush()
+    await notify_newly_restricted(
+        db, [(e, previous_restriction[e.id]) for e in events], now
+    )
 
     log.info(
         "classify_pending: attempted=%d succeeded=%d failed=%d cancelled=%d",

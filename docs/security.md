@@ -42,8 +42,10 @@ What's in here: the middleware stack, rate limiting and its client key, URL and 
 ## Rate Limiting
 
 - **Every endpoint carries `@limiter.limit(...)` with a `RATE_LIMIT_*` constant from `app/constants/rate_limits.py`**, authenticated ones included. Add both to any new endpoint, public or not.
+- **`backend/tests/test_route_guards.py` enforces this and the auth rule on the live app.** A route with no track dependency must be listed in its `PUBLIC_ROUTES`, which makes going public a reviewed choice.
 - **The limiter lives in `app/rate_limit.py`** so `main.py` and the routers can both import it without a cycle.
-- **All `/admin/*` routes in `app/routers/admin.py` share one bucket** through `limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")`. Per-route limits would let an attacker cycling every admin route multiply the nominal cap.
+- **All other `/admin/*` routes in `app/routers/admin.py` share one bucket** through `limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")`. Per-route limits would let an attacker cycling every admin route multiply the nominal cap.
+- **Admin queue list GETs and `GET /admin/counts` share a second bucket at `RATE_LIMIT_BROWSE`**, scope `RATE_LIMIT_SCOPE_ADMIN_READ`. Numbered paging plus a refetch after each action costs several reads per action, which the 10/minute action bucket can't absorb. Admin writes stay on `RATE_LIMIT_ADMIN`.
 - **`admin_auth.py`'s three routes have their own buckets**, separate from the shared admin one. Login uses `RATE_LIMIT_ADMIN_LOGIN`. What admin login shares is the lockout counter; see Admin Console Auth.
 - **Each claim-edit GET/PATCH pair shares a `shared_limit(RATE_LIMIT_SUBMIT, …)` bucket** (`claim_event_get`, `claim_event_patch`).
 - **`GET /health` has no rate limit, by design.** Throttling Render's health probe risks the platform marking the service unhealthy.
@@ -72,15 +74,16 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 ### Rendered-Only URLs
 
 - **`app/ingestion/http_client.py::safe_external_url()` is the scheme check** (`SAFE_URL_SCHEMES`). It stops stored XSS through `javascript:` or `data:` URLs. Scraped `image_url` uses it.
-- **`safe_render_url()` guards every user-supplied URL that is only rendered:** organizer and claim-edit `url`/`image_url`. It rejects backslashes, controls, whitespace, userinfo, explicit ports, non-http(s) schemes, and `%` or non-ASCII in the authority.
+- **`safe_render_url()` guards every user-supplied URL that is only rendered:** organizer and claim-edit `url`, and organizer `image_url` before `check_image_host()` narrows it. It rejects backslashes, controls, whitespace, userinfo, explicit ports, non-http(s) schemes, and `%` or non-ASCII in the authority.
 - **Callers store `safe_render_url()`'s re-serialized form, never the raw input.** Python's `urlsplit` and browsers disagree on `https://evil.com\@fienta.com/`, so a host pin checked on one parser must hold for the stored string.
 - **A `user_submission` source's `event.url` is render-only.** Organizers edit their row through PATCH, so `refetch.py::_select_candidates` skips organizer rows. `adapter.py::insert_normalized_event()` picks `safe_external_url()` for that `source.kind`, since an organizer's ticketing domain is never on `ALLOWED_SOURCE_HOSTS`.
 
 ### Organizer Images
 
-- **`app/routers/utils.py::check_image_host()` pins organizer `image_url` to our own Cloudinary account.** The host must be in `ALLOWED_IMAGE_HOSTS` and the path under `/{CLOUDINARY_CLOUD_NAME}/image/upload/`. It fails closed when the cloud name is unset.
+- **`app/routers/utils.py::check_image_host()` pins organizer and claim-edit `image_url` to our own Cloudinary account.** It calls `app/ingestion/http_client.py::own_cloudinary_url()`: the host must be in `ALLOWED_IMAGE_HOSTS` and the path under `/{CLOUDINARY_CLOUD_NAME}/image/upload/`. It fails closed when the cloud name is unset.
 - **The path pin matters because `res.cloudinary.com` serves every account.** The daily digest embeds `image_url` as an `<img>`, so an arbitrary host would be an unconsented tracking pixel leaking each recipient's IP and open time.
-- **Organizer images go through the signed `POST /organizer/events/image` upload.** Scraped sources are unaffected by the pin.
+- **The digest embeds an image only from our Cloudinary account or an `ALLOWED_SOURCE_HOSTS` host** (`app/email/digest.py::_embeddable_image_url`). Any other `image_url` gets the branded band instead.
+- **Organizer and claim-edit images go through the signed `POST /organizer/events/image` upload.** The claim edit checks `image_url` only when the client sends it, so saving other fields never fails on an untouched scraped URL. Scraped sources are unaffected by the pin. `backend/scripts/clear_foreign_claim_images.py` clears the non-Cloudinary values claimants pinned before the host check existed, and leaves a pinned empty value alone.
 
 ### Fetched URLs
 
@@ -92,8 +95,13 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 
 ### Redirects
 
+- **`http_get()` streams the body and raises `ResponseTooLargeError` past `HTTP_MAX_RESPONSE_BYTES` (16 MiB).** The cap counts decoded bytes, so a false or missing `Content-Length` and a compressed bomb both hit it. The error is an `httpx.HTTPError` that `_is_retryable` skips. The largest real page is Fienta's events API at about 4 MiB.
 - **A client that follows redirects must pin every hop with `host_guard_hook`** (`http_client.py`). httpx's `follow_redirects=True` has no same-origin rule, and a pre-fetch check only sees the first URL.
 - **The hook runs on each redirect hop**, checking `(scheme, hostname, port)` and re-running `resolves_to_private_ip()`. `fienta.py`, `html_base.py`, `refetch.py` and the publisher backfill client use it. Add it to any new adapter that follows redirects.
+
+### Paginated Next URLs
+
+- **A next-page URL from a response body is checked against the configured base host before it is fetched.** `FientaAdapter.fetch_organizer()` does this for `links.next`, and `organizer_sync.py::_fetch_city_scan()` for `pagination.next_page_url`. Both stop on a mismatch and keep what they have read. Copy the check into any new paginated adapter.
 
 ### Frontend URL Checks
 
@@ -115,6 +123,7 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 
 - **Regex runs in linear time on untrusted text.** Edge-`<br>` trimming is the loop-based `_strip_edge_brs()`. `CURRENCY_AMOUNT_RE` bounds digit runs, and `price_context_digest` truncates input to `PRICE_CONTEXT_INPUT_MAX_CHARS`. Both have timing regression tests.
 - **Numbers from LLMs and JSON-LD are bounded.** `parse_bounded_price()` accepts finite `0 <= x < PRICE_MAX_VALUE`, `normalize_currency()` enforces `VALID_CURRENCY_CODES`, non-finite quality is dropped, and refetched coordinates are bbox-gated.
+- **Request-body prices share the same ceiling.** Every `price_*` field on an organizer, claim-edit or venue body is `app/routers/utils.py::PriceField`, which also refuses `Infinity`. A bare float would overflow `Numeric(10,2)` into a 500.
 - **Validation replaces per-event savepoints.** Classify and refetch share one `AsyncSession` across concurrent workers, so a nested transaction there is unsafe.
 - **LLM booleans go through `app/llm/router.py::strict_bool()`** with fail-safe defaults.
 - **Why-go bullets are length-capped, stripped of URLs and emails, and explicit-filtered.** Venue-extract output may only reuse words from its input.
@@ -122,7 +131,7 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 
 ## Public Reads
 
-- **Public event endpoints filter visibility in the query, not the serializer.** `app/events/queries.py::public_event_filter()` admits only published, non-explicit, non-`event` rows. A hidden row's existence can't leak through a 200-versus-404 oracle.
+- **Public event endpoints filter visibility in the query, not the serializer.** `app/events/queries.py::public_event_filter()` admits only published rows that are neither explicit nor a non-event. A hidden row's existence can't leak through a 200-versus-404 oracle.
 - **Responses never expose internal metadata** such as `dedup_group_id`.
 
 ## Claims
@@ -132,6 +141,15 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 - **A Series claim resolves only ingested, dedup-canonical, non-cancelled events** (`app/claims/pinning.py::series_claim_event_filter()`). Its path and body `event_id` must equal the resolved representative.
 - **Pending claims resolve through one guarded UPDATE.** `app/claims/lifecycle.py::transition_pending_claim()` runs `WHERE status='pending' ... RETURNING` for admin grant, admin decline and `recheck_claim`. The loser of a race gets 409 and sends no email.
 
+## Promotions
+
+[organizer-portal.md](organizer-portal.md)'s Promotions section has the flows. These are the guards on the endpoints.
+
+- **`/organizer/promotions/*` sits on the organizer track** (`get_current_organizer`) and returns 404 while `PROMOTIONS_OFFER_ENABLED` is off. Reads use `RATE_LIMIT_BROWSE`; request create and withdraw use `RATE_LIMIT_SUBMIT`.
+- **Ownership is checked on every event and report read.** Another Organizer's event, request or Promotion is a 404, so ids cannot be probed.
+- **Sold-out days leave the server as dates only.** Counts and other Organizers' figures never appear, and the per-day report carries no viewer identifiers.
+- **`/admin/promotion-requests*` shares the admin buckets** (`RATE_LIMIT_ADMIN` for grant and decline, `RATE_LIMIT_BROWSE` for the list). The decline reason is stored and emailed as plain text, HTML-escaped in the email.
+
 ## Inbound Mail Webhook
 
 - **`routers/webhooks.py::inbound_mail()` verifies Resend's Svix HMAC-SHA256** over `"{svix-id}.{svix-timestamp}.{raw body}"` with `settings.RESEND_WEBHOOK_SECRET`. The `SVIX_*` header constants live in `app/constants/email.py`.
@@ -139,6 +157,15 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 - **A replayed `svix-id` inside that window gets 401.** `_seen_webhook_ids` is a bounded in-memory LRU (`WEBHOOK_SEEN_IDS_MAX_ENTRIES`), the same pattern as the admin lockout.
 - **The sender-domain check runs before the `RawInboundEmail` insert**, so a rejected sender's content is never stored.
 - **`_sender_domain_allowed()` trusts the forgeable `From` header.** It's dormant while `NEWSLETTER_SENDER_ALLOWED_DOMAINS` is empty. Never add a domain without also requiring an SPF/DKIM/DMARC pass for it.
+
+## Stripe Webhook
+
+- **`POST /webhooks/stripe` (public `/api/webhooks/stripe`) sits outside all three auth tracks.** The `Stripe-Signature` over the raw body is the only credential. `routers/stripe_webhook.py` verifies it through `PaymentGateway.construct_event()` with a 300-second tolerance, and answers 400 for a bad, missing or stale one before any work.
+- **An unset `STRIPE_WEBHOOK_SECRET` also answers 400.** The route never fails open, even in development.
+- **It has its own `RATE_LIMIT_WEBHOOK_STRIPE` bucket,** generous because Stripe retries and bursts. There is no `Origin` header, so the CSRF check lets it through.
+- **Replays are no-ops.** `app/promotions/stripe_events.py` inserts each event id into `processed_stripe_events` in the handler's transaction. A replay returns 200 with `duplicate`, and a failing handler rolls the id back so Stripe retries.
+- **Handlers read current state and never assume order.** An `expired` after a `completed` changes nothing. A `completed` after the hold was voided is refunded in full and stays void.
+- **A refund failure answers 500 on purpose.** The refund carries an idempotency key per Promotion, so Stripe's retry can't refund twice.
 
 ## Frontend CSP
 
@@ -151,14 +178,11 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 - **Cloudflare Pages reads `_headers` only from the build output**, so the test reads `frontend/public/_headers`, not a repo-root copy.
 - **The dev server sends no CSP.** Verify a CSP change against the built `dist/index.html` and `dist/_headers` before shipping.
 
-### Google Analytics
+### Analytics and device access
 
-- **The GA4 entries are exact for `script-src` and wildcarded for `connect-src`.** `script-src` adds only `https://www.googletagmanager.com`. `connect-src` adds `*.google-analytics.com` and `*.analytics.google.com`, per Google's CSP guidance for regional collection hosts. Don't narrow them without confirming beacons still land.
-- **`frontend/src/lib/gtag.ts` sets `client_storage: 'none'`, so GA4 sets no cookie.** That keeps the privacy page's "cookieless and aggregated" claim true and avoids a consent banner.
-- **Pageviews are sent manually through `maskAnalyticsUrl()`**, never automatically. That keeps the magic-link token and `/explore` search text out of GA4's `page_path`.
-- **A new dynamic route needs its own collapse in `maskAnalyticsUrl()`** (`frontend/src/utils.ts`), the way `/events/:id` becomes `/events/[id]`. Otherwise its ids reach GA4.
-- **GA4 no-ops when `isPrerenderRender()` is true**, so prerender snapshots send no fake pageviews.
-- **`VITE_GA_MEASUREMENT_ID` is the only switch.** It's a Cloudflare Pages build variable, never committed. Unset, `initGtag()` loads nothing.
+- **The app loads no analytics or advertising script.** GA4 was removed because "cookieless" doesn't answer ePrivacy Art. 5(3), which covers any access to the device, not only cookies. The Estonian DPA (AKI) applies the consent rule directly and lists analytics among the trackers that need prior consent.
+- **A new third-party measurement tool needs a consent prompt first.** Add it to the CSP and the privacy notice's section 4 only together with that prompt.
+- **`click_external` and `view` are the one passive-signal exception.** `utils.ts::trackExternalClick()` posts to our own `/feedback` endpoint, which needs the consumer session, so only a signed-in user's activity is recorded. It feeds their personalised feed, the function they asked for, so it is strictly necessary for it. Keep it out of any aggregate-reporting use.
 
 ## Dependency Audit
 
@@ -219,6 +243,13 @@ Accepted residual risks, all bounded because the token only toggles a reversible
 - **The token is a query parameter on both POST routes.** It can appear in edge logs, though never in Axiom: `app/logging_config.py::_AccessPathStripFilter` strips access-log query strings. The magic-link token moved into a body because it grants a session; this one doesn't.
 - **The same token authorizes `POST /email/resubscribe`**, so a leaked token can re-opt-in someone who unsubscribed.
 
+### Email Ad Consent Withdrawal
+
+- **`POST /email/ads-off?token=` withdraws Email ad consent without a login.** The digest keeps coming. The token has its own salt (`AUTH_ADS_OFF_SALT`) and `UNSUBSCRIBE_TOKEN_TTL_DAYS`, so it can't unsubscribe the digest or be replayed the other way. Errors match `/email/unsubscribe`.
+- **`POST /email/ads-on?token=` is the undo.** It grants again at the current wording version only for a user whose latest consent-log row is an `email_link` withdrawal; anyone else gets the invalid-link 400. It returns 409 while the digest or `PROMOTIONS_SLOTS_ENABLED` is off.
+- **The email link opens the frontend `/email-consent-off?token=` page**, which strips the token, POSTs `ads-off` on mount and offers Undo (`ads-on`). The path avoids "ad" so filter lists don't hide it.
+- **Both routes use `RATE_LIMIT_UNSUBSCRIBE` and the normal Origin check.** The token stays a query parameter, like unsubscribe's.
+
 ### Google Sign-In
 
 Both tracks offer Google sign-in alongside magic links, through a server-side OAuth 2.0 authorization-code flow with PKCE (S256). There's no Google JavaScript or widget, only a top-level redirect. [ADR 0002](adr/0002-google-sign-in-oauth-pkce.md) has the rationale and rejected alternatives.
@@ -276,10 +307,10 @@ The confirmation link must not attach an attacker's Google account to a victim w
 - **`app/routers/admin_auth.py` is a third track: password plus a required TOTP code (RFC 6238)** against `ADMIN_USERNAME`/`ADMIN_PASSWORD`. It's the only admin credential surface. HTTP Basic was removed because it never checked TOTP, so the password alone bypassed the second factor.
 - **Every `/admin/*` route requires the session cookie (`get_current_admin`)**, including counts and stats. A password-only route would be an oracle that the per-IP lockout can't slow across many IPs.
 - **The default `ADMIN_USERNAME` (`"admin"`) is refused outside development** (`admin_lockout.py::admin_username_disabled`). A well-known username halves the pair an attacker has to guess.
-- **`app/auth/totp.py::verify_totp_code` rejects any time step at or before the last accepted one.** An observed code can't mint a second session inside its `ADMIN_TOTP_VALID_WINDOW` drift window.
+- **`app/auth/totp.py::check_totp_code` rejects any time step at or before the last accepted one.** `record_totp_step()` records a step only after the whole login succeeds. An observed code can't mint a second session inside its `ADMIN_TOTP_VALID_WINDOW` drift window.
 - **The cookie is httpOnly, Secure, `SameSite=Strict`** (`ADMIN_SESSION_COOKIE_NAME`, `Path=/api/admin`), minted by `tokens.py::generate_admin_session_token` with its own salt `AUTH_ADMIN_SESSION_SALT`.
 - **It carries no id or version claim, because there's no admins table.** So there's no per-session revocation, and `ADMIN_SESSION_TTL_SECONDS` (12h) is shorter than the consumer TTL to compensate.
-- **The token's `e` (epoch) claim is a SHA-256 of `ADMIN_SESSION_EPOCH`, `ADMIN_PASSWORD` and `ADMIN_TOTP_SECRET`** (`tokens.py::_admin_session_epoch`). Rotating any of them invalidates every admin session, with no separate step.
+- **The token's `e` (epoch) claim is an HMAC-SHA256 under `SECRET_KEY` of `ADMIN_SESSION_EPOCH`, `ADMIN_PASSWORD` and `ADMIN_TOTP_SECRET`** (`tokens.py::_admin_session_epoch`). Rotating any of them invalidates every admin session, with no separate step. The key matters because the payload is signed, not encrypted: a bare hash would let anyone holding the cookie guess the password offline.
 - **TOTP enrollment is a local script, `backend/scripts/admin_totp_enroll.py`.** There are no backup codes, so a lost authenticator means rotating `ADMIN_TOTP_SECRET`.
 
 #### Lockout
@@ -291,6 +322,4 @@ The confirmation link must not attach an attacker's Google account to a victim w
 
 ## Known Gaps
 
-- **Outbound `http_get` has no streaming byte cap on response bodies.** Every test mocks `client.get`, so the cap needs its own change.
-- **Claim-edit `image_url` isn't Cloudinary-pinned yet.** The claim edit UI is a free-text field, so pinning waits on an approved upload control.
-- **`organizer_sanitize()` runs inline in the async handler**, not in a threadpool.
+- **Open gaps live in [security-audit.md](security-audit.md)'s Open Findings**, each with its recommended fix. The audit ledger is their one home, so a fix updates one file.

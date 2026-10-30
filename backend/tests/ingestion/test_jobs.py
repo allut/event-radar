@@ -153,6 +153,38 @@ async def test_ingest_all_enabled_records_per_source_error(mock_db, monkeypatch)
     assert results == [{"slug": "fienta", "error": "kaboom"}]
 
 
+@pytest.mark.asyncio
+async def test_ingest_all_enabled_runs_sources_concurrently_within_the_cap(
+    mock_db, monkeypatch
+):
+    import asyncio
+
+    from app.constants.ingestion import INGEST_SOURCE_CONCURRENCY
+
+    slugs = [f"s{i}" for i in range(INGEST_SOURCE_CONCURRENCY + 2)]
+    scalars_result = MagicMock()
+    scalars_result.all.return_value = [_make_source(slug=s) for s in slugs]
+    mock_db.scalars.return_value = scalars_result
+    monkeypatch.setattr(jobs, "AsyncSessionLocal", _session_factory(mock_db))
+    monkeypatch.setattr(jobs, "ADAPTER_REGISTRY", {s: MagicMock() for s in slugs})
+    in_flight = peak = 0
+
+    async def fake_ingest(slug):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0)
+        in_flight -= 1
+        return {"slug": slug}
+
+    monkeypatch.setattr(jobs, "ingest_source", AsyncMock(side_effect=fake_ingest))
+
+    results = await jobs.ingest_all_enabled()
+
+    assert [r["slug"] for r in results] == slugs
+    assert peak == INGEST_SOURCE_CONCURRENCY
+
+
 # ---------------------------------------------------------------------------
 # _run_db_job
 # ---------------------------------------------------------------------------

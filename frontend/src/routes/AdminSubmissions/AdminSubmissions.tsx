@@ -1,20 +1,23 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
+import { ADMIN_REVIEW_QUEUE_PAGE_SIZE, LOCALE_EN } from '../../_generated/sharedConstants';
 import {
   ADMIN_GENERIC_ERROR,
   ADMIN_QUEUE_DETAIL_LINK_LABEL,
-  ADMIN_REVIEW_QUEUE_PAGE_SIZE,
+  ADMIN_LOADING_LABEL,
 } from '../../constants/admin';
 import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
 import { ADMIN_RESOLUTION_MESSAGES } from '../../constants/claims';
 import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
-import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow, safeUrl } from '../../utils';
+import { apiErrorMessage, relativeTimeFromNow, safeUrl } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useAdminQueuePage, type ActionSpot } from '../../hooks/useAdminQueuePage';
+import Pager from '../../components/Pager';
 import AdminQueueSplitView from '../../components/AdminQueueSplitView';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
 import queueStyles from '../../components/shared/AdminQueue.module.css';
@@ -54,7 +57,7 @@ function renderSubmissionRow(item: AdminSubmission & { createdAtRelative: string
 }
 
 interface AdminSubmissionsResponse {
-  total: number | null;
+  total: number;
   limit: number;
   offset: number;
   has_more: boolean;
@@ -80,79 +83,80 @@ type ResolutionKind = 'approved' | 'retracted';
 export default function AdminSubmissions() {
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
+  const [note, setNote] = useState('');
   const {
-    data,
+    rows,
+    total,
+    tags: resolvedById,
+    tagRow,
+    resyncAfterFailedAction,
+    selectedId,
+    setSelectedId,
+    listRef,
     isLoading,
     isError,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
+    isPlaceholderData,
+    actionSpot,
+    pagerProps,
+  } = useAdminQueuePage<AdminSubmissionsResponse, AdminSubmission, ResolutionKind>({
     queryKey: [QUERY_KEYS.adminSubmissions],
-    queryFn: ({ pageParam }) =>
+    pageSize: ADMIN_REVIEW_QUEUE_PAGE_SIZE,
+    fetchPage: ({ limit, offset }) =>
       adminApi.get<AdminSubmissionsResponse>(
-        `${API.adminSubmissions}?${PAGE_PARAM.limit}=${ADMIN_REVIEW_QUEUE_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
+        `${API.adminSubmissions}?${PAGE_PARAM.limit}=${limit}&${PAGE_PARAM.offset}=${offset}`,
       ),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
+    select: (data) => ({ items: data.events, total: data.total, offset: data.offset }),
+    getId: getSubmissionId,
+    onPageSettled: () => setNote(''),
   });
 
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [note, setNote] = useState('');
-  const [resolvedById, setResolvedById] = useState<
-    Record<number, { item: AdminSubmission; kind: ResolutionKind }>
-  >({});
-
-  const serverItems = useMemo(() => data?.pages.flatMap((page) => page.events), [data]);
-  const totalSubmissions = data?.pages[0]?.total ?? 0;
   // Precomputed once per data/resolution change, not per render — see
   // AdminReports.tsx for why (Big-O audit M4).
-  const items = useMemo(() => {
-    const byId = new Map((serverItems ?? []).map((item) => [item.id, item]));
-    for (const entry of Object.values(resolvedById)) byId.set(entry.item.id, entry.item);
-    return Array.from(byId.values()).map((item) => ({
-      ...item,
-      createdAtRelative: relativeTimeFromNow(item.created_at),
-    }));
-  }, [serverItems, resolvedById]);
+  const items = useMemo(
+    () => rows.map((item) => ({ ...item, createdAtRelative: relativeTimeFromNow(item.created_at) })),
+    [rows],
+  );
 
   const currentId = selectedId ?? items[0]?.id ?? null;
 
   const actionMutation = useMutation({
-    mutationFn: ({ item, kind, note }: { item: AdminSubmission; kind: ResolutionKind; note: string }) => {
+    mutationFn: ({ item, kind, note }: { item: AdminSubmission; kind: ResolutionKind; note: string; spot: ActionSpot }) => {
       const path = kind === 'approved' ? API.adminSubmissionApprove(item.id) : API.adminSubmissionRetract(item.id);
       return adminApi.post<AdminSubmissionActionResult>(path, { resolution_note: note });
     },
-    onSuccess: (result, { item, kind }) => {
+    onSuccess: (result, { item, kind, spot }) => {
       const resolvedItem = kind === 'retracted' && result.status ? { ...item, status: result.status } : item;
-      setResolvedById((prev) => ({ ...prev, [item.id]: { item: resolvedItem, kind } }));
-      setNote('');
+      // Tags the row in place and refetches this page once, so the next
+      // row up fills the gap (spec #551). The note draft only resets when
+      // the admin is still on the page they acted on.
+      if (tagRow(resolvedItem, kind, spot)) setNote('');
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
       showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
+      resyncAfterFailedAction(err);
     },
   });
 
   function act(item: AdminSubmission, kind: ResolutionKind) {
     if (!note.trim()) return;
-    actionMutation.mutate({ item, kind, note: note.trim() });
+    actionMutation.mutate({ item, kind, note: note.trim(), spot: actionSpot(item) });
   }
 
   // Stable across note keystrokes (only resolvedById changes them) — see
   // renderSubmissionRow's module-scope siblings above for why this matters.
   const isResolved = useCallback(
-    (item: AdminSubmission) => item.id in resolvedById,
+    (item: AdminSubmission) => resolvedById.has(item.id),
     [resolvedById],
   );
   const resolvedTag = useCallback(
-    (item: AdminSubmission) => (resolvedById[item.id]?.kind === 'retracted' ? 'Retracted' : 'Approved'),
+    (item: AdminSubmission) => (resolvedById.get(item.id)?.kind === 'retracted' ? 'Retracted' : 'Approved'),
     [resolvedById],
   );
   const selectRow = useCallback((id: number) => {
     setSelectedId(id);
     setNote('');
-  }, []);
+  }, [setSelectedId]);
 
   return (
     <div>
@@ -162,12 +166,14 @@ export default function AdminSubmissions() {
       </div>
 
       {isLoading ? (
-        <PageState kind={UI_STATE.loading} message="Loading…" inline />
+        <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
       ) : isError ? (
         <PageState kind={UI_STATE.error} message="Couldn't load the submissions queue." inline />
+      ) : items.length === 0 && total > 0 ? (
+        // A past-end page about to clamp to the real last page.
+        <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
       ) : (
-        <>
-        <p className={styles.subtitle}>{items.length} of {totalSubmissions} pending submissions shown</p>
+        <div className={styles.queue} aria-busy={isPlaceholderData}>
         <AdminQueueSplitView
           items={items}
           getId={getSubmissionId}
@@ -177,8 +183,13 @@ export default function AdminSubmissions() {
           onSelect={selectRow}
           emptyLabel="No pending submissions."
           renderRow={renderSubmissionRow}
+          listRef={listRef}
+          listFooter={
+            // The pager's strings come from shared/i18n even here: docs/frontend.md "Admin Console"
+            <Pager {...pagerProps} locale={LOCALE_EN} liveNoun="items" className={queueStyles.queuePager} />
+          }
           renderDetail={(item) => {
-            const resolution = resolvedById[item.id];
+            const resolution = resolvedById.get(item.id);
             const previewUrl = safeUrl(item.url);
             return (
               <div>
@@ -233,17 +244,7 @@ export default function AdminSubmissions() {
             );
           }}
         />
-        {hasNextPage && (
-          <button
-            type="button"
-            className={styles.loadMoreBtn}
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
-          >
-            Load more
-          </button>
-        )}
-        </>
+        </div>
       )}
       {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
     </div>

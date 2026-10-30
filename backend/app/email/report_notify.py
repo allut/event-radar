@@ -20,6 +20,7 @@ from app.email.templates import (
     REPORT_NOTIFY_REVIEW_LINE,
     REPORT_NOTIFY_SOURCE_LINE,
     REPORT_NOTIFY_SUBJECT,
+    REPORT_NOTIFY_SUBJECT_PROMOTED,
     REPORT_NOTIFY_TEXT_BODY,
 )
 from app.models.models import Event
@@ -32,6 +33,7 @@ async def send_report_notification(
     is_illegal_allegation: bool,
     report_count: int,
     reporter_email: str,
+    is_promoted: bool = False,
 ) -> None:
     event_href = f"{settings.FRONTEND_URL}{EVENTS_PATH}/{event.id}"
     console_href = f"{settings.FRONTEND_URL}{ADMIN_REPORTS_PATH}?report={event.id}"
@@ -42,7 +44,10 @@ async def send_report_notification(
     safe_reporter_email = html.escape(reporter_email)
     safe_source_url = html.escape(event.url) if event.url else None
 
-    subject = REPORT_NOTIFY_SUBJECT.format(
+    subject_template = (
+        REPORT_NOTIFY_SUBJECT_PROMOTED if is_promoted else REPORT_NOTIFY_SUBJECT
+    )
+    subject = subject_template.format(
         title=" ".join(event.title_orig.split())
     )
 

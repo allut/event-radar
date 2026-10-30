@@ -1,7 +1,7 @@
 import { storageGet, storageSet, storageRemove } from './storage';
-import { LOCALES } from '../_generated/sharedConstants';
+import { LOCALES, LOCALE_EN } from '../_generated/sharedConstants';
 import { SIGNED_IN_HINT_KEY, LOGOUT_FLAG_TTL_MS } from '../constants/auth';
-import { LOCALE_EN, LOCALE_KEY } from '../constants/core';
+import { LOCALE_KEY } from '../constants/core';
 
 // Auth-change subscriber store, so components can react to setSignedInHint()/
 // clearSignedInHint() instead of only reading localStorage once at render

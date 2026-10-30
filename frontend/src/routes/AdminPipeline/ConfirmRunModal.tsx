@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Modal from '../../components/Modal';
 import type { AdminPipelineTrigger } from '../../constants/admin';
-import { LOCALE_EN } from '../../constants/core';
+import { LOCALE_EN } from '../../_generated/sharedConstants';
 import type { NdjsonLine } from '../../api/client';
 import styles from './ConfirmRunModal.module.css';
 

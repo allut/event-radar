@@ -1,6 +1,6 @@
 // .js extension required: this module is also imported (transitively) by
 // functions/api/seo-audit.ts, which Cloudflare Pages runs as unbundled ESM.
-import { SEO_AUDIT_GITHUB_REPO, SEO_AUDIT_ISSUE_LABEL } from '../constants/seo.js';
+import { SEO_AUDIT_GITHUB_REPO, SEO_AUDIT_ISSUE_LABEL, SEO_AUDIT_USER_AGENT } from '../constants/seo.js';
 import { githubRequest } from './githubRequest.js';
 
 interface GithubIssue {
@@ -8,7 +8,7 @@ interface GithubIssue {
 }
 
 function auditGithubRequest(path: string, token: string, init?: RequestInit): Promise<Response> {
-  return githubRequest(SEO_AUDIT_GITHUB_REPO, path, token, 'event-radar-seo-audit', init);
+  return githubRequest(SEO_AUDIT_GITHUB_REPO, path, token, SEO_AUDIT_USER_AGENT, init);
 }
 
 async function findOpenAuditIssue(token: string): Promise<GithubIssue | null> {

@@ -1,0 +1,59 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: var(--border-w-hair) solid var(--border);
+}
+
+.eyebrow {
+  composes: adminEyebrow from '../../components/shared/Page.module.css';
+}
+
+.title {
+  composes: adminPageTitle from '../../components/shared/Page.module.css';
+}
+
+.today {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+
+.section { min-width: 0; }
+
+.sectionTitle { composes: sectionTitle from '../../components/shared/AdminCommerce.module.css'; }
+
+.sectionTitleInline {
+  composes: sectionTitle;
+  margin: 0;
+}
+
+.listHint {
+  composes: hint from '../../components/shared/AdminCommerce.module.css';
+  margin-top: var(--space-3);
+}
+
+.trustHead {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: var(--border-w-hair) solid var(--border);
+}
+
+.trustCadence {
+  font-family: var(--font-mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}

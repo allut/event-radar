@@ -1,6 +1,6 @@
 # Code Quality Rationale
 
-What's in here: the reasons behind CLAUDE.md's inline Code Quality Rules, the HTTP retry bypasses, and the `fetch`-stub exceptions in frontend tests.
+What's in here: the reasons behind CLAUDE.md's inline Code Quality Rules, the HTTP retry bypasses, the `fetch`-stub exceptions in frontend tests, and spec-work conventions.
 
 CLAUDE.md states each rule. This doc says why it holds and where its edges are. Area mechanics live in the area doc that owns the code.
 
@@ -13,6 +13,7 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 - **`app/constants/__init__.py` stays empty, so every import names the defining file.** A re-export facade adds a hop to go-to-definition and lets constants pile back into one place. Generated cross-stack values are imported from `app._generated.shared_constants` directly.
 - **The frontend mirrors it in `frontend/src/constants/<domain>.ts`, with no `index.ts` barrel.** Each file imports with `.js` extensions because Pages Functions load it as unbundled ESM. Generated values come from `frontend/src/_generated/sharedConstants.ts` directly.
 - **LLM prompts sit apart in `app/llm/prompts.py`** so prompt-engineering diffs stay clean. Scrape selectors sit apart in `app/ingestion/selectors.py` for the same reason.
+- **A comment names a schedule constant and never restates its value or a UTC offset.** `CLEANUP_HOUR` stays true when the hour moves, but "Sun 03:30 EET" goes stale, and "EET" is the winter offset only. The `docs/backend-ops.md` cadence table is the one written copy, and `tests/test_main_scheduler.py` checks it against the registered triggers.
 - **Cross-stack values live once in `shared/` and are generated into both stacks.** The backend imports `app._generated.shared_constants` and the frontend `frontend/src/_generated/sharedConstants.ts`, so the two can't disagree. `backend/tests/test_generated_sync.py` fails when the generated files drift.
 
 ### Helpers
@@ -21,6 +22,11 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 - **One invariant stays in one file.** For example, `app/auth/admin_lockout.py` owns both the lockout counter and its eviction policy, and `admin_auth.py` imports from it. See [security.md](security.md)'s Admin Console Auth section.
 - **Cross-router auth dependencies live in `app/auth/dependencies.py`** so no router imports another router's module. Router modules stay leaves of the import graph.
 - **Every frontend request goes through `frontend/src/api/client.ts`.** It owns the per-track 401 handling, so a raw `fetch` misses the session-expiry redirect. See [frontend.md](frontend.md)'s API Client section.
+
+### Outbound Adapters
+
+- **Each external service the Promotions code calls sits behind a `Protocol` in `app/integrations/`.** `registry.py` is the Äriregister lookup and `payments.py` is Stripe. Domain code takes the adapter as an argument, and routers get it through `app/integrations/providers.py`.
+- **Tests swap in `backend/tests/promotions/fakes.py`, never patch an SDK or `httpx`.** The fakes script found, deleted, not-found and outage for the register, and record every Stripe call. The Äriregister call itself goes through `http_get()`.
 
 ### Underscore Names
 
@@ -39,6 +45,7 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 
 - **A query inside a per-row loop makes a job's cost grow with its row count.** The scheduled jobs touch every user or every pending event, so an N+1 loop turns a seconds-long job into minutes.
 - **Copy the existing shape when extending a job.** `app/ranking/score.py::build_daily_feeds()` and `app/llm/classifier.py::classify_pending()` fetch everything up front with `WHERE col IN (...)` and group in Python before the inner loop.
+- **A fixed query count is proven against real Postgres.** Run the job at two sizes inside `count_statements(db)` and compare the lengths. The helper and the rolled-back `db` fixture live in `backend/tests/conftest.py`.
 
 ### External Fan-Out
 
@@ -46,6 +53,7 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 - **Pick the cap from the provider's documented rate limit, with headroom for retries.** `app/constants/email.py::DIGEST_SEND_CONCURRENCY` is the model.
 - **`return_exceptions=True` keeps one failed call from discarding the other results.** Each result is then checked on its own.
 - **The Nominatim geocoding passes serial-await on purpose.** Nominatim's usage policy allows one request per second, which a concurrency cap can't express. See [pipeline.md](pipeline.md)'s Geocoding Backfill section.
+- **The Fienta organizer probe in `app/ingestion/organizer_sync.py::_check_existing_organizers()` is serial on purpose too.** It waits on an `AsyncRateLimiter` between calls to respect Fienta's rate limit, so a gather would only queue behind the limiter.
 
 ### HTTP Retry
 
@@ -55,12 +63,13 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 
 ### HTTP Retry Bypasses
 
-Four groups skip `http_get()`/`http_post()`. Add another only with a reason recorded here.
+These groups skip `http_get()`/`http_post()`. Add another only with a reason recorded here.
 
 - **Request-path Resend sends use `app/email/resend.py::send_resend_email()`, a single attempt.** A five-attempt backoff would stall the user's response for up to about 150 seconds. This covers the magic link, contact form, report notify, reporter outcome and claim resolution sends.
-- **Fan-out Resend callers share one client instead of retrying per send.** The report-outcome and claim-expiry sweeps pass `resend_http_client()` into each `send_resend_email()` call.
+- **Fan-out Resend callers share one client instead of retrying per send.** The report-outcome, claim-expiry and Promotion sweeps and the restriction notices pass `resend_http_client()` into each `send_resend_email()` call.
 - **`app/llm/router.py` calls each `LLM_PROVIDERS` entry directly.** The Groq → Cloudflare Workers AI → Mistral fallback chain is the retry strategy. A tenacity backoff underneath would fight its fast-fail-and-advance behaviour.
 - **`app/logging_config.py` ships logs with a sync `httpx.Client`.** It runs on the `QueueListener` background thread, which can't await the async `http_post()`.
+- **`app/integrations/payments.py` calls Stripe through the official `stripe` SDK.** The SDK signs requests, sets idempotency keys and verifies webhook signatures, and rebuilding that on `http_post()` would be riskier than the bypass. It is the only module that imports `stripe`.
 - **`app/auth/google_oauth.py`'s `PyJWKClient` fetches Google's JWKS itself, with its own caching.** Routing it through `http_get()` would mean hand-rolling that cache. ADR 0002 records the same trade-off.
 
 These are not bypasses, and they show where the line falls:
@@ -84,6 +93,8 @@ These are not bypasses, and they show where the line falls:
 
 - **`E501` is ignored.** Long lines are allowed where wrapping would hurt readability.
 - **`app/_generated` is excluded.** The generator owns those files, so they aren't hand-formatted.
+- **Ruff enforces the annotation and datetime rules.** `UP006`/`UP007`/`UP035`/`UP045` require PEP 604/585 syntax, `ANN201` a public return type, and the `DTZ` rules an aware datetime. Tests are exempt from `ANN201`, since a test function returns `None`.
+- **A parsed naive datetime chains `.replace(tzinfo=TALLINN_TZ)` onto the `strptime()` call.** `DTZ007` accepts the chained form but not a naive intermediate variable.
 
 ### Mypy
 
@@ -114,3 +125,10 @@ A test may stub global `fetch` only when its subject calls `fetch` itself. Add a
 - **`frontend/src/routes/Feed/Feed.logoutRedirect.test.tsx`** tests `api/client.ts`'s own 401 redirect surviving a logout race. Mocking `api` would remove the code path under test.
 - **`api/client.test.ts`, `lib/githubRequest.test.ts`, `lib/seoAuditIssue.test.ts` and `scripts/prerender.test.ts`** each test code that calls `fetch` directly.
 - **The Pages Functions tests under `frontend/tests/functions/`** test handlers that call `fetch` directly. See [frontend.md](frontend.md)'s Tests section for why they live outside `functions/`.
+
+## Spec Work
+
+- **Bug fixes and new behaviour need a test that failed before the change.** Three agents wrote code first on the Promotions spec, and review then found real defects in lock order and the withdraw refund.
+- **Spec work lands on an integration branch, then flattens to linear commits on `master`.** Run `python scripts/linearize-branch.py <branch> --base master` for the plan, add `--apply` for the new tip, then `git merge --ff-only <tip>`.
+- **One agent owns each migration number.** The orchestrator rechains `down_revision` at merge, and `backend/tests/test_migration_chain.py` catches a collision or a stale "Revises" line.
+

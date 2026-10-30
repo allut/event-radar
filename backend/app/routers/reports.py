@@ -18,11 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.constants.events import ERROR_EVENT_NOT_FOUND
 from app.constants.log_events import LOG_EVENT_REPORT_SUBMITTED
 from app.constants.rate_limits import RATE_LIMIT_REPORT
+from app._generated.shared_constants import REPORT_DETAIL_MAX_CHARS, REPORT_REASON_OTHER
 from app.constants.reports import (
     ERROR_REPORT_DETAIL_REQUIRED,
     ERROR_REPORT_DETAIL_TOO_LONG,
-    REPORT_DETAIL_MAX_CHARS,
-    REPORT_REASON_OTHER,
     REPORT_STATUS_OPEN,
 )
 from app.db import get_db
@@ -30,6 +29,8 @@ from app.email.report_notify import send_report_notification
 from app.models.models import Event, EventReport, User
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
+from app.promotions.promoted import is_event_promoted
+from app.promotions.windows import now_tallinn, tallinn_today
 from app.routers.utils import validate_report_reason
 from app.events.queries import public_event_filter
 
@@ -129,6 +130,9 @@ async def submit_report(
     # report (pre_upsert_open_count would already be >= 1 in that case).
     if pre_upsert_open_count == 0:
         try:
+            is_promoted = await is_event_promoted(
+                db, body.event_id, tallinn_today(now_tallinn())
+            )
             await send_report_notification(
                 event,
                 body.reason,
@@ -136,6 +140,7 @@ async def submit_report(
                 body.is_illegal_allegation,
                 1,
                 current_user.email,
+                is_promoted=is_promoted,
             )
         except Exception:
             log.exception(

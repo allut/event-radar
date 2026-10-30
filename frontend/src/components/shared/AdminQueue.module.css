@@ -65,14 +65,12 @@
   margin-bottom: var(--space-4);
 }
 
-.queueLoadMore {
-  composes: btnOutline from './Button.module.css';
-  display: block;
-  margin: var(--space-5) auto 0;
-  padding: var(--space-2) var(--space-5);
-  cursor: pointer;
+/* The queue's <Pager> in AdminQueueSplitView's listFooter: a hairline
+   between the list's scroll box and the pager (spec #551). */
+.queuePager {
+  padding-top: var(--space-3);
+  border-top: var(--border-w-hair) solid var(--border);
 }
-.queueLoadMore:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
 
 /* Top-level tab strip shared by AdminEventDetail's Overview/Classification/…
  * switch and AdminClaims' Pending review/Granted switch (#420) — a plain

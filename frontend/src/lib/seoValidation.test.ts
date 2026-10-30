@@ -9,27 +9,10 @@ import {
 } from './seoValidation';
 import { buildEventJsonLd, buildExploreItemListJsonLd, buildWebsiteJsonLd } from './structuredData';
 import { buildSeoMeta } from '../hooks/useSeoMeta';
+import { renderSnapshotHtml } from '../test/seoSnapshots';
 import { makeEvent } from '../test/utils';
-import { serializeJsonLd } from './jsonLd';
 import { PRODUCTION_ORIGIN } from '../constants/seo';
-
-/** Mirrors components/SeoTags/SeoTags.tsx's rendering (title/meta/link/
- * ld+json escaping) closely enough to exercise parseSnapshotHtml against a
- * realistic snapshot, without pulling react-helmet-async/jsdom-render into
- * this test file. */
-function renderSnapshotHtml(
-  meta: ReturnType<typeof buildSeoMeta>,
-  jsonLd: object | null,
-  extraBodyHtml = '',
-): string {
-  const metaTags = meta.metaTags
-    .map((tag) => `<meta ${tag.name ? `name="${tag.name}"` : `property="${tag.property}"`} content="${tag.content}">`)
-    .join('\n');
-  const links = meta.links
-    .map((link) => `<link rel="${link.rel}" href="${link.href}"${link.hrefLang ? ` hreflang="${link.hrefLang}"` : ''}>`)
-    .join('\n');
-  return `<!doctype html><html lang="${meta.htmlLang}"><head><title>${meta.title}</title>${metaTags}${links}<link rel="icon" href="/favicon.svg">${jsonLd === null ? '' : `<script type="application/ld+json">${serializeJsonLd(jsonLd)}</script>`}</head><body>${extraBodyHtml}</body></html>`;
-}
+import { SPONSORED_SLOT_ATTR } from '../_generated/sharedConstants';
 
 describe('parseSnapshotHtml', () => {
   it('extracts title/canonical/hreflang/robots/jsonLd/price from a well-formed snapshot', () => {
@@ -326,6 +309,25 @@ describe("validateSnapshotStructure kind 'page'", () => {
     parsed.robots = 'noindex';
     const issues = validateSnapshotStructure(parsed, { kind: 'page', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
     expect(issues).toEqual(['robots meta is "noindex", expected "index, follow"']);
+  });
+});
+
+describe('validateSnapshotStructure Sponsored slot guard (issue #603)', () => {
+  const events = [makeEvent({ id: 1, title: 'A' }), makeEvent({ id: 2, title: 'B' }), makeEvent({ id: 3, title: 'C' })];
+  function listHtml(bodyHtml: string): string {
+    const meta = buildSeoMeta({ title: 'Explore | Event Radar', locale: 'et', path: '/explore', indexable: true });
+    return renderSnapshotHtml(meta, buildExploreItemListJsonLd(events, 'et'), bodyHtml);
+  }
+  const validate = (html: string) =>
+    validateSnapshotStructure(parseSnapshotHtml(html), { kind: 'list', locale: 'et', originPrefix: PRODUCTION_ORIGIN });
+
+  it('passes a list snapshot with no slot', () => {
+    expect(validate(listHtml('<article>organic</article>'))).toEqual([]);
+  });
+
+  it('fails a list snapshot that contains the slot marker', () => {
+    const issues = validate(listHtml(`<article ${SPONSORED_SLOT_ATTR}>ad</article>`));
+    expect(issues.some((i) => i.includes('Sponsored slot'))).toBe(true);
   });
 });
 

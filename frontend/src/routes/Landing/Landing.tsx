@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { CATEGORIES, LOCALES, MAGIC_LINK_EXPIRY_MINUTES } from '../../_generated/sharedConstants';
-import { ANALYTICS_EVENTS } from '../../constants/analytics';
 import { API, QUERY_KEYS } from '../../constants/api';
 import {
   ACCENT_MARKER_RE,
@@ -25,7 +24,6 @@ import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import { usePrefersReducedMotion } from '../../hooks/usePrefersReducedMotion';
 import { useSeoMeta } from '../../hooks/useSeoMeta';
-import { trackEvent } from '../../lib/gtag';
 import { buildWebsiteJsonLd } from '../../lib/structuredData';
 import TopBar from '../../components/TopBar';
 import SeoTags from '../../components/SeoTags';
@@ -89,11 +87,6 @@ function AccentedText({ text }: { text: string }) {
 function EmailCapture({ locale }: { locale: string }) {
   const { email, setEmail, state, errorMsg, submit } = useMagicLinkRequest(locale);
 
-  function handleSubmit(e: React.FormEvent) {
-    trackEvent(ANALYTICS_EVENTS.landingEmailSubmit, { locale });
-    return submit(e);
-  }
-
   if (state === UI_STATE.success) {
     return (
       <div className={styles.success} role="status">
@@ -110,7 +103,7 @@ function EmailCapture({ locale }: { locale: string }) {
 
   return (
     <>
-      <form onSubmit={handleSubmit} className={styles.emailForm} noValidate>
+      <form onSubmit={submit} className={styles.emailForm} noValidate>
         <input
           type="email"
           className={styles.input}
@@ -257,7 +250,7 @@ export default function Landing() {
     retry: false,
   });
   const tonightEvents = counts?.tonight_events ?? [];
-  const furthestYear = counts?.furthest_date ? new Date(counts.furthest_date).getFullYear() : null;
+  const furthestYear = counts?.furthest_date ? Number(counts.furthest_date.slice(0, 4)) : null;
 
   const brand = t('brand', locale);
   const brandSplitIdx = brand.lastIndexOf(' ');
@@ -322,7 +315,6 @@ export default function Landing() {
                       <Link
                         to={exploreHref}
                         className={styles.capbarBrowse}
-                        onClick={() => trackEvent(ANALYTICS_EVENTS.landingBrowseCtaClick, { locale })}
                       >
                         {t('landing_cta_explore', locale)}
                       </Link>
@@ -386,7 +378,6 @@ export default function Landing() {
             <Link
               to={exploreHref}
               className={styles.showcaseCta}
-              onClick={() => trackEvent(ANALYTICS_EVENTS.landingBrowseCtaClick, { locale })}
             >
               {ti('landing_showcase_cta', locale, { count: formatCount(counts.upcoming_count, locale) })}
             </Link>

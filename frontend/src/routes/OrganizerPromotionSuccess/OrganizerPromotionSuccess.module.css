@@ -1,0 +1,17 @@
+.page {
+  composes: page from '../../components/shared/Page.module.css';
+}
+
+.main {
+  flex: 1 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-8) var(--space-6);
+}
+
+@media (max-width: 640px) {
+  .main {
+    padding: var(--space-6) var(--space-4);
+  }
+}

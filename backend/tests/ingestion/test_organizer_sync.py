@@ -160,6 +160,130 @@ async def test_discovery_revives_retired_organizer(mock_db):
     assert 99 not in source.config["retired_organizer_ids"]
 
 
+def _page(events: list[dict], page: int, last_page: int) -> AsyncMock:
+    r = AsyncMock()
+    next_url = (
+        f"https://fienta.com/api/v1/public/events?page={page + 1}&city=Tallinn"
+        if page < last_page
+        else None
+    )
+    r.json = lambda: {
+        "events": events,
+        "pagination": {
+            "page": page,
+            "last_page": last_page,
+            "next_page_url": next_url,
+        },
+    }
+    return r
+
+
+def _events_for(oid: int, name: str, n: int) -> list[dict]:
+    return [{"organizer_id": oid, "organizer_name": name}] * n
+
+
+@pytest.mark.asyncio
+async def test_discovery_counts_events_across_all_pages(mock_db):
+    # Organizer 7 has 1 event per page: only reaches the 3-event threshold if
+    # every page is read (#634).
+    source = _source({"organizer_ids": [], "organizer_names": {}})
+    mock_db.scalar.return_value = source
+
+    pages = [_page(_events_for(7, "Late Org", 1), n, 3) for n in (1, 2, 3)]
+    with patch(
+        "app.ingestion.organizer_sync.http_get",
+        new_callable=AsyncMock,
+        side_effect=pages,
+    ) as mock_get:
+        result = await sync_fienta_organizers(mock_db)
+
+    assert (7, "Late Org") in result["added"]
+    assert mock_get.await_count == 3
+    assert "page=2" in mock_get.await_args_list[1].args[1]
+    assert mock_get.await_args_list[1].kwargs.get("params") is None
+
+
+@pytest.mark.asyncio
+async def test_discovery_stops_on_next_url_host_mismatch(mock_db, caplog):
+    source = _source({"organizer_ids": [], "organizer_names": {}})
+    mock_db.scalar.return_value = source
+
+    first = _page(_events_for(7, "Org", 1), 1, 3)
+    first.json = lambda: {
+        "events": _events_for(7, "Org", 1),
+        "pagination": {
+            "page": 1,
+            "last_page": 3,
+            "next_page_url": "https://evil.example/api?page=2",
+        },
+    }
+    with patch(
+        "app.ingestion.organizer_sync.http_get",
+        new_callable=AsyncMock,
+        side_effect=[first],
+    ) as mock_get:
+        await sync_fienta_organizers(mock_db)
+
+    assert mock_get.await_count == 1
+    assert "SSRF guard" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_discovery_acquires_limiter_per_page(mock_db):
+    source = _source({"organizer_ids": [], "organizer_names": {}})
+    mock_db.scalar.return_value = source
+
+    pages = [_page([], n, 3) for n in (1, 2, 3)]
+    with (
+        patch(
+            "app.ingestion.organizer_sync.http_get",
+            new_callable=AsyncMock,
+            side_effect=pages,
+        ),
+        patch(
+            "app.ingestion.organizer_sync.AsyncRateLimiter.acquire",
+            new_callable=AsyncMock,
+        ) as acquire,
+    ):
+        await sync_fienta_organizers(mock_db)
+
+    assert acquire.await_count == 3  # no organizer probes, one per scan page
+
+
+@pytest.mark.asyncio
+async def test_discovery_warns_when_page_budget_exhausted(mock_db, caplog):
+    source = _source({"organizer_ids": [], "organizer_names": {}})
+    mock_db.scalar.return_value = source
+
+    with (
+        patch("app.ingestion.organizer_sync.FIENTA_ORGANIZER_SCAN_MAX_PAGES", 2),
+        patch(
+            "app.ingestion.organizer_sync.http_get",
+            new_callable=AsyncMock,
+            side_effect=[_page([], n, 5) for n in (1, 2, 3)],
+        ) as mock_get,
+    ):
+        await sync_fienta_organizers(mock_db)
+
+    assert mock_get.await_count == 2
+    assert "page budget" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_discovery_no_warning_when_all_pages_read(mock_db, caplog):
+    source = _source({"organizer_ids": [], "organizer_names": {}})
+    mock_db.scalar.return_value = source
+
+    with patch(
+        "app.ingestion.organizer_sync.http_get",
+        new_callable=AsyncMock,
+        side_effect=[_page([], 1, 2), _page([], 2, 2)],
+    ):
+        await sync_fienta_organizers(mock_db)
+
+    assert "page budget" not in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # Publisher mirroring (#409/#411) — sources.config stays the ingestion
 # filter; publishers is a read mirror of it.

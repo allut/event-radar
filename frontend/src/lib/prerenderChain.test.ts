@@ -10,9 +10,17 @@ import {
   buildRoundMarker,
   shouldSkipCadenceTick,
   shouldCommitRoundMarker,
+  predictRoundContinues,
   type RoundMarker,
 } from './prerenderChain';
-import { CHAIN_MAX_ROUNDS, CHAIN_STALENESS_TIMEOUT_MINUTES } from '../constants/prerender';
+import { MS_PER_MINUTE } from '../constants/core';
+import {
+  CHAIN_MAX_ROUNDS,
+  CHAIN_STALENESS_TIMEOUT_MINUTES,
+  DEFAULT_RENDER_BUDGET_MINUTES,
+  PRERENDER_CONTINUE_PREDICTION_MARGIN,
+  PRERENDER_ROUTES_PER_MINUTE,
+} from '../constants/prerender';
 
 function makeMarker(overrides: Partial<RoundMarker> = {}): RoundMarker {
   return {
@@ -343,5 +351,32 @@ describe('shouldCommitRoundMarker', () => {
       }
     }
     expect(selfTriggeredPushes).toBe(0);
+  });
+});
+
+describe('predictRoundContinues (issue #537)', () => {
+  const budgetMs = DEFAULT_RENDER_BUDGET_MINUTES * MS_PER_MINUTE;
+  const threshold = Math.floor(
+    DEFAULT_RENDER_BUDGET_MINUTES * PRERENDER_ROUTES_PER_MINUTE * PRERENDER_CONTINUE_PREDICTION_MARGIN,
+  );
+  // The 2026-10-12 release build's render queue — a single-round burst.
+  const observedSingleRoundQueue = 213;
+
+  it('predicts continuing when the render queue outgrows what the budget can plausibly render', () => {
+    expect(predictRoundContinues(threshold + 1, 1, budgetMs)).toBe(true);
+  });
+
+  it('predicts done when the budget can plausibly render the whole queue', () => {
+    expect(predictRoundContinues(threshold, 1, budgetMs)).toBe(false);
+    expect(predictRoundContinues(observedSingleRoundQueue, 1, budgetMs)).toBe(false);
+    expect(predictRoundContinues(0, 1, budgetMs)).toBe(false);
+  });
+
+  it('predicts done past the chain-depth cap, however long the queue', () => {
+    expect(predictRoundContinues(50_000, CHAIN_MAX_ROUNDS + 1, budgetMs)).toBe(false);
+  });
+
+  it('predicts done on a zero budget, which renders nothing and so ends zero-progress', () => {
+    expect(predictRoundContinues(50_000, 1, 0)).toBe(false);
   });
 });

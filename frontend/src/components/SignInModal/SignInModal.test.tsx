@@ -9,13 +9,6 @@ vi.mock('../../api/client', async (importOriginal) => ({
   api: { post: vi.fn(() => new Promise(() => undefined)) },
 }));
 
-vi.mock('../../lib/gtag', () => ({
-  trackEvent: vi.fn(),
-}));
-
-import { trackEvent } from '../../lib/gtag';
-const mockTrackEvent = vi.mocked(trackEvent);
-
 describe('SignInModal', () => {
   it('renders nothing when trigger is null', () => {
     renderWithProviders(<SignInModal open={false} trigger={null} onClose={vi.fn()} locale="en" />);
@@ -46,25 +39,10 @@ describe('SignInModal', () => {
     expect(screen.getByRole('button', { name: /send/i })).toBeInTheDocument();
   });
 
-  it('tracks signin_modal_dismiss with the trigger on close without submitting', async () => {
+  it('calls onClose when the Close button is pressed', async () => {
     const onClose = vi.fn();
     renderWithProviders(<SignInModal open trigger="save" onClose={onClose} locale="en" />);
     await userEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(mockTrackEvent).toHaveBeenCalledWith('signin_modal_dismiss', { trigger: 'save' });
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it('tracks signin_modal_submit on form submit, and does not track dismiss on a later close', async () => {
-    const onClose = vi.fn();
-    renderWithProviders(<SignInModal open trigger="for_you" onClose={onClose} locale="en" />);
-    await userEvent.type(screen.getByLabelText(/email/i), 'jane@example.com');
-    await userEvent.click(screen.getByRole('button', { name: /send/i }));
-
-    expect(mockTrackEvent).toHaveBeenCalledWith('signin_modal_submit', { trigger: 'for_you' });
-
-    mockTrackEvent.mockClear();
-    await userEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(mockTrackEvent).not.toHaveBeenCalledWith('signin_modal_dismiss', expect.anything());
     expect(onClose).toHaveBeenCalled();
   });
 });

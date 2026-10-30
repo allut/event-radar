@@ -7,9 +7,7 @@ import {
   evaluateLiveAudit,
   isPathAllowedByRobots,
 } from './seoAudit';
-import { buildEventJsonLd, buildExploreItemListJsonLd, buildWebsiteJsonLd } from './structuredData';
-import { buildSeoMeta } from '../hooks/useSeoMeta';
-import { makeEvent } from '../test/utils';
+import { renderEventHtml, renderExploreHtml, renderLandingHtml } from '../test/seoSnapshots';
 import {
   PRODUCTION_ORIGIN,
   SEO_AUDIT_STALE_THRESHOLD_HOURS,
@@ -43,40 +41,6 @@ const VALID_ROBOTS_TXT = [
 /** The pre-fix shape (issue this audit check exists for): `Disallow: /` with
  * no exceptions for the non-route files served out of dist/. */
 const ROBOTS_TXT_MISSING_ALLOWS = ['User-agent: *', 'Disallow: /', 'Allow: /$', 'Allow: /events/', ''].join('\n');
-
-/** Mirrors seoValidation.test.ts's renderSnapshotHtml — kept local since that
- * helper isn't exported, and this file needs both the Landing/website and
- * event-page shapes. */
-function renderSnapshotHtml(meta: ReturnType<typeof buildSeoMeta>, jsonLd: object): string {
-  const metaTags = meta.metaTags
-    .map((tag) => `<meta ${tag.name ? `name="${tag.name}"` : `property="${tag.property}"`} content="${tag.content}">`)
-    .join('\n');
-  const links = meta.links
-    .map((link) => `<link rel="${link.rel}" href="${link.href}"${link.hrefLang ? ` hreflang="${link.hrefLang}"` : ''}>`)
-    .join('\n');
-  return `<!doctype html><html lang="${meta.htmlLang}"><head><title>${meta.title}</title>${metaTags}${links}<link rel="icon" href="/favicon.svg"><script type="application/ld+json">${JSON.stringify(jsonLd)}</script></head><body></body></html>`;
-}
-
-function renderLandingHtml(): string {
-  const meta = buildSeoMeta({ title: 'Mis toimub Tallinnas | Event Radar', locale: 'et', path: '/', indexable: true });
-  return renderSnapshotHtml(meta, buildWebsiteJsonLd('et'));
-}
-
-function renderEventHtml(eventId = 1): string {
-  const event = makeEvent({ id: eventId, title: 'Jazz Night' });
-  const meta = buildSeoMeta({
-    title: 'Jazz Night – Kultuurikatel | Event Radar',
-    locale: 'et',
-    path: `/events/${eventId}`,
-    indexable: true,
-  });
-  return renderSnapshotHtml(meta, buildEventJsonLd(event));
-}
-
-function renderExploreHtml(locale: string, events = [makeEvent({ id: 1 }), makeEvent({ id: 2 }), makeEvent({ id: 3 })]): string {
-  const meta = buildSeoMeta({ title: 'Explore | Event Radar', locale, path: '/explore', indexable: true });
-  return renderSnapshotHtml(meta, buildExploreItemListJsonLd(events, locale));
-}
 
 function sitemapWithLastmod(lastmod: string, extraLocs: string[] = []): string {
   const extraUrls = extraLocs.map((loc) => `<url><loc>${loc}</loc><lastmod>${lastmod}</lastmod></url>`).join('');

@@ -9,12 +9,22 @@
   composes: queueEmpty from '../shared/AdminQueue.module.css';
 }
 
+/* The list column: the scrolling row list, then the listFooter slot (the
+   pager) outside the scroll area. The column rule lives here so it runs
+   past the pager. */
+.listCol {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border-right: var(--border-w-hair) solid var(--border);
+  padding-right: var(--space-4);
+}
+
 .list {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  border-right: var(--border-w-hair) solid var(--border);
-  padding-right: var(--space-4);
   max-height: var(--admin-queue-list-max-height);
   overflow-y: auto;
 }
@@ -71,9 +81,12 @@
     grid-template-columns: 1fr;
   }
 
-  .list {
+  .listCol {
     border-right: none;
     padding-right: 0;
+  }
+
+  .list {
     max-height: none;
   }
 

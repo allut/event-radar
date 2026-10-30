@@ -42,12 +42,11 @@ EVENTS_PATH = "/events"
 SETTINGS_PATH = "/settings"
 ADMIN_REPORTS_PATH = "/admin/reports"
 UNSUBSCRIBE_PATH = "/unsubscribe"
+ADS_OFF_PATH = "/email-consent-off"
 
 # Named locale codes for the fixed et/en/ru vocabulary (VALID_LOCALES above) —
 # used where code refers to one specific locale rather than iterating the set.
 LOCALE_ET = "et"
-LOCALE_EN = "en"
-LOCALE_RU = "ru"
 # Locales whose frontend URLs carry a `/en`/`/ru` path prefix — Estonian is the
 # bare (unprefixed) URL locale. Backend mirror of the frontend's
 # LOCALE_URL_PREFIX_CODES (frontend/src/constants/core.ts); used by
@@ -57,6 +56,10 @@ LOCALE_URL_PREFIX_CODES: frozenset[str] = frozenset(VALID_LOCALES) - {LOCALE_ET}
 # Max values per ``IN (...)`` list: SQLAlchemy expands one bind param per value,
 # and Postgres caps a statement at ~32k params.
 SQL_IN_CHUNK_SIZE = 1000
+
+# Largest Postgres BIGINT (signed 64-bit). Upper bound for an id query param,
+# so an out-of-range id is a 422 instead of an overflowing bind (a 500).
+SQL_BIGINT_MAX = 2**63 - 1
 
 # app/ingestion/adapter.py::_make_slug — collapses any non a-z0-9 run to "-".
 SLUG_SANITIZE_RE = r"[^a-z0-9]+"

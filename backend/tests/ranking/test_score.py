@@ -1,7 +1,9 @@
 """Unit tests for the scoring formula — no DB, all pure functions."""
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from app.constants.core import TALLINN_TZ
 from app.constants.ranking import SCORE_HARD_EXCLUDE
@@ -20,6 +22,17 @@ from app.ranking.score import (
     recency_boost,
     score_event,
 )
+
+
+@pytest.fixture(autouse=True)
+def _no_daily5_slot(monkeypatch):
+    """These tests drive build_daily_feeds against a mocked session; the
+    Sponsored-slot pick (#607) has its own real-Postgres tests."""
+    from app.promotions.daily5 import Daily5Run
+
+    run = Daily5Run(today=date(2026, 5, 10), now=_now(), eligible=[])
+    monkeypatch.setattr(run, "finish", AsyncMock())
+    monkeypatch.setattr("app.ranking.score.prepare_daily5", AsyncMock(return_value=run))
 
 
 def _now() -> datetime:
@@ -1196,7 +1209,7 @@ class TestBuildDailyFeedsBatching:
 
         result = await score_module.build_daily_feeds(mock_db)
 
-        assert mock_db.commit.await_count == 3  # one per page
+        assert mock_db.commit.await_count == 4  # one per page, plus the final Daily 5 slot commit
 
         # Candidate-events query ran exactly once regardless of page count —
         # the core RAM-savings claim (identified by its is_explicit marker).
@@ -1217,3 +1230,75 @@ class TestBuildDailyFeedsBatching:
             "total_users": 5,
             "candidate_events": 2,
         }
+
+
+class TestPersonaOnlyScoreMemo:
+    """Users without feedback share one score per candidate per persona mix."""
+
+    def _build_ctx(self, users, personas_by_user, recent_series_by_user, fb_by_user=None):
+        from app.ranking.score import (
+            _FeedBuildContext,
+            _precompute_event_factors,
+            _SharedFeedContext,
+        )
+
+        events = [
+            _event(event_id=1, categories=["music"], vibes=["chill"], quality=0.9),
+            _event(event_id=2, categories=["theater"], vibes=["social"], quality=0.4),
+            _event(event_id=3, categories=["music", "nightlife"], vibes=["underground"]),
+        ]
+        series = {e.id: (f"title-{e.id}", "venue") for e in events}
+        shared = _SharedFeedContext(
+            event_rows=events,
+            candidate_series_key=series,
+            event_factors=_precompute_event_factors(events, _now()),
+        )
+        return _FeedBuildContext(
+            shared=shared,
+            users=users,
+            personas_by_user=personas_by_user,
+            fb_by_user=fb_by_user or {},
+            recent_series_by_user=recent_series_by_user,
+            affinity_cache=shared.affinity_cache,
+        ), events
+
+    def test_second_user_with_same_mix_reuses_scores(self, monkeypatch):
+        from app.ranking import score as score_mod
+
+        vec = {"categories": {"music": 1.0, "theater": -0.5}, "vibes": {"chill": 0.5}}
+        u1, u2 = _user(1), _user(2)
+        build_ctx, events = self._build_ctx(
+            [u1, u2],
+            {1: [(1.0, vec)], 2: [(1.0, vec)]},
+            {2: {("title-2", "venue")}},
+        )
+        calls = []
+        real = score_mod.score_event
+        monkeypatch.setattr(
+            score_mod, "score_event", lambda *a, **k: calls.append(1) or real(*a, **k)
+        )
+
+        first = score_mod._score_user_candidates(u1, build_ctx, FeedbackContext(), _now())
+        second = score_mod._score_user_candidates(u2, build_ctx, FeedbackContext(), _now())
+
+        assert len(calls) == len(events)
+        expected = {
+            e.id: real([(1.0, vec)], FeedbackContext(), e, _now()) for e in events
+        }
+        assert {e.id: s for s, e in first[0]} == pytest.approx(expected)
+        assert [e.id for _, e in second[0]] == [1, 3]
+        assert [e.id for _, e in second[1]] == [2]  # series cooldown still per user
+        assert {e.id: s for s, e in second[0] + second[1]} == pytest.approx(expected)
+
+    def test_user_with_feedback_is_scored_individually(self):
+        from app.ranking import score as score_mod
+
+        vec = {"categories": {"music": 1.0}}
+        u1 = _user(1)
+        build_ctx, _ = self._build_ctx([u1], {1: [(1.0, vec)]}, {})
+        fb_ctx = _ctx(("dislike", 1, ["music"], None, _now()))
+
+        scored, _ = score_mod._score_user_candidates(u1, build_ctx, fb_ctx, _now())
+
+        assert [e.id for _, e in scored] == [2, 3]
+        assert build_ctx.shared.persona_only_scores == {}

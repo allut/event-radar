@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { QueryClient } from '@tanstack/react-query';
-import { renderWithProviders } from '../../test/utils';
+import { makeTestQueryClient, renderWithProviders } from '../../test/utils';
 import VenuePicker, { type VenuePickerValue } from './VenuePicker';
 import { QUERY_KEYS } from '../../constants/api';
-import { LOCALE_EN, LOCALE_ET, type ContentLang } from '../../constants/core';
+import { LOCALE_ET, type ContentLang } from '../../constants/core';
+import { LOCALE_EN } from '../../_generated/sharedConstants';
 
 vi.mock('../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api/client')>()),
@@ -76,7 +76,7 @@ describe('VenuePicker', () => {
   });
 
   it('keeps in-progress edits when a background refetch returns changed data for the same venue', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const queryClient = makeTestQueryClient();
     renderWithProviders(<Harness initial={{ mode: 'saved', venueId: 1 }} />, { queryClient });
 
     await userEvent.click(await screen.findByRole('button', { name: /edit venue/i }));

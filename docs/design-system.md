@@ -124,10 +124,16 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 `frontend/src/components/shared/` holds pure-CSS modules for page, card, button, field, menu, bar, calendar, settings and prose chrome. `GoogleSignInButton/` is the one component folder in it.
 
 - **Consume shared modules with CSS Modules `composes:`.** Component CSS composes from `'../shared/X.module.css'`, route CSS from `'../../components/shared/X.module.css'`. Copy-pasting their rules is the drift this layer exists to stop.
+- **`cssRules.test.ts` enforces the layer's rules.** It rejects `composes:` inside `@media` or `@container`, literal durations and radii, `@media` widths with no `--bp-*` token, and a block of 6+ declarations copied across modules.
 - **Add a new shared pattern here rather than growing a second copy.** Variants follow base class plus modifier, like `.card` and `.cardAccentTop`. Restyling a base class in place for one consumer changes every other consumer.
 - **`composes:` can't be scoped inside `@media`.** It resolves to a class-name string at build time. A shared rule needed only on one side of a breakpoint is restated locally, as `Feed.module.css`'s media-scoped `.srOnly` does. Keep a restatement in sync with its source.
+- **A local override of a composed property must out-rank the shared rule.** Vite can bundle the shared module after the consumer, so a same-specificity override loses. Double the local selector (`.main.main`) or qualify it (`.main.mainWide`) like `Menu.module.css`'s `.menuPopFill.menuPopFill`. A modifier in the shared module itself (`AdminCommerce.module.css`'s `.inputFieldSize`) needs neither, because one file's source order is stable.
+- **`cssRules.test.ts` fails on a new tie with a composed rule.** It compares rules on the composing class itself, so it misses a modifier class applied beside it in the TSX (`.mainWide`). `frontend/src/test/composedTieBaseline.ts` lists the ties that predate the guard. Delete a line when you fix its tie; the test fails until stale lines go.
+- **`Pager/` composes `Button.module.css`'s `.btnOutline` for every page link**, with `--space-2-75` (44px) targets. Callers place it and add spacing or a rule through `className`; it has no audience variant.
+- **`PageSettle.module.css`'s `.settleTarget` gives a paged list's results heading its `scroll-margin-top`.** It clears the top bar at its full, unscrolled height (`--bar-h`, `--bar-h-phone`), so the heading clears the bar whether or not it has condensed.
 - **Every bar and drawer link sets its own `:hover` color.** `index.css`'s global gold `a:hover` otherwise outranks a single-class link color.
 - **`Prose.module.css` is the one typography for sanitized-HTML bodies.** `EventDetail` and `AdminEventDetail` compose it. `RichTextEditor`'s editing surface keeps its own margin model.
+- **`AdminCommerce.module.css` is the admin commerce chrome:** pills, tags, chips, callouts, inline panels, hairline tables and the three admin buttons. The Promotions queue, Trust review and Stripe look compose it. Callouts take `.alertDanger` or `.alertSuccess` as modifiers.
 - **`Landing.module.css` re-rolls its hero, ticker, plate and footer chrome locally, on purpose.** That treatment has no second consumer. Hoisting it into `shared/` adds indirection for nothing.
 
 ## 8. Motion
@@ -175,6 +181,10 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 ### Components
 
 - **`EventCard` has two variants: `standard` and `featured`.** An `editorial` split-row plate variant was built twice and reverted twice on product review. Add a third only after a live visual review. Landing's `.plate` rows are unrelated.
+- **A Sponsored slot is `EventCard` with an optional `sponsored` caption slot, not a third variant.** The caption sits above the image, outside the stretched link. The label is bold small caps in `--text`, then `· {org}` in `--text-muted`, then a "Why?" text button in `--text-soft`.
+- **The "Why?" button opens a panel over the card body (never the caption).** It is `--bg-raised` with a gold `--border-w-accent` top rule, the surface's explanation and a plain link to `/ranking#paid-slots`.
+- **Gold text in a Sponsored slot uses `--accent-ink`, not `--accent-light`,** so the link passes AA on the light palette. The card is never banner-styled and carries the `SPONSORED_SLOT_ATTR` marker from `shared/`.
+- **On Daily 5 the card sits in its own section after the list.** A `--rule` hairline and a `--fs-xs` `--text-muted` caption set it apart, so it never reads as pick #6.
 - **`EmptyState` has no icon and is left-aligned.** Its shape is an optional small-caps eyebrow (an existing i18n string), a `--rule` hairline, a Cormorant title, a Manrope message, then an optional hint.
 - **`PageState` stays centered.** A viewport-centered spinner is the conventional pattern for a transient full-page load.
 - **The two top bars stay separate.** `TopBar` hardcodes consumer routes, and each bar renders its own `<header>`/`<nav>`. They share `Bar.module.css`, the bar sub-components and `MobileMenu`, which takes per-bar props. A shared base header would save about 15 lines for more indirection than it's worth.
@@ -186,8 +196,9 @@ Zoom shrinks the CSS viewport, so a `vw` term shrinks as much as zoom enlarges i
 ## 10. Layout and breakpoints
 
 - **640px is the one shared breakpoint**, written as a literal and named by `--bp-narrow` (§3). `Landing`'s 641px is its `min-width` complement, not a new breakpoint.
-- **Three one-off breakpoints each have a single consumer and a doc token:** 560px for Onboarding, 900px for Landing's stat row and 1024px for the admin desktop gate.
-- **The top bar switches at 1280px, with no token.** Below it, `Bar.module.css` hides `.wideOnly` (pulse chip, inline search) and shows `.narrowOnly` (search icon and popover).
+- **Five one-off breakpoints each have a doc token:** 560px for Onboarding, 900px for Landing's stat row, 1024px for the admin desktop gate, 760px for `PromotionTrust` and 1280px for the top bar (`--bp-bar-wide`). The Organizer promotion request form also collapses at 900px.
+- **`Pager.module.css` holds the only container queries**, on the pager's own width. At `--bp-pager-stack` the label stacks over the buttons; at `--bp-pager-collapse` it keeps first, current and last. That fits a 340px admin column at any viewport. Like `@media`, `composes:` can't sit inside `@container`.
+- **The top bar switches at 1280px (`--bp-bar-wide`).** Below it, `Bar.module.css` hides `.wideOnly` (pulse chip, inline search) and shows `.narrowOnly` (search icon and popover).
 - **Page widths are `--page-max-*` tokens per surface.** Pick an existing one before adding another.
 - **The browse grid is `Page.module.css`'s `.cardGrid`,** composed by Explore and Saved. It auto-fills below the wide band, uses fixed column counts inside it and collapses to one column at 640px.
 - **Feed doesn't use the browse grid.** Five curated picks (a lead `featured` card plus a list) are a different problem from an unbounded browse list. Converging them would flatten that distinction.
@@ -205,7 +216,7 @@ The wide band is **pure reflow**: one `@media (min-width: 2000px)` band, a fixed
 
 - **The floor sits between a laptop and a monitor.** It started at 1280px, but a 1920px-CSS laptop (2880×1620 at 150%) read better on the original layout. Re-check that laptop before lowering the floor below 1920.
 - **One wide `:root` block at the end of `index.css`** sets `--page-max-wide` to 1760px and points `--page-max-medium` and `-grid` at it. Every wide token is theme-neutral.
-- **The band has six grid columns.** `frontend/src/cardGridColumns.test.ts` asserts each fixed count divides the 24-event page size, so every page and load-more ends on a full row.
+- **The band has six grid columns.** `frontend/src/cardGridColumns.test.ts` asserts each fixed count divides the 24-event page size, so every full page ends on a full row.
 - **Bar content aligns to the 1760 wrap through `--wrap-inset`;** the bar background stays full-bleed. The token's `100%` resolves at each use site, so any full-bleed strip can reuse it.
 
 #### Landing in the Band
@@ -281,4 +292,14 @@ Each of these was built or prototyped, reviewed and decided. Reopen one only wit
 4. Test the layout against the **Estonian and Russian** strings, not English.
 5. Check with imagery stripped and under `prefers-reduced-motion: reduce`. For display type, also zoom to 300% and raise the default font size (§4's Browser Zoom).
 6. Verify visually before landing. A CSS retrofit that reads correctly in the diff can still look wrong on screen.
-7. Run `npm run lint` and `npm run type-check`; CI runs neither.
+7. Run `npm run lint` and `npm run type-check` before committing; CI's `lint` job runs both.
+8. Start a new surface from an approved prototype built on the shell below.
+
+### Prototype Shell
+
+- **A prototype is approved before UI work starts.** It uses the real tokens, the real components and the real `DatePicker`. Fake form styles and hand-copied palettes cost a review round each.
+- **Load the `frontend-design` skill before building a prototype.** Its aesthetic direction applies inside the tokens: it picks layout and hierarchy and never new colors, fonts or radii.
+- **`cd frontend && npx tsx scripts/prototype-shell.ts <out.html>` writes the shell.** It scopes the real `src/index.css` to `#app`, loads Manrope and Cormorant, and adds a working theme switch.
+- **Mount every modal and dialog inside `#app`.** Outside it, a dialog loses the theme tokens and renders unthemed in the light theme.
+- **Keep prototypes out of the repo.** Write them to the session scratchpad and delete them after approval.
+- **Name no id or class with a bare `ad` or `ads` word.** Ad blockers hide those elements. `frontend/src/adBlockerNames.test.ts` enforces it across the CSS Modules and JSX.

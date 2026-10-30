@@ -9,7 +9,9 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 ### Users and Sign-In
 
 - **`users.email_verified` flips true on the first successful magic-link verification.** It gates `build_daily_feeds` and `send_daily_digests`. See [security.md](security.md)'s Email Verification Gate section.
-- **`users.email_digest_opt_in` gates the daily digest send.** `users.locale` is one of `et`, `en` and `ru`.
+- **`users.email_digest_opt_in` gates the daily digest send, and new users start `false`.** The onboarding checkbox sends the choice with `POST /onboarding/persona`. Rows from before migration 0059 kept `true`. `users.locale` is one of `et`, `en` and `ru`.
+- **`users.email_ad_consent` is the send-time gate for the digest's Sponsored slot, and starts `false`.** `email_ad_consent_version` holds the wording version agreed to. Only `app/email/consent.py` writes them, and every unsubscribe route withdraws consent through `set_digest_subscription`.
+- **`email_ad_consent_log` is append-only, one row per grant or withdrawal.** It stores the source and locale. Its `user_id` FK cascades, so `log_account_deletion` logs before the account goes. Startup resets older wording versions to off, logged as `wording_change`.
 - **`session_token_version` is bumped to revoke every session** of a user, or of an organizer on `organizers`. See [security.md](security.md)'s Session Revocation section.
 - **`auth_magic_links` rows are one-use and store only a sha256 `token_hash`.** A non-null `pending_google_sub` marks a link that confirms a pending Google link instead of starting a session ([ADR 0002](adr/0002-google-sign-in-oauth-pkce.md)). There is no second token type.
 
@@ -46,6 +48,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 
 - **A unique index on `event_sources(source_id, external_id)` makes ingestion idempotent** at the DB level (migration 0007).
 - **`ingestion_runs.error` comes from the propagated adapter exception.** See [pipeline.md](pipeline.md)'s Pipeline Code Rules section.
+- **`llm_calls.failure_reason` names why an attempt failed** (`rate_limited`, `truncated`, `parse_error`, `http_error`, `network_error`, `bad_shape`). Successful attempts leave it NULL.
 - **The dedup, classification and venue-extract caches key off `llm_calls.content_hash`.** Rows are pruned after `LLM_CALLS_RETENTION_DAYS`; see [backend-ops.md](backend-ops.md)'s Data Retention & Cleanup section.
 - **`raw_inbound_emails` backs a dormant path.** See [pipeline.md](pipeline.md)'s Newsletter Inbound section.
 
@@ -76,6 +79,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 | `submitted_by_organizer_id` | FK → `organizers`, indexed |
 | `needs_review` | flags the admin review queue; partial index on true |
 | `pinned_fields` | JSONB array of fields a claim has pinned |
+| `promotion_restriction` | content-policy assessment for Promotions; `NULL` is unassessed (migration 0060) |
 | `series_key` | DB-maintained series key (migration 0052) |
 | `dedup_group_id` | the event's dedup group |
 | `updated_at` | trigger-maintained change marker |
@@ -107,6 +111,12 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **The query side must match the index expression textually.** `app/routers/organizer_claims.py::claim_search_text()` builds it, and `backend/tests/test_claim_search_indexes.py` guards drift.
 - **They are expression indexes, not columns,** so the `updated_at` trigger's column list is untouched.
 
+#### Publish and Quality Indexes
+
+- **`ix_events_classified_live_until` serves `backend/app/publish.py::publish_pending`** (migration 0070). It is partial on `status = 'classified'` over `coalesce(ends_at, starts_at)`, so the UPDATE skips every reject that has already ended.
+- **`ix_event_sources_unstamped` serves `backend/app/publish.py::_stamp_missing_fienta_publishers`.** It is partial on `publisher_id IS NULL`.
+- **`ix_event_classifications_quality_score` is `quality_score DESC NULLS LAST`,** the order every quality sort asks for. `backend/tests/test_bigo_indexes.py` checks that the planner uses all three.
+
 #### Pinned Fields
 
 - **`events.pinned_fields` lists the fields a claim has pinned against overwrite** by ingestion and detail-refetch. It defaults to `[]`. A per-locale text field pins one locale with a `"<field>:<locale>"` entry.
@@ -124,7 +134,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **Preference signals keep current state, one row per (user, event).** These are like, dislike and bookmark (`PREFERENCE_SIGNALS`), enforced by a partial unique index (migration 0019). `POST /feedback` upserts and `DELETE /feedback/{event_id}` removes. `GET /feedback/events?signal=` reads them for the Saved Events page.
 - **Passive signals append, at most one row per (user, event, signal, UTC day).** These are `view` and `click_external`, the rest of `VALID_SIGNALS`, kept for page-view and ticket-click analytics. A partial unique index on the UTC date enforces the cap (`uq_user_event_feedback_passive_signal_day`, migration 0055).
 - **`POST /feedback` inserts passive rows `ON CONFLICT DO NOTHING`**, so a client spamming the endpoint can't grow the table. Ranking reads only like and dislike rows, so the cap changes no score.
-- **`daily_feeds` stores each user's Daily 5** as `user_id`, `feed_date` and a `BigInteger[]` of `event_ids`.
+- **`daily_feeds` stores each user's Daily 5** as `user_id`, `feed_date` and a `BigInteger[]` of `event_ids`. The Sponsored slot is stored separately in `daily_sponsored_slots`.
 - **There is no score cache.** Migration 0053 dropped `user_event_scores`, and `build_daily_feeds` recomputes scores every run. So a feedback or persona change needs no invalidation. See [pipeline.md](pipeline.md)'s Ranking section.
 
 ### Saved Venues
@@ -161,16 +171,48 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 | `resolved_at` | set once `status` leaves `pending` |
 | `dormant` | set by `app/dedup/rules.py::resolve_claim_dormancy()`; see [organizer-portal.md](organizer-portal.md)'s Dormant Claims section |
 
+### Promotions
+
+`promotions` holds one row per sold or granted Promotion window. `app/promotions/` owns the logic and never imports from `app/routers/utils.py`. See `CONTEXT.md`'s Promotions glossary.
+
+- **`status` is commercial only:** `unpaid`, `paid`, `ended_early` or `void`. Scheduled, live and finished are computed from the window and today's Tallinn date by `app/promotions/windows.py::promotion_state()`, never stored.
+- **`start_date` and `end_date` are inclusive Tallinn dates,** 3 to 14 days long, starting tomorrow at the earliest. They end on or before the event's last Tallinn day. `days` is stored beside them.
+- **A complimentary grant is created `paid` at `net_price_cents = 0`** with a required `complimentary_note`. A priced grant stores the net price and the `vat_rate_percent` in force at sale, so a later rate change never rewrites it.
+- **`organizer_id` is the owner resolved at grant time** by `app/promotions/owners.py::resolve_owner_ids()`: the submitter, or the holder of an approved, non-dormant claim. It costs two queries for any number of events.
+- **The advertiser name and registry code are snapshots,** prefilled from the Organizer name. The caption names them, so a later Organizer rename must not change a running Promotion.
+- **`invoice_reference` uses the `ER-M-` series with `invoice_source = 'manual'`.** `granted_by` is `admin` for a direct grant. There is no admin id because there is no admins table (ADR 0001).
+- **An `unpaid` or `paid` row holds every day of its window against the cap of 5,** paused days included. `void` releases them all. Back-to-back windows on one event are allowed; overlap is not.
+- **Every grant first takes `pg_advisory_xact_lock` (`PROMOTION_CAP_LOCK_KEY`) in `app/promotions/cap.py::lock_cap()`.** The cap check and insert then run in one transaction, so two concurrent grants can't both take the last day. The lock releases on commit.
+- **`promotion_daily_stats` holds one row per Promotion per Tallinn day,** unique on `(promotion_id, day)` and never pruned (migration 0061). Columns: `gate_outcome`, `gate_reason`, and the counts `explore_served`, `daily5_placed`, `digest_sent`, `web_opens`, `digest_opens`, `slot_dislikes`. Counts only, no viewer identifiers. See [pipeline.md](pipeline.md) for the writers.
+- **Starting or ending a Promotion never touches `events.updated_at`.** `events.promotion_restriction` is deliberately outside the `updated_at` trigger's column list.
+- **`promotions.daily5_reach` is the Daily 5 reach** (migration 0063): NULL until the nightly build computes it, then frozen after the window ends.
+- **`daily_sponsored_slots` holds one row per user per Tallinn day** (migration 0063), unique on `(user_id, slot_date)`. It stores the Daily 5 Sponsored slot apart from `daily_feeds`. Columns: `promotion_id` (NULL when a swap found nothing left), `is_swap` and `replaced_promotion_id`. It cascades with the user and is pruned on `DAILY_FEEDS_RETENTION_DAYS`.
+- **Lifecycle commands live in `app/promotions/lifecycle.py`.** Each takes the cap lock, then a `FOR UPDATE` lock on the row, so it serializes against grants and other commands. Only `unpaid -> paid`, `unpaid -> void` and `paid -> ended_early` change `status`.
+- **A Stripe refund holds no lock during the network call.** It commits first and re-locks after. A card-paid Promotion's dates cannot be edited, because the price charged caps every refund.
+- **Mark paid is allowed while today (Tallinn) is before `start_date`.**
+- **Edit before the start date rechecks window, overlap and cap against the other Promotions** (the row never collides with itself) and recomputes `days` and `net_price_cents`.
+- **While live, edit only moves `end_date` earlier and never before today.** The price paid stays on the row, and a refund is recorded separately. A finished, ended or void row is not editable.
+- **Re-point needs the same owner and the same dedup group** (`dedup_group_id`, or the event's own id when it has none). The window must still end on or before the target's last day and not overlap its Promotions.
+- **End early and void store the admin's reason in `end_note`** (`end_reason = admin`) and stamp `ended_at`. Leaving the holding statuses releases every cap day at once, and the fill gate stops serving the row. The Organizer is emailed the reason in their locale by `app/email/promotion_notice.py` after commit, best-effort.
+- **A refund is cumulative in `refunded_cents` (gross) with its notes in `refund_note`.** It needs a paid, non-complimentary row (live or ended early) and cannot exceed net plus VAT.
+- **A Restriction clearance is four columns on `promotions`:** `restriction_cleared`, `restriction_clearance_by`, `restriction_clearance_note`, `restriction_cleared_at` (migration 0065). It covers only the restriction it names. A grant of a restricted event needs the checkbox and a note, and `POST .../{id}/clear-restriction` clears a newly flagged one.
+- **`promotion_snapshots` is append-only and never pruned.** `app/promotions/snapshots.py::take_snapshot()` stores the title in et/en/ru, a 300-character description excerpt, image URL, venue, event dates, the Promotion's dates and net price, and the caption text (`REKLAAM · {advertiser}`).
+- **A snapshot's `trigger` is `grant`, `mark_paid`, `edit` or `repoint`.** `grant` is a complimentary grant, which is born paid. A priced grant takes none until it is paid, and every edit takes one, scheduled or live.
+- **`promotion_requests` holds an Organizer's request** (migration 0066): event, Organizer, window, advertiser name and registry code, billing email, note, `status`, `decline_reason`, `resolved_by`, the terms version and time, and `business_attested_at`. A partial unique index allows one `pending` row per event.
+- **`status` is `pending`, `granted`, `declined`, `withdrawn` or `expired`.** Granting sets `promotions.source_request_id` in the same transaction.
+
 ### Moderation and Audit
 
 - **`event_reports` holds user-filed content reports from `POST /reports`.** Admins resolve them or take the event down through `/admin/reports`; a takedown cancels the event with `cancellation_reason = report_takedown`. See `CONTEXT.md`'s Content Moderation glossary.
 - **`event_reports.is_illegal_allegation` is legal-sensitive.** It is one reason `/admin/reports` is session-only.
-- **`admin_actions` is a durable audit row per console action,** written by `log_admin_action()` in the same transaction as the mutation. See [backend-ops.md](backend-ops.md)'s Audit Logging section.
+- **`admin_actions` is a durable audit row per console action,** `promotion_grant`, `promotion_mark_paid`, `promotion_edit`, `promotion_repoint`, `promotion_end`, `promotion_void`, `promotion_refund`, `promotion_request_grant` and `promotion_request_decline` included (the request audit target is the request id), written by `log_admin_action()` in the same transaction as the mutation. See [backend-ops.md](backend-ops.md)'s Audit Logging section.
+- **Card checkout adds columns to `promotions` and two tables** (migration 0067). The columns hold the Stripe customer, session, payment intent and invoice ids, `checkout_expires_at`, `invoice_url`, and the content-policy and Organizer-terms acceptance times and versions. `invoice_source = stripe` marks a card-paid row.
+- **`stripe_customers` maps `(organizer_id, registry_code)` to a Stripe customer id,** so a repeat checkout reuses it. Its `billing_email` and `legal_name` (migration 0068) hold what Stripe last got, and a repeat checkout updates the Customer only when they differ; NULL on older rows means one update. `processed_stripe_events` holds the webhook event ids that make a replay a no-op.
 - **The boot-time `assert_schema_at_head` guard exists because of this table.** Its migration (0030) went unapplied in production, and every audited admin action returned 500.
 
 ## Migrations
 
-- **Chain `down_revision` to the previous revision**, and keep each migration small and reversible. CI round-trips the whole chain and runs `alembic check` (see `docs/backend-ops.md`'s CI section).
+- **Chain `down_revision` to the previous revision**, and keep each migration small and reversible. CI round-trips the whole chain and runs `alembic check` (see `docs/backend-ops.md`'s CI section). Locally, `backend/tests/test_models_match_migrations.py` runs the same check against the scratch database.
 - **Before creating a unique index, add a defensive `DELETE`** that keeps the smallest `id` per key. Historical duplicates exist even where the application now prevents them; `event_sources(source_id, external_id)` in `0007` was the first case.
 
 ## Connection Pooling

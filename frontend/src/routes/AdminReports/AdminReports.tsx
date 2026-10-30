@@ -1,23 +1,29 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
+import { ADMIN_REPORTS_QUEUE_PAGE_SIZE, LOCALE_EN } from '../../_generated/sharedConstants';
 import {
   ADMIN_GENERIC_ERROR,
   ADMIN_QUEUE_DETAIL_LINK_LABEL,
+  ADMIN_REPORT_RESOLVED_LINK_LABEL,
+  ADMIN_REPORT_PROMOTED_LABEL,
+  ADMIN_REPORT_RESOLVED_NOTICE,
   ADMIN_REPORTS_PARAM,
-  ADMIN_REPORTS_QUEUE_PAGE_SIZE,
+  ADMIN_LOADING_LABEL,
 } from '../../constants/admin';
-import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
+import { API, PAGE_PARAM, PAGE_QUERY_PARAM, QUERY_KEYS } from '../../constants/api';
 import { ADMIN_RESOLUTION_MESSAGES } from '../../constants/claims';
-import { LOCALE_EN, UI_STATE } from '../../constants/core';
+import { UI_STATE } from '../../constants/core';
 import { REPORT_REASONS_BY_VALUE } from '../../constants/feedback';
 import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
-import { apiErrorMessage, nextOffsetParam, relativeTimeFromNow } from '../../utils';
+import { apiErrorMessage, relativeTimeFromNow } from '../../utils';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
+import { useAdminQueuePage, type ActionSpot } from '../../hooks/useAdminQueuePage';
+import Pager from '../../components/Pager';
 import AdminQueueSplitView from '../../components/AdminQueueSplitView';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
 import queueStyles from '../../components/shared/AdminQueue.module.css';
@@ -39,6 +45,8 @@ interface AdminReportedEvent {
   report_count: number;
   reasons: string[];
   has_illegal_allegation: boolean;
+  /** A live paid Promotion is on the event (#612): sorted first and tagged. */
+  is_promoted?: boolean;
   reports: AdminReport[];
   oldest_open_report_at: string;
 }
@@ -57,6 +65,7 @@ function renderReportRow(item: AdminReportedEvent & { oldestOpenReportRelative: 
     <>
       <div className={styles.rowTitle}>{item.title}</div>
       <div className={styles.rowMeta}>
+        {item.is_promoted && <span className={styles.promotedChip}>{ADMIN_REPORT_PROMOTED_LABEL}</span>}
         {item.has_illegal_allegation && <span className={styles.illegalDot} aria-label="Illegal content alleged" />}
         {item.report_count} report{item.report_count === 1 ? '' : 's'} · {item.oldestOpenReportRelative}
       </div>
@@ -65,11 +74,13 @@ function renderReportRow(item: AdminReportedEvent & { oldestOpenReportRelative: 
 }
 
 interface AdminReportsResponse {
-  total: number | null;
+  total: number;
   limit: number;
   offset: number;
   has_more: boolean;
   events: AdminReportedEvent[];
+  /** True when `report=<id>` named an event that is no longer in the queue. */
+  report_not_found: boolean;
 }
 
 interface AdminReportActionResult {
@@ -86,102 +97,135 @@ function reasonLabel(reason: string): string {
 
 // The reports moderation queue (issue #155) — establishes the shared
 // split-view inbox pattern (AdminQueueSplitView/AdminQueueActionPanel) that
-// the submissions screen (#156) and the event inspector reuse. Resolved
-// items are tracked client-side only (session-local, per the parent spec's
-// "without re-querying" decision) since GET /admin/reports only ever
-// returns REPORT_STATUS_OPEN rows — resolving one removes it from the next
-// server fetch, so this screen keeps its own snapshot to render it greyed
-// out with a status tag instead of letting it vanish.
+// the submissions screen (#156) and the event inspector reuse. GET
+// /admin/reports only ever returns REPORT_STATUS_OPEN rows, so resolving one
+// removes it from the next fetch; useAdminQueuePage keeps the acted-on row
+// in place, greyed out and tagged, and refetches the page once (spec #551).
+//
+// The admin email deep link is `?report=<event_id>`. With no `page` the
+// server finds that row's page and returns its real offset (usePagedQuery
+// syncs the URL to it silently); once the URL carries a `page`, `report` is
+// only used to pick the selected row and is never sent. A row located on
+// page 1 leaves the URL without a `page`, so the locate runs once per link:
+// later refetches ask for the plain page and keep its not-found flag, rather
+// than re-locating and jumping pages if the row has since moved.
 export default function AdminReports() {
   const queryClient = useQueryClient();
   const { toast, showToast } = useToast();
+  const [searchParams] = useSearchParams();
+  const [note, setNote] = useState('');
+
+  const rawLinkedId = searchParams.get(ADMIN_REPORTS_PARAM.report);
+  const parsedLinkedId = rawLinkedId === null ? NaN : Number(rawLinkedId);
+  const linkedId = Number.isInteger(parsedLinkedId) && parsedLinkedId > 0 ? parsedLinkedId : null;
+  // Only ask the server to locate the row while the URL has no page.
+  const locateId = linkedId !== null && !searchParams.has(PAGE_QUERY_PARAM) ? linkedId : null;
+  // Ids this mount has located, with their not-found flag. Paired with the
+  // cache check below: the cache covers a remount, this ref covers a long
+  // mount whose inactive locate entry was garbage-collected.
+  const locatedRef = useRef(new Map<number, boolean>());
+
   const {
+    rows,
     data,
+    total,
+    tags: resolvedById,
+    tagRow,
+    resyncAfterFailedAction,
+    selectedId,
+    setSelectedId,
+    listRef,
     isLoading,
     isError,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
-    queryKey: [QUERY_KEYS.adminReports],
-    queryFn: ({ pageParam }) =>
-      adminApi.get<AdminReportsResponse>(
-        `${API.adminReports}?${PAGE_PARAM.limit}=${ADMIN_REPORTS_QUEUE_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
-      ),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.events.length),
+    isPlaceholderData,
+    actionSpot,
+    pagerProps,
+  } = useAdminQueuePage<AdminReportsResponse, AdminReportedEvent, ResolutionKind>({
+    // A located response holds a page the plain page-1 key must not cache.
+    queryKey: locateId === null ? [QUERY_KEYS.adminReports] : [QUERY_KEYS.adminReports, 'locate', locateId],
+    pageSize: ADMIN_REPORTS_QUEUE_PAGE_SIZE,
+    fetchPage: async ({ limit, offset, page }) => {
+      // Already located when this mount located it, or when this query
+      // still holds the first locate's response (a remount: detail page and
+      // Back). Either way, carry over that first not-found flag.
+      const notFound =
+        locateId === null
+          ? undefined
+          : (locatedRef.current.get(locateId) ??
+            queryClient.getQueryData<AdminReportsResponse>([QUERY_KEYS.adminReports, 'locate', locateId, page])
+              ?.report_not_found);
+      const locate = locateId === null || notFound !== undefined ? '' : `&${ADMIN_REPORTS_PARAM.report}=${locateId}`;
+      const response = await adminApi.get<AdminReportsResponse>(
+        `${API.adminReports}?${PAGE_PARAM.limit}=${limit}&${PAGE_PARAM.offset}=${offset}${locate}`,
+      );
+      if (notFound !== undefined) return { ...response, report_not_found: notFound };
+      if (locateId !== null) {
+        locatedRef.current.set(locateId, response.report_not_found);
+        if (!response.report_not_found && response.offset !== offset) {
+          // The silent replace to the located page then finds it cached.
+          queryClient.setQueryData([QUERY_KEYS.adminReports, response.offset / limit + 1], response);
+        }
+      }
+      return response;
+    },
+    select: (response) => ({ items: response.events, total: response.total, offset: response.offset }),
+    getId: getReportId,
+    // Every cached page of the queue (plain and located) goes out of date on
+    // an action or a 409/404; only the mounted one refetches.
+    invalidateKey: [QUERY_KEYS.adminReports],
+    onPageSettled: () => setNote(''),
   });
 
-  const [searchParams] = useSearchParams();
-  const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [deepLinkApplied, setDeepLinkApplied] = useState(false);
-  const [deepLinkMatchedId, setDeepLinkMatchedId] = useState<number | null>(null);
-  const [note, setNote] = useState('');
-  const [resolvedById, setResolvedById] = useState<
-    Record<number, { item: AdminReportedEvent; kind: ResolutionKind }>
-  >({});
-
-  const serverItems = useMemo(() => data?.pages.flatMap((page) => page.events), [data]);
-  const totalReports = data?.pages[0]?.total ?? 0;
   // Precomputed once per data/resolution change (not per render) — renderRow
   // below reads this instead of calling relativeTimeFromNow live, so typing
   // in the resolution-note textarea no longer re-parses every row's date
   // (Big-O audit M4).
-  const items = useMemo(() => {
-    const byId = new Map((serverItems ?? []).map((item) => [item.event_id, item]));
-    for (const entry of Object.values(resolvedById)) byId.set(entry.item.event_id, entry.item);
-    return Array.from(byId.values()).map((item) => ({
-      ...item,
-      oldestOpenReportRelative: relativeTimeFromNow(item.oldest_open_report_at),
-    }));
-  }, [serverItems, resolvedById]);
+  const items = useMemo(
+    () => rows.map((item) => ({ ...item, oldestOpenReportRelative: relativeTimeFromNow(item.oldest_open_report_at) })),
+    [rows],
+  );
 
-  // Adjust state during render (React's documented pattern for "derive from
-  // props/state once data arrives") rather than a useEffect, since a
-  // setState-in-effect would cause an extra render pass on every load.
-  if (!deepLinkApplied && items.length > 0) {
-    setDeepLinkApplied(true);
-    const rawLinkedId = searchParams.get(ADMIN_REPORTS_PARAM.report);
-    const linkedId = rawLinkedId === null ? NaN : Number(rawLinkedId);
-    if (!Number.isNaN(linkedId) && items.some((item) => item.event_id === linkedId)) {
-      setSelectedId(linkedId);
-      setDeepLinkMatchedId(linkedId);
-    }
-  }
-
-  const currentId = selectedId ?? items[0]?.event_id ?? null;
+  const linkedRowShown = linkedId !== null && items.some((item) => item.event_id === linkedId);
+  const currentId = selectedId ?? (linkedRowShown ? linkedId : null) ?? items[0]?.event_id ?? null;
+  // The row is gone from the queue. Not when this very screen just resolved
+  // it: the refetch after that action also reports it missing.
+  const resolvedNoticeId =
+    locateId !== null && data?.report_not_found === true && !resolvedById.has(locateId) ? locateId : null;
 
   const actionMutation = useMutation({
-    mutationFn: ({ item, kind, note }: { item: AdminReportedEvent; kind: ResolutionKind; note: string }) => {
+    mutationFn: ({ item, kind, note }: { item: AdminReportedEvent; kind: ResolutionKind; note: string; spot: ActionSpot }) => {
       const path = kind === 'resolved' ? API.adminReportResolve(item.event_id) : API.adminReportTakedown(item.event_id);
       return adminApi.post<AdminReportActionResult>(path, { resolution_note: note });
     },
-    onSuccess: (result, { item, kind }) => {
+    onSuccess: (result, { item, kind, spot }) => {
       const resolvedItem = kind === 'taken_down' && result.status ? { ...item, status: result.status } : item;
-      setResolvedById((prev) => ({ ...prev, [item.event_id]: { item: resolvedItem, kind } }));
-      setNote('');
+      // Tags the row in place and refetches this page once, so the next
+      // report up fills the gap (spec #551). The note draft only resets when
+      // the admin is still on the page they acted on.
+      if (tagRow(resolvedItem, kind, spot)) setNote('');
       void queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.adminCounts] });
     },
     onError: (err) => {
       showToast(UI_STATE.error, apiErrorMessage(err, ADMIN_GENERIC_ERROR));
+      resyncAfterFailedAction(err);
     },
   });
 
   function act(item: AdminReportedEvent, kind: ResolutionKind) {
     if (!note.trim()) return;
-    actionMutation.mutate({ item, kind, note: note.trim() });
+    actionMutation.mutate({ item, kind, note: note.trim(), spot: actionSpot(item) });
   }
 
   // Stable across note keystrokes (only resolvedById changes them) — see
   // renderReportRow's module-scope siblings above for why this matters.
   const isResolved = useCallback(
-    (item: AdminReportedEvent) => item.event_id in resolvedById,
+    (item: AdminReportedEvent) => resolvedById.has(item.event_id),
     [resolvedById],
   );
   const selectRow = useCallback((id: number) => {
     setSelectedId(id);
     setNote('');
-  }, []);
+  }, [setSelectedId]);
 
   return (
     <div>
@@ -191,12 +235,23 @@ export default function AdminReports() {
       </div>
 
       {isLoading ? (
-        <PageState kind={UI_STATE.loading} message="Loading…" inline />
+        <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
       ) : isError ? (
         <PageState kind={UI_STATE.error} message="Couldn't load the reports queue." inline />
+      ) : items.length === 0 && total > 0 ? (
+        // A past-end page about to clamp to the real last page.
+        <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
       ) : (
         <>
-        <p className={styles.subtitle}>{items.length} of {totalReports} open reports shown</p>
+        {resolvedNoticeId !== null && (
+          <p className={styles.notice} role="status">
+            {ADMIN_REPORT_RESOLVED_NOTICE.replace('{id}', String(resolvedNoticeId))}{' '}
+            <Link to={ROUTES.adminEventDetail(resolvedNoticeId)} className={styles.noticeLink}>
+              {ADMIN_REPORT_RESOLVED_LINK_LABEL.replace('{id}', String(resolvedNoticeId))}
+            </Link>
+          </p>
+        )}
+        <div className={styles.queue} aria-busy={isPlaceholderData}>
         <AdminQueueSplitView
           items={items}
           getId={getReportId}
@@ -205,10 +260,21 @@ export default function AdminReports() {
           selectedId={currentId}
           onSelect={selectRow}
           emptyLabel="No open reports."
-          initialDetailOpen={deepLinkMatchedId !== null}
+          initialDetailOpen={linkedRowShown}
           renderRow={renderReportRow}
+          listRef={listRef}
+          listFooter={
+            // The pager's strings come from shared/i18n even here: docs/frontend.md "Admin Console"
+            <Pager
+              {...pagerProps}
+              locale={LOCALE_EN}
+              liveNoun="items"
+              dropOnPageChange={[ADMIN_REPORTS_PARAM.report]}
+              className={queueStyles.queuePager}
+            />
+          }
           renderDetail={(item) => {
-            const resolution = resolvedById[item.event_id];
+            const resolution = resolvedById.get(item.event_id);
             return (
               <div>
                 <h2 className={styles.detailTitle}>{item.title}</h2>
@@ -217,6 +283,7 @@ export default function AdminReports() {
                   {ADMIN_QUEUE_DETAIL_LINK_LABEL}
                 </Link>
                 <div className={styles.chips}>
+                  {item.is_promoted && <span className={styles.promotedChip}>{ADMIN_REPORT_PROMOTED_LABEL}</span>}
                   {item.has_illegal_allegation && <span className={styles.illegalChip}>Illegal content alleged</span>}
                   {item.reasons.map((r) => (
                     <span key={r} className={styles.chip}>{reasonLabel(r)}</span>
@@ -255,16 +322,7 @@ export default function AdminReports() {
             );
           }}
         />
-        {hasNextPage && (
-          <button
-            type="button"
-            className={styles.loadMoreBtn}
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
-          >
-            Load more
-          </button>
-        )}
+        </div>
         </>
       )}
       {toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}

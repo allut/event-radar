@@ -1,9 +1,10 @@
 import { CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
+import { SPONSORED_RANKING_TARGET } from '../../constants/sponsored';
 import type { FaqDoc } from './types';
 
 const doc: FaqDoc = {
-  lastUpdated: '2026-10-06',
+  lastUpdated: '2026-10-18',
   seoTitle: 'Frequently asked questions',
   metaDescription:
     "How Event Radar works: where Tallinn's events come from, how your Daily 5 is picked, the morning email, your data, and how organizers list or claim events.",
@@ -37,6 +38,15 @@ const doc: FaqDoc = {
               content: [
                 "Yes, for event-goers and for organizers. There's no fee, and nobody can pay to be shown higher.",
               ],
+              gate: 'slotsOff',
+            },
+            {
+              kind: 'p',
+              content: [
+                'Yes. Event Radar is free for event-goers, and listing events is free for organizers. Organizers can pay for a labelled ad spot, but nobody can pay to move up the regular results or your Daily 5. ',
+                { text: 'How ads work', to: SPONSORED_RANKING_TARGET },
+              ],
+              gate: 'slotsOn',
             },
           ],
         },
@@ -116,6 +126,10 @@ const doc: FaqDoc = {
                 "AI sorts every event into categories and moods, which is how events are matched to your tastes. Your first Daily 5 is ready as soon as you've picked your tastes, and a new one is ready early each morning.",
               ],
             },
+            {
+              kind: 'p',
+              content: [{ text: 'How results are ordered', to: ROUTES.ranking }],
+            },
           ],
         },
         {
@@ -126,6 +140,83 @@ const doc: FaqDoc = {
               kind: 'p',
               content: [
                 "In the morning, with that day's Daily 5. On a day with no picks for you, no email is sent. The email is switched on when you create your account. To stop it, use the unsubscribe link in any email (or your mail app's unsubscribe button), or turn it off in Settings. You can turn it back on in Settings at any time.",
+              ],
+            },
+          ],
+        },
+        {
+          id: 'paid-on-event-radar',
+          question: 'Are there ads on Event Radar?',
+          gate: 'slotsOn',
+          answer: [
+            {
+              kind: 'p',
+              content: [
+                'Organizers can pay for a labelled spot next to the results: at most one card on the first page of Explore, and at most one separate card after your Daily 5. It is marked "Ad" and names the business that paid. When nothing fits, the spot stays empty and nothing takes its place.',
+              ],
+            },
+            {
+              kind: 'p',
+              content: [{ text: 'How ads work', to: SPONSORED_RANKING_TARGET }],
+            },
+          ],
+        },
+        {
+          id: 'paid-change-results',
+          question: 'Do ads change my results or my Daily 5?',
+          gate: 'slotsOn',
+          answer: [
+            {
+              kind: 'p',
+              content: [
+                'No. Results and your five picks are ranked exactly as they would be without ads. An ad never takes a place in the order and never replaces one of your five. Paying cannot move an event up.',
+              ],
+            },
+          ],
+        },
+        {
+          id: 'paid-chosen',
+          question: 'Are ads picked from my interests?',
+          gate: 'slotsOn',
+          answer: [
+            {
+              kind: 'p',
+              content: [
+                'No. An ad is chosen by context: the page, the day and, on Explore, the filters and search you set. Your tastes, likes and history are not used to pick it. They are used only to keep ads away: an event you disliked, reported, saved or liked is never advertised to you. Press "Why?" on any ad to see its one-line explanation.',
+              ],
+            },
+          ],
+        },
+        {
+          id: 'paid-in-email',
+          question: 'Do I get ads in the morning email?',
+          gate: 'slotsOn',
+          answer: [
+            {
+              kind: 'p',
+              content: [
+                'Only if you ask. Ads in the email are off by default. You can switch them on in Settings, under the email setting, with "Include ads in my Daily Five email". Then the email may carry at most one paid event below your picks, marked "Ad". It is never mentioned in the subject.',
+              ],
+            },
+            {
+              kind: 'p',
+              content: [
+                'To stop, use "Stop ads in this email" in any email that carries one, or turn the setting off in Settings. Unsubscribing from the email also turns ads off, and they stay off if you subscribe again.',
+              ],
+            },
+          ],
+        },
+        {
+          id: 'paid-data',
+          question: 'What do you record about ads?',
+          gate: 'slotsOn',
+          answer: [
+            {
+              kind: 'p',
+              content: [
+                'Anonymous daily totals for each ad: how often it was shown and how often it was opened. They contain nothing about you, and we do not track whether you open our emails. Advertisers get only these totals, never who saw or clicked an ad. Known bots are not counted. If you turn on ads in the email, we also keep a record of when you did and what you agreed to. The ',
+                { text: 'Privacy Policy', to: ROUTES.privacy },
+                ' has the details.',
               ],
             },
           ],
@@ -209,7 +300,7 @@ const doc: FaqDoc = {
             {
               kind: 'p',
               content: [
-                "We set one cookie, to keep you signed in. Our analytics run without cookies, and page addresses are masked before they're sent. The ",
+                'We set one cookie, to keep you signed in, and we run no analytics or advertising trackers. The ',
                 { text: 'Privacy Policy', to: ROUTES.privacy },
                 ' has the full list.',
               ],

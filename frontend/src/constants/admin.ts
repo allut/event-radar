@@ -9,14 +9,12 @@ export const ADMIN_DESKTOP_BREAKPOINT_PX = 1024;
 
 export const ADMIN_NOTE_TEXTAREA_ROWS = 3;
 
-// ─── Admin: dedup groups (mirrors backend's ADMIN_DEDUP_GROUPS_PAGE_SIZE) ───
-export const ADMIN_DEDUP_GROUPS_PAGE_SIZE = 50;
+// PageState message while an admin list or detail loads.
+export const ADMIN_LOADING_LABEL = 'Loading…';
 
-// ─── Admin: reports / submissions queues (mirrors backend's
-// ADMIN_REPORTS_QUEUE_PAGE_SIZE / ADMIN_REVIEW_QUEUE_PAGE_SIZE) ────────────
-export const ADMIN_REPORTS_QUEUE_PAGE_SIZE = 50;
-export const ADMIN_REVIEW_QUEUE_PAGE_SIZE = 50;
-export const ADMIN_CLAIMS_QUEUE_PAGE_SIZE = 50;
+// Queue page sizes (ADMIN_*_PAGE_SIZE) are cross-stack: _generated/sharedConstants.ts.
+// URL (and API) param carrying the Claims tab: `approved` for Granted, omitted for pending.
+export const ADMIN_CLAIMS_TAB_PARAM = 'status';
 
 // Query-param name for the report-notification email's deep link into
 // AdminReports — carries the reported event's id so the matching row's
@@ -26,7 +24,7 @@ export const ADMIN_REPORTS_PARAM = {
 } as const;
 
 // AdminEventDetail's tab strip — same no-i18n exemption as ADMIN_NAV_ITEMS.
-export const ADMIN_EVENT_DETAIL_TABS = ['Overview', 'Classification', 'Dedup & reports', 'Raw payload'] as const;
+export const ADMIN_EVENT_DETAIL_TABS = ['Overview', 'Classification', 'Dedup & reports', 'Promotions', 'Raw payload'] as const;
 
 // title/description/important_info — the fields markerState() counts to
 // decide 'matched' vs 'partial' vs 'empty' translation coverage per locale.
@@ -43,6 +41,13 @@ export const ADMIN_CONTENT_LANG_MARKER_LABELS: Record<ContentMarkerState, string
 // Shared "open full details" link on AdminSubmissions/AdminReports detail
 // panes (AdminQueue.module.css's .queueDetailLink) — same no-i18n exemption.
 export const ADMIN_QUEUE_DETAIL_LINK_LABEL = 'Open full details →';
+
+// Shown on page 1 of Admin Reports when an email deep link (?report=<id>)
+// names a report that is no longer in the queue — same no-i18n exemption.
+// `{id}` is the event id.
+export const ADMIN_REPORT_PROMOTED_LABEL = 'Promoted';
+export const ADMIN_REPORT_RESOLVED_NOTICE = 'Report #{id} was already resolved. Showing the start of the queue.';
+export const ADMIN_REPORT_RESOLVED_LINK_LABEL = 'Open event #{id}';
 
 // Fallback error toast copy shared across admin mutations that don't get a
 // server-provided message — same no-i18n exemption as the rest of admin.
@@ -135,3 +140,6 @@ export const ADMIN_PIPELINE_STAGE_LABELS: Record<string, string> = {
   build_feeds: 'Build feeds',
   send_digests: 'Send digests',
 };
+
+// Admin screens are English-only; the shared DatePicker still wants a locale.
+export const ADMIN_LOCALE = 'en';

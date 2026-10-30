@@ -137,6 +137,27 @@ EVENT_TICKETS_ROW = (
     "</td></tr>"
 )
 
+# The Sponsored slot in the digest (#611): a sharp-cornered, gold-tinted frame
+# around the unchanged event block. "sponsor" avoids bare ad/ads hooks that
+# content blockers hide.
+DIGEST_SPONSORED_BLOCK = (
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="{s_sponsor_wrap}">'
+    "<tr><td>"
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="e-sponsor" style="{s_sponsor}">'
+    '<tr><td style="{s_sponsor_head}">'
+    '<p class="e-sponsor-label" style="{s_sponsor_label}">{label}</p>'
+    '<p class="e-muted" style="{s_sponsor_org}">{advertiser}</p>'
+    "</td></tr>"
+    '<tr><td style="{s_sponsor_body}">{event_block}</td></tr>'
+    '<tr><td style="{s_sponsor_foot}">'
+    '<p class="e-muted" style="{s_sponsor_note}">{explanation}</p>'
+    '<p style="margin:0;"><a href="{stop_url}" class="e-footer-link" style="{s_sponsor_stop}">{stop_label}</a></p>'
+    "</td></tr>"
+    "</table>"
+    "</td></tr>"
+    "</table>"
+)
+
 CONTACT_HTML_BODY = (
     "<p><strong>From:</strong> {name} ({email})</p><p>{message}</p>"
 )
@@ -145,6 +166,7 @@ CONTACT_SUBJECT = "Contact form — {name}"
 EMAIL_LINE_BREAK = "<br>"
 
 REPORT_NOTIFY_SUBJECT = "New report — {title}"
+REPORT_NOTIFY_SUBJECT_PROMOTED = "New report on a promoted event — {title}"
 REPORT_NOTIFY_TEXT_BODY = (
     "Event: {title} ({event_href})\n"
     "Source: {source}\n"
@@ -169,3 +191,37 @@ REPORT_NOTIFY_COUNT_LINE = "<p><strong>Report count:</strong> {count}</p>"
 REPORT_NOTIFY_ILLEGAL_LINE = "<p><strong>Illegal allegation:</strong> {is_illegal}</p>"
 REPORT_NOTIFY_REPORTER_LINE = "<p><strong>Reporter:</strong> {email}</p>"
 REPORT_NOTIFY_REVIEW_LINE = "<p><a href='{href}'>Review in the admin console</a></p>"
+
+
+# Admin notice: a scheduled or live Promotion's event became restricted (#612).
+PROMOTION_RESTRICTION_NOTIFY_SUBJECT = "Promotion paused: {restriction} restriction — {title}"
+PROMOTION_RESTRICTION_NOTIFY_HTML = (
+    "<p>The event <strong>{title}</strong> was newly flagged with the Promotion "
+    "restriction <strong>{restriction}</strong>. Its Promotion #{promotion_id} "
+    "({start} to {end}) is paused until you clear it or end it early.</p>"
+    "<p><a href='{href}'>Review in the admin console</a></p>"
+)
+PROMOTION_RESTRICTION_NOTIFY_TEXT = (
+    "The event {title} was newly flagged with the Promotion restriction "
+    "{restriction}. Its Promotion #{promotion_id} ({start} to {end}) is paused "
+    "until you clear it or end it early.\n\nReview: {href}\n"
+)
+
+# Admin notice: a new Promotion request (#614).
+PROMOTION_REQUEST_NOTIFY_SUBJECT = "New Promotion request: {title}"
+PROMOTION_REQUEST_NOTIFY_HTML = (
+    "<p>{organizer} requested a Promotion of <strong>{title}</strong> "
+    "({start} to {end}) for {advertiser}.</p>"
+    "<p><a href='{href}'>Review in the admin console</a></p>"
+)
+PROMOTION_REQUEST_NOTIFY_TEXT = (
+    "{organizer} requested a Promotion of {title} ({start} to {end}) for "
+    "{advertiser}.\n\nReview: {href}\n"
+)
+# Admin notices for card payments (#618, #619): one generic shape, the headline
+# says what happened. Sent to the contact address with a deep link.
+PROMOTION_PAYMENT_NOTIFY_SUBJECT = "[Event Radar] {headline}"
+PROMOTION_PAYMENT_NOTIFY_HTML = (
+    "<p><strong>{headline}</strong></p><p>{detail}</p><p><a href='{href}'>Open in the admin console</a></p>"
+)
+PROMOTION_PAYMENT_NOTIFY_TEXT = "{headline}\n\n{detail}\n\nOpen: {href}\n"

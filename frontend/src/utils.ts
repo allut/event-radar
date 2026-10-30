@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import { type InfiniteData, type QueryClient } from '@tanstack/react-query';
+import { type QueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api/client';
 import {
   DEFAULT_CURRENCY,
@@ -12,10 +12,11 @@ import {
   LOCALES,
   DEFAULT_LOCALE_CODE,
   TALLINN_TZ,
+  CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED,
+  LOCALE_EN,
+  LOCALE_RU,
 } from './_generated/sharedConstants';
-import { ANALYTICS_EVENT_PATH_RE, ANALYTICS_ORGANIZER_EDIT_PATH_RE } from './constants/analytics';
 import { API, QUERY_KEYS } from './constants/api';
-import { CLAIM_JUSTIFICATION_REQUIRED_ERROR } from './constants/claims';
 import {
   NUMERIC_ROUTE_ID_RE,
   CARD_ANIMATION_DELAY_STEP_MS,
@@ -33,9 +34,7 @@ import {
   MAX_MINUTE,
   TIME_FIELD_MAX_LENGTH,
   LOCALES_BY_CODE,
-  LOCALE_EN,
   LOCALE_ET,
-  LOCALE_RU,
   type LocaleCode,
   MS_PER_HOUR,
   HOURS_PER_DAY,
@@ -45,6 +44,7 @@ import {
   type SortOption,
   DATE_PRESET_DAYS,
   DATE_PRESET_DAYS_FALLBACK,
+  DATE_PRESET_CUSTOM,
   DATE_PRESET_DEFAULT,
   DATE_PRESET_TODAY,
   DATE_PRESET_WEEKEND,
@@ -136,9 +136,9 @@ export function apiErrorMessage(err: unknown, fallback: string): string {
  * (#428's Series-claim gate) — the one claim-creation error ClaimEventPicker/
  * ClaimStrip react to structurally (reveal the reason field) rather than
  * just display, so both share this check instead of duplicating the
- * ApiError/message comparison. */
+ * ApiError.code comparison. */
 export function isClaimJustificationRequiredError(err: unknown): boolean {
-  return err instanceof ApiError && err.message === CLAIM_JUSTIFICATION_REQUIRED_ERROR;
+  return err instanceof ApiError && err.code === CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED;
 }
 
 /** { value, label } options for every CATEGORIES slug, localized — callers
@@ -162,54 +162,12 @@ export function vibeOptions(locale: string): { value: string; label: string }[] 
   return VIBES.map((slug) => ({ value: slug, label: t(`vibe_${slug}`, locale) }));
 }
 
-/** useInfiniteQuery's getNextPageParam cursor for every offset-paginated
- * list (admin queues, claim events; Explore/Saved use nextKeysetParam): the next offset when the page
- * says there's more, else undefined to stop paging. `itemCount` is the
- * caller's page-array length (`events.length`/`groups.length` — the key
- * differs per response shape, so it's passed rather than read off `page`). */
-export function nextOffsetParam(
-  page: { has_more: boolean; offset: number },
-  itemCount: number,
-): number | undefined {
-  return page.has_more ? page.offset + itemCount : undefined;
-}
-
-/** A useInfiniteQuery page param for lists the backend keyset-paginates
- * (Explore's date sort, Saved Events): `cursor` is the server's opaque
- * `next_cursor` and wins when present; `offset` is the fallback for the
- * sorts that stay on OFFSET (relevance/price/quality). */
-export interface KeysetPageParam {
-  offset: number;
-  cursor?: string;
-}
-
-export const FIRST_KEYSET_PAGE: KeysetPageParam = { offset: 0 };
-
-export function nextKeysetParam(
-  page: { has_more: boolean; offset: number; next_cursor?: string | null },
-  itemCount: number,
-): KeysetPageParam | undefined {
-  if (!page.has_more) return undefined;
-  return { offset: page.offset + itemCount, cursor: page.next_cursor ?? undefined };
-}
-
 /** True for any organizer-portal route, with or without a `/:locale` prefix
  * (e.g. `/organizer/dashboard`, `/ru/organizer/settings`) — used to pick the
  * right chrome/links (e.g. Footer's Contact link) by current portal rather
  * than by auth state alone. */
 export function isOrganizerPortalPath(pathname: string): boolean {
   return /\/organizer(\/|$)/.test(pathname);
-}
-
-/** Reshapes a URL before it's forwarded to Google Analytics: strips the query string and
- * hash (query params can carry sensitive values — the /auth/verify magic-link token, an
- * /explore free-text search — that must never reach a third-party analytics vendor) and
- * groups `/events/:id` under one row instead of one per event id. */
-export function maskAnalyticsUrl(url: string): string {
-  const pathname = url.split(/[?#]/)[0];
-  return pathname
-    .replace(ANALYTICS_EVENT_PATH_RE, '$1/events/[id]')
-    .replace(ANALYTICS_ORGANIZER_EDIT_PATH_RE, '$1/organizer/events/[id]/edit');
 }
 
 /** Defense-in-depth render guard: only allow the given URL schemes (http(s) by
@@ -388,10 +346,22 @@ function dateTimeFormatter(
   options: Intl.DateTimeFormatOptions,
   tallinn = false,
 ): Intl.DateTimeFormat {
-  const key = tallinn ? `${localeCode}|${shapeKey}|tallinn` : `${localeCode}|${shapeKey}`;
+  return cachedDateTimeFormat(localeCode, shapeKey, options, tallinn ? TALLINN_TZ : undefined);
+}
+
+/** The cache behind every formatter here, for one outside utils.ts (ESLint
+ * bans a per-call `new Intl.*` elsewhere). `timeZone: 'UTC'` formats a bare
+ * YYYY-MM-DD day built with a `Z` suffix without shifting it. */
+export function cachedDateTimeFormat(
+  localeCode: string,
+  shapeKey: string,
+  options: Intl.DateTimeFormatOptions,
+  timeZone?: string,
+): Intl.DateTimeFormat {
+  const key = `${localeCode}|${shapeKey}|${timeZone ?? ''}`;
   let fmt = DATE_TIME_FORMATTERS.get(key);
   if (!fmt) {
-    fmt = new Intl.DateTimeFormat(localeCode, tallinn ? { ...options, timeZone: TALLINN_TZ } : options);
+    fmt = new Intl.DateTimeFormat(localeCode, timeZone ? { ...options, timeZone } : options);
     DATE_TIME_FORMATTERS.set(key, fmt);
   }
   return fmt;
@@ -442,10 +412,10 @@ export function formatEventShortDate(iso: string, locale: string): string {
   return dateTimeFormatter(localeCode, 'day-month-short', DTF_DAY_MONTH_SHORT, true).format(new Date(iso));
 }
 
-/** Flatten an inline run (string or `{ text }` part) to plain text, for building
- * stable React keys off authored content (react/no-array-index-key is an error). */
-export function inlineText(content: ReadonlyArray<string | { text: string }>): string {
-  return content.map((part) => (typeof part === 'string' ? part : part.text)).join('');
+/** Flatten an inline run (string, `{ text }` link or `{ operator }` field) to plain
+ * text, for building stable React keys off authored content (react/no-array-index-key is an error). */
+export function inlineText(content: ReadonlyArray<string | { text: string } | { operator: string }>): string {
+  return content.map((part) => (typeof part === 'string' ? part : 'operator' in part ? part.operator : part.text)).join('');
 }
 
 // ─── Date / number helpers ───────────────────────────────────────────────────
@@ -818,7 +788,7 @@ export function datePresetRange(preset: DatePreset): { from: string | null; to: 
   // keeps datePresetRange total/correct so 'custom' can never fall through
   // to the DATE_PRESET_DAYS fallback below and get silently misread as a
   // 30-day window.
-  if (preset === 'custom') return { from: null, to: null };
+  if (preset === DATE_PRESET_CUSTOM) return { from: null, to: null };
   const today = tallinnToday();
 
   if (preset === DATE_PRESET_TODAY) {
@@ -906,7 +876,7 @@ export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearch
   if (!isFullSet(filters.category, CATEGORIES)) params.set(EXPLORE_PARAM.category, filters.category.join(','));
   if (!isFullSet(filters.vibe, VIBES)) params.set(EXPLORE_PARAM.vibe, filters.vibe.join(','));
   if (filters.datePreset !== DATE_PRESET_DEFAULT) params.set(EXPLORE_PARAM.date, filters.datePreset);
-  if (filters.datePreset === 'custom' && filters.customFrom && filters.customTo) {
+  if (filters.datePreset === DATE_PRESET_CUSTOM && filters.customFrom && filters.customTo) {
     params.set(EXPLORE_PARAM.dateFrom, filters.customFrom);
     params.set(EXPLORE_PARAM.dateTo, filters.customTo);
   }
@@ -917,11 +887,7 @@ export function exploreFiltersToSearchParams(filters: ExploreFilters): URLSearch
 }
 
 /** Build the GET /explore query string for a given filter set + page offset. */
-export function buildExploreApiQuery(
-  filters: ExploreFilters,
-  offset: number,
-  cursor?: string,
-): string {
+export function buildExploreApiQuery(filters: ExploreFilters, offset: number): string {
   const params = new URLSearchParams();
   if (filters.q) params.set(EXPLORE_PARAM.q, filters.q);
   if (filters.category.length && !isFullSet(filters.category, CATEGORIES)) {
@@ -930,7 +896,7 @@ export function buildExploreApiQuery(
   if (filters.vibe.length && !isFullSet(filters.vibe, VIBES)) {
     params.set(EXPLORE_PARAM.vibe, filters.vibe.join(','));
   }
-  if (filters.datePreset === 'custom') {
+  if (filters.datePreset === DATE_PRESET_CUSTOM) {
     if (filters.customFrom) params.set(EXPLORE_PARAM.dateFrom, filters.customFrom);
     if (filters.customTo) params.set(EXPLORE_PARAM.dateTo, filters.customTo);
   } else {
@@ -943,7 +909,6 @@ export function buildExploreApiQuery(
   params.set(EXPLORE_PARAM.sort, filters.sort);
   params.set(EXPLORE_PARAM.limit, String(BROWSE_PAGE_SIZE));
   params.set(EXPLORE_PARAM.offset, String(offset));
-  if (cursor) params.set(EXPLORE_PARAM.cursor, cursor);
   return params.toString();
 }
 
@@ -982,18 +947,16 @@ function patchEventInPage<T extends CachedEventsPage>(page: T, eventId: number, 
 }
 
 /** Writes `patch` (e.g. `{ my_signal }`, `{ reported }`) onto one event's row in
- * every cached Feed / Explore / event-detail payload, so a save/like/report is
- * reflected everywhere without refetching every loaded page of every list
- * (an infinite Explore query refetches all its pages sequentially). Saved-tab
- * payloads are deliberately left alone: membership there changes with the
- * signal, so callers invalidate them instead. */
+ * every cached Feed / Explore page / event-detail payload, so a save/like/report
+ * is reflected everywhere without refetching (an Explore refetch re-scores
+ * server-side). Saved-tab payloads are deliberately left alone: membership
+ * there changes with the signal, so callers invalidate them instead. */
 export function patchCachedEvent(queryClient: QueryClient, eventId: number, patch: object): void {
-  queryClient.setQueriesData<CachedEventsPage>({ queryKey: [QUERY_KEYS.feed] }, (old) =>
-    old ? patchEventInPage(old, eventId, patch) : old,
-  );
-  queryClient.setQueriesData<InfiniteData<CachedEventsPage>>({ queryKey: [QUERY_KEYS.explore] }, (old) =>
-    Array.isArray(old?.pages) ? { ...old, pages: old.pages.map((page) => patchEventInPage(page, eventId, patch)) } : old,
-  );
+  for (const key of [QUERY_KEYS.feed, QUERY_KEYS.explore]) {
+    queryClient.setQueriesData<CachedEventsPage>({ queryKey: [key] }, (old) =>
+      old ? patchEventInPage(old, eventId, patch) : old,
+    );
+  }
   queryClient.setQueriesData<CachedEventLike>({ queryKey: [QUERY_KEYS.event] }, (old) =>
     old && old.id === eventId ? { ...old, ...patch } : old,
   );

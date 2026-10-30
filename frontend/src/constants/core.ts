@@ -6,6 +6,8 @@ import {
   DEFAULT_LOCALE_CODE as _DEFAULT_LOCALE_CODE,
   LOCALE_CODE_MAP as _LOCALE_CODE_MAP,
   LOCALES,
+  LOCALE_EN,
+  LOCALE_RU,
 } from '../_generated/sharedConstants.js';
 
 // Re-export PERSONAS under the original name so all import sites are unchanged.
@@ -69,9 +71,7 @@ export const LOCALES_BY_CODE: Map<string, (typeof LOCALES)[number]> = new Map(
 );
 export const COPYRIGHT_YEAR = String(new Date().getFullYear());
 
-export const LOCALE_EN = 'en' as const;
 export const LOCALE_ET = 'et' as const;
-export const LOCALE_RU = 'ru' as const;
 
 export function toLocaleCode(locale: string): string {
   return _LOCALE_CODE_MAP[locale] ?? _DEFAULT_LOCALE_CODE;
@@ -153,6 +153,8 @@ export const MS_PER_MINUTE = 60 * 1000;
 // Milliseconds in an hour — divides a millisecond timestamp delta down to
 // hours, e.g. for SEO_AUDIT_STALE_THRESHOLD_HOURS's staleness comparison.
 export const MS_PER_HOUR = MINUTES_PER_HOUR * MS_PER_MINUTE;
+// Milliseconds in a day — whole-day differences between two calendar dates.
+export const MS_PER_DAY = HOURS_PER_DAY * MS_PER_HOUR;
 
 // Arrow-key increment/decrement step per time field.
 export const TIME_STEP_HOURS = 1;
@@ -164,6 +166,11 @@ export const TIME_FIELD_MAX_LENGTH = 2;
 // Placeholder for the picker's typeable field. Mirrors the 'YYYY-MM-DDTHH:mm'
 // wire format with a space in place of the literal 'T' — see toDisplayDateTime.
 export const PICKER_VALUE_PLACEHOLDER = 'YYYY-MM-DD HH:mm';
+export const PICKER_DATE_ONLY_PLACEHOLDER = 'YYYY-MM-DD';
+// Midnight suffix that lets a date-only value reuse the date-time parser.
+export const PICKER_MIDNIGHT_SUFFIX = 'T00:00';
+// Upper bound on a skip-disabled-days walk (a year of cells).
+export const PICKER_SKIP_LIMIT = 366;
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 // Ordered to match a user's ranked persona picks (see PERSONA_RANK_WEIGHTS on
@@ -190,7 +197,6 @@ export const MAILTO_SCHEME = 'mailto';
 export const CONTACT_MAILTO = `${MAILTO_SCHEME}:${CONTACT_EMAIL}`;
 // External regulator links the legal docs cite (identical in every locale).
 export const AKI_URL = 'https://www.aki.ee';
-export const ODR_URL = 'https://ec.europa.eu/consumers/odr';
 
 // Scroll hysteresis: the bar condenses past 24px and expands back only under
 // 4px, so its 18px height change can't oscillate around one threshold.

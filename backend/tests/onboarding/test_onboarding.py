@@ -274,3 +274,49 @@ class TestSetPersona:
         assert result["personas"] == [
             {"slug": "culture_buff", "weight": PERSONA_RANK_WEIGHTS[0]}
         ]
+
+
+class TestSetPersonaDigestOptIn:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("choice", [True, False])
+    async def test_explicit_choice_is_stored(self, mock_db, make_user, make_request, choice):
+        from app.routers.onboarding import set_persona, PersonaBody
+
+        mock_db.scalars.return_value = MagicMock(
+            all=MagicMock(return_value=[_make_persona("culture_buff", 1)])
+        )
+        user = make_user(opt_in=not choice)
+
+        await set_persona(
+            body=PersonaBody(persona_slugs=["culture_buff"], email_digest_opt_in=choice),
+            request=make_request(method="POST", path="/onboarding/persona"),
+            background_tasks=BackgroundTasks(),
+            current_user=user,
+            db=mock_db,
+        )
+
+        assert user.email_digest_opt_in is choice
+
+    @pytest.mark.asyncio
+    async def test_omitted_choice_leaves_flag_untouched(self, mock_db, make_user, make_request):
+        from app.routers.onboarding import set_persona, PersonaBody
+
+        mock_db.scalars.return_value = MagicMock(
+            all=MagicMock(return_value=[_make_persona("culture_buff", 1)])
+        )
+        user = make_user(opt_in=True)
+
+        await set_persona(
+            body=PersonaBody(persona_slugs=["culture_buff"]),
+            request=make_request(method="POST", path="/onboarding/persona"),
+            background_tasks=BackgroundTasks(),
+            current_user=user,
+            db=mock_db,
+        )
+
+        assert user.email_digest_opt_in is True
+
+    def test_new_user_column_defaults_to_false(self):
+        from app.models.models import User
+
+        assert User.__table__.c.email_digest_opt_in.server_default.arg == "false"

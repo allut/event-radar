@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.constants.reports import REPORT_DETAIL_MAX_CHARS
+from app._generated.shared_constants import REPORT_DETAIL_MAX_CHARS
 
 
 class TestSubmitReport:
@@ -224,7 +224,7 @@ class TestFirstReportNotification:
         from app.routers.reports import ReportBody, submit_report
 
         event = make_event(10)
-        mock_db.scalar.side_effect = [event, 0]
+        mock_db.scalar.side_effect = [event, 0, None]
         user = make_user()
 
         with patch(
@@ -238,7 +238,7 @@ class TestFirstReportNotification:
             )
 
         mock_send.assert_awaited_once_with(
-            event, "spam_or_scam", None, False, 1, user.email
+            event, "spam_or_scam", None, False, 1, user.email, is_promoted=False
         )
 
     @pytest.mark.asyncio
@@ -298,7 +298,7 @@ class TestFirstReportNotification:
         the durable record regardless of delivery."""
         from app.routers.reports import ReportBody, submit_report
 
-        mock_db.scalar.side_effect = [make_event(10), 0]
+        mock_db.scalar.side_effect = [make_event(10), 0, None]
 
         with patch(
             "app.routers.reports.send_report_notification",
@@ -312,3 +312,32 @@ class TestFirstReportNotification:
             )
 
         assert result == {"ok": True}
+
+
+class TestReportReasonTaxonomy:
+    @pytest.mark.parametrize(
+        "reason",
+        [
+            "spam_or_scam",
+            "sexual_or_explicit",
+            "not_an_event",
+            "hateful_or_violent",
+            "misleading_info",
+            "event_ended_or_cancelled",
+            "wrong_location",
+            "other",
+        ],
+    )
+    def test_every_offered_reason_is_accepted(self, reason):
+        from app.routers.utils import validate_report_reason
+
+        validate_report_reason(reason)
+
+    def test_error_lists_exactly_the_offered_reasons(self):
+        from app.routers.utils import validate_report_reason
+
+        with pytest.raises(HTTPException) as exc_info:
+            validate_report_reason("not_a_real_reason")
+        for reason in ["spam_or_scam", "wrong_location", "other"]:
+            assert f"'{reason}'" in exc_info.value.detail
+        assert exc_info.value.detail.count("'") == 2 * 8

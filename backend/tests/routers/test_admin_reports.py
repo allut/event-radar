@@ -204,6 +204,295 @@ async def test_list_reports_excludes_cancelled(admin_app, make_db_ctx, mock_db):
     assert "events.status !=" in sql or "events.status IS DISTINCT FROM" in sql
 
 
+async def _get_reports(admin_app, db, make_db_ctx, url: str):
+    with (
+        patch_admin_settings() as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+        async with AsyncClient(
+            transport=ASGITransport(app=admin_app), base_url="http://test"
+        ) as client:
+            return await client.get(url, auth=("admin", ""))
+
+
+@pytest.mark.asyncio
+async def test_list_reports_returns_total_past_the_first_page(
+    admin_app, make_db_ctx, mock_db
+):
+    """Spec #551: exact total on every request, not only at offset 0."""
+    db = mock_db
+    db.scalar = AsyncMock(return_value=120)
+    db.execute = AsyncMock(return_value=execute_rows([]))
+
+    resp = await _get_reports(
+        admin_app, db, make_db_ctx, "/admin/reports?limit=50&offset=100"
+    )
+
+    body = resp.json()
+    assert (body["total"], body["limit"], body["offset"]) == (120, 50, 100)
+    assert body["report_not_found"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_reports_breaks_ties_on_event_id(admin_app, make_db_ctx, mock_db):
+    """has_illegal desc, report_count desc, oldest asc, then event_id: events
+    tying on the first three keys keep one order across pages."""
+    db = mock_db
+    db.scalar = AsyncMock(return_value=0)
+    captured: dict = {}
+
+    async def _capture_execute(stmt):
+        captured["stmt"] = stmt
+        return execute_rows([])
+
+    db.execute = AsyncMock(side_effect=_capture_execute)
+
+    await _get_reports(admin_app, db, make_db_ctx, "/admin/reports")
+
+    sql = str(captured["stmt"].compile(compile_kwargs={"literal_binds": True}))
+    order = sql[sql.index("ORDER BY") :]
+    keys = [
+        "has_illegal_allegation DESC",
+        "report_count DESC",
+        "oldest_open_report_at ASC",
+        "event_reports.event_id ASC",
+    ]
+    assert [order.index(k) for k in keys] == sorted(order.index(k) for k in keys)
+
+
+@pytest.mark.asyncio
+async def test_list_reports_locates_a_late_page_row(
+    admin_app, make_db_ctx, mock_db, make_event, make_report
+):
+    """report=<id> ignores offset: row 123 (1-based) at limit 50 lives on the
+    page starting at offset 100, and the response carries that real offset."""
+    event = make_event(event_id=42, status="published")
+    event.submitted_by_organizer_id = None
+    agg_row = MagicMock(
+        event_id=42,
+        has_illegal_allegation=False,
+        report_count=1,
+        oldest_open_report_at="2026-05-13T06:00:00+00:00",
+    )
+    captured: dict = {}
+
+    async def _capture_execute(stmt):
+        captured["stmt"] = stmt
+        return execute_rows([agg_row])
+
+    db = mock_db
+    db.scalar = AsyncMock(side_effect=[130, 123])  # total, then the row position
+    db.execute = AsyncMock(side_effect=_capture_execute)
+    db.scalars = AsyncMock(
+        side_effect=[
+            scalars_returning([event]),
+            scalars_returning([make_report(report_id=1, event_id=42)]),
+        ]
+    )
+
+    resp = await _get_reports(
+        admin_app, db, make_db_ctx, "/admin/reports?limit=50&offset=0&report=42"
+    )
+
+    body = resp.json()
+    assert body["offset"] == 100
+    assert body["total"] == 130
+    assert body["report_not_found"] is False
+    assert [r["event_id"] for r in body["events"]] == [42]
+    assert "OFFSET 100" in str(
+        captured["stmt"].compile(compile_kwargs={"literal_binds": True})
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_reports_locate_on_page_one_keeps_offset_zero(
+    admin_app, make_db_ctx, mock_db
+):
+    db = mock_db
+    db.scalar = AsyncMock(side_effect=[10, 3])
+    db.execute = AsyncMock(return_value=execute_rows([]))
+
+    resp = await _get_reports(admin_app, db, make_db_ctx, "/admin/reports?report=7")
+
+    assert resp.json()["offset"] == 0
+    assert resp.json()["report_not_found"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_reports_already_resolved_report_returns_page_one(
+    admin_app, make_db_ctx, mock_db
+):
+    """A report no longer in the queue: page 1 plus report_not_found, never
+    an unrelated row silently selected by the server."""
+    db = mock_db
+    db.scalar = AsyncMock(side_effect=[130, None])
+    db.execute = AsyncMock(return_value=execute_rows([]))
+
+    resp = await _get_reports(
+        admin_app, db, make_db_ctx, "/admin/reports?limit=50&offset=100&report=999"
+    )
+
+    body = resp.json()
+    assert body["report_not_found"] is True
+    assert body["offset"] == 0
+    assert body["total"] == 130
+
+
+@pytest.mark.asyncio
+async def test_list_reports_rejects_a_report_id_past_bigint(
+    admin_app, make_db_ctx, mock_db
+):
+    """A hand-edited deep link past Postgres BIGINT gets a 422, not a 500 from
+    the overflowing bind; the largest BIGINT is still a valid id."""
+    db = mock_db
+    # total + locate per request that reaches the query.
+    db.scalar = AsyncMock(side_effect=[0, None, 0, None])
+    db.execute = AsyncMock(return_value=execute_rows([]))
+
+    too_big = await _get_reports(
+        admin_app, db, make_db_ctx, "/admin/reports?report=9223372036854775808"
+    )
+    largest = await _get_reports(
+        admin_app, db, make_db_ctx, "/admin/reports?report=9223372036854775807"
+    )
+
+    assert too_big.status_code == http.HTTPStatus.UNPROCESSABLE_ENTITY
+    assert largest.status_code == http.HTTPStatus.OK
+
+
+@pytest.mark.asyncio
+async def test_reports_list_uses_the_admin_read_bucket(admin_app, make_db_ctx, mock_db):
+    """Refetch-after-action costs a list GET per action: it runs on the
+    browse rate in the shared admin-read bucket, not the 10/minute one."""
+    from app.constants.rate_limits import RATE_LIMIT_ADMIN, RATE_LIMIT_BROWSE
+
+    admin_burst = int(RATE_LIMIT_ADMIN.split("/")[0])
+    browse_burst = int(RATE_LIMIT_BROWSE.split("/")[0])
+    db = mock_db
+    db.scalar = AsyncMock(return_value=0)
+    db.execute = AsyncMock(return_value=execute_rows([]))
+
+    with (
+        patch_admin_settings() as mock_settings,
+        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+        async with AsyncClient(
+            transport=ASGITransport(app=admin_app), base_url="http://test"
+        ) as client:
+            statuses = [
+                (await client.get("/admin/reports", auth=("admin", ""))).status_code
+                for _ in range(browse_burst + 1)
+            ]
+
+    assert statuses[: admin_burst + 1] == [http.HTTPStatus.OK] * (admin_burst + 1)
+    assert statuses[browse_burst] == http.HTTPStatus.TOO_MANY_REQUESTS
+
+
+@pytest.mark.asyncio
+async def test_list_reports_walks_tied_events_and_locates_against_postgres(admin_app):
+    """Against a real Postgres (skipped without one): seven events tie on
+    every aggregate key. Walking the queue three per page returns each event
+    exactly once in event-id order, and report=<id> lands on the page holding
+    it with that page's real offset. Seeded in a rolled-back transaction."""
+    import asyncio
+    import os
+
+    from sqlalchemy import text
+    from sqlalchemy.exc import DBAPIError, SQLAlchemyError
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from sqlalchemy.pool import NullPool
+
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        pytest.skip("DATABASE_URL not set")
+    engine = create_async_engine(url, poolclass=NullPool)
+    try:
+        conn = await asyncio.wait_for(engine.connect(), timeout=3)
+    except (OSError, asyncio.TimeoutError, SQLAlchemyError):
+        await engine.dispose()
+        pytest.skip("Postgres unreachable")
+    tx = await conn.begin()
+    session = AsyncSession(
+        bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False
+    )
+    try:
+        try:
+            event_ids: list[int] = []
+            for n in range(7):
+                event_id = (
+                    await session.execute(
+                        text(
+                            "INSERT INTO events (slug, title_orig, starts_at, status) "
+                            "VALUES (:slug, 'Tie', now(), 'published') RETURNING id"
+                        ),
+                        {"slug": f"report-tie-{n}"},
+                    )
+                ).scalar_one()
+                event_ids.append(event_id)
+                user_id = (
+                    await session.execute(
+                        text("INSERT INTO users (email) VALUES (:email) RETURNING id"),
+                        {"email": f"report-tie-{n}@example.test"},
+                    )
+                ).scalar_one()
+                await session.execute(
+                    text(
+                        "INSERT INTO event_reports (user_id, event_id, reason, "
+                        "is_illegal_allegation, status, created_at) VALUES "
+                        "(:u, :e, 'spam_or_scam', false, 'open', "
+                        "'2999-01-01T00:00:00+00')"
+                    ),
+                    {"u": user_id, "e": event_id},
+                )
+        except DBAPIError as exc:
+            pytest.skip(f"schema not insertable with minimal columns: {exc}")
+
+        ctx = MagicMock()
+        ctx.__aenter__ = AsyncMock(return_value=session)
+        ctx.__aexit__ = AsyncMock(return_value=False)
+        walked: list[int] = []
+        with (
+            patch_admin_settings() as mock_settings,
+            patch("app.routers.admin.AsyncSessionLocal", return_value=ctx),
+        ):
+            mock_settings.ADMIN_PASSWORD = ""
+            mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+            async with AsyncClient(
+                transport=ASGITransport(app=admin_app), base_url="http://test"
+            ) as client:
+                total = (
+                    await client.get("/admin/reports?limit=1", auth=("admin", ""))
+                ).json()["total"]
+                for offset in range(0, total, 3):
+                    body = (
+                        await client.get(
+                            f"/admin/reports?limit=3&offset={offset}",
+                            auth=("admin", ""),
+                        )
+                    ).json()
+                    walked += [row["event_id"] for row in body["events"]]
+                located = (
+                    await client.get(
+                        f"/admin/reports?limit=3&report={event_ids[-1]}",
+                        auth=("admin", ""),
+                    )
+                ).json()
+    finally:
+        await session.close()
+        await tx.rollback()
+        await conn.close()
+        await engine.dispose()
+
+    assert len(walked) == len(set(walked)) == total
+    assert [i for i in walked if i in event_ids] == sorted(event_ids)
+    assert event_ids[-1] in [row["event_id"] for row in located["events"]]
+    assert located["offset"] == walked.index(event_ids[-1]) // 3 * 3
+
+
 # ---------------------------------------------------------------------------
 # POST /admin/reports/{id}/resolve
 # ---------------------------------------------------------------------------

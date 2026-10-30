@@ -19,17 +19,22 @@ from app.ingestion.adapter import (
     NormalizedEvent,
     SourceAdapter,
     coords_in_estonia,
+    coords_in_event_area,
     coords_in_tallinn,
     existing_external_ids,
     insert_normalized_event,
     _make_slug,
     load_publisher_lookup,
 )
+from app.ingestion import http_client
 from app.ingestion.content_filters import is_explicit_text, is_non_event_text
 from app.ingestion.http_client import (
     AsyncRateLimiter,
+    ResponseTooLargeError,
+    _is_retryable,
     _retry_wait,
     host_is_allowed,
+    http_get,
     http_get_stored_url,
     resolves_to_private_ip,
     retry_after_seconds,
@@ -171,6 +176,15 @@ class TestResolvesToPrivateIp:
         with patch("socket.getaddrinfo", return_value=_addrinfo(ip)):
             assert resolves_to_private_ip("x.example") is True
 
+    def test_verdict_cache_evicts_oldest_past_its_cap(self, monkeypatch):
+        from app.ingestion import http_client
+
+        monkeypatch.setattr(http_client, "DNS_RESOLVE_CACHE_MAX_ENTRIES", 2)
+        with patch("socket.getaddrinfo", return_value=_addrinfo("93.184.216.34")):
+            for host in ("a.example", "b.example", "c.example"):
+                resolves_to_private_ip(host)
+        assert list(http_client._dns_verdict_cache) == ["b.example", "c.example"]
+
 
 class TestSafeFetchableUrl:
     @pytest.mark.asyncio
@@ -244,6 +258,93 @@ class TestHttpGetStoredUrl:
         ):
             await http_get_stored_url(client, "https://fienta.com/e/1")
         get.assert_awaited_once_with(client, "https://fienta.com/e/1")
+
+
+class TestHttpGetBodyCap:
+    """http_get streams the body through a real httpx transport (MockTransport)."""
+
+    @staticmethod
+    def _client(handler):
+        return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    @pytest.mark.asyncio
+    async def test_body_under_limit_is_returned_in_full(self):
+        client = self._client(lambda r: httpx.Response(200, content=b"x" * 1000))
+        async with client:
+            resp = await http_get(client, "https://fienta.com/e/1")
+        assert resp.status_code == 200
+        assert resp.content == b"x" * 1000
+        assert resp.text == "x" * 1000
+
+    @pytest.mark.asyncio
+    async def test_body_over_limit_raises_without_retry(self, monkeypatch):
+        monkeypatch.setattr(http_client, "HTTP_MAX_RESPONSE_BYTES", 100)
+        calls = []
+
+        def handler(request):
+            calls.append(request)
+            return httpx.Response(200, content=b"x" * 101)
+
+        async with self._client(handler) as client:
+            with pytest.raises(ResponseTooLargeError):
+                await http_get(client, "https://fienta.com/e/1")
+        assert len(calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_false_content_length_does_not_bypass_cap(self, monkeypatch):
+        monkeypatch.setattr(http_client, "HTTP_MAX_RESPONSE_BYTES", 100)
+        handler = lambda r: httpx.Response(  # noqa: E731
+            200, content=b"x" * 500, headers={"Content-Length": "5"}
+        )
+        async with self._client(handler) as client:
+            with pytest.raises(ResponseTooLargeError):
+                await http_get(client, "https://fienta.com/e/1")
+
+    @pytest.mark.asyncio
+    async def test_missing_content_length_does_not_bypass_cap(self, monkeypatch):
+        monkeypatch.setattr(http_client, "HTTP_MAX_RESPONSE_BYTES", 100)
+
+        async def chunks():
+            for _ in range(10):
+                yield b"x" * 50
+
+        handler = lambda r: httpx.Response(200, content=chunks())  # noqa: E731
+        async with self._client(handler) as client:
+            with pytest.raises(ResponseTooLargeError):
+                await http_get(client, "https://fienta.com/e/1")
+
+    @pytest.mark.asyncio
+    async def test_compressed_bomb_counts_decoded_bytes(self, monkeypatch):
+        import gzip
+
+        monkeypatch.setattr(http_client, "HTTP_MAX_RESPONSE_BYTES", 1000)
+        packed = gzip.compress(b"x" * 100_000)
+        assert len(packed) < 1000
+        handler = lambda r: httpx.Response(  # noqa: E731
+            200, content=packed, headers={"Content-Encoding": "gzip"}
+        )
+        async with self._client(handler) as client:
+            with pytest.raises(ResponseTooLargeError):
+                await http_get(client, "https://fienta.com/e/1")
+
+    @pytest.mark.asyncio
+    async def test_declared_oversize_content_length_fails_fast(self, monkeypatch):
+        monkeypatch.setattr(http_client, "HTTP_MAX_RESPONSE_BYTES", 100)
+        handler = lambda r: httpx.Response(  # noqa: E731
+            200, content=b"x" * 10, headers={"Content-Length": "101"}
+        )
+        async with self._client(handler) as client:
+            with pytest.raises(ResponseTooLargeError):
+                await http_get(client, "https://fienta.com/e/1")
+
+    @pytest.mark.asyncio
+    async def test_error_status_still_raises_status_error(self):
+        async with self._client(lambda r: httpx.Response(404)) as client:
+            with pytest.raises(httpx.HTTPStatusError):
+                await http_get(client, "https://fienta.com/e/1")
+
+    def test_too_large_is_not_retryable(self):
+        assert _is_retryable(ResponseTooLargeError("big")) is False
 
 
 class TestIsExplicitText:
@@ -1502,3 +1603,18 @@ class TestExistingExternalIds:
         stmt = mock_db.scalars.call_args.args[0]
         where = str(stmt.whereclause.compile(dialect=postgresql.dialect()))
         assert "coalesce(events.ends_at, events.starts_at)" in where
+
+
+class TestCoordsInEventArea:
+    TARTU = (58.378, 26.729)  # inside Estonia, outside TALLINN_REGION_BBOX
+    TALLINN = (59.437, 24.753)
+
+    def test_in_area_event_rejects_estonia_only_coord(self):
+        assert coords_in_event_area(*self.TARTU, out_of_area=False) is False
+
+    def test_out_of_area_event_accepts_estonia_coord(self):
+        assert coords_in_event_area(*self.TARTU, out_of_area=True) is True
+
+    def test_both_accept_tallinn_coord(self):
+        assert coords_in_event_area(*self.TALLINN, out_of_area=False) is True
+        assert coords_in_event_area(*self.TALLINN, out_of_area=True) is True

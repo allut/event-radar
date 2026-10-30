@@ -1,5 +1,7 @@
 """Tests for GET /explore (app/routers/browse.py)."""
 import asyncio
+import logging
+from array import array
 from datetime import date, datetime, timezone
 from unittest.mock import MagicMock
 
@@ -53,7 +55,7 @@ class TestParseSlugList:
 
 class TestKeywordFilter:
     def test_escapes_wildcards_in_pattern(self):
-        from app.routers.browse import _keyword_filter
+        from app.events.queries import keyword_filter as _keyword_filter
 
         cond = _keyword_filter("100% off_sale")
         # cond = or_(title ILIKE ..., description ILIKE ...); first clause's
@@ -88,7 +90,7 @@ class TestDateRangeFilter:
 
 class TestFreeFilter:
     def test_matches_zero_price_or_free_tier(self):
-        from app.routers.browse import _free_filter
+        from app.events.queries import free_filter as _free_filter
 
         compiled = str(_free_filter().compile(compile_kwargs={"literal_binds": True}))
         assert "events.price_min = 0" in compiled
@@ -159,8 +161,9 @@ class TestBrowseSqlPath:
         assert result["has_more"] is False
 
 
-class TestBrowseSqlPathKeyset:
-    """Date sort pages on (starts_at, id); other sorts stay on OFFSET."""
+class TestBrowseSqlPathOffsetPaging:
+    """Every Path A sort pages on OFFSET with an exact total on every page
+    (spec #551): no keyset cursor, and a deterministic id tie-breaker."""
 
     @staticmethod
     def _stmt_sql(mock_db):
@@ -168,82 +171,56 @@ class TestBrowseSqlPathKeyset:
         return str(stmt.compile(compile_kwargs={"literal_binds": True}))
 
     @pytest.mark.asyncio
-    async def test_date_sort_emits_next_cursor_when_more(self, mock_db, make_event):
-        from app.routers.browse import _browse_sql_path
-        from app.routers.utils import decode_page_cursor
-
-        events = [make_event(1), make_event(2), make_event(3)]
-        mock_db.scalar.return_value = 3
-        mock_db.scalars.return_value = _scalars_result(events)
-
-        result = await _browse_sql_path(
-            mock_db, [], "date", limit=2, offset=0, locale="en", user_id=None
-        )
-
-        assert decode_page_cursor(result["next_cursor"]) == (
-            events[1].starts_at,
-            events[1].id,
-        )
-
-    @pytest.mark.asyncio
-    async def test_last_page_has_no_next_cursor(self, mock_db, make_event):
+    async def test_date_sort_deep_page_offsets_and_counts_total(self, mock_db, make_event):
         from app.routers.browse import _browse_sql_path
 
-        mock_db.scalar.return_value = 1
-        mock_db.scalars.return_value = _scalars_result([make_event(1)])
+        mock_db.scalar.return_value = 130
+        mock_db.scalars.return_value = _scalars_result([make_event(49), make_event(50)])
 
         result = await _browse_sql_path(
-            mock_db, [], "date", limit=2, offset=0, locale="en", user_id=None
-        )
-        assert result["next_cursor"] is None
-
-    @pytest.mark.asyncio
-    async def test_cursor_page_filters_keyset_skips_offset_and_total(
-        self, mock_db, make_event
-    ):
-        from app.routers.browse import _browse_sql_path
-
-        mock_db.scalars.return_value = _scalars_result([make_event(1)])
-        ts = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
-
-        result = await _browse_sql_path(
-            mock_db,
-            [],
-            "date",
-            limit=2,
-            offset=40,
-            locale="en",
-            user_id=None,
-            cursor=(ts, 7),
+            mock_db, [], "date", limit=24, offset=48, locale="en", user_id=None
         )
 
         sql = self._stmt_sql(mock_db)
-        assert "(events.starts_at, events.id) >" in sql
-        assert "OFFSET" not in sql.upper().replace("OFFSET 0", "")
-        assert "ORDER BY events.starts_at ASC, events.id ASC" in sql
-        mock_db.scalar.assert_not_called()
-        assert result["total"] is None
-        assert result["offset"] == 0
+        assert "OFFSET 48" in sql
+        assert "(events.starts_at, events.id) >" not in sql
+        mock_db.scalar.assert_called_once()
+        assert result["total"] == 130
+        assert result["limit"] == 24
+        assert result["offset"] == 48
+        assert "next_cursor" not in result
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("sort", ["price", "quality"])
-    async def test_non_date_sort_stays_offset_and_ignores_cursor(
-        self, mock_db, make_event, sort
+    @pytest.mark.parametrize(
+        ("sort", "order_by"),
+        [
+            ("date", "ORDER BY events.starts_at ASC, events.id ASC"),
+            ("price", "ORDER BY events.price_min ASC NULLS LAST, events.id ASC"),
+            (
+                "quality",
+                "ORDER BY event_classifications.quality_score DESC NULLS LAST, events.id ASC",
+            ),
+        ],
+    )
+    async def test_tie_breaker_is_stable_across_pages(
+        self, mock_db, make_event, sort, order_by
     ):
+        """Page 1 and page 2 order on the same keys, ending in events.id, so
+        rows sharing a sort value neither repeat nor vanish across pages."""
         from app.routers.browse import _browse_sql_path
 
-        mock_db.scalar.return_value = 1
-        mock_db.scalars.return_value = _scalars_result([make_event(1), make_event(2)])
-        ts = datetime(2026, 5, 1, tzinfo=timezone.utc)
+        mock_db.scalar.return_value = 4
+        sqls = []
+        for offset in (0, 2):
+            mock_db.scalars.return_value = _scalars_result([make_event(offset + 1)])
+            await _browse_sql_path(
+                mock_db, [], sort, limit=2, offset=offset, locale="en", user_id=None
+            )
+            sqls.append(self._stmt_sql(mock_db))
 
-        result = await _browse_sql_path(
-            mock_db, [], sort, limit=1, offset=0, locale="en", user_id=None, cursor=(ts, 7)
-        )
-
-        assert "(events.starts_at, events.id) >" not in self._stmt_sql(mock_db)
-        assert "events.id ASC" in self._stmt_sql(mock_db)
-        assert result["total"] == 1
-        assert result["next_cursor"] is None
+        for sql in sqls:
+            assert order_by in sql
+        assert "OFFSET 2" in sqls[1]
 
 
 class TestBrowseScoredPath:
@@ -435,6 +412,137 @@ class TestBrowseScoredPath:
         assert [e["id"] for e in result["events"]] == [3, 4]
 
 
+class TestRelevanceCeiling:
+    """Path B scores up to BROWSE_RELEVANCE_CEILING and flags an overflow (#561)."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        from app.routers.browse import _score_cache
+
+        _score_cache.clear()
+        yield
+        _score_cache.clear()
+
+    @staticmethod
+    async def _run(mock_db, candidates, hydrated, limit=24, offset=0):
+        from app.routers.browse import _browse_scored_path
+
+        mock_db.scalars.side_effect = [
+            _scalars_result(candidates),
+            _scalars_result(hydrated),
+        ]
+        return await _browse_scored_path(
+            mock_db, [], for_you=False, sort="date", limit=limit, offset=offset,
+            current_user=None, now=datetime(2026, 4, 1, tzinfo=timezone.utc), locale="en",
+        )
+
+    @pytest.mark.asyncio
+    async def test_events_beyond_old_cap_are_reachable(self, mock_db, make_event):
+        events = [make_event(i, starts_at=datetime(2026, 5, 1, tzinfo=timezone.utc)) for i in range(1, 401)]
+        result = await self._run(mock_db, events, events[390:400], limit=10, offset=390)
+
+        assert result["total"] == 400
+        assert "total_is_lower_bound" not in result
+        assert result["has_more"] is False
+
+    @pytest.mark.asyncio
+    async def test_ranks_event_ids_past_32_bits(self, mock_db, make_event):
+        # Event.id is a BigInteger: the ranked-id cache must hold any of them.
+        big_id = 2**32 + 7
+        events = [make_event(1), make_event(big_id)]
+        result = await self._run(mock_db, events, events)
+
+        assert result["total"] == 2
+        assert sorted(e["id"] for e in result["events"]) == [1, big_id]
+
+    @pytest.mark.asyncio
+    async def test_candidate_query_fetches_ceiling_plus_one_ordered_by_id(
+        self, mock_db, make_event, monkeypatch
+    ):
+        from app.routers import browse
+
+        monkeypatch.setattr(browse, "BROWSE_RELEVANCE_CEILING", 5)
+        await self._run(mock_db, [make_event(1)], [make_event(1)])
+
+        sql = str(mock_db.scalars.call_args_list[0].args[0].compile(compile_kwargs={"literal_binds": True}))
+        assert "LIMIT 6" in sql
+        assert "ORDER BY events.starts_at ASC, events.id ASC" in sql
+
+    @pytest.mark.asyncio
+    async def test_overflow_scores_soonest_pool_and_sets_flag(
+        self, mock_db, make_event, monkeypatch
+    ):
+        from app.routers import browse
+
+        monkeypatch.setattr(browse, "BROWSE_RELEVANCE_CEILING", 3)
+        events = [make_event(i, starts_at=datetime(2026, 5, i, tzinfo=timezone.utc)) for i in range(1, 5)]
+        result = await self._run(mock_db, events, events[:3])
+
+        assert result["total"] == 3
+        assert result["total_is_lower_bound"] is True
+        assert result["has_more"] is False
+        hydration_sql = str(mock_db.scalars.call_args_list[-1].args[0].compile(compile_kwargs={"literal_binds": True}))
+        assert "4" not in hydration_sql.split("IN (")[1].split(")")[0]
+
+    @pytest.mark.asyncio
+    async def test_exactly_ceiling_rows_is_not_an_overflow(
+        self, mock_db, make_event, monkeypatch, caplog
+    ):
+        from app.routers import browse
+
+        monkeypatch.setattr(browse, "BROWSE_RELEVANCE_CEILING", 3)
+        events = [make_event(i, starts_at=datetime(2026, 5, i, tzinfo=timezone.utc)) for i in range(1, 4)]
+        with caplog.at_level(logging.WARNING, logger="app.routers.browse"):
+            result = await self._run(mock_db, events, events)
+
+        assert "total_is_lower_bound" not in result
+        assert not caplog.records
+
+    @pytest.mark.asyncio
+    async def test_overflow_logs_structured_warning(self, mock_db, make_event, monkeypatch, caplog):
+        from app.constants.log_events import LOG_EVENT_EXPLORE_CEILING_OVERFLOW
+        from app.routers import browse
+
+        monkeypatch.setattr(browse, "BROWSE_RELEVANCE_CEILING", 2)
+        events = [make_event(i) for i in range(1, 4)]
+        with caplog.at_level(logging.WARNING, logger="app.routers.browse"):
+            await self._run(mock_db, events, events[:2])
+
+        records = [r for r in caplog.records if getattr(r, "event", None) == LOG_EVENT_EXPLORE_CEILING_OVERFLOW]
+        assert len(records) == 1
+        assert records[0].levelno == logging.WARNING
+        assert records[0].ceiling == 2
+
+    @pytest.mark.asyncio
+    async def test_cache_hit_still_returns_flag_and_logs_nothing(
+        self, mock_db, make_event, monkeypatch, caplog
+    ):
+        from app.routers import browse
+        from app.routers.browse import _browse_scored_path
+
+        monkeypatch.setattr(browse, "BROWSE_RELEVANCE_CEILING", 2)
+        events = [make_event(i) for i in range(1, 4)]
+        mock_db.scalars.side_effect = [
+            _scalars_result(events),  # candidates
+            _scalars_result(events[:2]),  # hydration
+            _scalars_result(events[:2]),  # hydration on the cache hit
+        ]
+        key = (browse.BROWSE_ANON_CACHE_SENTINEL, False, "date", (), (), False, None, None, None)
+        now = datetime(2026, 4, 1, tzinfo=timezone.utc)
+        kwargs = dict(
+            for_you=False, sort="date", limit=24, offset=0, current_user=None,
+            now=now, locale="en", cache_key=key,
+        )
+        first = await _browse_scored_path(mock_db, [], **kwargs)
+        caplog.clear()
+        with caplog.at_level(logging.WARNING, logger="app.routers.browse"):
+            second = await _browse_scored_path(mock_db, [], **kwargs)
+
+        assert first["total_is_lower_bound"] is True
+        assert second["total_is_lower_bound"] is True
+        assert not caplog.records
+
+
 class TestScoreCache:
     """_score_cache_get/_score_cache_set (TTL + LRU eviction), and that
     _browse_scored_path actually consults them when given a cache_key."""
@@ -454,15 +562,24 @@ class TestScoreCache:
         key = (1, True, "relevance", (), (), False, None, None, None)
 
         assert browse._score_cache_get(key) is None
-        browse._score_cache_set(key, [3, 1, 2])
-        assert browse._score_cache_get(key) == [3, 1, 2]
+        browse._score_cache_set(key, array("q", [3, 1, 2]), False)
+        ids, lower_bound = browse._score_cache_get(key)
+        assert list(ids) == [3, 1, 2]
+        assert lower_bound is False
+
+    def test_hit_carries_lower_bound_flag(self):
+        from app.routers import browse
+
+        key = (1, True, "relevance", (), (), False, None, None, None)
+        browse._score_cache_set(key, array("q", [1]), True)
+        assert browse._score_cache_get(key)[1] is True
 
     def test_expires_after_ttl(self, monkeypatch):
         from app.routers import browse
 
         key = (1, True, "relevance", (), (), False, None, None, None)
         monkeypatch.setattr(browse.time, "monotonic", lambda: 0.0)
-        browse._score_cache_set(key, [1])
+        browse._score_cache_set(key, array("q", [1]), False)
 
         monkeypatch.setattr(
             browse.time, "monotonic", lambda: browse.BROWSE_SCORE_CACHE_TTL_SECONDS + 1.0
@@ -476,13 +593,13 @@ class TestScoreCache:
         monkeypatch.setattr(browse, "BROWSE_SCORE_CACHE_MAX_ENTRIES", 2)
         monkeypatch.setattr(browse.time, "monotonic", lambda: 0.0)
 
-        browse._score_cache_set(("k1",), [1])
-        browse._score_cache_set(("k2",), [2])
-        browse._score_cache_set(("k3",), [3])
+        browse._score_cache_set(("k1",), array("q", [1]), False)
+        browse._score_cache_set(("k2",), array("q", [2]), False)
+        browse._score_cache_set(("k3",), array("q", [3]), False)
 
         assert len(browse._score_cache) == 2
         assert ("k1",) not in browse._score_cache
-        assert browse._score_cache_get(("k3",)) == [3]
+        assert list(browse._score_cache_get(("k3",))[0]) == [3]
 
     @pytest.mark.asyncio
     async def test_browse_scored_path_hit_skips_rescoring(self, mock_db, make_event):
@@ -532,7 +649,7 @@ class TestExploreEventsRouting:
 
         called = {}
 
-        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id, cursor=None):
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -549,7 +666,6 @@ class TestExploreEventsRouting:
             q=None,
             sort="date",
             for_you=False,
-            cursor=None,
             current_user=user,
             db=mock_db,
         )
@@ -563,7 +679,7 @@ class TestExploreEventsRouting:
 
         called = {}
 
-        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id, cursor=None):
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -593,7 +709,7 @@ class TestExploreEventsRouting:
 
         called = {}
 
-        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id, cursor=None):
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
             called["path"] = "sql"
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -673,11 +789,11 @@ class TestAnonymousExplore:
         mock_db.scalars.side_effect = [_scalars_result(events)]
         now = datetime(2026, 5, 10, tzinfo=timezone.utc)
 
-        ids = await _score_and_rank_candidates(
+        ranked, _ = await _score_and_rank_candidates(
             mock_db, [], for_you=False, sort="relevance", current_user=None, now=now
         )
 
-        assert set(ids) == {1, 2}
+        assert set(ranked) == {1, 2}
         assert mock_db.scalars.call_count == 1
 
     @pytest.mark.asyncio
@@ -692,10 +808,10 @@ class TestAnonymousExplore:
         # for_you=True still keeps the event — no feedback context exists to
         # hard-exclude it, and persona_affinity([], ...) == NEUTRAL_SCORE
         # passes BROWSE_FORYOU_MIN_AFFINITY.
-        ids = await _score_and_rank_candidates(
+        ranked, _ = await _score_and_rank_candidates(
             mock_db, [], for_you=True, sort="relevance", current_user=None, now=now
         )
-        assert ids == [1]
+        assert list(ranked) == [1]
 
     @pytest.mark.asyncio
     async def test_browse_scored_path_anonymous_returns_no_signals(
@@ -739,7 +855,7 @@ class TestAnonymousExplore:
 
         called = {}
 
-        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id, cursor=None):
+        async def fake_sql_path(db, conds, sort, limit, offset, locale, user_id):
             called["user_id"] = user_id
             return {"events": [], "total": 0, "limit": limit, "offset": offset, "has_more": False}
 
@@ -750,7 +866,6 @@ class TestAnonymousExplore:
             q=None,
             sort="date",
             for_you=False,
-            cursor=None,
             current_user=None,
             db=mock_db,
         )
@@ -799,7 +914,7 @@ class TestAnonymousExplore:
         async def slow_scan(*args, **kwargs):
             call_count["n"] += 1
             await asyncio.sleep(0.01)
-            return [1]
+            return array("q", [1]), False
 
         with pytest.MonkeyPatch.context() as mp:
             from app.routers import browse

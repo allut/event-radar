@@ -39,6 +39,8 @@ PILETILEVI_IMPORTANT_INFO_HEADINGS: dict[str, str] = {
     "et": "Hinnainfo",
     "ru": "Дополнительная информация",
 }
+# Tag of the important-info heading, matched by its text (PILETILEVI_IMPORTANT_INFO_HEADINGS).
+PILETILEVI_IMPORTANT_INFO_HEADING_TAG = "h2"
 # Wrapper the important-info heading lives inside — used to scope the sibling
 # text extraction to that one block rather than the whole detail page.
 PILETILEVI_INFO_BLOCK_CLASS = "white-rounded-block"

@@ -203,3 +203,22 @@
   }
 }
 
+
+/* The Sponsored slot (#607): a separate section after the numbered list, set
+   off by a hairline rule so it never reads as pick #6. */
+.sponsored {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: var(--rule);
+}
+
+.sponsoredCaption {
+  margin-bottom: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.rankingLink {
+  display: inline-block;
+  margin-top: var(--space-5);
+}

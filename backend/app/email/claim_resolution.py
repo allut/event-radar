@@ -58,7 +58,7 @@ def _prepare_self_cancelled(event_title: str | None, locale: str) -> tuple[str, 
     return intro, t("email.claim_self_cancelled.fallback_note", locale)
 
 
-def _build_html(*, subject_key: str, intro: str, note: str, locale: str) -> str:
+def build_resolution_html(*, subject_key: str, intro: str, note: str, locale: str) -> str:
     s = get_email_styles()
     dashboard_url = html_lib.escape(
         frontend_url(ORGANIZER_DASHBOARD_PATH, locale), quote=True
@@ -92,20 +92,20 @@ def _build_html(*, subject_key: str, intro: str, note: str, locale: str) -> str:
     )
 
 
-def _build_text(*, intro: str, note: str) -> str:
+def build_resolution_text(*, intro: str, note: str) -> str:
     return f"{intro}\n\n{note}"
 
 
 def build_claim_granted_html(event_title: str | None, note: str, locale: str) -> str:
     intro, resolved_note = _prepare_granted(event_title, note, locale)
-    return _build_html(
+    return build_resolution_html(
         subject_key="email.claim_granted", intro=intro, note=resolved_note, locale=locale
     )
 
 
 def build_claim_declined_html(event_title: str | None, note: str, locale: str) -> str:
     intro, resolved_note = _prepare_declined(event_title, note, locale)
-    return _build_html(
+    return build_resolution_html(
         subject_key="email.claim_declined", intro=intro, note=resolved_note, locale=locale
     )
 
@@ -114,17 +114,17 @@ def build_claim_expired_html(
     event_title: str | None, locale: str, days: int = CLAIM_EXPIRY_DAYS
 ) -> str:
     intro, note = _prepare_expired(event_title, locale, days)
-    return _build_html(subject_key="email.claim_expired", intro=intro, note=note, locale=locale)
+    return build_resolution_html(subject_key="email.claim_expired", intro=intro, note=note, locale=locale)
 
 
 def build_claim_self_cancelled_html(event_title: str | None, locale: str) -> str:
     intro, note = _prepare_self_cancelled(event_title, locale)
-    return _build_html(
+    return build_resolution_html(
         subject_key="email.claim_self_cancelled", intro=intro, note=note, locale=locale
     )
 
 
-async def _send(
+async def send_resolution_email(
     to_email: str,
     subject: str,
     html_body: str,
@@ -154,12 +154,12 @@ async def send_claim_granted_email(
     http_client: httpx.AsyncClient | None = None,
 ) -> None:
     intro, resolved_note = _prepare_granted(event_title, note, locale)
-    html_body = _build_html(
+    html_body = build_resolution_html(
         subject_key="email.claim_granted", intro=intro, note=resolved_note, locale=locale
     )
-    text_body = _build_text(intro=intro, note=resolved_note)
+    text_body = build_resolution_text(intro=intro, note=resolved_note)
     subject = t("email.claim_granted.subject", locale)
-    await _send(to_email, subject, html_body, text_body, http_client, "claim-granted")
+    await send_resolution_email(to_email, subject, html_body, text_body, http_client, "claim-granted")
 
 
 async def send_claim_declined_email(
@@ -170,12 +170,12 @@ async def send_claim_declined_email(
     http_client: httpx.AsyncClient | None = None,
 ) -> None:
     intro, resolved_note = _prepare_declined(event_title, note, locale)
-    html_body = _build_html(
+    html_body = build_resolution_html(
         subject_key="email.claim_declined", intro=intro, note=resolved_note, locale=locale
     )
-    text_body = _build_text(intro=intro, note=resolved_note)
+    text_body = build_resolution_text(intro=intro, note=resolved_note)
     subject = t("email.claim_declined.subject", locale)
-    await _send(to_email, subject, html_body, text_body, http_client, "claim-declined")
+    await send_resolution_email(to_email, subject, html_body, text_body, http_client, "claim-declined")
 
 
 async def send_claim_expired_email(
@@ -191,12 +191,12 @@ async def send_claim_expired_email(
     CLAIM_EXPIRY_DAYS so existing non-expiry-sweep callers, if any, need no
     change."""
     intro, note = _prepare_expired(event_title, locale, days)
-    html_body = _build_html(
+    html_body = build_resolution_html(
         subject_key="email.claim_expired", intro=intro, note=note, locale=locale
     )
-    text_body = _build_text(intro=intro, note=note)
+    text_body = build_resolution_text(intro=intro, note=note)
     subject = t("email.claim_expired.subject", locale)
-    await _send(to_email, subject, html_body, text_body, http_client, "claim-expired")
+    await send_resolution_email(to_email, subject, html_body, text_body, http_client, "claim-expired")
 
 
 async def send_claim_self_cancelled_email(
@@ -206,9 +206,9 @@ async def send_claim_self_cancelled_email(
     http_client: httpx.AsyncClient | None = None,
 ) -> None:
     intro, note = _prepare_self_cancelled(event_title, locale)
-    html_body = _build_html(
+    html_body = build_resolution_html(
         subject_key="email.claim_self_cancelled", intro=intro, note=note, locale=locale
     )
-    text_body = _build_text(intro=intro, note=note)
+    text_body = build_resolution_text(intro=intro, note=note)
     subject = t("email.claim_self_cancelled.subject", locale)
-    await _send(to_email, subject, html_body, text_body, http_client, "claim-self-cancelled")
+    await send_resolution_email(to_email, subject, html_body, text_body, http_client, "claim-self-cancelled")

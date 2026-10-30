@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { StatusCodes } from 'http-status-codes';
 import { screen, waitFor } from '@testing-library/react';
 import OrganizerClaimVerify from './OrganizerClaimVerify';
-import { renderWithProviders } from '../../test/utils';
+import { CACHED_CLAIMS_KEY, clientWithCachedClaimsList, renderWithProviders } from '../../test/utils';
 
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -31,6 +31,7 @@ import { setOrganizerSignedInHint } from '../../lib/organizerAuth';
 const mockPost = vi.mocked(organizerApi.post);
 const mockSetOrganizerSignedInHint = vi.mocked(setOrganizerSignedInHint);
 
+
 describe('OrganizerClaimVerify (#415)', () => {
   afterEach(() => {
     localStorage.clear();
@@ -52,6 +53,16 @@ describe('OrganizerClaimVerify (#415)', () => {
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith('/organizer/claims/42/pending', { replace: true }),
     );
+  });
+
+  it('marks the Your claims list and dashboard summary stale once the claim link creates the claim', async () => {
+    mockPost.mockResolvedValueOnce({ claim: { id: 42 } });
+    const queryClient = clientWithCachedClaimsList();
+
+    renderWithProviders(<OrganizerClaimVerify />, { route: '/organizer/claims/verify?token=valid', queryClient });
+
+    await waitFor(() => expect(mockSetOrganizerSignedInHint).toHaveBeenCalled());
+    expect(queryClient.getQueryState(CACHED_CLAIMS_KEY)?.isInvalidated).toBe(true);
   });
 
   it('on verify failure: shows error state', async () => {

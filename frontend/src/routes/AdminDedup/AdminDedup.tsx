@@ -1,13 +1,14 @@
-import { useMemo } from 'react';
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useRef } from 'react';
 import { adminApi } from '../../api/client';
-import { ADMIN_DEDUP_GROUPS_PAGE_SIZE } from '../../constants/admin';
+import { ADMIN_DEDUP_GROUPS_PAGE_SIZE, LOCALE_EN } from '../../_generated/sharedConstants';
+import { ADMIN_LOADING_LABEL } from '../../constants/admin';
 import { API, QUERY_KEYS, PAGE_PARAM } from '../../constants/api';
 import { UI_STATE } from '../../constants/core';
 import { EVENT_STATUS } from '../../constants/prerender';
-import { nextOffsetParam } from '../../utils';
+import { usePagedQuery } from '../../hooks/usePagedQuery';
 import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';
+import Pager from '../../components/Pager';
 import styles from './AdminDedup.module.css';
 
 interface DedupEventSummary {
@@ -28,7 +29,7 @@ interface DedupGroup {
 interface DedupGroupsResponse {
   group_count: number;
   event_count: number;
-  total_groups: number | null;
+  total: number;
   limit: number;
   offset: number;
   has_more: boolean;
@@ -36,29 +37,34 @@ interface DedupGroupsResponse {
 }
 
 // Read-only dedup group review (issue #162), over the existing
-// GET /admin/dedup/groups endpoint and its by-group pagination (issue #153).
+// GET /admin/dedup/groups endpoint and its by-group pagination (issue #153),
+// paged with the shared numbered pager (spec #551) — the page lives in ?page.
 // Desktop-only: below ADMIN_DESKTOP_BREAKPOINT_PX the .desktopGate message
 // (AdminDedup.module.css) replaces .real outright, mirroring AdminPipeline.
 export default function AdminDedup() {
+  const firstGroupRef = useRef<HTMLDivElement>(null);
   const {
-    data,
+    items: groups,
+    total,
     isLoading,
     isError,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useInfiniteQuery({
+    isPlaceholderData,
+    pagerProps,
+  } = usePagedQuery({
     queryKey: [QUERY_KEYS.adminDedupGroups],
-    queryFn: ({ pageParam }) =>
+    pageSize: ADMIN_DEDUP_GROUPS_PAGE_SIZE,
+    fetchPage: ({ limit, offset }) =>
       adminApi.get<DedupGroupsResponse>(
-        `${API.adminDedupGroups}?${PAGE_PARAM.limit}=${ADMIN_DEDUP_GROUPS_PAGE_SIZE}&${PAGE_PARAM.offset}=${pageParam}`,
+        `${API.adminDedupGroups}?${PAGE_PARAM.limit}=${limit}&${PAGE_PARAM.offset}=${offset}`,
       ),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => nextOffsetParam(lastPage, lastPage.groups.length),
+    select: (data) => ({ items: data.groups, total: data.total, offset: data.offset }),
+    // No selection or actions on Dedup: a page change just resets the
+    // scroll and moves focus to the new page's first group.
+    onPageSettled: () => {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      firstGroupRef.current?.focus({ preventScroll: true });
+    },
   });
-
-  const groups = useMemo(() => data?.pages.flatMap((page) => page.groups) ?? [], [data]);
-  const totalGroups = data?.pages[0]?.total_groups ?? 0;
 
   return (
     <div>
@@ -73,18 +79,24 @@ export default function AdminDedup() {
 
       <div className={styles.real}>
         {isLoading ? (
-          <PageState kind={UI_STATE.loading} message="Loading…" inline />
+          <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
         ) : isError ? (
           <PageState kind={UI_STATE.error} message="Couldn't load dedup groups." inline />
+        ) : groups.length === 0 && total > 0 ? (
+          // A past-end page about to clamp to the real last page.
+          <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />
         ) : groups.length === 0 ? (
           <EmptyState admin title="No dedup groups" message="Nothing flagged as a duplicate right now." />
         ) : (
-          <>
-            <p className={styles.subtitle}>
-              {groups.length} of {totalGroups} groups shown
-            </p>
-            {groups.map((group) => (
-              <div key={group.dedup_group_id} className={styles.group} data-testid={`dedup-group-${group.dedup_group_id}`}>
+          <div className={styles.groups} aria-busy={isPlaceholderData}>
+            {groups.map((group, index) => (
+              <div
+                key={group.dedup_group_id}
+                ref={index === 0 ? firstGroupRef : undefined}
+                tabIndex={-1}
+                className={styles.group}
+                data-testid={`dedup-group-${group.dedup_group_id}`}
+              >
                 <div className={styles.groupHead}>
                   <span>Group #{group.dedup_group_id}</span>
                   <span>{group.events.length} events</span>
@@ -109,19 +121,10 @@ export default function AdminDedup() {
                 ))}
               </div>
             ))}
-
-            {hasNextPage && (
-              <button
-                type="button"
-                className={styles.loadMoreBtn}
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-              >
-                Load more
-              </button>
-            )}
-          </>
+          </div>
         )}
+        {/* The pager's strings come from shared/i18n even here: docs/frontend.md "Admin Console" */}
+        <Pager {...pagerProps} locale={LOCALE_EN} liveNoun="items" className={styles.pager} />
       </div>
     </div>
   );

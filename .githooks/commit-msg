@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Trims the message to the subject line plus the Closes/Refs/Fixes #N references
+# named anywhere below it. Enabled with pre-commit (core.hooksPath .githooks).
+set -euo pipefail
+msg="$1"
+
+# Drop git's comment lines and, under `commit -v`, the diff below the scissors.
+text=$(sed '/^# -* >8 -*$/,$d' "$msg" | grep -v '^#' || true)
+subject=$(printf '%s\n' "$text" | awk 'NF { print; exit }')
+[ -n "$subject" ] || exit 0 # an empty message: git aborts the commit itself
+
+body=$(printf '%s\n' "$text" | awk 'f; !f && NF { f = 1 }')
+refs=$(printf '%s\n' "$body" \
+  | grep -oiE '\b(closes|refs|fixes)[[:space:]]+#[0-9]+' \
+  | awk '{ print toupper(substr($1, 1, 1)) tolower(substr($1, 2)) " " $2 }' \
+  | awk '!seen[$0]++' || true)
+
+if printf '%s\n' "$body" | grep -v '^[[:space:]]*$' | grep -qviE '^(closes|refs|fixes) #[0-9]+$'; then
+  echo "commit-msg: trimmed to the subject line${refs:+ and its issue references}" >&2
+fi
+if [ -n "$refs" ]; then
+  printf '%s\n\n%s\n' "$subject" "$refs" >"$msg"
+else
+  printf '%s\n' "$subject" >"$msg"
+fi

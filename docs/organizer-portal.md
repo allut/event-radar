@@ -1,6 +1,6 @@
 # Organizer Portal
 
-What's in here: organizer auth, event submission, trust gating and review, rich-text authoring, the organizer contact form, Organizer Settings, and Event Claiming.
+What's in here: organizer auth, event submission, trust gating and review, rich-text authoring, the organizer contact form, Organizer Settings, Event Claiming, and Promotions.
 
 An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter that submits events directly. It is not the Fienta organizer in [pipeline.md](pipeline.md), which is a ticketing-source id being polled. Saved Venues live in [data-model.md](data-model.md)'s Saved Venues section.
 
@@ -18,7 +18,8 @@ An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter
 `app/routers/organizer_events.py` (prefix `/organizer/events`) lets an organizer create, edit, cancel and list their own events.
 
 - **A submission is inserted on the adapter-less `user_submission` source** through `app/ingestion/adapter.py::insert_normalized_event()`. It is then classified and published inside the request, not on the next scheduled pass.
-- **`DELETE` is a soft delete:** it cancels the event.
+- **`DELETE` is a soft delete:** it cancels the event. Cancelled events stay listed in Your events, so a delete never shrinks the list.
+- **`GET /organizer/events` pages Your events at `ORGANIZER_EVENTS_PAGE_SIZE` (24) with the numbered pager.** It returns `total`, `limit`, `offset` and `has_more` on every page, sorted `created_at desc, id desc`. It runs at `RATE_LIMIT_BROWSE`, so quick paging and edit round-trips don't 429.
 - **`GET /organizer/events/{id}` returns one of the caller's own events, with the list's row shape.** A foreign event is a 404. It feeds the edit form's prefill, so events past the list's first page stay editable.
 
 ### Image Upload
@@ -26,7 +27,7 @@ An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter
 - **`POST /organizer/events/image` returns a signed Cloudinary upload**, so the API secret never reaches the SPA. It needs all three `CLOUDINARY_*` settings (`app/config.py`); with any unset it logs and returns 501.
 - **Uploads are gated by `IMAGE_UPLOAD_ALLOWED_MIME` (415) and `IMAGE_UPLOAD_MAX_BYTES` (413).**
 - **Never send `signature_algorithm` as an upload param.** It is an SDK-config knob. Cloudinary verifies against the params it receives, so sending it makes the check 401. `_cloudinary_signature` signs with SHA-256, which the account accepts by default.
-- **`image_url` is pinned to our own Cloudinary account.** See [security.md](security.md)'s Organizer Images section.
+- **`image_url` is pinned to our own Cloudinary account, on submit, edit and claim edit.** The claim edit form offers the same `FileField` upload. See [security.md](security.md)'s Organizer Images section.
 
 ### Daily Caps
 
@@ -165,8 +166,11 @@ An organizer can claim an event Event Radar ingested from Fienta, KUMU, Estonia 
 ### Claim Surfaces
 
 - **The organizer dashboard's `ClaimEventPicker`** searches events and suggests ones whose domain matches the organizer's email.
+- **`/organizer/claims` (`OrganizerClaims/`) is Your claims, paged at `ORGANIZER_OWN_CLAIMS_PAGE_SIZE` (20) with the numbered pager.** `GET /organizer/claims` returns `total`, `limit`, `offset` and `has_more` on every page, sorted `created_at desc, id desc`. It has its own top-bar nav item.
+- **The dashboard keeps only a summary line, "You have N claims (M pending) → View".** It reads `total` and `pending_count` from a one-row `GET /organizer/claims` request, and hides when the organizer has no claims. A new pending claim still shows where the organizer lands after signing in.
 - **`/organizer/claims/:id/pending` (`ClaimPending/`)** shows the proof instructions and the recheck button.
 - **`/organizer/claims/:id/edit` and `/organizer/claims/:id/events`** (`ClaimEventEdit/`, `ClaimEvents/`) are the claim-editing surface over `organizer_claim_edits.py`. Edits write `Event.pinned_fields` and count against `claim_edit_attempts`.
+- **Claim events pages at `CLAIM_EVENTS_PAGE_SIZE` (20) with the numbered pager.** `GET /organizer/claims/{claim_id}/events` returns `total`, `limit`, `offset` and `has_more` on every page, sorted `starts_at desc, id desc`. A page change focuses the page's h1.
 - **`/organizer/claims/verify` (`OrganizerClaimVerify/`) lands `POST /organizer/claims/request-link`'s sign-in link.** The token carries the `event_id`, so the claim intent survives a device switch.
 - **The public `EventDetail` shows `ClaimPanel` and `ClaimPill`** (`components/ClaimStrip/`).
 - **Admins resolve claims at `/admin/claims`** (`AdminClaims/`), over `GET /admin/claims` plus grant, decline and revoke.
@@ -178,3 +182,59 @@ An organizer can claim an event Event Radar ingested from Fienta, KUMU, Estonia 
 - **Organizer auth alone was never a real boundary.** Organizer accounts are free to create, and the organizer cookie never reaches `/api/events` anyway.
 - **The pending pill (`ClaimPill`) is claimant-only.** A signed-in organizer's `EventDetail` calls `GET /organizer/claims/for-event/{event_id}` (`own_claim_for_event()`), which returns the caller's own active claim or `null`, and shows the pill only on `pending`.
 - **`claimed` stays public.** It backs the "Organizer-verified" and "Listed by X" labels for every viewer.
+
+## Promotions
+
+The Organizer offer and request path (`app/routers/organizer_promotions.py`, `app/promotions/requests.py`, `app/promotions/organizer_view.py`). A Promotion is defined in [data-model.md](data-model.md)'s Promotions section.
+
+### Offer Flag
+
+- **`PROMOTIONS_OFFER_ENABLED` (default off) gates every `/organizer/promotions/*` route.** While off they return 404, and event rows carry no `promotion` key. Admin direct grants are unaffected.
+- **The offer never appears in submit or edit forms, modals, banners, settings or emails.** It lives on the Promotions page and as a quiet row action.
+
+### Event Row Flags
+
+- **`GET /organizer/events` and `GET /organizer/claims/{id}/events` add `promotion: {promotable, badge}` per row** while the offer is on, from one bulk read (`promotion_flags_for()`).
+- **`promotable` needs current ownership, a public, canonical, not-ended event, room for a 3-day window and nothing open on it.** A dormant claim is not ownership.
+- **`badge` replaces the action** with `requested`, `awaiting_payment`, `awaiting_checkout`, `scheduled`, `live` or `paused`.
+
+### Requests
+
+- **`POST /organizer/promotions/requests` creates a pending request** with dates, legal name, registry code, optional billing email (default: the account email) and note, plus `terms_accepted` and `business_attested`. It records `ORGANIZER_TERMS_VERSION` and both times, and emails the admin a deep link.
+- **The registry code must be 8 digits with a valid check digit** (`app/promotions/registry.py`). Window, overlap and sold-out rules reuse the grant validation.
+- **Limits are one pending request per event, no overlap with an `unpaid` or `paid` Promotion, and `ORGANIZER_DAILY_PROMOTION_REQUEST_CAP` per Tallinn day.** Refusals carry `detail.errors`: 409 for state, 429 for the daily cap, 422 for input.
+- **An event the Organizer does not currently own is a 404,** whoever owns it.
+- **`POST /organizer/promotions/requests/{id}/withdraw` withdraws a pending request.** Another Organizer's request is a 404.
+
+### Form Helpers
+
+- **`GET /organizer/promotions/context?event_id=` feeds the form:** window rules, price, terms version, default billing email, `checkout_available`, `review_required` and `unavailable_dates`. The dates are sold-out days only; counts never leave the server.
+- **`GET /organizer/promotions/validate?event_id=&start_date=&end_date=` validates live** and returns the errors, the day count and the price. It writes nothing.
+
+### The List
+
+- **`GET /organizer/promotions` returns requests and Promotions newest first.** Status is `requested`, `declined`, `awaiting_payment`, `awaiting_checkout` (an open card checkout), `scheduled`, `live`, `paused`, `finished`, `ended_early` or `cancelled`. Items carry `billing_email` and, once card-paid, `invoice_url`. Withdrawn and expired requests and abandoned card checkouts drop off, and a granted request is replaced by its Promotion.
+- **A `paused` item carries `paused_reason`,** the fill gate's not-showing code. The frontend turns it into plain words. The admin list and detail carry the same `paused_reason`, computed by the one `views.paused_reasons()` (one `evaluate_gate` call per page).
+
+### Per-Day Report
+
+- **`GET /organizer/promotions/{id}/report` serves the purchasing Organizer only** and does not check current ownership. It stays after a claim goes dormant or is revoked. Another Organizer gets 404.
+- **It returns complete days only,** each with shown or paused (and the reason), Explore shown, Daily 5 placed, digest sent and opens, plus one `daily5_reach`. There is no viewer data and no slot dislikes.
+
+### Portal Screens
+
+- **`/organizer/promotions` (`OrganizerPromotions/`) is the explainer and the list.** An item is a request or a Promotion with a status badge and a one-line reason. Withdraw (with a confirm line), the `Invoice` link and the daily-report toggle sit under it.
+- **The nav item and row actions hide while the offer is off.** `lib/organizerPromotionsOffer.ts` keeps a hint learned from the `promotion` key on event rows and from the list's 404, so the top bar needs no request. The page itself redirects to Your events on a 404.
+- **A row's `Promote` link or badge comes from `PromotionRowAction`, after `Edit`.** The badge opens `/organizer/promotions?event=<id>`, which scrolls to that event's open item. Claim event rows keep their stretched title link, and the action sits above it.
+- **The request form (`OrganizerPromotionRequest/`, `/organizer/promotions/new?event_id=`) validates dates through `GET /validate`.** Sold-out days arrive as dates from `/context` and grey out in `DatePicker`. A real `EventCard` previews the ad with the typed or registry name.
+- **Card payment is the default action, with the request as fallback.** The form starts on Pay only when `/context` says `checkout_available` and not `review_required`; otherwise it starts on the request with the review copy. A 409 `event_needs_review`, a 404 or a registry outage still fall back.
+- **Both paths make the Organizer confirm the business is its own.** Without it the server refuses `business_attestation_required`; with it, `business_attested_at` is recorded. The claim is trusted; see [ADR 0005](adr/0005-card-only-stripe-checkout-for-promotions.md).
+- **The registry lookup runs once the 8-digit check digit passes.** A found name locks the field. Deleted and not-found codes block the form, and an outage opens a typed name and the request path.
+- **The terms and content-policy links open `/organizer-terms` and its `#content-policy` section** (`ROUTES.organizerTerms`, `ROUTES.organizerContentPolicy`). That page carries a DRAFT notice; see [frontend.md](frontend.md)'s i18n section.
+- **`OrganizerPromotionSuccess/` never trusts the redirect.** It polls the list until the Promotion is `scheduled` or later, because the Stripe webhook can land after the return. A late payment still gets the automatic refund the page describes.
+- **The per-day table sums `web_opens` and `digest_opens` into one Opens column.** A paused day shows the gate reason in short words; the long sentence appears under the row's badge. Copy lives in `promo_*` keys, with `promo_why_<code>` per gate code.
+
+### Expiry
+
+- **A pending request expires inside `sweep_promotions` with no email.** It expires when its event is cancelled, when its Organizer loses the event (claim revoked), or when its start date arrives.
+- **A dormant claim or dates that stop fitting leave it pending.**

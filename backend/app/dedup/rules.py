@@ -23,7 +23,7 @@ from sqlalchemy import Integer, cast, column, func, or_, select, update, values
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased, load_only, selectinload
 
-from app.constants.claims import CLAIM_STATUS_APPROVED
+from app._generated.shared_constants import CLAIM_STATUS_APPROVED
 from app.constants.core import SQL_IN_CHUNK_SIZE, SECONDS_PER_HOUR, TALLINN_TZ
 from app.constants.dedup import (
     DEDUP_BULK_UPDATE_CHUNK_SIZE,
@@ -58,12 +58,25 @@ log = logging.getLogger(__name__)
 
 
 def _venue_compatible(a: str | None, b: str | None) -> bool:
+    """Fuzzy venue match on already-lowercased names; unknown is compatible."""
     if a is None or b is None:
         return True
-    return (
-        token_set_ratio(a.lower(), b.lower(), score_cutoff=VENUE_RATIO_THRESHOLD)
-        >= VENUE_RATIO_THRESHOLD
-    )
+    return token_set_ratio(a, b, score_cutoff=VENUE_RATIO_THRESHOLD) >= VENUE_RATIO_THRESHOLD
+
+
+# event id -> (lowercased title, lowercased venue name or None)
+LoweredText = dict[int, tuple[str, str | None]]
+
+
+def _lower_text(event: Event) -> tuple[str, str | None]:
+    venue = event.venue_name
+    return event.title_orig.lower(), venue.lower() if venue is not None else None
+
+
+def lowered_text(events: Iterable[Event]) -> LoweredText:
+    """Each event's lowercased title and venue, built once per pass so the
+    pair loop doesn't lowercase both sides of every pair again."""
+    return {e.id: _lower_text(e) for e in events}
 
 
 def is_candidate_pair(
@@ -72,6 +85,7 @@ def is_candidate_pair(
     *,
     bypass_venue_on_near_exact_title: bool = False,
     bypass_title_on_exact_time_and_venue: bool = False,
+    lowered: LoweredText | None = None,
 ) -> bool:
     """Return True when a and b pass all three rule-based criteria.
 
@@ -98,28 +112,29 @@ def is_candidate_pair(
     identical-round-time pair into an LLM candidate. The rule-only path keeps
     the default (strict) behavior for both bypasses — it has no way to
     adjudicate the ambiguity a bypass admits.
+
+    ``lowered`` is the pass's ``lowered_text()`` map; omitted, both events
+    are lowercased here.
     """
     if (
         abs((a.starts_at - b.starts_at).total_seconds())
         > TIME_WINDOW_HOURS * SECONDS_PER_HOUR
     ):
         return False
+    a_title, a_venue = lowered[a.id] if lowered is not None else _lower_text(a)
+    b_title, b_venue = lowered[b.id] if lowered is not None else _lower_text(b)
     if (
         bypass_title_on_exact_time_and_venue
         and a.starts_at == b.starts_at
-        and a.venue_name is not None
-        and b.venue_name is not None
-        and _venue_compatible(a.venue_name, b.venue_name)
+        and a_venue is not None
+        and b_venue is not None
+        and _venue_compatible(a_venue, b_venue)
     ):
         return True
     # score_cutoff: rapidfuzz short-circuits to 0 below the threshold, which
     # is rejected right after anyway — same result, less work on the many
     # non-matching pairs.
-    title_ratio = token_set_ratio(
-        a.title_orig.lower(),
-        b.title_orig.lower(),
-        score_cutoff=TITLE_RATIO_THRESHOLD,
-    )
+    title_ratio = token_set_ratio(a_title, b_title, score_cutoff=TITLE_RATIO_THRESHOLD)
     if title_ratio < TITLE_RATIO_THRESHOLD:
         return False
     if (
@@ -127,7 +142,7 @@ def is_candidate_pair(
         and title_ratio >= TITLE_RATIO_VENUE_BYPASS_THRESHOLD
     ):
         return True
-    return _venue_compatible(a.venue_name, b.venue_name)
+    return _venue_compatible(a_venue, b_venue)
 
 
 # ---------------------------------------------------------------------------
@@ -568,6 +583,7 @@ def cluster_events(
     apply_same_day_title_unions(parent, events)
 
     pair_count = 0
+    lowered = lowered_text(events)
     if candidate_pair_ids is None:
         # Unfiltered O(N²) path — both production callers pass candidate_pair_ids
         # (pre-filtered via candidate_pair_ids_in_window). This branch exists for
@@ -586,7 +602,7 @@ def cluster_events(
         )
         for i in range(n):
             for j in range(i + 1, n):
-                if is_candidate_pair(events[i], events[j]):
+                if is_candidate_pair(events[i], events[j], lowered=lowered):
                     union(parent, events[i].id, events[j].id)
                     pair_count += 1
     else:
@@ -595,7 +611,7 @@ def cluster_events(
             b = events_by_id.get(b_id)
             if a is None or b is None:
                 continue
-            if is_candidate_pair(a, b):
+            if is_candidate_pair(a, b, lowered=lowered):
                 union(parent, a.id, b.id)
                 pair_count += 1
 

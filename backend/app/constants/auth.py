@@ -48,6 +48,9 @@ SESSION_COOKIE_SAMESITE: Literal["strict"] = "strict"
 # server_default/model default.
 DEFAULT_SESSION_TOKEN_VERSION = 1
 AUTH_UNSUBSCRIBE_SALT = "unsubscribe-v1"
+# The "Stop ads in this email" link (routers/unsubscribe.py): purpose-bound, so an
+# unsubscribe token can never withdraw Email ad consent or the reverse.
+AUTH_ADS_OFF_SALT = "ads-off-v1"
 # Organizer auth — distinct salts from the user stack above so a user's magic-link
 # or session token can never verify as an organizer token (and vice versa), even
 # though both use the same URLSafeTimedSerializer(settings.SECRET_KEY).
@@ -68,8 +71,6 @@ OAUTH_STATE_TTL_MINUTES = 10
 # (app/auth/tokens.py) — the cross-track replay guard; a typo at any of the
 # four call sites (auth.py x2, organizer_auth.py x2) would silently break the
 # mint/verify pairing, so both are named constants rather than inline strings.
-AUTH_TRACK_USER = "user"
-AUTH_TRACK_ORGANIZER = "organizer"
 # PyJWKClient's own cache_jwk_set lifespan (app/auth/google_oauth.py) — how
 # long the fetched Google JWKS keyset is cached before a re-fetch.
 GOOGLE_JWKS_CACHE_LIFESPAN_SECONDS = 300
@@ -129,15 +130,13 @@ GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL = "unverified_email"
 # a server-side redirect with no app JS in between, so this param tells
 # main.tsx which track's hint to set before the router's first render (see
 # frontend/src/lib/googleSignInLanding.ts). Values reuse AUTH_TRACK_USER/
-# AUTH_TRACK_ORGANIZER above — no separate value constants.
-GOOGLE_SIGNIN_RESULT_QUERY_PARAM = "google_signin"
+# AUTH_TRACK_ORGANIZER from app._generated.shared_constants — no separate value
+# constants.
 # Callback redirect-with-error query param + failure reason codes — internal,
 # not i18n keys (mirrors the ERROR_* constants' English-only convention).
-OAUTH_ERROR_QUERY_PARAM = "google_error"
 OAUTH_ERROR_STATE_INVALID = "state_invalid"
 OAUTH_ERROR_TOKEN_EXCHANGE_FAILED = "token_exchange_failed"
 OAUTH_ERROR_VERIFICATION_FAILED = "verification_failed"
-OAUTH_ERROR_DENIED = "access_denied"
 
 # Admin console auth (issue #154) — third auth track alongside the consumer and
 # organizer ones above. No magic link (password + TOTP instead) and no admins
@@ -158,8 +157,8 @@ ADMIN_SESSION_TTL_SECONDS = 12 * 60 * 60
 # guess window.
 ADMIN_TOTP_VALID_WINDOW = 1
 # _admin_session_epoch()'s hexdigest truncation length (app/auth/tokens.py) —
-# 16 hex chars (64 bits) of the sha256 digest is ample collision resistance
-# for a value that only ever feeds another hash, not a standalone credential.
+# 16 hex chars (64 bits) of the HMAC-SHA256 digest is ample for a value that
+# only ever gates an already-signed token, not a standalone credential.
 ADMIN_SESSION_EPOCH_HASH_LEN = 16
 
 # Per-email magic-link resend cooldown (routers/auth.py::_recent_unused_link_exists) —

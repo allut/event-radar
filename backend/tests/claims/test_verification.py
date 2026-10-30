@@ -13,12 +13,14 @@ from app.claims.verification import (
     verify_institutional_publisher_claim,
     verify_piletilevi_claim,
 )
-from app.constants.claims import (
+from app._generated.shared_constants import (
     CLAIM_VERIFICATION_MECHANISM_ADMIN_REVIEW,
     CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
     CLAIM_VERIFICATION_MECHANISM_FIENTA_TOKEN,
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
     CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
+)
+from app.constants.claims import (
     CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
     CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
 )

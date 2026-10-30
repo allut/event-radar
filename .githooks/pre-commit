@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# Runs the checks CI also runs, on the areas the commit stages. Enabled by
+# .devcontainer/post-create.sh (git config core.hooksPath .githooks).
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+staged() { git diff --cached --name-only --diff-filter=ACMR | grep -qE "$1"; }
+
+if staged '^(shared/|backend/app/_generated/|frontend/src/_generated/)'; then
+  echo "pre-commit: generated files"
+  python scripts/generate_shared.py --check
+fi
+
+# The backend checks read files from disk, so with unstaged or untracked backend
+# or scripts/ changes they would pass on the working tree while the commit itself
+# is broken.
+# Check a copy of the index instead; its mypy cache persists under .git.
+backend=backend
+mypy_cache=()
+if staged '^(backend/|shared/|scripts/)' \
+  && { ! git diff --quiet -- backend/ scripts/ || [ -n "$(git ls-files --others --exclude-standard -- backend/ scripts/)" ]; }; then
+  snapshot="$(git rev-parse --absolute-git-dir)/precommit-snapshot"
+  rm -rf "$snapshot"
+  git ls-files -z -- backend/ scripts/ | git checkout-index -z --stdin --prefix="$snapshot/"
+  backend="$snapshot/backend"
+  mypy_cache=(--cache-dir "$(git rev-parse --absolute-git-dir)/precommit-mypy-cache")
+  echo "pre-commit: unstaged backend changes, checking the staged snapshot"
+fi
+
+# ../scripts holds the repo-root scripts (generate_shared.py and the rest).
+if staged '^(backend/|shared/|scripts/)'; then
+  echo "pre-commit: ruff"
+  (cd "$backend" && python -m ruff check . ../scripts)
+  echo "pre-commit: mypy"
+  (cd "$backend" && python -m mypy app ../scripts "${mypy_cache[@]}")
+fi
+
+if staged '^backend/'; then
+  echo "pre-commit: backend guard tests"
+  out=$(bash "$backend/scripts/scratch-test.sh" --no-db tests/test_code_rules.py tests/test_constants_unique.py -q 2>&1) || { echo "$out"; exit 1; }
+fi
+
+if staged '^(frontend/|shared/)'; then
+  echo "pre-commit: eslint"
+  (cd frontend && npm run --silent lint)
+  echo "pre-commit: type-check"
+  (cd frontend && npm run --silent type-check)
+fi
+
+if staged '^frontend/src/(.*\.css$|constants/)'; then
+  echo "pre-commit: guard tests"
+  (cd frontend && npx vitest run src/cssRules.test.ts src/constants/mirrors.test.ts src/displayTokens.test.ts)
+fi
+
+if staged '^(backend/app/constants/|frontend/src/constants/|shared/)'; then
+  echo "pre-commit: cross-stack hand copies"
+  # The test reads both stacks' constants, so it needs the whole tree, not the
+  # backend snapshot; with unstaged or untracked changes, a checkout of the index.
+  copies_root=.
+  if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    copies_root="$(git rev-parse --absolute-git-dir)/precommit-copies-snapshot"
+    rm -rf "$copies_root"
+    git checkout-index -a --prefix="$copies_root/"
+  fi
+  out=$(bash "$copies_root/backend/scripts/scratch-test.sh" --no-db \
+    tests/test_move_to_shared.py::test_no_constant_is_copied_by_hand_across_stacks -q 2>&1) || { echo "$out"; exit 1; }
+fi
+
+if staged '^(CLAUDE\.md|README\.md|docs/)'; then
+  echo "pre-commit: docs style"
+  # The guard reads docs and the code they cite from disk; with unstaged or
+  # untracked changes, point it at a checkout of the index instead.
+  docs_root=""
+  if ! git diff --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+    docs_root="$(git rev-parse --absolute-git-dir)/precommit-docs-snapshot"
+    rm -rf "$docs_root"
+    git checkout-index -a --prefix="$docs_root/"
+    echo "pre-commit: unstaged changes, checking the staged docs"
+  fi
+  out=$(DOCS_STYLE_ROOT="$docs_root" bash backend/scripts/scratch-test.sh --no-db tests/test_docs_style.py -q 2>&1) || { echo "$out"; exit 1; }
+fi

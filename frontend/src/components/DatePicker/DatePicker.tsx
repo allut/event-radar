@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboa
 import {
   cx, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue,
   formatPickerValue, formatMonthYearLabel, parseTypedDate, toDisplayDateTime, fromDisplayDateTime,
-  clamp, tallinnToday, isSameDay, addDays, addMonths, padIndex, weekdayOffset,
+  clamp, tallinnToday, toDateStr, isSameDay, addDays, addMonths, padIndex, weekdayOffset,
 } from '../../utils';
 import { useDropdown } from '../../hooks/useDropdown';
 import {
@@ -18,6 +18,9 @@ import {
   TIME_STEP_MINUTES,
   TIME_FIELD_MAX_LENGTH,
   PICKER_VALUE_PLACEHOLDER,
+  PICKER_DATE_ONLY_PLACEHOLDER,
+  PICKER_MIDNIGHT_SUFFIX,
+  PICKER_SKIP_LIMIT,
 } from '../../constants/core';
 import { t, ti } from '../../i18n';
 import { PrevIcon, NextIcon } from '../ChevronIcons';
@@ -34,6 +37,19 @@ interface DatePickerProps {
   /** Earlier days (in the same wire format) are greyed out and unselectable — Ends passes Starts. */
   min?: string;
   ariaLabel: string;
+  /** Later days are greyed out and unselectable. Same format as `value`. */
+  max?: string;
+  /** Whole-day mode: `value`/`onChange`/`min`/`max` are 'YYYY-MM-DD', the time fields are hidden and the popover closes on a day pick. */
+  dateOnly?: boolean;
+  /** Days (as 'YYYY-MM-DD') greyed out and unselectable, by calendar or typed entry. */
+  isDayDisabled?: (isoDate: string) => boolean;
+  /** Marks the text field aria-invalid. */
+  invalid?: boolean;
+}
+
+/** Widens a date-only value to the date-time wire format the parser reads. */
+function widenValue(v: string, dateOnly: boolean): string {
+  return dateOnly && v ? `${v}${PICKER_MIDNIGHT_SUFFIX}` : v;
 }
 
 /** Reads the hour/minute text fields back as bounded numbers — empty or
@@ -62,6 +78,9 @@ interface PopoverBodyProps {
   value: string;
   onChange: (v: string) => void;
   min?: string;
+  max?: string;
+  dateOnly: boolean;
+  isDayDisabled?: (isoDate: string) => boolean;
   locale: string;
   required: boolean;
   disabled: boolean;
@@ -69,10 +88,21 @@ interface PopoverBodyProps {
   flip: boolean;
 }
 
-function PopoverBody({ id, value, onChange, min, locale, required, disabled, popRef, flip }: PopoverBodyProps) {
+function PopoverBody({ id, value, onChange, min, max, dateOnly, isDayDisabled, locale, required, disabled, popRef, flip }: PopoverBodyProps) {
   const today = tallinnToday();
-  const parsed = splitDateTimeValue(value);
-  const minParsed = min ? splitDateTimeValue(min) : null;
+  const parsed = splitDateTimeValue(widenValue(value, dateOnly));
+  const minParsed = min ? splitDateTimeValue(widenValue(min, dateOnly)) : null;
+  const maxParsed = max ? splitDateTimeValue(widenValue(max, dateOnly)) : null;
+  const maxDay = maxParsed ? new Date(maxParsed.year, maxParsed.month, maxParsed.day) : null;
+  const isBlocked = (date: Date) =>
+    Boolean((minDay && date < minDay) || (maxDay && date > maxDay) || isDayDisabled?.(toDateStr(date)));
+  // First selectable day at or after `from`, walking by `step` days; `from`
+  // itself when none is found within a year.
+  function nextOpen(from: Date, step: number): Date {
+    let d = from;
+    for (let i = 0; i < PICKER_SKIP_LIMIT && isBlocked(d); i += 1) d = addDays(d, step);
+    return isBlocked(d) ? from : d;
+  }
   const minDay = minParsed ? new Date(minParsed.year, minParsed.month, minParsed.day) : null;
   // Full minute-resolution bound (not just the day) — a day-only comparison would
   // let the same calendar day as `min` commit with an earlier time (e.g. Ends
@@ -82,7 +112,11 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
   // With no value yet and a future min (Ends opened before Starts has been
   // picked), default the view to min's month rather than today's — today's
   // month would otherwise open with every cell disabled.
-  const initialDay = parsed ? new Date(parsed.year, parsed.month, parsed.day) : (minDay && minDay > today ? minDay : today);
+  // Lazy: the nextOpen walk can cover a year of days, and only the first render needs it.
+  const [initialDay] = useState(() => {
+    const baseDay = parsed ? new Date(parsed.year, parsed.month, parsed.day) : (minDay && minDay > today ? minDay : today);
+    return !parsed && (maxDay || isDayDisabled) ? nextOpen(baseDay, 1) : baseDay;
+  });
 
   // Fresh state per mount — PopoverBody only exists while the popover is open
   // (DatePicker conditionally renders it), so every open re-derives from the
@@ -118,7 +152,11 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
   }
 
   function commitDay(date: Date) {
-    if (disabled || (minDay && date < minDay)) return;
+    if (disabled || isBlocked(date)) return;
+    if (dateOnly) {
+      onChange(toDateStr(date));
+      return;
+    }
     const [h, m] = clampToMin(date, parseHourText(hourText), parseMinuteText(minuteText));
     setHourText(padIndex(h));
     setMinuteText(padIndex(m));
@@ -127,7 +165,7 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
 
   function commitTime(h: number, m: number) {
     const base = selectedDay ?? focusedDay;
-    if (disabled || (minDay && base < minDay)) return;
+    if (disabled || isBlocked(base)) return;
     const [ch, cm] = clampToMin(base, h, m);
     if (ch !== h || cm !== m) {
       setHourText(padIndex(ch));
@@ -166,23 +204,31 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
   // the nav button that was just clicked.
   function goToMonth(delta: number) {
     const next = addMonths(focusedDay, delta);
+    // Land on a selectable day of the new month when the clamped one is blocked.
+    const landed = isBlocked(next) ? nextOpen(next, 1) : next;
+    const target = landed.getMonth() === next.getMonth() ? landed : next;
     setViewYear(next.getFullYear());
     setViewMonth(next.getMonth());
-    setFocusedDay(next);
+    setFocusedDay(target);
   }
 
   function handleGridKeyDown(e: ReactKeyboardEvent<HTMLDivElement>) {
     const d = focusedDay;
     let next: Date | null = null;
+    // Walk further in the key's direction past blocked days; stay put if none.
+    const skip = (to: Date, step: number): Date => {
+      const open = nextOpen(to, step);
+      return isBlocked(open) ? d : open;
+    };
     switch (e.key) {
-      case 'ArrowLeft': next = addDays(d, -1); break;
-      case 'ArrowRight': next = addDays(d, 1); break;
-      case 'ArrowUp': next = addDays(d, -CALENDAR_DAYS_PER_WEEK); break;
-      case 'ArrowDown': next = addDays(d, CALENDAR_DAYS_PER_WEEK); break;
-      case 'PageUp': next = addMonths(d, -1); break;
-      case 'PageDown': next = addMonths(d, 1); break;
-      case 'Home': next = addDays(d, -weekdayOffset(d, CALENDAR_WEEK_START)); break;
-      case 'End': next = addDays(d, CALENDAR_DAYS_PER_WEEK - 1 - weekdayOffset(d, CALENDAR_WEEK_START)); break;
+      case 'ArrowLeft': next = skip(addDays(d, -1), -1); break;
+      case 'ArrowRight': next = skip(addDays(d, 1), 1); break;
+      case 'ArrowUp': next = skip(addDays(d, -CALENDAR_DAYS_PER_WEEK), -CALENDAR_DAYS_PER_WEEK); break;
+      case 'ArrowDown': next = skip(addDays(d, CALENDAR_DAYS_PER_WEEK), CALENDAR_DAYS_PER_WEEK); break;
+      case 'PageUp': next = skip(addMonths(d, -1), -1); break;
+      case 'PageDown': next = skip(addMonths(d, 1), 1); break;
+      case 'Home': next = skip(addDays(d, -weekdayOffset(d, CALENDAR_WEEK_START)), 1); break;
+      case 'End': next = skip(addDays(d, CALENDAR_DAYS_PER_WEEK - 1 - weekdayOffset(d, CALENDAR_WEEK_START)), -1); break;
       case 'Enter':
       case ' ':
         e.preventDefault();
@@ -250,7 +296,8 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
           const isToday = isSameDay(c.date, today);
           const isSelected = selectedDay ? isSameDay(c.date, selectedDay) : false;
           const isFocused = isSameDay(c.date, focusedDay);
-          const isDisabled = disabled || Boolean(minDay && c.date < minDay);
+          const isBlockedDay = isBlocked(c.date);
+          const isDisabled = disabled || isBlockedDay;
           return (
             <button
               key={c.key}
@@ -261,6 +308,7 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
               data-date={c.dataDate}
               data-selected-day={isFocused || undefined}
               disabled={isDisabled}
+              aria-disabled={isBlockedDay || undefined}
               className={cx(styles.calDay, c.spill && styles.spill, isToday && styles.today, isSelected && styles.selected)}
               onClick={() => commitDay(c.date)}
             >
@@ -270,7 +318,7 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
         })}
       </div>
       <div className={styles.footer}>
-        <div className={styles.timeGroup}>
+        {!dateOnly && <div className={styles.timeGroup}>
           <span className={styles.timeLabel}>{t('picker_time_label', locale)}</span>
           <div className={styles.timeRow}>
             <input
@@ -315,9 +363,9 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
               }}
             />
           </div>
-        </div>
+        </div>}
         <div className={styles.footerActions}>
-          <button type="button" className={styles.todayBtn} onClick={() => { moveFocus(today); commitDay(today); }}>
+          <button type="button" className={styles.todayBtn} disabled={isBlocked(today)} onClick={() => { moveFocus(today); commitDay(today); }}>
             {t('picker_today', locale)}
           </button>
           {!required && value && (
@@ -336,7 +384,7 @@ function PopoverBody({ id, value, onChange, min, locale, required, disabled, pop
  * and Ends. The committed `value`/`onChange` contract is the same 'YYYY-MM-DDTHH:mm'
  * wire format as the native datetime-local input this replaces; the field displays
  * (and accepts typed input as) a space in place of the 'T' — see toDisplayDateTime. */
-export default function DatePicker({ id, value, onChange, locale, disabled = false, required = false, min, ariaLabel }: DatePickerProps) {
+export default function DatePicker({ id, value, onChange, locale, disabled = false, required = false, min, max, dateOnly = false, isDayDisabled, invalid = false, ariaLabel }: DatePickerProps) {
   const { open, setOpen, flip, rootRef, popRef, triggerRef } = useDropdown('[data-selected-day="true"]');
   // Holds the *displayed* text (space-separated — see toDisplayDateTime), not
   // the canonical 'T'-joined wire value.
@@ -358,8 +406,17 @@ export default function DatePicker({ id, value, onChange, locale, disabled = fal
       onChange('');
       return true;
     }
+    if (dateOnly) {
+      const day = parseTypedDate(widenValue(text, true)) === null ? null : text;
+      if (day === null) return false;
+      // Typed entry follows the calendar: an unselectable day is rejected, not snapped.
+      if ((min && day < min) || (max && day > max) || isDayDisabled?.(day)) return false;
+      onChange(day);
+      return true;
+    }
     const parsed = parseTypedDate(text);
     if (parsed === null) return false;
+    if ((max && parsed > max) || isDayDisabled?.(parsed.slice(0, 10))) return false;
     // The wire format is a fixed-width zero-padded 'YYYY-MM-DDTHH:mm', so it
     // sorts chronologically as a plain string — no Date parsing needed here.
     // Mirrors PopoverBody's clampToMin: typed entry must not be able to commit
@@ -368,7 +425,7 @@ export default function DatePicker({ id, value, onChange, locale, disabled = fal
     return true;
   }
 
-  const preview = formatPickerValue(value, locale);
+  const preview = dateOnly ? '' : formatPickerValue(value, locale);
 
   return (
     <div className={styles.datePicker} ref={rootRef}>
@@ -381,7 +438,8 @@ export default function DatePicker({ id, value, onChange, locale, disabled = fal
           onChange={(e) => { setTypedValue(e.target.value); commitTyped(fromDisplayDateTime(e.target.value)); }}
           onBlur={(e) => { if (!commitTyped(fromDisplayDateTime(e.target.value))) setTypedValue(toDisplayDateTime(value)); }}
           aria-label={ariaLabel}
-          placeholder={PICKER_VALUE_PLACEHOLDER}
+          placeholder={dateOnly ? PICKER_DATE_ONLY_PLACEHOLDER : PICKER_VALUE_PLACEHOLDER}
+          aria-invalid={invalid || undefined}
           disabled={disabled}
           required={required}
         />
@@ -403,8 +461,11 @@ export default function DatePicker({ id, value, onChange, locale, disabled = fal
         <PopoverBody
           id={id}
           value={value}
-          onChange={(v) => { onChange(v); if (v === '') setOpen(false); }}
+          onChange={(v) => { onChange(v); if (v === '' || dateOnly) setOpen(false); }}
           min={min}
+          max={max}
+          dateOnly={dateOnly}
+          isDayDisabled={isDayDisabled}
           locale={locale}
           required={required}
           disabled={disabled}

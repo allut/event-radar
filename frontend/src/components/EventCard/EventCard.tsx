@@ -1,10 +1,12 @@
-import { memo } from 'react';
+import { memo, useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { UI_STATE } from '../../constants/core';
 import type { Signal } from '../../constants/feedback';
 import { ROUTES } from '../../constants/routes';
+import { PROMOTION_REF_PARAM, SPONSORED_LINK_REL, SPONSORED_TICKET_REL, TICKET_REL } from '../../constants/sponsored';
+import { PROMOTION_REF_AD, SPONSORED_SLOT_ATTR } from '../../_generated/sharedConstants';
 import { t } from '../../i18n';
-import { cardAnimationDelayMs, categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, shareEvent, trackExternalClick } from '../../utils';
+import { cardAnimationDelayMs, categoryGradient, cx, formatEventTime, formatPrice, padIndex, safeUrl, shareEvent, trackExternalClick, withQueryParam } from '../../utils';
 import { useEventReport } from '../../hooks/useEventReport';
 import { useFeedback } from '../../hooks/useFeedback';
 import type { EventCardNav } from '../../hooks/useEventCardNav';
@@ -12,6 +14,7 @@ import { useToast } from '../../hooks/useToast';
 import EventOverflowMenu from '../EventOverflowMenu';
 import FeedbackButtonRow from '../FeedbackButtonRow';
 import ReportModal from '../ReportModal';
+import { SponsoredCaption, SponsoredPanel, type SponsoredInfo } from '../SponsoredSlot';
 import Toast from '../Toast';
 import styles from './EventCard.module.css';
 
@@ -62,22 +65,20 @@ interface EventCardProps {
   // Anonymous /explore (issue #235): when set, a save/thumbs press is
   // intercepted client-side before any API call — useFeedback's sendFeedback
   // is never invoked — and this is called with the pressed signal instead,
-  // so the caller can open the sign-in modal and fire its own analytics.
+  // so the caller can open the sign-in modal.
   onFeedbackBlocked?: (signal: Signal) => void;
-  // Fired with this card's list `index` when the title link is clicked, so
-  // the caller (Explore) can track explore_card_click with the position.
-  // Navigation itself is unaffected — this is additive, not an
-  // interception. Takes `index` as an argument (rather than the caller
-  // closing over it per card) so Explore can pass one referentially-stable
-  // callback for every card instead of a fresh closure per card per render,
-  // which would defeat this component's memo below.
-  onCardClick?: (index: number) => void;
+  // Sponsored slot (issue #603): turns the card into a labelled paid placement
+  // with a caption, a "Why?" panel and rel="sponsored" paid links.
+  sponsored?: SponsoredInfo;
 }
 
-function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'standard', readOnly = false, alignTitle = true, onFeedbackBlocked, onCardClick }: EventCardProps) {
+function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'standard', readOnly = false, alignTitle = true, onFeedbackBlocked, sponsored }: EventCardProps) {
+  const [panelOpen, setPanelOpen] = useState(false);
+  const panelId = useId();
   const { activeSignal, pending, sendFeedback } = useFeedback(event.id, {
     initialSignal: event.my_signal,
     onChange: onFeedbackSent,
+    ref: sponsored ? PROMOTION_REF_AD : undefined,
   });
 
   function handleFeedbackPress(signal: Signal) {
@@ -92,6 +93,9 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
   const { reportOpen, reported, openReportModal, closeReportModal, handleReportSubmitted } = useEventReport(event.reported, event.id, authed, onLoginRequired);
   const isFeatured = variant === 'featured';
 
+  const detailPath = sponsored
+    ? withQueryParam(localePath(ROUTES.eventDetail(event.id)), PROMOTION_REF_PARAM, PROMOTION_REF_AD)
+    : localePath(ROUTES.eventDetail(event.id));
   const price = formatPrice(event.price_min, event.price_max, event.currency, locale, event.has_free_tier);
   const imageSrc = safeUrl(event.image_url);
   const ticketUrl = safeUrl(event.url);
@@ -115,10 +119,12 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
         />
       )}
       {ticketUrl && (
+        // SPONSORED_TICKET_REL is 'sponsored noopener noreferrer'; the rule can't see through the constant.
+        // eslint-disable-next-line react/jsx-no-target-blank
         <a
           href={ticketUrl}
           target="_blank"
-          rel="noopener noreferrer"
+          rel={sponsored ? SPONSORED_TICKET_REL : TICKET_REL}
           className={styles.ticketsLink}
           onClick={readOnly ? undefined : () => trackExternalClick(event.id)}
         >
@@ -128,11 +134,8 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
     </div>
   );
 
-  return (
-    <article
-      className={cx(styles.card, isFeatured && styles.featured)}
-      style={{ animationDelay: `${cardAnimationDelayMs(index)}ms` }}
-    >
+  const cardBody = (
+    <>
       <div className={styles.clickable}>
         <div className={cx(styles.imageWrap, isFeatured && styles.featuredImageWrap)}>
           {imageSrc ? (
@@ -146,7 +149,7 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
               style={{ background: categoryGradient(event.categories) }}
               aria-hidden
             >
-              {!isFeatured && (
+              {!isFeatured && !sponsored && (
                 <span className={styles.placeholderNum}>{padIndex(index + 1)}</span>
               )}
             </div>
@@ -179,9 +182,9 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
 
           <h2 className={cx(styles.title, isFeatured && styles.featuredTitle)}>
             <Link
-              to={localePath(ROUTES.eventDetail(event.id))}
+              to={detailPath}
               className={cx(styles.titleLink, styles.stretched)}
-              onClick={onCardClick ? () => onCardClick(index) : undefined}
+              rel={sponsored ? SPONSORED_LINK_REL : undefined}
             >
               <span className={cx(styles.titleClamp, isFeatured && styles.featuredTitleClamp, !isFeatured && !alignTitle && styles.titleClampFlush)}>
                 {event.title}
@@ -200,6 +203,39 @@ function EventCard({ event, index, locale, nav, onFeedbackSent, variant = 'stand
       </div>
 
       {actionsRow}
+    </>
+  );
+
+  return (
+    <article
+      className={cx(styles.card, isFeatured && styles.featured)}
+      style={{ animationDelay: `${cardAnimationDelayMs(index)}ms` }}
+      {...(sponsored ? { [SPONSORED_SLOT_ATTR]: '' } : {})}
+    >
+      {sponsored ? (
+        <>
+          <SponsoredCaption
+            advertiser={sponsored.advertiser}
+            locale={locale}
+            open={panelOpen}
+            panelId={panelId}
+            onToggle={() => setPanelOpen((open) => !open)}
+          />
+          <div className={styles.slotBody}>
+            {cardBody}
+            {panelOpen && (
+              <SponsoredPanel
+                explanation={sponsored.explanation}
+                locale={locale}
+                id={panelId}
+                onClose={() => setPanelOpen(false)}
+              />
+            )}
+          </div>
+        </>
+      ) : (
+        cardBody
+      )}
 
       {!readOnly && toast.status !== UI_STATE.idle && <Toast status={toast.status} message={toast.message} />}
       {!readOnly && reportOpen && (

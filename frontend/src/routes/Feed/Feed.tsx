@@ -16,6 +16,8 @@ import { formatHourMinute, formatIsoDate, formatTodayDate, padIndex, titleWithBr
 import { API, QUERY_KEYS } from '../../constants/api';
 import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
+import { type SponsoredInfo } from '../../components/SponsoredSlot';
+import RankingLink from '../../components/RankingLink';
 import styles from './Feed.module.css';
 
 interface FeedResponse {
@@ -23,6 +25,8 @@ interface FeedResponse {
   events: EventData[];
   built_at: string | null;
   is_stale: boolean;
+  // A separate card after the five, never one of them (issue #607).
+  sponsored_slot?: (EventData & SponsoredInfo) | null;
 }
 
 export default function Feed() {
@@ -57,6 +61,7 @@ export default function Feed() {
   }
 
   const events = data?.events ?? [];
+  const sponsoredSlot = data?.sponsored_slot ?? null;
 
   return (
     <div className={styles.page}>
@@ -114,6 +119,22 @@ export default function Feed() {
             ))}
           </ol>
         )}
+
+        {sponsoredSlot && (
+          <section className={styles.sponsored}>
+            <p className={styles.sponsoredCaption}>{t('sponsored_daily5_caption', locale)}</p>
+            <EventCard
+              event={sponsoredSlot}
+              index={events.length}
+              locale={locale}
+              nav={nav}
+              variant="standard"
+              sponsored={sponsoredSlot}
+            />
+          </section>
+        )}
+
+        <RankingLink locale={locale} className={styles.rankingLink} />
       </main>
     </div>
   );

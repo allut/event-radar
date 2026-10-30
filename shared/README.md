@@ -14,6 +14,7 @@ committed generated modules — no runtime cross-directory imports, no deploy-co
 | `calendar.json` | `day_names` and `month_names` per locale (backend email only) |
 | `personas.json` | Persona slugs, emojis, display names, and vibes per locale |
 | `app-config.json` | Cross-stack scalars: TTLs, weights, locale list, locale_code_map, signal/category/vibe taxonomies |
+| `fixtures/*.json` | Test cases both suites run, so a shared pattern behaves the same in Python and JS (not generated) |
 
 ## Workflow
 
@@ -23,6 +24,14 @@ committed generated modules — no runtime cross-directory imports, no deploy-co
 3. git add shared/ backend/app/_generated/ frontend/src/_generated/
 4. git commit
 ```
+
+To move an existing backend constant into `scalars`, run
+`python scripts/move_to_shared.py <domain> NAME [NAME ...]` (add `--dry-run` to preview).
+It adds the value after the last key sharing its leading words (so `ADMIN_*` keys stay
+together), removes the backend definition and any same-named frontend copy,
+regenerates, and repoints both stacks' imports. It prints the comments that sat above
+each removed definition for you to place, flags changed gitignored files, and lists
+frontend constants with the same value under another name, which it leaves alone.
 
 ## Generated outputs
 

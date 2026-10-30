@@ -1,19 +1,29 @@
-"""Docs guard: the mechanical house-style rules and code→doc pointer resolution.
+"""Docs guard: the mechanical house-style rules and pointer resolution both ways.
 
 The rules themselves live in docs/writing-docs.md. `test_docs_follow_house_style`
 checks the ones a regex can judge without false positives;
 `test_code_doc_pointers_resolve` checks that every pointer from code into a doc
-still names a file, `§N` section and heading that exist.
+still names a file, `§N` section and heading that exist;
+`test_doc_code_cites_resolve` checks that every backticked repo path and
+`path::symbol` cite in a governed doc still names a tracked file and a symbol in it;
+`test_readme_tree_entries_are_tracked` checks the README's Project structure tree.
 """
 
 from __future__ import annotations
 
+import fnmatch
+import os
 import re
 import subprocess
+from functools import cache
 from pathlib import Path
 
 
-REPO = Path(__file__).parent.parent.parent
+# Docs and code are read from REPO. The pre-commit hook points DOCS_STYLE_ROOT
+# at a checkout of the index, so a commit is judged on what it stages, not on
+# unstaged edits. `git ls-files` runs in GIT_ROOT, whose index is that set.
+GIT_ROOT = Path(__file__).parent.parent.parent
+REPO = Path(os.environ.get("DOCS_STYLE_ROOT") or GIT_ROOT)
 
 MAX_UNIT_WORDS = 60
 MAX_BANNER_WORDS = 30
@@ -42,10 +52,42 @@ POINTER = re.compile(
 )
 QUOTED = re.compile(r'"([^"\n]+)"')
 
+CODE_SPAN = re.compile(r"`([^`\n]+)`")
+# A span counts as a repo path only when it ends in one of these or in `/`, so
+# `Europe/Tallinn` and `openai/gpt-oss-120b` never read as paths. A leading `/`
+# is a route or an absolute path, and a lone `.module.css` is an extension.
+CITE_PATH = re.compile(
+    r"^(?!/)(?!\.[\w.]+$)[\w.*\[\]{},/-]+"
+    r"(?:\.(?:py|tsx?|jsx?|css|md|json|toml|ya?ml|sh|html|ini|txt)|/)$"
+)
+BRACES = re.compile(r"\{([^{}]*)\}")
+# Paths a doc names on purpose that no commit tracks: gitignored or absent
+# files, build output, runtime state and the `Name.*` folder-convention
+# placeholders. A new entry needs the same reason.
+UNTRACKED_CITES = {
+    "backend/.env",
+    "backend/logs/",
+    "backend/pyproject.toml",
+    ".playwright-mcp/",
+    "app-shell.html",
+    "robots.txt",
+    "index.json",
+    "prerender-chain-state/",
+    "Name.tsx",
+    "Name.module.css",
+    "Name.test.tsx",
+    "Name.test.ts",
+}
+UNTRACKED_PREFIXES = ("dist/",)
+
+
+README_TREE_HEADING = "Project structure"
+TREE_ENTRY = re.compile(r"^[├└]── (\S+)")
+
 
 def _governed_docs() -> list[str]:
     docs = sorted(f"docs/{p.name}" for p in (REPO / "docs").glob("*.md"))
-    return ["CLAUDE.md", "README.md", *docs]
+    return ["CLAUDE.md", "README.md", "CODING_STANDARDS.md", *docs]
 
 
 def _prose_lines(text: str) -> list[tuple[int, str]]:
@@ -172,7 +214,7 @@ def _heading_exists(quoted: str, texts: list[str]) -> bool:
 
 def _code_files() -> list[str]:
     result = subprocess.run(
-        ["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True
+        ["git", "ls-files"], cwd=GIT_ROOT, capture_output=True, text=True, check=True
     )
     return [
         f
@@ -212,4 +254,118 @@ def test_code_doc_pointers_resolve() -> None:
     assert not failures, (
         "Code→doc pointers that no longer resolve (fix the pointer or the heading "
         "in the same commit):\n" + "\n".join(failures)
+    )
+
+
+@cache
+def _tracked() -> tuple[frozenset[str], frozenset[str]]:
+    """(tracked files, every directory that holds one)."""
+    result = subprocess.run(
+        ["git", "ls-files"], cwd=GIT_ROOT, capture_output=True, text=True, check=True
+    )
+    files = frozenset(result.stdout.splitlines())
+    dirs = frozenset(f.rsplit("/", i)[0] for f in files for i in range(1, f.count("/") + 1))
+    return files, dirs
+
+
+def _expand_braces(path: str) -> list[str]:
+    """`a/{b,c}.py` → `a/b.py`, `a/c.py`."""
+    m = BRACES.search(path)
+    if not m:
+        return [path]
+    return [
+        expanded
+        for alt in m.group(1).split(",")
+        for expanded in _expand_braces(path[: m.start()] + alt + path[m.end() :])
+    ]
+
+
+def _resolve_cite_path(path: str) -> list[str]:
+    """Tracked files or directories the cited path names, by exact path or by
+    a trailing-segment match (`fienta.py`, `geocode/nominatim.py`)."""
+    files, dirs = _tracked()
+    candidates = dirs if path.endswith("/") else files
+    path = path.rstrip("/")
+    if "*" in path:
+        return [c for c in candidates if fnmatch.fnmatch(c, path) or fnmatch.fnmatch(c, "*/" + path)]
+    return [c for c in candidates if c == path or c.endswith("/" + path)]
+
+
+def _defines(file: str, symbol: str) -> bool:
+    try:
+        text = (REPO / file).read_text(encoding="utf-8")
+    except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
+        return False
+    return re.search(rf"(?<![\w$]){re.escape(symbol)}(?![\w$])", text) is not None
+
+
+def _cite_failures(name: str, text: str) -> list[str]:
+    failures: list[str] = []
+    for no, line in _prose_lines(text):
+        for span in CODE_SPAN.findall(line):
+            path, _, symbol = span.strip().partition("::")
+            # A brace with no comma is a placeholder, such as `{locale}`.
+            if not CITE_PATH.match(path) or re.search(r"\{[^,}]*\}", path):
+                continue
+            for expanded in _expand_braces(path):
+                if expanded in UNTRACKED_CITES or expanded.startswith(UNTRACKED_PREFIXES):
+                    continue
+                where = f"{name}:{no}: `{span}`"
+                matches = _resolve_cite_path(expanded)
+                if not matches:
+                    failures.append(f"{where} — no tracked path {expanded!r}")
+                    continue
+                if not symbol:
+                    continue
+                bare = re.sub(r"\(.*$", "", symbol).split(".")[-1].strip()
+                if not any(_defines(m, bare) for m in matches):
+                    failures.append(f"{where} — {bare!r} not found in {', '.join(sorted(matches))}")
+    return failures
+
+
+def test_doc_code_cites_resolve() -> None:
+    failures: list[str] = []
+    for name in _governed_docs():
+        failures.extend(_cite_failures(name, (REPO / name).read_text(encoding="utf-8")))
+    assert not failures, (
+        "Doc→code cites that no longer resolve (fix the cite in the same commit as "
+        "the rename; a deliberately untracked path goes in UNTRACKED_CITES):\n"
+        + "\n".join(failures)
+    )
+
+
+def _readme_tree_failures(text: str) -> list[str]:
+    """Every `├──`/`└──` entry in the fenced tree under the Project structure
+    heading must be a tracked file, or a directory holding one when it ends in `/`.
+    The fence hides the tree from the cite check, so this is its only guard."""
+    files, dirs = _tracked()
+    failures: list[str] = []
+    entries = 0
+    in_section = in_fence = False
+    for no, line in enumerate(text.splitlines(), start=1):
+        if FENCE.match(line):
+            in_fence = not in_fence
+            continue
+        heading = None if in_fence else HEADING.match(line)
+        if heading:
+            in_section = heading.group(1) == README_TREE_HEADING
+            continue
+        m = TREE_ENTRY.match(line) if in_section and in_fence else None
+        if not m:
+            continue
+        entries += 1
+        entry = m.group(1)
+        tracked = entry.rstrip("/") in dirs if entry.endswith("/") else entry in files
+        if not tracked:
+            failures.append(f"README.md:{no}: tree entry {entry!r} isn't tracked")
+    if not entries:
+        failures.append(f"README.md: no tree under the {README_TREE_HEADING!r} heading")
+    return failures
+
+
+def test_readme_tree_entries_are_tracked() -> None:
+    failures = _readme_tree_failures((REPO / "README.md").read_text(encoding="utf-8"))
+    assert not failures, (
+        "README Project structure entries that no longer exist (update the tree in "
+        "the same commit as the move):\n" + "\n".join(failures)
     )

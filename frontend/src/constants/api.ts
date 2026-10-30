@@ -18,9 +18,6 @@ export const VALIDATION_ERROR_CODE = 'validation_error';
 // "couldn't reach Event Radar" message instead of the generic fallback.
 export const NETWORK_ERROR_CODE = 'network_error';
 
-// HTTP status the claim-editing surface reads structurally (not-granted / dormant).
-export const HTTP_STATUS_CONFLICT = 409;
-
 // ─── React Query keys ──────────────────────────────────────────────────────────
 // Query-key root strings shared across routes and useFeedback's invalidation
 // fan-out — a typo in one spot would silently break refresh, so it's centralized.
@@ -43,12 +40,27 @@ export const QUERY_KEYS = {
   organizerClaimEvent: 'organizerClaimEvent',
   organizerClaimEvents: 'organizerClaimEvents',
   organizerClaimForEvent: 'organizerClaimForEvent',
+  organizerPromotions: 'organizerPromotions',
+  organizerPromotionContext: 'organizerPromotionContext',
+  organizerPromotionValidate: 'organizerPromotionValidate',
+  organizerPromotionRegistry: 'organizerPromotionRegistry',
+  organizerPromotionReport: 'organizerPromotionReport',
+  organizerPromotionEvent: 'organizerPromotionEvent',
   adminCounts: 'adminCounts',
   adminReports: 'adminReports',
   adminSubmissions: 'adminSubmissions',
   adminClaims: 'adminClaims',
   adminDedupGroups: 'adminDedupGroups',
   adminEventDetail: 'adminEventDetail',
+  adminPromotions: 'adminPromotions',
+  adminPromotionCapStrip: 'adminPromotionCapStrip',
+  adminPromotionDetail: 'adminPromotionDetail',
+  adminPromotionDailyStats: 'adminPromotionDailyStats',
+  adminPromotionContext: 'adminPromotionContext',
+  adminPromotionValidate: 'adminPromotionValidate',
+  adminPromotionRequests: 'adminPromotionRequests',
+  adminPromotionTrust: 'adminPromotionTrust',
+  adminPromotionWithdrawable: 'adminPromotionWithdrawable',
 } as const;
 
 // Pagination query-param names shared by every paginated list fetch
@@ -57,8 +69,26 @@ export const QUERY_KEYS = {
 export const PAGE_PARAM = {
   limit: 'limit',
   offset: 'offset',
-  cursor: 'cursor',
 } as const;
+
+// The frontend URL's 1-based page number (spec #551), read by usePageParam and
+// written by <Pager>'s links. Page 1 omits it. Never sent to the backend,
+// which only ever sees PAGE_PARAM.limit/offset.
+export const PAGE_QUERY_PARAM = 'page';
+
+// Router location-state key every <Pager> link carries. usePagedQuery only
+// treats a push with it (or a POP) as a page change that scrolls, focuses and
+// announces; anything else that lands on another page (a setListParams
+// filter/sort/search/tab push, a nav link, a preset chip) is silent.
+export const PAGER_NAV_STATE = 'pagerPageChange';
+
+// i18n keys for <Pager>'s live-region announcement, one per item noun: the
+// Explore-style lists announce "Events", lists of anything else "Items".
+export const PAGER_LIVE_KEY = {
+  events: 'pager_live_events',
+  items: 'pager_live_items',
+} as const;
+export type PagerLiveNoun = keyof typeof PAGER_LIVE_KEY;
 
 // Prefix every backend request is proxied under (see
 // functions/api/[[path]].ts's catch-all proxy, keyed on this same string) —
@@ -103,6 +133,8 @@ export const API = {
   publicCounts: '/public/counts',
   emailUnsubscribe: '/email/unsubscribe',
   emailResubscribe: '/email/resubscribe',
+  emailConsentOff: '/email/ads-off',
+  emailConsentOn: '/email/ads-on',
   event: (id: number | string) => `/events/${encodeURIComponent(String(id))}`,
   organizerEvents: '/organizer/events',
   organizerEvent: (id: number | string) => `/organizer/events/${encodeURIComponent(String(id))}`,
@@ -128,6 +160,15 @@ export const API = {
       : `/organizer/claims/${id}/event`,
   organizerClaimEvents: (id: number | string) => `/organizer/claims/${encodeURIComponent(String(id))}/events`,
   organizerClaimForEvent: (eventId: number | string) => `/organizer/claims/for-event/${encodeURIComponent(String(eventId))}`,
+  organizerPromotions: '/organizer/promotions',
+  organizerPromotionContext: '/organizer/promotions/context',
+  organizerPromotionValidate: '/organizer/promotions/validate',
+  organizerPromotionRequests: '/organizer/promotions/requests',
+  organizerPromotionWithdraw: (id: number | string) =>
+    `/organizer/promotions/requests/${encodeURIComponent(String(id))}/withdraw`,
+  organizerPromotionReport: (id: number | string) => `/organizer/promotions/${encodeURIComponent(String(id))}/report`,
+  organizerPromotionRegistryLookup: '/organizer/promotions/registry-lookup',
+  organizerPromotionCheckout: '/organizer/promotions/checkout',
   reports: '/reports',
   adminAuthLogin: '/admin/auth/login',
   adminAuthLogout: '/admin/auth/logout',
@@ -145,6 +186,26 @@ export const API = {
   adminClaimDecline: (id: number) => `/admin/claims/${id}/decline`,
   adminClaimRevoke: (id: number) => `/admin/claims/${id}/revoke`,
   adminEventDetail: (id: number | string) => `/admin/events/${encodeURIComponent(String(id))}`,
+  adminPromotions: '/admin/promotions',
+  adminPromotionCapStrip: '/admin/promotions/cap-strip',
+  adminPromotionDetail: (id: number | string) => `/admin/promotions/${id}`,
+  adminPromotionMarkPaid: (id: number | string) => `/admin/promotions/${id}/mark-paid`,
+  adminPromotionRepoint: (id: number | string) => `/admin/promotions/${id}/repoint`,
+  adminPromotionClearRestriction: (id: number | string) => `/admin/promotions/${id}/clear-restriction`,
+  adminPromotionEnd: (id: number | string) => `/admin/promotions/${id}/end`,
+  adminPromotionVoid: (id: number | string) => `/admin/promotions/${id}/void`,
+  adminPromotionRefund: (id: number | string) => `/admin/promotions/${id}/refund`,
+  adminPromotionDailyStats: (id: number | string) => `/admin/promotions/${id}/daily-stats`,
+  adminPromotionContext: (eventId: number | string) => `/admin/events/${eventId}/promotion-context`,
+  adminPromotionValidate: (eventId: number | string) => `/admin/events/${eventId}/promotions/validate`,
+  adminPromotionGrant: (eventId: number | string) => `/admin/events/${eventId}/promotions`,
+  adminPromotionRequests: '/admin/promotion-requests',
+  adminPromotionRequestGrant: (id: number) => `/admin/promotion-requests/${id}/grant`,
+  adminPromotionRequestDecline: (id: number) => `/admin/promotion-requests/${id}/decline`,
+  adminPromotionTrust: '/admin/promotions/trust',
+  adminPromotionComplaints: '/admin/promotions/complaints',
+  adminPromotionWithdraw: (id: number | string) => `/admin/promotions/${id}/withdraw`,
+  adminPromotionWithdrawAll: '/admin/promotions/withdraw-all',
   adminIngestAll: '/admin/ingest',
   adminIngestSource: (slug: string) => `/admin/ingest/${slug}`,
   adminDedupRun: '/admin/dedup',

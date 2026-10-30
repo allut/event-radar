@@ -1,0 +1,14 @@
+.link {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  text-decoration: underline;
+  text-underline-offset: var(--underline-offset);
+  text-decoration-color: var(--border);
+  transition: color var(--transition), text-decoration-color var(--transition);
+}
+
+.link:hover,
+.link:focus-visible {
+  color: var(--accent-light);
+  text-decoration-color: var(--accent-light);
+}

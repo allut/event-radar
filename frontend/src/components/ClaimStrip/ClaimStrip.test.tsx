@@ -2,9 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ClaimPanel, ClaimPill } from './ClaimStrip';
-import { renderWithProviders } from '../../test/utils';
+import { CACHED_CLAIMS_KEY, clientWithCachedClaimsList, renderWithProviders } from '../../test/utils';
 import { ORGANIZER_SIGNED_IN_HINT_KEY } from '../../constants/auth';
-import { CLAIM_JUSTIFICATION_REQUIRED_ERROR } from '../../constants/claims';
+import { CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED } from '../../_generated/sharedConstants';
 
 vi.mock('../../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/client')>();
@@ -17,6 +17,7 @@ vi.mock('../../api/client', async (importOriginal) => {
 
 import { ApiError, organizerApi } from '../../api/client';
 const mockOrganizerPost = vi.mocked(organizerApi.post);
+
 
 describe('ClaimPill', () => {
   it('renders the pending label', () => {
@@ -62,10 +63,28 @@ describe('ClaimPanel', () => {
     await waitFor(() => expect(screen.getByText('pending-screen-42')).toBeInTheDocument());
   });
 
+  it('marks the Your claims list and dashboard summary stale once the claim is created', async () => {
+    localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
+    mockOrganizerPost.mockResolvedValueOnce({ id: 42, status: 'pending' });
+    const queryClient = clientWithCachedClaimsList();
+    renderWithProviders(null, {
+      routes: [
+        { path: '/', element: <ClaimPanel eventId={7} locale="en" /> },
+        { path: '/organizer/claims/:id/pending', element: <div>pending-screen-42</div> },
+      ],
+      queryClient,
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Claim this event' }));
+
+    await waitFor(() => expect(screen.getByText('pending-screen-42')).toBeInTheDocument());
+    expect(queryClient.getQueryState(CACHED_CLAIMS_KEY)?.isInvalidated).toBe(true);
+  });
+
   it('reveals a justification field when the claim resolves to a series claim (#428), then resubmits with it', async () => {
     localStorage.setItem(ORGANIZER_SIGNED_IN_HINT_KEY, '1');
     mockOrganizerPost
-      .mockRejectedValueOnce(new ApiError(422, CLAIM_JUSTIFICATION_REQUIRED_ERROR))
+      .mockRejectedValueOnce(new ApiError(422, 'A justification is required.', CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED))
       .mockResolvedValueOnce({ id: 42, status: 'pending' });
     renderWithProviders(null, {
       routes: [

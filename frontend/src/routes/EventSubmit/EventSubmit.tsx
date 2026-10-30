@@ -11,12 +11,15 @@ import CategoryPicker from '../../components/CategoryPicker';
 import FileField from '../../components/FileField';
 import VenuePicker from '../../components/VenuePicker';
 import { t, ti } from '../../i18n';
-import { DEFAULT_CURRENCY, ORGANIZER_MAX_CATEGORIES } from '../../_generated/sharedConstants';
+import {
+  DEFAULT_CURRENCY,
+  LOCALE_EN,
+  LOCALE_RU,
+  ORGANIZER_MAX_CATEGORIES,
+} from '../../_generated/sharedConstants';
 import {
   CONTENT_LANG_ORDER,
-  LOCALE_EN,
   LOCALE_ET,
-  LOCALE_RU,
   type ContentLang,
   type ContentMarkerState,
 } from '../../constants/core';

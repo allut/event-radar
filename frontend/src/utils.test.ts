@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventTime, tallinnToday, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, nextKeysetParam, activeFacetCount, isFullSet, shouldFlipPopover, maskAnalyticsUrl, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, cardAnimationDelayMs, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset, toggleCapped, numericRouteId } from './utils';
+import { cx, safeUrl, sanitizeHtml, formatPrice, categoryGradient, formatHourMinute, formatEventTime, tallinnToday, formatEventShortDate, makeActiveClassMap, trackExternalClick, datePresetRange, parseExploreFilters, exploreFiltersToSearchParams, buildExploreApiQuery, activeFacetCount, isFullSet, shouldFlipPopover, DEFAULT_EXPLORE_FILTERS, type ExploreFilters, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue, parseTypedDate, formatPickerValue, formatMonthYearLabel, toDisplayDateTime, fromDisplayDateTime, buildMapsUrl, isValidLocale, stripLocalePrefix, localizedPath, localeFromPath, localizedTo, truncateForMeta, cardAnimationDelayMs, parseISODateLocal, formatDateRangeShort, localeLabel, localizedFieldLabel, localizedTriplet, weekdayOffset, toggleCapped, numericRouteId } from './utils';
 import { t } from './i18n';
 import { CATEGORIES } from './_generated/sharedConstants';
 import { GOOGLE_MAPS_SEARCH_URL } from './constants/core';
@@ -24,49 +24,6 @@ describe('cx', () => {
 
   it('returns empty string when all falsy', () => {
     expect(cx(false, null, undefined)).toBe('');
-  });
-});
-
-describe('maskAnalyticsUrl', () => {
-  it('masks a numeric event id', () => {
-    expect(maskAnalyticsUrl('/events/42')).toBe('/events/[id]');
-  });
-
-  it('strips the query string (may carry the /auth/verify magic-link token)', () => {
-    expect(maskAnalyticsUrl('/auth/verify?token=secret')).toBe('/auth/verify');
-  });
-
-  it('strips the query string on a masked event path', () => {
-    expect(maskAnalyticsUrl('/events/42?x=1')).toBe('/events/[id]');
-  });
-
-  it('strips the hash', () => {
-    expect(maskAnalyticsUrl('/events/42#section')).toBe('/events/[id]');
-  });
-
-  it('strips a free-text search query', () => {
-    expect(maskAnalyticsUrl('/explore?q=jazz+night')).toBe('/explore');
-  });
-
-  it('leaves non-event paths unchanged', () => {
-    expect(maskAnalyticsUrl('/explore')).toBe('/explore');
-  });
-
-  it('does not mask a non-numeric id segment', () => {
-    expect(maskAnalyticsUrl('/events/abc')).toBe('/events/abc');
-  });
-
-  it('masks an organizer edit-form event id', () => {
-    expect(maskAnalyticsUrl('/organizer/events/7/edit')).toBe('/organizer/events/[id]/edit');
-  });
-
-  it('masks a locale-prefixed event id, keeping the prefix so locales still group separately', () => {
-    expect(maskAnalyticsUrl('/en/events/42')).toBe('/en/events/[id]');
-    expect(maskAnalyticsUrl('/ru/events/42?x=1')).toBe('/ru/events/[id]');
-  });
-
-  it('masks a locale-prefixed organizer edit-form event id', () => {
-    expect(maskAnalyticsUrl('/en/organizer/events/7/edit')).toBe('/en/organizer/events/[id]/edit');
   });
 });
 
@@ -804,29 +761,6 @@ describe('cardAnimationDelayMs', () => {
   it('restarts on every page so later cards are not held invisible', () => {
     expect(cardAnimationDelayMs(24)).toBe(0);
     expect(cardAnimationDelayMs(24 * 5 + 2)).toBe(160);
-  });
-});
-
-describe('buildExploreApiQuery cursor', () => {
-  it('sends cursor only when given', () => {
-    expect(new URLSearchParams(buildExploreApiQuery(DEFAULT_EXPLORE_FILTERS, 0)).has('cursor')).toBe(false);
-    const params = new URLSearchParams(buildExploreApiQuery(DEFAULT_EXPLORE_FILTERS, 24, 'abc'));
-    expect(params.get('cursor')).toBe('abc');
-  });
-});
-
-describe('nextKeysetParam', () => {
-  it('stops when there is no more', () => {
-    expect(nextKeysetParam({ has_more: false, offset: 0, next_cursor: 'x' }, 24)).toBeUndefined();
-  });
-
-  it('carries the server cursor when present', () => {
-    expect(nextKeysetParam({ has_more: true, offset: 0, next_cursor: 'x' }, 24)).toEqual({ offset: 24, cursor: 'x' });
-  });
-
-  it('falls back to offset arithmetic without a cursor', () => {
-    expect(nextKeysetParam({ has_more: true, offset: 24 }, 24)).toEqual({ offset: 48, cursor: undefined });
-    expect(nextKeysetParam({ has_more: true, offset: 24, next_cursor: null }, 24)).toEqual({ offset: 48, cursor: undefined });
   });
 });
 

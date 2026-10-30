@@ -31,6 +31,7 @@ from app.ingestion.selectors import (
     PILETILEVI_HOST,
     PILETILEVI_IMAGE_HEIGHT,
     PILETILEVI_IMAGE_SELECTOR,
+    PILETILEVI_IMPORTANT_INFO_HEADING_TAG,
     PILETILEVI_IMPORTANT_INFO_HEADINGS,
     PILETILEVI_INFO_BLOCK_CLASS,
     PILETILEVI_LOGIN_EXPRESS_URL,
@@ -180,8 +181,9 @@ def _parse_piletilevi_date(date_str: str) -> datetime | None:
         # Strip weekday abbreviation: "We 19.08.2026" → "19.08.2026"
         date_part = date_part_raw.strip().split(" ", 1)[-1].strip()
         time_part = time_part.strip()
-        naive = datetime.strptime(f"{date_part} {time_part}", PILETILEVI_DATE_FORMAT)
-        return naive.replace(tzinfo=TALLINN_TZ)
+        return datetime.strptime(
+            f"{date_part} {time_part}", PILETILEVI_DATE_FORMAT
+        ).replace(tzinfo=TALLINN_TZ)
     except (ValueError, IndexError):
         return None
 
@@ -198,9 +200,9 @@ def _piletilevi_important_info(soup: BeautifulSoup, locale: str = "en") -> str |
     )
     heading = next(
         (
-            h2
-            for h2 in soup.find_all("h2")
-            if h2.get_text(strip=True) == heading_text
+            h
+            for h in soup.find_all(PILETILEVI_IMPORTANT_INFO_HEADING_TAG)
+            if h.get_text(strip=True) == heading_text
         ),
         None,
     )

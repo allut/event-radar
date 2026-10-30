@@ -1,4 +1,4 @@
-import { CONTACT_EMAIL, CONTACT_MAILTO, ODR_URL } from '../../constants/core';
+import { CONTACT_EMAIL, CONTACT_MAILTO } from '../../constants/core';
 import type { LegalDoc } from './types';
 
 const doc: LegalDoc = {
@@ -124,9 +124,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'These Terms are governed by the laws of Estonia. Disputes are subject to the competent Estonian courts, without prejudice to any mandatory consumer-protection rights or to your right to bring proceedings in your country of residence. EU consumers may also use the European Commission’s Online Dispute Resolution platform (',
-            { text: ODR_URL, href: ODR_URL },
-            ').',
+            'These Terms are governed by the laws of Estonia. Disputes are subject to the competent Estonian courts, without prejudice to any mandatory consumer-protection rights or to your right to bring proceedings in your country of residence.',
           ],
         },
       ],

@@ -1,10 +1,14 @@
+import { StatusCodes } from 'http-status-codes';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { organizerApi, ApiError } from '../api/client';
-import { ORGANIZER_MAX_CATEGORIES } from '../_generated/sharedConstants';
-import { API, HTTP_STATUS_CONFLICT, QUERY_KEYS } from '../constants/api';
-import { CLAIM_ERROR_CODE_DORMANT } from '../constants/claims';
+import {
+  CLAIM_ERROR_CODE_DORMANT,
+  ORGANIZER_MAX_CATEGORIES,
+} from '../_generated/sharedConstants';
+import { API, QUERY_KEYS } from '../constants/api';
 import { t } from '../i18n';
+import { useOrganizerImageUpload } from './useOrganizerImageUpload';
 import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, toggleCapped, type LocalizedTextFields } from '../utils';
 
 export interface ClaimEventData {
@@ -94,6 +98,10 @@ export interface UseClaimEventEditResult {
    * capped at ORGANIZER_MAX_CATEGORIES, so a toggle is ignored once full. */
   pendingCategories: string[];
   togglePendingCategory: (slug: string) => void;
+  uploadImage: (file: File) => void;
+  clearImage: () => void;
+  imageUploading: boolean;
+  imageError: string;
   save: () => void;
   isSaving: boolean;
   saveError: string;
@@ -226,6 +234,10 @@ export function useClaimEventEdit(
     },
   });
 
+  // The claim edit accepts only our own Cloudinary uploads as image_url, so
+  // the image is uploaded first and its returned URL becomes the field value.
+  const imageUpload = useOrganizerImageUpload(locale, (url) => setField('imageUrl', 'image_url', url));
+
   const acceptPriceMutation = useMutation({
     mutationFn: () =>
       organizerApi.patch<ClaimEventData>(API.organizerClaimEvent(claimId, eventId), {
@@ -243,7 +255,7 @@ export function useClaimEventEdit(
     },
   });
 
-  const isLocked = query.isError && query.error instanceof ApiError && query.error.status === HTTP_STATUS_CONFLICT;
+  const isLocked = query.isError && query.error instanceof ApiError && query.error.status === StatusCodes.CONFLICT;
   const isDormant =
     isLocked && query.error instanceof ApiError && query.error.code === CLAIM_ERROR_CODE_DORMANT;
 
@@ -263,6 +275,10 @@ export function useClaimEventEdit(
       const room = Math.max(0, ORGANIZER_MAX_CATEGORIES - (query.data?.categories.length ?? 0));
       setPendingCategories((prev) => toggleCapped(prev, slug, room));
     },
+    uploadImage: imageUpload.upload,
+    clearImage: () => { setField('imageUrl', 'image_url', ''); imageUpload.reset(); },
+    imageUploading: imageUpload.uploading,
+    imageError: imageUpload.error,
     save: () => {
       const err = clientValidationError();
       setClientError(err);

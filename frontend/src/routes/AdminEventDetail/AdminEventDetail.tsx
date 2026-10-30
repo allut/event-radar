@@ -7,6 +7,7 @@ import {
   ADMIN_EVENT_DETAIL_TABS,
   ADMIN_GENERIC_ERROR,
   ADMIN_TRANSLATABLE_FIELD_COUNT,
+  ADMIN_LOADING_LABEL,
 } from '../../constants/admin';
 import { API, QUERY_KEYS } from '../../constants/api';
 import { ADMIN_RESOLUTION_MESSAGES } from '../../constants/claims';
@@ -25,6 +26,7 @@ import { useToast } from '../../hooks/useToast';
 import AdminQueueActionPanel from '../../components/AdminQueueActionPanel';
 import SegmentedControl from '../../components/SegmentedControl';
 import chipStyles from '../../components/shared/Chip.module.css';
+import PromotionsPanel from './PromotionsPanel';
 import styles from './AdminEventDetail.module.css';
 
 interface LocaleContent {
@@ -219,7 +221,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
     actionMutation.mutate({ kind, note: note.trim() });
   }
 
-  if (isLoading) return <PageState kind={UI_STATE.loading} message="Loading…" inline />;
+  if (isLoading) return <PageState kind={UI_STATE.loading} message={ADMIN_LOADING_LABEL} inline />;
   if (isError || !data) return <PageState kind={UI_STATE.error} message="Couldn't load this event." inline />;
 
   const { event, dedup_siblings, reports, raw_events, in_todays_feed } = data;
@@ -438,6 +440,8 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
             </div>
           </>
         )}
+
+        {tab === 'Promotions' && <PromotionsPanel eventId={eventId} onNotify={showToast} />}
 
         {tab === 'Raw payload' && (
           raw_events.length === 0 ? (

@@ -76,6 +76,22 @@ describe('App route guards', () => {
     expect(window.location.pathname).toBe('/organizer/dashboard');
   });
 
+  it('routes /organizer/claims to Your claims without shadowing /organizer/claims/verify', async () => {
+    setOrganizerSignedInHint();
+    setPath('/organizer/claims');
+    const { unmount } = render(<App />);
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: t('dashboard_claims_title', 'et') })).toBeInTheDocument(),
+    );
+    unmount();
+
+    setPath('/organizer/claims/verify');
+    render(<App />);
+    await waitFor(() => expect(screen.getByText(t('no_token', 'et'))).toBeInTheDocument());
+    expect(screen.queryByRole('heading', { level: 1, name: t('dashboard_claims_title', 'et') })).not.toBeInTheDocument();
+    expect(window.location.pathname).toBe('/organizer/claims/verify');
+  });
+
   it('does not let an organizer session satisfy the consumer Protected guard, or vice versa', async () => {
     setOrganizerSignedInHint();
     setPath('/settings');

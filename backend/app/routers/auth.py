@@ -41,9 +41,13 @@ from app.auth.tokens import (
     verify_oauth_state_token,
 )
 from app.config import settings
-from app._generated.shared_constants import DEFAULT_USER_LOCALE, VALID_LOCALES
-from app.constants.auth import (
+from app._generated.shared_constants import (
     AUTH_TRACK_USER,
+    DEFAULT_USER_LOCALE,
+    OAUTH_ERROR_DENIED,
+    VALID_LOCALES,
+)
+from app.constants.auth import (
     DETAIL_MAGIC_LINK_SENT,
     DETAIL_SIGNED_OUT,
     DETAIL_SIGNED_OUT_ALL,
@@ -60,7 +64,6 @@ from app.constants.auth import (
     GOOGLE_SIGNIN_OUTCOME_NEW_ACCOUNT,
     GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL,
     IDENTITY_PROVIDER_GOOGLE,
-    OAUTH_ERROR_DENIED,
     OAUTH_ERROR_STATE_INVALID,
     OAUTH_ERROR_TOKEN_EXCHANGE_FAILED,
     OAUTH_ERROR_VERIFICATION_FAILED,

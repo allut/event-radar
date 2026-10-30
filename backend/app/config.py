@@ -39,6 +39,27 @@ class Settings(BaseSettings):
     # pipeline in production. Manual POST /admin/* triggers are unaffected.
     ENABLE_SCHEDULER: bool = True
 
+    # Promotions launch flags (spec #597), all off until each launch step.
+    # SLOTS is the master gate on every Sponsored-slot fill path; OFFER gates the
+    # organizer-portal offer and request path; CHECKOUT gates card checkout.
+    PROMOTIONS_SLOTS_ENABLED: bool = False
+    PROMOTIONS_OFFER_ENABLED: bool = False
+    PROMOTIONS_CHECKOUT_ENABLED: bool = False
+
+    # Stripe card checkout (docs/adr/0005). Empty = checkout cannot start and the
+    # webhook fails closed. The Tax Rate is the 24% exclusive VAT rate made in
+    # the Stripe Dashboard; the footer carries the Operator's VAT number.
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_TAX_RATE_ID: str = ""
+    PROMOTIONS_INVOICE_FOOTER: str = ""
+
+    # Äriregister (Estonian business register) lookup. Empty base URL or
+    # credentials = every lookup fails closed as "unavailable".
+    ARIREGISTER_BASE_URL: str = ""
+    ARIREGISTER_USERNAME: str = ""
+    ARIREGISTER_PASSWORD: str = ""
+
     FIENTA_BASE_URL: str = "https://fienta.com/api/v1/public/events"
     KULTUURIKATEL_URL: str = "https://kultuurikatel.ee/en/events/"
     FOTOGRAFISKA_URL: str = "https://tallinn.fotografiska.com/en/events"

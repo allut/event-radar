@@ -1,0 +1,295 @@
+/* Admin commerce chrome shared by the Promotions request queue, Trust panel,
+   complaint logger, Withdraw and the Stripe look (docs/design-system.md §7).
+   Admin register: hairlines, mono data, square corners. */
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.muted { color: var(--text-muted); }
+
+.sectionTitle {
+  font-family: var(--font-system);
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  color: var(--text-muted);
+  margin: 0 0 var(--space-3);
+}
+
+.sectionTitleInline {
+  composes: sectionTitle;
+  margin: 0;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: var(--fs-2xs);
+  margin: 0;
+}
+
+.error {
+  margin: 0;
+  min-height: var(--space-4);
+  color: var(--danger);
+  font-size: var(--fs-2xs);
+}
+
+.okmsg {
+  margin: 0;
+  color: var(--success);
+  font-size: var(--fs-2xs);
+}
+
+/* Pills, tags and chips */
+.pill {
+  display: inline-block;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  padding: var(--space-0-1) var(--space-2);
+  border: var(--border-w-hair) solid currentColor;
+  letter-spacing: var(--tracking-snug);
+  white-space: nowrap;
+}
+.pillLive { color: var(--success); }
+.pillScheduled, .pillAttention { color: var(--accent-ink); }
+.pillFinished { color: var(--text-muted); }
+.pillDanger { color: var(--danger); }
+
+.reason {
+  color: var(--accent-ink);
+  font-size: var(--fs-2xs);
+  margin-top: var(--space-0-3);
+}
+
+.tag {
+  display: inline-block;
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  padding: var(--space-0-1) var(--space-2);
+  border: var(--border-w-hair) solid var(--accent-border);
+  color: var(--accent-ink);
+}
+
+.chip {
+  display: inline-block;
+  font-size: var(--fs-2xs);
+  padding: var(--space-0-1) var(--space-2);
+  border: var(--border-w-hair) solid var(--border);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.chipStripe { color: var(--text-soft); }
+
+.countPill {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-bold);
+  padding: var(--space-0-1) var(--space-2);
+  border: var(--border-w-hair) solid var(--accent-border);
+  background: var(--accent-subtle);
+  color: var(--accent-ink);
+}
+
+.docLink {
+  composes: accentLink from './Link.module.css';
+  margin-top: 0;
+  font-size: var(--fs-2xs);
+}
+
+/* Buttons */
+.plainButton {
+  composes: btnOutline from './Button.module.css';
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  cursor: pointer;
+}
+.plainButton:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+
+.primaryButton {
+  composes: btnPrimary from './Button.module.css';
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.dangerButton {
+  composes: btnOutline from './Button.module.css';
+  padding: var(--space-2) var(--space-3);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--danger);
+  border-color: var(--danger-border);
+  cursor: pointer;
+}
+.dangerButton:hover:not(:disabled) { border-color: var(--danger); color: var(--danger); }
+.dangerButton:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }
+
+/* Modifier next to the base class, for compact row actions. */
+.smallButton {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--fs-xs);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Fields and inline panels */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.wide { grid-column: 1 / -1; }
+
+.label {
+  font-size: var(--fs-2xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-soft);
+}
+
+.input {
+  composes: fieldInput from './Field.module.css';
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  padding: var(--space-2) var(--space-3);
+  min-width: 0;
+  width: 100%;
+}
+.input[aria-invalid='true'] { border-color: var(--danger); }
+textarea.input { resize: vertical; }
+/* Modifier: restores Field's .fieldInput size, level with a DatePicker in
+   the same form. */
+.inputFieldSize {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--fs-base);
+}
+
+.panel {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-raised);
+  border: var(--border-w-hair) solid var(--accent-border);
+}
+
+.panelTitle {
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-bold);
+}
+
+.panelButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.check {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  font-size: var(--fs-sm);
+}
+.check input {
+  margin-top: var(--space-0-45);
+  accent-color: var(--accent);
+}
+
+/* Callouts: accent by default, danger and success as modifiers. */
+.alert {
+  composes: alertAccent from './Alert.module.css';
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  font-size: var(--fs-sm);
+}
+.alertTitle {
+  font-weight: var(--fw-bold);
+  color: var(--accent-ink);
+}
+.alertDanger {
+  border-color: var(--danger-border);
+  border-left-color: var(--danger);
+  background: var(--danger-faint);
+}
+.alertDanger .alertTitle { color: var(--danger); }
+.alertSuccess { border-left-color: var(--success); }
+.alertSuccess .alertTitle { color: var(--success); }
+
+/* Hairline tables */
+.tableScroll {
+  overflow-x: auto;
+  border-top: var(--border-w-hair) solid var(--border);
+}
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: var(--admin-promotions-table-min);
+  font-size: var(--fs-sm);
+}
+.table th {
+  font-size: var(--fs-2xs);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  color: var(--text-muted);
+  text-align: left;
+  font-weight: var(--fw-semibold);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border-w-hair) solid var(--border);
+}
+.table td {
+  padding: var(--space-3);
+  border-bottom: var(--border-w-hair) solid var(--border);
+  vertical-align: top;
+  color: var(--text);
+}
+.table th.num, .table td.num { text-align: right; }
+.table td.num { font-family: var(--font-mono); }
+
+/* Dated rows (complaints, tripwires, withdrawn lists) */
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: var(--border-w-hair) solid var(--border);
+  font-size: var(--fs-sm);
+}
+.rows > li {
+  padding: var(--space-3) 0;
+  border-bottom: var(--border-w-hair) solid var(--border);
+  display: grid;
+  gap: var(--space-1);
+}
+.rowMeta {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: var(--fs-2xs);
+  color: var(--text-muted);
+}
+.steps {
+  margin: 0;
+  padding-left: var(--space-5);
+  display: grid;
+  gap: var(--space-1);
+  color: var(--text-soft);
+  font-size: var(--fs-sm);
+}
+.stepsPlain {
+  list-style: none;
+  padding: 0;
+}

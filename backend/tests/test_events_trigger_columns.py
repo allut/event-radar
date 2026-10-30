@@ -28,6 +28,9 @@ UNTRACKED = {
     # Trigger-derived from title_orig/venue columns (migration 0052); only
     # changes when a tracked column does.
     "series_key",
+    # Promotion bookkeeping (migration 0060): starting or ending a Promotion
+    # never moves the event's change marker.
+    "promotion_restriction",
 }
 
 

@@ -8,18 +8,19 @@ import logging
 from collections.abc import Sequence
 from contextlib import nullcontext
 from datetime import date, datetime
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.tokens import generate_unsubscribe_token
+from app.auth.tokens import generate_ads_off_token, generate_unsubscribe_token
 from app.config import settings
 from app.constants.core import (
+    ADS_OFF_PATH,
     EVENTS_PATH,
     HOME_PATH,
     LOCALE_ET,
-    LOCALE_RU,
     SETTINGS_PATH,
     TALLINN_TZ,
     UNSUBSCRIBE_PATH,
@@ -35,18 +36,22 @@ from app.constants.email import (
     LIST_UNSUBSCRIBE_ONE_CLICK,
     RESEND_ERROR_SNIPPET_LEN,
     RESEND_SEND_URL,
-    RESEND_TIMEOUT_SECONDS,
 )
 from app.constants.http import AUTHORIZATION_HEADER, BEARER_PREFIX
 from app.constants.log_events import LOG_EVENT_EMAIL_SEND_FAILED
-from app.constants.ranking import FEED_BUILD_USER_BATCH_SIZE
+from app._generated.shared_constants import LOCALE_RU, PROMOTION_REF_DIGEST_AD
+from app.constants.promotions import PROMOTION_STAT_DIGEST_SENT
+from app.constants.ranking import DAILY_5_COUNT, FEED_BUILD_USER_BATCH_SIZE
 from app.email.links import frontend_url
+from app.email.resend import resend_http_client
 from app.email.brand import brand_mark_attachments, brand_mark_html
 from app.email.styles import EmailStyles, get_email_styles
+from app.ingestion.http_client import host_is_allowed, own_cloudinary_url, safe_render_url
 from app.email.templates import (
     DIGEST_EMPTY_STATE,
     DIGEST_FOOTER,
     DIGEST_HEADER,
+    DIGEST_SPONSORED_BLOCK,
     DIGEST_PRICE_SEPARATOR,
     DIGEST_TIME_FORMAT,
     EMAIL_DOCUMENT,
@@ -62,6 +67,8 @@ from app.email.templates import (
 from app.i18n import day_name, month_name, t, ti
 from app.ingestion.http_client import http_post
 from app.models.models import DailyFeed, Event, User
+from app.promotions import counters
+from app.promotions.digest_slot import DigestSlot, load_digest_slots
 from app.events.localize import resolve_title, resolve_why_go
 from app.events.queries import public_event_filter, select_events_with_classification
 from app.events.venue import resolve_venue_name
@@ -114,14 +121,35 @@ def _format_price_pill(event: Event, locale: str) -> str:
     return price_str
 
 
+def _embeddable_image_url(image_url: str | None) -> str | None:
+    """The URL to embed as the card's <img>, or None for the branded band.
+
+    Only our own Cloudinary uploads and the scraped sources' hosts qualify. A
+    claimant can pin any https image_url, and an <img> on a host they run
+    would log every recipient's IP and open time (security audit, 2026-10)."""
+    if own := own_cloudinary_url(image_url):
+        return own
+    safe = safe_render_url(image_url)
+    if safe is not None and host_is_allowed(urlsplit(safe).hostname):
+        return safe
+    return None
+
+
 def _build_event_block(
-    event: Event, locale: str, frontend_base: str, s: EmailStyles
+    event: Event,
+    locale: str,
+    frontend_base: str,
+    s: EmailStyles,
+    ref: str | None = None,
 ) -> str:
-    """Render one event card (time/venue/price, image or band, title, bullets)."""
+    """Render one event card (time/venue/price, image or band, title, bullets).
+    ``ref`` is appended to the card's event links (the Sponsored slot's marker)."""
     cl = event.classification
     bullets = resolve_why_go(cl, locale)[:DIGEST_MAX_WHY_GO_BULLETS]
     time_str = html_lib.escape(_format_event_time(event.starts_at, locale))
     event_href = frontend_url(f"{EVENTS_PATH}/{event.id}", locale, frontend_base)
+    if ref is not None:
+        event_href = f"{event_href}?ref={ref}"
 
     venue_str = html_lib.escape(resolve_venue_name(event, locale) or "")
     venue_html = (
@@ -135,10 +163,11 @@ def _build_event_block(
         else ""
     )
 
-    if event.image_url:
+    image_url = _embeddable_image_url(event.image_url)
+    if image_url:
         image_html = EVENT_IMAGE.format(
             event_href=event_href,
-            image_url=html_lib.escape(event.image_url, quote=True),
+            image_url=html_lib.escape(image_url, quote=True),
             title=html_lib.escape(resolve_title(event, locale)),
             s_img=s.s_img,
         )
@@ -204,6 +233,8 @@ def build_digest_html(
     frontend_base: str,
     unsubscribe_url: str | None = None,
     block_cache: EventBlockCache | None = None,
+    sponsored: DigestSlot | None = None,
+    ads_off_url: str | None = None,
 ) -> str:
     s = get_email_styles()
     date_str = _format_feed_date(feed_date, locale)
@@ -228,6 +259,30 @@ def build_digest_html(
             s_body_text=s.s_body_text, text=t("digest.no_events", locale)
         )
     )
+    if sponsored is not None and event_blocks and ads_off_url is not None:
+        events_html += DIGEST_SPONSORED_BLOCK.format(
+            s_sponsor_wrap=s.s_sponsor_wrap,
+            s_sponsor=s.s_sponsor,
+            s_sponsor_head=s.s_sponsor_head,
+            s_sponsor_label=s.s_sponsor_label,
+            label=html_lib.escape(t("digest.ad_label", locale)),
+            s_sponsor_org=s.s_sponsor_org,
+            advertiser=html_lib.escape(
+                ti("digest.ad_advertiser", locale, org=sponsored.advertiser)
+            ),
+            s_sponsor_body=s.s_sponsor_body,
+            event_block=_build_event_block(
+                sponsored.event, locale, frontend_base, s, PROMOTION_REF_DIGEST_AD
+            ),
+            s_sponsor_foot=s.s_sponsor_foot,
+            s_sponsor_note=s.s_sponsor_note,
+            explanation=html_lib.escape(
+                ti("digest.ad_explain", locale, org=sponsored.advertiser)
+            ),
+            stop_url=html_lib.escape(ads_off_url, quote=True),
+            s_sponsor_stop=s.s_sponsor_stop,
+            stop_label=html_lib.escape(t("digest.ad_stop", locale)),
+        )
     settings_label = t("digest.unsubscribe", locale)
 
     header_html = DIGEST_HEADER.format(
@@ -267,15 +322,6 @@ def build_digest_html(
 # ---------------------------------------------------------------------------
 
 
-def digest_http_client() -> httpx.AsyncClient:
-    """Build an ``httpx.AsyncClient`` configured for digest sends, for
-    ``send_daily_digests`` to open once and reuse across its whole paged loop
-    via ``send_digest_email``'s ``http_client`` param — instead of a fresh
-    connection pool + TLS handshake per user (Big-O audit M7), mirroring
-    ``llm_http_client()``."""
-    return httpx.AsyncClient(timeout=RESEND_TIMEOUT_SECONDS)
-
-
 async def send_digest_email(
     to_email: str,
     locale: str,
@@ -285,6 +331,7 @@ async def send_digest_email(
     *,
     http_client: httpx.AsyncClient | None = None,
     block_cache: EventBlockCache | None = None,
+    sponsored: DigestSlot | None = None,
 ) -> None:
     if not settings.RESEND_API_KEY:
         log.warning(
@@ -296,6 +343,11 @@ async def send_digest_email(
     unsubscribe_url = f"{frontend_url(UNSUBSCRIBE_PATH, locale)}?token={unsubscribe_token}"
     header_url = f"{settings.BACKEND_URL}/email/unsubscribe?token={unsubscribe_token}"
 
+    ads_off_url = (
+        f"{frontend_url(ADS_OFF_PATH, locale)}?token={generate_ads_off_token(user_id)}"
+        if sponsored is not None
+        else None
+    )
     html = build_digest_html(
         events,
         feed_date,
@@ -303,6 +355,8 @@ async def send_digest_email(
         settings.FRONTEND_URL,
         unsubscribe_url,
         block_cache,
+        sponsored,
+        ads_off_url,
     )
     subject = ti(
         "digest.subject_template", locale, date=_format_feed_date(feed_date, locale)
@@ -343,8 +397,10 @@ async def send_digest_email(
     if http_client is not None:
         await _send(http_client)
     else:
-        async with digest_http_client() as client:
+        async with resend_http_client() as client:
             await _send(client)
+    if sponsored is not None:
+        counters.bump(sponsored.promotion_id, feed_date, PROMOTION_STAT_DIGEST_SENT)
     log.info("Digest sent to %s (%d events)", mask_email(to_email), len(events))
 
 
@@ -402,12 +458,32 @@ async def _load_digest_data(
     }
 
 
+async def _load_page_slots(
+    db: AsyncSession,
+    user_map: dict[int, User],
+    feed_by_user: dict[int, list[int]],
+    event_map: dict[int, Event],
+) -> dict[int, DigestSlot]:
+    """The page's Sponsored slots: only users with Email ad consent and a full
+    set of picks (#611). Nothing is queried while the slots flag is off."""
+    if not settings.PROMOTIONS_SLOTS_ENABLED:
+        return {}
+    eligible = [
+        uid
+        for uid, eids in feed_by_user.items()
+        if uid in user_map
+        and user_map[uid].email_ad_consent
+        and sum(1 for eid in eids if eid in event_map) >= DAILY_5_COUNT
+    ]
+    return await load_digest_slots(db, eligible, datetime.now(TALLINN_TZ))
+
+
 async def send_daily_digests(
     db: AsyncSession, *, dry_run: bool = False
 ) -> dict[str, int]:
     """
     Send today's Daily 5 digest to all opted-in users.
-    Runs at 07:00 Europe/Tallinn (one hour after build_daily_feeds).
+    Runs daily at DIGEST_SEND_HOUR (after build_daily_feeds).
 
     Pages the opted-in population at FEED_BUILD_USER_BATCH_SIZE, mirroring
     build_daily_feeds — memory is bounded by a batch size (feeds + their
@@ -452,6 +528,7 @@ async def send_daily_digests(
         eids: list[int],
         event_map: dict[int, Event],
         http_client: httpx.AsyncClient | None,
+        sponsored: DigestSlot | None,
     ) -> str:
         """Returns 'sent' | 'skipped'."""
         ordered_events = [event_map[eid] for eid in eids if eid in event_map]
@@ -469,6 +546,7 @@ async def send_daily_digests(
                     user.id,
                     http_client=http_client,
                     block_cache=block_cache,
+                    sponsored=sponsored,
                 )
                 return DIGEST_RESULT_SENT
             except Exception:
@@ -481,7 +559,7 @@ async def send_daily_digests(
 
     # One shared client for the whole run (Big-O audit M7) — dry runs never
     # send, so they skip opening a connection pool entirely.
-    client_ctx = digest_http_client() if not dry_run else nullcontext(None)
+    client_ctx = resend_http_client() if not dry_run else nullcontext(None)
     async with client_ctx as http_client:
         for i in range(0, len(user_ids), FEED_BUILD_USER_BATCH_SIZE):
             page_ids = user_ids[i : i + FEED_BUILD_USER_BATCH_SIZE]
@@ -497,12 +575,14 @@ async def send_daily_digests(
             if event_map is None:
                 continue
 
+            slots = await _load_page_slots(db, user_map, feed_by_user, event_map)
+
             # return_exceptions=True is defence-in-depth: _send_one already catches
             # every send error and returns "skipped", but a programming error inside
             # the wrapper itself would otherwise abort the whole page's batch.
             results = await asyncio.gather(
                 *(
-                    _send_one(user_map[uid], eids, event_map, http_client)
+                    _send_one(user_map[uid], eids, event_map, http_client, slots.get(uid))
                     for uid, eids in feed_by_user.items()
                     if uid in user_map
                 ),

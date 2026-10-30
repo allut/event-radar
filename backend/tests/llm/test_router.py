@@ -263,3 +263,132 @@ class TestLlmJsonProviderFallback:
 
             with pytest.raises(LLMError):
                 await llm_json("classify", "test prompt", mock_db)
+
+
+def _raw_response(content: str | None, finish_reason: str | None = "stop") -> MagicMock:
+    choice: dict = {"message": {"content": content}}
+    if finish_reason is not None:
+        choice["finish_reason"] = finish_reason
+    resp = MagicMock()
+    resp.status_code = http.HTTPStatus.OK
+    resp.json.return_value = {
+        "choices": [choice],
+        "usage": {"prompt_tokens": 50, "completion_tokens": 600},
+    }
+    resp.raise_for_status = MagicMock()
+    return resp
+
+
+async def _call_groq_only(mock_db, resp: MagicMock):
+    with (
+        patch("app.llm.router.settings") as mock_settings,
+        patch("httpx.AsyncClient") as mock_client_cls,
+    ):
+        mock_settings.GROQ_API_KEY = "gsk_test"
+        mock_settings.CLOUDFLARE_WORKERS_AI_API_KEY = ""
+        mock_settings.CLOUDFLARE_WORKERS_AI_BASE_URL = ""
+        mock_settings.MISTRAL_API_KEY = ""
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=resp)
+        mock_client_cls.return_value = mock_client
+        return await llm_json("classify", "test prompt", mock_db)
+
+
+class TestLlmJsonTolerantParsing:
+    @pytest.fixture(autouse=True)
+    def _cache_miss(self, mock_db):
+        mock_db.scalar.return_value = None
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            '```json\n{"a": 1}\n```',
+            '```\n{"a": 1}\n```',
+            'Here is the JSON:\n{"a": 1}',
+            '{"a": 1}\n\nHope that helps!',
+            'Thinking...\n```json\n{"a": 1}\n```\nDone.',
+        ],
+    )
+    async def test_fenced_or_prefixed_json_parses(self, mock_db, content):
+        result, _ = await _call_groq_only(mock_db, _raw_response(content))
+        assert result == {"a": 1}
+
+    async def test_plain_json_still_parses(self, mock_db):
+        result, _ = await _call_groq_only(mock_db, _raw_response('{"a": {"b": 2}}'))
+        assert result == {"a": {"b": 2}}
+
+    async def test_truncated_json_labelled_truncated(self, mock_db):
+        resp = _raw_response('{"categories": ["music"], "why_go": "cut o', "length")
+        with pytest.raises(LLMError, match="truncated"):
+            await _call_groq_only(mock_db, resp)
+        failed = mock_db.add.call_args.args[0]
+        assert failed.completion_tokens == 600
+        assert failed.response_json is None
+        assert failed.failure_reason == "truncated"
+
+    async def test_empty_content_with_length_labelled_truncated(self, mock_db):
+        with pytest.raises(LLMError, match="truncated"):
+            await _call_groq_only(mock_db, _raw_response("", "length"))
+
+    async def test_parse_failure_logs_finish_reason_and_snippet(self, mock_db, caplog):
+        resp = _raw_response("I cannot comply " + "x" * 300, "stop")
+        with caplog.at_level("WARNING", logger="app.llm.router"):
+            with pytest.raises(LLMError, match="JSON parse error"):
+                await _call_groq_only(mock_db, resp)
+        assert mock_db.add.call_args.args[0].failure_reason == "parse_error"
+        text = caplog.text
+        assert "finish_reason=stop" in text
+        assert "I cannot comply" in text
+        assert "x" * 200 not in text
+
+
+class TestLlmJsonProviderPacing:
+    @pytest.fixture(autouse=True)
+    def _cache_miss(self, mock_db):
+        mock_db.scalar.return_value = None
+
+    async def test_mistral_fallback_is_paced_and_groq_is_not(self, mock_db):
+        ok = _make_openai_response({"same": True})
+        limiter = MagicMock()
+        limiter.acquire = AsyncMock()
+
+        with (
+            patch("app.llm.router.settings") as mock_settings,
+            patch("httpx.AsyncClient") as mock_client_cls,
+            patch("app.llm.router._provider_limiters", {"mistral": limiter}),
+        ):
+            mock_settings.GROQ_API_KEY = "gsk_test"
+            mock_settings.CLOUDFLARE_WORKERS_AI_API_KEY = ""
+            mock_settings.CLOUDFLARE_WORKERS_AI_BASE_URL = ""
+            mock_settings.MISTRAL_API_KEY = "mk_test"
+
+            rate_limited = MagicMock(status_code=http.HTTPStatus.TOO_MANY_REQUESTS)
+            mock_client = AsyncMock()
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.post = AsyncMock(side_effect=[rate_limited, ok])
+            mock_client_cls.return_value = mock_client
+
+            _, label = await llm_json("dedup", "prompt", mock_db)
+
+        assert label.startswith("mistral/")
+        limiter.acquire.assert_awaited_once()
+
+    def test_provider_without_interval_gets_no_limiter(self):
+        from app.llm.router import _provider_limiter
+
+        assert _provider_limiter({"name": "groq"}) is None
+
+
+def test_mistral_pacing_fits_the_tier_token_limit():
+    """One worst-case classify call per interval must stay under the tokens/min tier limit."""
+    from app.constants.llm import (
+        LLM_CLASSIFY_CALL_MAX_TOKENS,
+        LLM_MISTRAL_MIN_INTERVAL_SECONDS,
+        LLM_MISTRAL_TOKENS_PER_MINUTE,
+    )
+
+    calls_per_minute = 60 / LLM_MISTRAL_MIN_INTERVAL_SECONDS
+    assert calls_per_minute * LLM_CLASSIFY_CALL_MAX_TOKENS <= LLM_MISTRAL_TOKENS_PER_MINUTE

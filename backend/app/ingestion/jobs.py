@@ -8,6 +8,7 @@ from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.dedup import AGGREGATE_LAST_VALUE_FIELDS
+from app.constants.ingestion import INGEST_SOURCE_CONCURRENCY
 from app.constants.jobs import (
     JOB_ID_BACKFILL_PUBLISHER_IDS,
     JOB_ID_CLASSIFY_PENDING,
@@ -85,20 +86,26 @@ async def ingest_all_enabled(kind: str | None = None) -> list[dict]:
             q = q.where(Source.kind == kind)
         sources = (await db.scalars(q)).all()
 
-    results = []
+    slugs = []
     for source in sources:
         if source.slug not in ADAPTER_REGISTRY:
             log.debug(
                 "no adapter for slug=%s kind=%s — skipping", source.slug, source.kind
             )
             continue
-        try:
-            result = await ingest_source(source.slug)
-            results.append(result)
-        except Exception as exc:
-            results.append({"slug": source.slug, "error": str(exc)})
+        slugs.append(source.slug)
 
-    return results
+    # Sources scrape different hosts, so they run side by side, bounded.
+    semaphore = asyncio.Semaphore(INGEST_SOURCE_CONCURRENCY)
+
+    async def _one(slug: str) -> dict:
+        async with semaphore:
+            try:
+                return await ingest_source(slug)
+            except Exception as exc:
+                return {"slug": slug, "error": str(exc)}
+
+    return list(await asyncio.gather(*(_one(slug) for slug in slugs)))
 
 
 async def _run_db_job(
@@ -176,6 +183,21 @@ async def refetch_event_details_job() -> dict:
 
 def _dedup_has_backlog(summary: dict) -> bool:
     return summary.get("deferred_pairs", 0) > 0
+
+
+def _dedup_backlog_shrinking() -> Callable[[dict], bool]:
+    """``_dedup_has_backlog``, plus: the last pass deferred fewer pairs than
+    the one before. An unpaced drain stops once a pass makes no headway (the
+    LLM is down, say) instead of reloading the window up to the cap."""
+    previous: list[int] = []
+
+    def has_backlog(summary: dict) -> bool:
+        deferred = summary.get("deferred_pairs", 0)
+        shrinking = not previous or deferred < previous[-1]
+        previous.append(deferred)
+        return deferred > 0 and shrinking
+
+    return has_backlog
 
 
 def _classify_has_backlog(summary: dict) -> bool:
@@ -274,11 +296,12 @@ async def dedup_pass_drain_now() -> dict:
     ``retry_seconds=0`` is passed both to this external wrapper (no sleep
     between external re-scans, unchanged) and into ``dedup_pass`` itself (no
     sleep between its now-internal backlog-drain sub-passes either) — this
-    entry point has always accepted a full unpaced burst.
+    entry point has always accepted a full unpaced burst, but it stops as
+    soon as a pass leaves as many pairs deferred as the one before.
     """
     return await _drain_backlog(
         lambda: dedup_pass(retry_seconds=0),
-        _dedup_has_backlog,
+        _dedup_backlog_shrinking(),
         JOB_LABEL_DEDUP_DRAIN,
         retry_seconds=0,
         aggregate=True,
