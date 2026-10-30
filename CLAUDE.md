@@ -90,8 +90,8 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 
 ### Where things live
 
-- **Backend constants live in `app/constants/<domain>.py`**, one file per domain, imported from the file that defines them. LLM prompts go in `app/llm/prompts.py`, scrape selectors in `app/ingestion/selectors.py`, and cross-stack values in `shared/`. Add the constant there first, then import it.
-- **Frontend constants live in `frontend/src/constants/<domain>.ts`**, imported from the file that defines them, and cross-stack ones in `shared/` (an int, string or string list under `scalars` in `app-config.json`; `docs/frontend.md` i18n has the generator flow). Add the literal there before using it in a component.
+- **Backend constants live in `app/constants/<domain>.py`**, one file per domain, imported from the file that defines them. LLM prompts go in `app/llm/prompts.py`, scrape selectors in `app/ingestion/selectors.py`, and cross-stack values in `shared/`, imported from `app._generated.shared_constants` directly. Add the constant there first, then import it.
+- **Frontend constants live in `frontend/src/constants/<domain>.ts`**, imported from the file that defines them, and cross-stack ones in `shared/`, imported from `src/_generated/sharedConstants.ts` directly (an int, string or string list under `scalars` in `app-config.json`; `docs/frontend.md` i18n has the generator flow). Add the literal there before using it in a component.
 - **Each backend helper has one home.** Router-shared helpers go in `app/routers/utils.py`. Domain packages (`app/auth/`, `app/email/`, `app/claims/`, `app/ingestion/`, `app/events/`, `app/promotions/`) own theirs and never import from `routers/utils.py`. Check both before writing one.
 - **Cross-router auth dependencies live in `app/auth/dependencies.py`**, so routers never import from each other's modules.
 - **Frontend helpers live in `frontend/src/utils.ts` and hooks in `frontend/src/hooks/`.** Every request goes through `frontend/src/api/client.ts`. Check there before writing a new one.
