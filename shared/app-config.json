@@ -73,7 +73,12 @@
     "CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE": "not_claimable",
     "CLAIM_ERROR_CODE_NOT_GRANTED": "claim_not_granted",
     "CLAIM_ERROR_CODE_DORMANT": "claim_dormant",
-    "CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED": "claim_justification_required"
+    "CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED": "claim_justification_required",
+    "REPORT_REASONS": [
+      "spam_or_scam", "sexual_or_explicit", "not_an_event", "hateful_or_violent",
+      "misleading_info", "event_ended_or_cancelled", "wrong_location", "other"
+    ],
+    "REPORT_REASON_OTHER": "other"
   },
   "promotion_vat_rate_percent": "24.00",
   "organizer_max_categories": 3,

@@ -17,6 +17,22 @@ import { api } from '../../api/client';
 const mockPost = vi.mocked(api.post);
 
 describe('ReportModal', () => {
+  it('offers the report reasons in their fixed order, "Other" last', () => {
+    renderWithProviders(
+      <ReportModal open onClose={vi.fn()} eventId={1} locale="en" onSubmitted={vi.fn()} />,
+    );
+    expect(screen.getAllByRole('radio').map(r => (r as HTMLInputElement).value)).toEqual([
+      'spam_or_scam',
+      'sexual_or_explicit',
+      'not_an_event',
+      'hateful_or_violent',
+      'misleading_info',
+      'event_ended_or_cancelled',
+      'wrong_location',
+      'other',
+    ]);
+  });
+
   it('requires a reason before submitting', async () => {
     const onSubmitted = vi.fn();
     renderWithProviders(

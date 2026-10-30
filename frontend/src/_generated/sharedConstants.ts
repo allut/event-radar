@@ -71,6 +71,8 @@ export const CLAIM_DISCOVERY_STATUS_NOT_CLAIMABLE = 'not_claimable';
 export const CLAIM_ERROR_CODE_NOT_GRANTED = 'claim_not_granted';
 export const CLAIM_ERROR_CODE_DORMANT = 'claim_dormant';
 export const CLAIM_ERROR_CODE_JUSTIFICATION_REQUIRED = 'claim_justification_required';
+export const REPORT_REASONS = ['spam_or_scam', 'sexual_or_explicit', 'not_an_event', 'hateful_or_violent', 'misleading_info', 'event_ended_or_cancelled', 'wrong_location', 'other'] as const;
+export const REPORT_REASON_OTHER = 'other';
 export const PROMOTION_VAT_RATE_PERCENT = 24;
 
 export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];

@@ -1,26 +1,10 @@
 """Event reports: reasons, statuses, detail limits, resolution notes, and report errors."""
 
-# Report-an-inappropriate-event feature (event_reports table).
-REPORT_REASON_SPAM_OR_SCAM = "spam_or_scam"
-REPORT_REASON_SEXUAL_OR_EXPLICIT = "sexual_or_explicit"
-REPORT_REASON_NOT_AN_EVENT = "not_an_event"
-REPORT_REASON_HATEFUL_OR_VIOLENT = "hateful_or_violent"
-REPORT_REASON_MISLEADING_INFO = "misleading_info"
-REPORT_REASON_EVENT_ENDED_OR_CANCELLED = "event_ended_or_cancelled"
-REPORT_REASON_WRONG_LOCATION = "wrong_location"
-REPORT_REASON_OTHER = "other"
-VALID_REPORT_REASONS = frozenset(
-    {
-        REPORT_REASON_SPAM_OR_SCAM,
-        REPORT_REASON_SEXUAL_OR_EXPLICIT,
-        REPORT_REASON_NOT_AN_EVENT,
-        REPORT_REASON_HATEFUL_OR_VIOLENT,
-        REPORT_REASON_MISLEADING_INFO,
-        REPORT_REASON_EVENT_ENDED_OR_CANCELLED,
-        REPORT_REASON_WRONG_LOCATION,
-        REPORT_REASON_OTHER,
-    }
-)
+from app._generated.shared_constants import REPORT_REASONS
+
+# Report-an-inappropriate-event feature (event_reports table). The reasons and
+# REPORT_REASON_OTHER are cross-stack; their order is the report form's.
+VALID_REPORT_REASONS = frozenset(REPORT_REASONS)
 REPORT_STATUS_OPEN = "open"
 REPORT_STATUS_RESOLVED = "resolved"
 VALID_REPORT_STATUSES = frozenset({REPORT_STATUS_OPEN, REPORT_STATUS_RESOLVED})
