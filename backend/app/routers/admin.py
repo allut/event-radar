@@ -19,6 +19,7 @@ from app.cleanup import cleanup_stale_data
 from app._generated.shared_constants import (
     ADMIN_CLAIMS_QUEUE_PAGE_SIZE,
     ADMIN_DEDUP_GROUPS_PAGE_SIZE,
+    ADMIN_PROMOTIONS_PAGE_SIZE,
     ADMIN_REPORTS_QUEUE_PAGE_SIZE,
     ADMIN_REVIEW_QUEUE_PAGE_SIZE,
     CLAIM_KIND_PUBLISHER,
@@ -94,7 +95,6 @@ from app.constants.ranking import (
 from app.constants.promotions import (
     PROMOTION_LIVE_CAP,
     ADMIN_PROMOTIONS_MAX_PAGE_SIZE,
-    ADMIN_PROMOTIONS_PAGE_SIZE,
     ERROR_PROMOTION_ADVERTISER_LEGAL_NAME_REQUIRED,
     ERROR_PROMOTION_FIELD_NOT_NULLABLE,
     ERROR_PROMOTION_INVALID_STATE,

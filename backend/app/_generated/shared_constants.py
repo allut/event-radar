@@ -110,6 +110,7 @@ PROMOTION_SNAPSHOT_TRIGGER_MARK_PAID: str = "mark_paid"
 PROMOTION_SNAPSHOT_TRIGGER_EDIT: str = "edit"
 PROMOTION_SNAPSHOT_TRIGGER_REPOINT: str = "repoint"
 PROMOTION_CHECKOUT_PATH_SUCCESS: str = "/organizer/promotions/checkout/success"
+ADMIN_PROMOTIONS_PAGE_SIZE: int = 50
 PROMOTION_VAT_RATE_PERCENT: Decimal = Decimal("24.00")
 IMAGE_UPLOAD_ALLOWED_MIME: frozenset[str] = frozenset({"image/jpeg", "image/png", "image/webp"})
 ORGANIZER_MAX_CATEGORIES: int = 3

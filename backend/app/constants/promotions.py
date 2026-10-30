@@ -105,7 +105,6 @@ ERROR_PROMOTION_NOTE_REQUIRED = "note required"
 ERROR_PROMOTION_ADVERTISER_LEGAL_NAME_REQUIRED = "advertiser_legal_name is required"
 ERROR_PROMOTION_FIELD_NOT_NULLABLE = "{key} cannot be null"
 
-ADMIN_PROMOTIONS_PAGE_SIZE: int = 50
 ADMIN_PROMOTIONS_MAX_PAGE_SIZE: int = 500
 
 # Rule-violation codes (grant refusals and live validation). The ones the

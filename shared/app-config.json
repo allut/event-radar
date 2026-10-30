@@ -120,7 +120,8 @@
     "PROMOTION_SNAPSHOT_TRIGGER_MARK_PAID": "mark_paid",
     "PROMOTION_SNAPSHOT_TRIGGER_EDIT": "edit",
     "PROMOTION_SNAPSHOT_TRIGGER_REPOINT": "repoint",
-    "PROMOTION_CHECKOUT_PATH_SUCCESS": "/organizer/promotions/checkout/success"
+    "PROMOTION_CHECKOUT_PATH_SUCCESS": "/organizer/promotions/checkout/success",
+    "ADMIN_PROMOTIONS_PAGE_SIZE": 50
   },
   "promotion_vat_rate_percent": "24.00",
   "organizer_max_categories": 3,

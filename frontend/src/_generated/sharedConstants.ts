@@ -115,6 +115,7 @@ export const PROMOTION_SNAPSHOT_TRIGGER_MARK_PAID = 'mark_paid';
 export const PROMOTION_SNAPSHOT_TRIGGER_EDIT = 'edit';
 export const PROMOTION_SNAPSHOT_TRIGGER_REPOINT = 'repoint';
 export const PROMOTION_CHECKOUT_PATH_SUCCESS = '/organizer/promotions/checkout/success';
+export const ADMIN_PROMOTIONS_PAGE_SIZE = 50;
 export const PROMOTION_VAT_RATE_PERCENT = 24;
 
 export const ORGANIZER_IMAGE_ALLOWED_MIME: readonly string[] = ['image/jpeg', 'image/png', 'image/webp'];

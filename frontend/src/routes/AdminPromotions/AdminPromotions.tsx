@@ -4,7 +4,6 @@ import { adminApi } from '../../api/client';
 import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
 import { LOCALE_EN, UI_STATE } from '../../constants/core';
 import {
-  ADMIN_PROMOTIONS_PAGE_SIZE,
   ADMIN_PROMOTIONS_STATE_FILTERS,
   ADMIN_PROMOTIONS_STATE_PARAM,
   PROMOTION_COPY,
@@ -12,6 +11,7 @@ import {
   PROMOTION_TRUST_CADENCE,
   PROMOTION_TRUST_HEADING,
 } from '../../constants/promotions';
+import { ADMIN_PROMOTIONS_PAGE_SIZE } from '../../_generated/sharedConstants';
 import { usePageParam } from '../../hooks/usePageParam';
 import { usePagedQuery } from '../../hooks/usePagedQuery';
 import type { CapStripResponse, PromotionRow } from '../../lib/promotions';

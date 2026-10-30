@@ -31,8 +31,6 @@ import {
   PROMOTION_SNAPSHOT_TRIGGER_REPOINT,
 } from '../_generated/sharedConstants.js';
 
-export const ADMIN_PROMOTIONS_PAGE_SIZE = 50;
-
 // URL param carrying the list's state filter; omitted for "All".
 export const ADMIN_PROMOTIONS_STATE_PARAM = 'state';
 
