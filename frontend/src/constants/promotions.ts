@@ -196,7 +196,7 @@ export const PROMOTION_DECLINE_ROWS = 4;
 export const PROMOTION_REQUEST_DORMANT_CODE = 'organizer_not_owner';
 export const PROMOTION_RESTRICTION_NONE = 'none';
 
-// Backend rule codes (PROMOTION_ERROR_*) worded for a request row.
+// Backend PROMOTION_ERROR_* rule codes, worded for a request row.
 export const PROMOTION_REQUEST_REASON_LABELS: Readonly<Record<string, string>> = {
   no_owner: 'The event has no owning Organizer.',
   window_order: 'The end date is before the start date.',
