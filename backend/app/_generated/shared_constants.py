@@ -5,7 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 
-APP_VERSION: str = "0.1.34"
+APP_VERSION: str = "0.1.35"
 MAGIC_LINK_TTL_MINUTES: int = 15
 SESSION_TTL_DAYS: int = 2
 PERSONA_PRIMARY_WEIGHT: float = 1.0
