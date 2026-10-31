@@ -239,7 +239,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
     );
   }
   // submitted_by_organizer_id !== null mirrors the backend's own gate
-  // (_submission_or_404, admin.py) — approve/retract 404 without it, so the
+  // (_submission_or_404, admin_submissions.py) — approve/retract 404 without it, so the
   // buttons must not render as if they'd work.
   if (event.needs_review && event.submitted_by_organizer_id !== null) {
     actions.push(

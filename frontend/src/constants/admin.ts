@@ -130,7 +130,7 @@ export const ADMIN_PIPELINE_TRIGGERS: AdminPipelineTrigger[] = [
 
 // pipeline_run's bespoke stage-by-stage breakdown (PipelineRunBreakdown,
 // issue #161) — display label per entry in ADMIN_PIPELINE_TRIGGERS'
-// pipeline_run.stages, keyed by the same stage names admin.py streams.
+// pipeline_run.stages, keyed by the same stage names admin_jobs.py streams.
 export const ADMIN_PIPELINE_STAGE_LABELS: Record<string, string> = {
   sync_organizers: 'Sync organizers',
   ingest: 'Ingest',

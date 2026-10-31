@@ -249,7 +249,7 @@ async def bulk_resolve_publisher_events(
 ) -> dict[int, Event]:
     """One representative Event per Publisher id in ``publisher_ids``,
     bulk-loaded in two fixed queries regardless of how many ids are passed —
-    shared by admin.py::admin_list_claims and
+    shared by admin_claims.py::admin_list_claims and
     app.claims.lifecycle._send_claim_expiry_emails (#421). "Freshest listing
     wins" (highest EventSource.id per publisher_id) mirrors
     app.claims.lifecycle.representative_event_source's own single-row

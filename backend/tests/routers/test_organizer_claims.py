@@ -947,7 +947,7 @@ class TestVerifyClaimLink:
 class TestListClaimEvents:
     """GET /organizer/claims/{claim_id}/events (#436) — the Publisher-claim
     event list, paginated the same limit/offset/has_more/total shape as the
-    admin queues (see tests/routers/test_admin.py's pagination tests)."""
+    admin queues (see the admin queue tests under tests/routers/)."""
 
     @pytest.mark.asyncio
     async def test_returns_paginated_events(

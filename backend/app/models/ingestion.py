@@ -66,7 +66,7 @@ class RawEvent(Base):
         # predicate directly instead of a bitmap-AND over two single-column
         # indexes; also covers source_id-only lookups (leftmost prefix).
         Index("ix_raw_events_source_fetched", "source_id", "fetched_at"),
-        # admin.py's event-inspector RawEvent↔EventSource join matches on
+        # admin_events.py's event-inspector RawEvent↔EventSource join matches on
         # (source_id, external_id) — only (source_id, fetched_at) existed, so
         # external_id was a heap filter over the source's whole raw history
         # (Big-O audit #5, item 2.9).

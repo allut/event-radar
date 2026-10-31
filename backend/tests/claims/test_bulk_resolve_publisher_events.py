@@ -8,7 +8,7 @@ from app.claims.target_resolution import bulk_resolve_publisher_events
 
 
 class TestBulkResolvePublisherEvents:
-    """Shared by admin.py::admin_list_claims and
+    """Shared by admin_claims.py::admin_list_claims and
     app.claims.lifecycle._send_claim_expiry_emails (#421) — two fixed
     queries regardless of how many publisher_ids are passed, freshest
     EventSource (highest id) wins per publisher."""

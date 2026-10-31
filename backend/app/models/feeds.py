@@ -94,7 +94,7 @@ class DailyFeed(Base):
         # UniqueConstraint above leads with user_id, so this indexless-for-that-
         # predicate query was unusable by it.
         Index("ix_daily_feeds_feed_date", "feed_date"),
-        # admin.py's event-inspector event_ids.contains([id]) (`@>`) check was
+        # admin_events.py's event-inspector event_ids.contains([id]) (`@>`) check was
         # a full scan of every active user's feed row per event-inspector open
         # (Big-O audit #5, item 2.9).
         Index("ix_daily_feeds_event_ids_gin", "event_ids", postgresql_using="gin"),

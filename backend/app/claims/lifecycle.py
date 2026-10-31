@@ -406,7 +406,7 @@ async def approved_claim_exists(db: AsyncSession, target: ClaimTarget) -> bool:
     claim against a target that already has other *pending* claims, only
     against one with an existing *approved* claim, so that case needs an
     explicit pre-insert check instead of relying on IntegrityError. Not
-    module-private: also called from admin.py's manual grant endpoint, which
+    module-private: also called from admin_claims.py's manual grant endpoint, which
     needs the same pre-flip guard as the organizer-facing auto-grant path."""
     return (
         await db.scalar(
@@ -465,7 +465,7 @@ async def auto_decline_other_pending_claims(
 ) -> None:
     """(#431) Proof preempts assertion: once a claim on `target` is granted —
     either the organizer-facing auto-grant path or an admin's manual grant
-    (admin.py's admin_grant_claim) — every other still-pending claim on that
+    (admin_claims.py's admin_grant_claim) — every other still-pending claim on that
     same target auto-declines, mirroring admin_decline_claim's status
     transition and reusing its decline email, just with no admin note (falls
     back to the email's generic decline copy). The shared target's
@@ -473,7 +473,7 @@ async def auto_decline_other_pending_claims(
     supplies the email's event title — not the winning claim's event — since
     a Publisher target's freshest traced-back listing can differ from whichever specific event the winner
     happened to claim through. Not module-private: also called from
-    admin.py's manual grant endpoint.
+    admin_claims.py's manual grant endpoint.
 
     Excludes `winning_organizer_id`'s own other pending rows (#448) — those
     should no longer exist since create_claim now returns an organizer's
