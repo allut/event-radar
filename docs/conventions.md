@@ -138,5 +138,7 @@ A test may stub global `fetch` only when its subject calls `fetch` itself. Add a
 
 - **Bug fixes and new behaviour need a test that failed before the change.** Three agents wrote code first on the Promotions spec, and review then found real defects in lock order and the withdraw refund.
 - **Spec work lands on an integration branch, then flattens to linear commits on `master`.** Run `python scripts/linearize-branch.py <branch> --base master` for the plan, add `--apply` for the new tip, then `git merge --ff-only <tip>`. Each commit keeps the subject plus `Closes/Refs #N` lines, and a merge that carried several issues prints a warning to reword it.
+- **A pure split keeps every test.** Run `python scripts/compare-test-names.py <base>` before the final commit; it exits 1 and lists any test name the base has that `HEAD` lacks, whatever file it moved to.
+- **A fresh worktree has no `frontend/node_modules`.** Link it from the main checkout (`ln -s <main>/frontend/node_modules frontend/node_modules`) before committing there, or the pre-commit hook skips the frontend checks and says so.
 - **One agent owns each migration number.** The orchestrator rechains `down_revision` at merge, and `backend/tests/test_migration_chain.py` catches a collision or a stale "Revises" line.
 

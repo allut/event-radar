@@ -46,14 +46,22 @@ if staged '^(backend/app/|frontend/src/)'; then
   out=$(bash "$backend/scripts/scratch-test.sh" --no-db tests/test_file_length.py -q 2>&1) || { echo "$out"; exit 1; }
 fi
 
-if staged '^(frontend/|shared/)'; then
+# A fresh worktree has no node_modules; link frontend/node_modules from the main
+# checkout to run these. CI runs them either way.
+frontend_ready=true
+if [ ! -d frontend/node_modules ] && staged '^(frontend/|shared/)'; then
+  echo "pre-commit: frontend/node_modules missing, skipping eslint, type-check and the vitest guards"
+  frontend_ready=false
+fi
+
+if $frontend_ready && staged '^(frontend/|shared/)'; then
   echo "pre-commit: eslint"
   (cd frontend && npm run --silent lint)
   echo "pre-commit: type-check"
   (cd frontend && npm run --silent type-check)
 fi
 
-if staged '^frontend/src/(.*\.css$|constants/)'; then
+if $frontend_ready && staged '^frontend/src/(.*\.css$|constants/)'; then
   echo "pre-commit: guard tests"
   (cd frontend && npx vitest run src/cssRules.test.ts src/constants/mirrors.test.ts src/displayTokens.test.ts)
 fi
