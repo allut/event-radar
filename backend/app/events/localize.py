@@ -1,7 +1,7 @@
 """Localized-text resolvers for events: locale -> en -> original fallback."""
 
 from app._generated.shared_constants import DEFAULT_USER_LOCALE
-from app.models.models import Event, EventClassification
+from app.models.events import Event, EventClassification
 
 
 # FAQ #languages describes this behaviour — update the copy (all locales) if it changes

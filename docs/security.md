@@ -20,7 +20,7 @@ What's in here: the middleware stack, rate limiting and its client key, URL and 
 ### Host Check
 
 - **`HostCheckMiddleware` rejects an unexpected `Host` header outside development.** It wraps `TrustedHostMiddleware`. Nothing builds an absolute URL from `Host` today, so this is one-line hardening against cache poisoning.
-- **`_resolve_allowed_hosts()` builds the allowlist** from `settings.RENDER_EXTERNAL_HOSTNAME` (Render injects it; never set it by hand) plus `settings.BACKEND_URL`'s hostname. Local hostnames (`DEV_DB_LOCAL_HOSTS`) are dropped from both.
+- **`resolve_allowed_hosts()` (in `app/middleware.py`) builds the allowlist** from `settings.RENDER_EXTERNAL_HOSTNAME` (Render injects it; never set it by hand) plus `settings.BACKEND_URL`'s hostname. Local hostnames (`DEV_DB_LOCAL_HOSTS`) are dropped from both.
 - **It fails open on purpose.** If both sources are empty or local, it logs an `ERROR` and the middleware isn't installed at all. An allowlist that rejects all public traffic would be a site-wide outage, which happened once when `BACKEND_URL` was left at its `localhost` default.
 - **Every reject logs `LOG_EVENT_HOST_REJECTED`** with the offending `Host` and path. It wraps inside `ProxyHeadersMiddleware`, so the log carries the real client IP.
 - **`/health` is exempt (`HOST_CHECK_EXEMPT_PATHS`).** Render's probe reaches the process over the private network with a rotating internal `Host`, and Starlette's `allowed_hosts` has no CIDR support.
@@ -229,7 +229,7 @@ There are three auth tracks: consumer, organizer and admin. `CONTEXT.md` defines
 - **`users.email_verified` is false until someone proves the address.** `routers/auth.py::_get_or_create_user` inserts a `User` row on an unauthenticated `POST /auth/request-link`, before the address is shown to be reachable.
 - **Two writers set it, each in the same transaction as session issuance:** `verify_magic_link` on a consumed link, and Google sign-in's authoritative branch in `_apply_google_linking_gate`. A false row is provably one nobody has signed into.
 - **That guarantee holds from migration `0024_users_email_verified.py` on.** It backfilled every older row to true, because the purged magic-link history made real status underivable.
-- **`build_daily_feeds` (`app/ranking/score.py::_verified_user_ids`) and `send_daily_digests` (`app/email/digest.py`) both filter on it.** An anonymous request with someone else's address can't enroll them in the digest.
+- **`build_daily_feeds` (`app/ranking/daily_feed.py::_verified_user_ids`) and `send_daily_digests` (`app/email/digest.py`) both filter on it.** An anonymous request with someone else's address can't enroll them in the digest.
 
 ### Digest Unsubscribe
 

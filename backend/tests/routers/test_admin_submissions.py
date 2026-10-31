@@ -430,7 +430,8 @@ async def test_approve_submission_clears_needs_review(admin_app, make_db_ctx, mo
     db = mock_db
 
     async def _get(model, pk):
-        from app.models.models import Event, Organizer
+        from app.models.events import Event
+        from app.models.organizers import Organizer
 
         if model is Event:
             return event
@@ -525,7 +526,8 @@ async def test_approve_submission_with_no_submitting_organizer_still_publishes(
     db = mock_db
 
     async def _get(model, pk):
-        from app.models.models import Event, Organizer
+        from app.models.events import Event
+        from app.models.organizers import Organizer
 
         if model is Event:
             return event

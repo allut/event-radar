@@ -1,4 +1,4 @@
-"""Drift guard for M9: the claim-discovery search expressions must match the
+"""Drift guard for M9: the claimable-event search expressions must match the
 trigram GIN expression indexes (model + migration 0051) textually, or the
 planner silently falls back to a seq scan of events."""
 
@@ -10,8 +10,8 @@ from pathlib import Path
 from sqlalchemy.dialects import postgresql
 
 from app.constants.events import EVENT_SEARCH_TEXT_SQL
-from app.models.models import Event
-from app.routers.organizer_claims import claim_search_text, claim_url_text
+from app.models.events import Event
+from app.routers.organizer_claim_search import claim_search_text, claim_url_text
 
 MIGRATION = (
     Path(__file__).parent.parent

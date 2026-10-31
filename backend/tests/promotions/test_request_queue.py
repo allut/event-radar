@@ -11,7 +11,9 @@ from app.constants.admin import (
 )
 from app._generated.shared_constants import CLAIM_STATUS_REVOKED
 from app.constants.promotions import PROMOTION_LIVE_CAP
-from app.models.models import AdminAction, Event, Promotion, PromotionRequest
+from app.models.events import Event
+from app.models.audit import AdminAction
+from app.models.promotions import Promotion, PromotionRequest
 from app.promotions.grant import GrantRequest, grant_promotion
 from app.promotions.requests import RequestInput, create_request
 from app.promotions.sweep import sweep_promotions

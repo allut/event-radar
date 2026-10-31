@@ -148,7 +148,7 @@ LOCALIZED_TEXT_MAX_DESC_CHARS = 5000
 ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD = 3
 # Write-phase attempts for the weekly organizer sync: one retry when the server dropped the connection during the HTTP phase (#530).
 ORGANIZER_SYNC_DB_WRITE_ATTEMPTS = 2
-# Publisher.name (models/models.py) column width.
+# Publisher.name (models/claims.py) column width.
 PUBLISHER_NAME_MAX_LEN = 255
 # Page budget for the weekly city-filtered discovery scan; ~14 pages of 100 at today's volume (#634).
 FIENTA_ORGANIZER_SCAN_MAX_PAGES = 50

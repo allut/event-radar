@@ -99,18 +99,11 @@ from app.ingestion.http_client import own_cloudinary_url
 from app.ingestion.pricing import normalize_currency
 from app.ingestion.sanitize import sanitize_html
 from app.promotions.grant import PromotionRefused
-from app.models.models import (
-    AdminAction,
-    Event,
-    EventClassification,
-    EventReport,
-    Organizer,
-    OrganizerIdentity,
-    User,
-    UserEventFeedback,
-    UserIdentity,
-    Venue,
-)
+from app.models.events import Event, EventClassification, EventReport
+from app.models.feeds import UserEventFeedback
+from app.models.audit import AdminAction
+from app.models.organizers import Organizer, OrganizerIdentity, Venue
+from app.models.users import User, UserIdentity
 
 log = logging.getLogger(__name__)
 

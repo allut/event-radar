@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import QueryableAttribute
 
 from app.constants.promotions import PROMOTION_STATUS_PAID
-from app.models.models import Promotion
+from app.models.promotions import Promotion
 
 
 def promoted_clause(event_id_col: QueryableAttribute[int], today: date) -> ColumnElement[bool]:

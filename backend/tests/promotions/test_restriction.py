@@ -24,7 +24,10 @@ from app.constants.promotions import (
 )
 from app.constants.reports import REPORT_STATUS_OPEN
 from app.db import get_db
-from app.models.models import Event, EventReport, Promotion, User, Venue
+from app.models.events import Event, EventReport
+from app.models.promotions import Promotion
+from app.models.organizers import Venue
+from app.models.users import User
 from app.promotions.fill import evaluate_gate
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion
 from app.promotions.restriction import (
@@ -305,7 +308,7 @@ class TestAssessAgainstRealTable:
     async def test_llm_call_row_persists_and_second_assess_hits_cache(self, db, make) -> None:
         from sqlalchemy import func, select
 
-        from app.models.models import LlmCall
+        from app.models.llm import LlmCall
         from app.promotions.restriction import assess_events
 
         ev = await make.event(submitted_by=await make.organizer())

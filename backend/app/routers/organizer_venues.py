@@ -31,7 +31,7 @@ from app.constants.ranking import (
 from app.constants.rate_limits import RATE_LIMIT_SUBMIT
 from app.db import get_db
 from app.ingestion.pricing import normalize_currency
-from app.models.models import Organizer, Venue
+from app.models.organizers import Organizer, Venue
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.routers.utils import (

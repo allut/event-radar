@@ -7,7 +7,8 @@ from sqlalchemy import select
 from app.config import settings
 from app.integrations.payments import PaymentProviderError
 from app.integrations.providers import get_payment_gateway
-from app.models.models import AdminAction, PromotionDailyStat
+from app.models.audit import AdminAction
+from app.models.promotions import PromotionDailyStat
 from app.promotions.grant import PromotionRefused
 from app.promotions.lifecycle import edit_promotion, end_early, record_refund
 from app.promotions.refunds import refund_prefill
@@ -250,7 +251,9 @@ async def test_stripe_refund_runs_without_the_cap_lock_held(engine, sessionmaker
     from sqlalchemy import delete, text
 
     from app.constants.promotions import PROMOTION_CAP_LOCK_KEY
-    from app.models.models import Event, Organizer, Promotion, PromotionSnapshot
+    from app.models.events import Event
+    from app.models.promotions import Promotion, PromotionSnapshot
+    from app.models.organizers import Organizer
     from tests.conftest import Factory
 
     seen: list[bool] = []

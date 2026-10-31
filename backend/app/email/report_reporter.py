@@ -26,7 +26,7 @@ from app.email.templates import (
     REPORT_OUTCOME_HEADER,
 )
 from app.i18n import t, ti
-from app.models.models import Event
+from app.models.events import Event
 
 
 def build_report_outcome_html(

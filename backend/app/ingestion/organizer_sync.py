@@ -27,7 +27,8 @@ from app.constants.ingestion import (
     STALE_ORGANIZER_RETIRE_DAYS,
 )
 from app.ingestion.http_client import AsyncRateLimiter, http_get
-from app.models.models import Publisher, Source
+from app.models.ingestion import Source
+from app.models.claims import Publisher
 
 log = logging.getLogger(__name__)
 

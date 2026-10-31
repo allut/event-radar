@@ -30,7 +30,9 @@ from app.constants.ingestion import (
     SOURCE_SLUG_PILETILEVI,
 )
 from app.ingestion.http_client import http_get_stored_url
-from app.models.models import Event, EventSource, Publisher, RawEvent, Source
+from app.models.ingestion import RawEvent, Source
+from app.models.claims import Publisher
+from app.models.events import Event, EventSource
 from app.events.venue import resolve_venue_name
 from app.events.queries import event_series_key, serialize_event_series_key
 

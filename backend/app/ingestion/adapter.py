@@ -41,7 +41,9 @@ from app.events.queries import event_not_ended_filter
 from app.ingestion.content_filters import content_flags, localized_text_values
 from app.ingestion.http_client import safe_external_url, safe_fetchable_url
 from app.ingestion.pricing import normalize_currency
-from app.models.models import Event, EventSource, IngestionRun, Publisher, RawEvent, Source
+from app.models.ingestion import IngestionRun, RawEvent, Source
+from app.models.claims import Publisher
+from app.models.events import Event, EventSource
 
 log = logging.getLogger(__name__)
 

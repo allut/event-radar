@@ -21,7 +21,7 @@ from app.constants.promotions import (
     PROMOTION_STATE_LIVE,
     PROMOTION_STATE_SCHEDULED,
 )
-from app.models.models import Event
+from app.models.events import Event
 
 
 @dataclass(frozen=True)

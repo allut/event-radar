@@ -1,6 +1,5 @@
-"""Tests for M5 (MaxBodySizeMiddleware), the M1 dev-database-host sanity
-check (_check_dev_database_host), and HostCheckMiddleware, all in
-app/main.py."""
+"""Tests for M5 (MaxBodySizeMiddleware) and HostCheckMiddleware, plus
+resolve_allowed_hosts, all in app/middleware.py."""
 
 from unittest.mock import patch
 
@@ -10,14 +9,12 @@ from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from app.constants.core import APP_ENV_DEVELOPMENT
 from app.constants.log_events import LOG_EVENT_HOST_REJECTED
 from app.constants.security import HOST_CHECK_EXEMPT_PATHS
-from app.main import (
+from app.middleware import (
     HostCheckMiddleware,
     MaxBodySizeMiddleware,
-    _check_dev_database_host,
-    _resolve_allowed_hosts,
+    resolve_allowed_hosts,
 )
 
 
@@ -114,40 +111,6 @@ async def test_non_http_scope_bypasses_middleware():
 
 
 # ---------------------------------------------------------------------------
-# _check_dev_database_host (M1)
-# ---------------------------------------------------------------------------
-
-
-def test_dev_database_host_check_skips_outside_development():
-    with patch("app.main.settings") as mock_settings:
-        mock_settings.APP_ENV = "production"
-        mock_settings.DATABASE_URL = "postgresql+asyncpg://user:pass@real-host.example.com/db"
-        with patch("app.main.log") as mock_log:
-            _check_dev_database_host()
-    mock_log.error.assert_not_called()
-
-
-def test_dev_database_host_check_silent_for_localhost():
-    with patch("app.main.settings") as mock_settings:
-        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
-        mock_settings.DATABASE_URL = "postgresql+asyncpg://eventradar:eventradar@localhost:5432/eventradar"
-        with patch("app.main.log") as mock_log:
-            _check_dev_database_host()
-    mock_log.error.assert_not_called()
-
-
-def test_dev_database_host_check_logs_error_for_non_local_host():
-    with patch("app.main.settings") as mock_settings:
-        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
-        mock_settings.DATABASE_URL = (
-            "postgresql+asyncpg://user:pass@ep-xxx.eu-central-1.aws.neon.tech/neondb?ssl=require"
-        )
-        with patch("app.main.log") as mock_log:
-            _check_dev_database_host()
-    mock_log.error.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
 # HostCheckMiddleware
 # ---------------------------------------------------------------------------
 
@@ -225,7 +188,7 @@ async def test_rejected_request_logs_host_rejected_event(caplog):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        with caplog.at_level("WARNING", logger="app.main"):
+        with caplog.at_level("WARNING", logger="app.middleware"):
             resp = await client.post(
                 "/echo", content=b"x", headers={"Host": "10.238.24.247"}
             )
@@ -247,7 +210,7 @@ async def test_downstream_400_with_allowed_host_not_logged_as_host_rejected(capl
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        with caplog.at_level("WARNING", logger="app.main"):
+        with caplog.at_level("WARNING", logger="app.middleware"):
             resp = await client.get(
                 "/bad-request",
                 headers={"Host": "event-radar-api-r7l6.onrender.com"},
@@ -260,50 +223,50 @@ async def test_downstream_400_with_allowed_host_not_logged_as_host_rejected(capl
 
 
 # ---------------------------------------------------------------------------
-# _resolve_allowed_hosts
+# resolve_allowed_hosts
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_allowed_hosts_local_default_yields_empty_allowlist():
+def testresolve_allowed_hosts_local_default_yields_empty_allowlist():
     """Regression guard for the 0.1.6 outage: an unset BACKEND_URL (falls
     back to its local-default config value) with no RENDER_EXTERNAL_HOSTNAME
     must yield *no* allowlist, not one that rejects every request."""
-    with patch("app.main.settings") as mock_settings:
+    with patch("app.middleware.settings") as mock_settings:
         mock_settings.RENDER_EXTERNAL_HOSTNAME = ""
         mock_settings.BACKEND_URL = "http://localhost:8000"
-        with patch("app.main.log") as mock_log:
-            result = _resolve_allowed_hosts()
+        with patch("app.middleware.log") as mock_log:
+            result = resolve_allowed_hosts()
     assert result == []
     mock_log.error.assert_called_once()
 
 
-def test_resolve_allowed_hosts_render_hostname_alone():
+def testresolve_allowed_hosts_render_hostname_alone():
     """RENDER_EXTERNAL_HOSTNAME must resolve the allowlist even when
     BACKEND_URL is still a local/dev default."""
-    with patch("app.main.settings") as mock_settings:
+    with patch("app.middleware.settings") as mock_settings:
         mock_settings.RENDER_EXTERNAL_HOSTNAME = "event-radar-api-r7l6.onrender.com"
         mock_settings.BACKEND_URL = "http://localhost:8000"
-        with patch("app.main.log") as mock_log:
-            result = _resolve_allowed_hosts()
+        with patch("app.middleware.log") as mock_log:
+            result = resolve_allowed_hosts()
     assert result == ["event-radar-api-r7l6.onrender.com"]
     mock_log.error.assert_not_called()
 
 
-def test_resolve_allowed_hosts_both_set_and_different():
-    with patch("app.main.settings") as mock_settings:
+def testresolve_allowed_hosts_both_set_and_different():
+    with patch("app.middleware.settings") as mock_settings:
         mock_settings.RENDER_EXTERNAL_HOSTNAME = "srv-abc123.onrender.com"
         mock_settings.BACKEND_URL = "https://event-radar-api-r7l6.onrender.com"
-        with patch("app.main.log") as mock_log:
-            result = _resolve_allowed_hosts()
+        with patch("app.middleware.log") as mock_log:
+            result = resolve_allowed_hosts()
     assert result == ["srv-abc123.onrender.com", "event-radar-api-r7l6.onrender.com"]
     mock_log.error.assert_not_called()
 
 
-def test_resolve_allowed_hosts_both_set_and_equal_dedupes():
-    with patch("app.main.settings") as mock_settings:
+def testresolve_allowed_hosts_both_set_and_equal_dedupes():
+    with patch("app.middleware.settings") as mock_settings:
         mock_settings.RENDER_EXTERNAL_HOSTNAME = "event-radar-api-r7l6.onrender.com"
         mock_settings.BACKEND_URL = "https://event-radar-api-r7l6.onrender.com"
-        with patch("app.main.log") as mock_log:
-            result = _resolve_allowed_hosts()
+        with patch("app.middleware.log") as mock_log:
+            result = resolve_allowed_hosts()
     assert result == ["event-radar-api-r7l6.onrender.com"]
     mock_log.error.assert_not_called()

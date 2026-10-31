@@ -15,15 +15,10 @@ from app.constants.events import (
     PUBLISH_MIN_QUALITY_SCORE,
 )
 from app.constants.ingestion import SOURCE_SLUG_FIENTA, TALLINN_REGION_BBOX
-from app.models.models import (
-    Event,
-    EventClassification,
-    EventSource,
-    Organizer,
-    Publisher,
-    RawEvent,
-    Source,
-)
+from app.models.ingestion import RawEvent, Source
+from app.models.claims import Publisher
+from app.models.events import Event, EventClassification, EventSource
+from app.models.organizers import Organizer
 from app.events.queries import event_ended_filter, event_not_ended_filter
 
 

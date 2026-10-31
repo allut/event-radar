@@ -2,7 +2,7 @@
 
 # Per-IP rate limits (slowapi / limits syntax: "<count>/<period>"). These guard
 # auth + webhook endpoints against enumeration, quota-exhaustion, and email-bombing
-# attacks that the per-email cooldown (request-link) doesn't cover — see main.py::limiter.
+# attacks that the per-email cooldown (request-link) doesn't cover — see app/rate_limit.py::limiter.
 RATE_LIMIT_AUTH_REQUEST_LINK = "10/minute"
 RATE_LIMIT_AUTH_VERIFY = "30/minute"
 RATE_LIMIT_WEBHOOK_INBOUND_MAIL = "60/minute"

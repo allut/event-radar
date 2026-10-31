@@ -26,7 +26,8 @@ from app.constants.reports import (
 )
 from app.db import get_db
 from app.email.report_notify import send_report_notification
-from app.models.models import Event, EventReport, User
+from app.models.events import Event, EventReport
+from app.models.users import User
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
 from app.promotions.promoted import is_event_promoted

@@ -13,7 +13,7 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 - **`app/constants/__init__.py` stays empty, so every import names the defining file.** A re-export facade adds a hop to go-to-definition and lets constants pile back into one place. Generated cross-stack values are imported from `app._generated.shared_constants` directly.
 - **The frontend mirrors it in `frontend/src/constants/<domain>.ts`, with no `index.ts` barrel.** Each file imports with `.js` extensions because Pages Functions load it as unbundled ESM. Generated values come from `frontend/src/_generated/sharedConstants.ts` directly.
 - **LLM prompts sit apart in `app/llm/prompts.py`** so prompt-engineering diffs stay clean. Scrape selectors sit apart in `app/ingestion/selectors.py` for the same reason.
-- **A comment names a schedule constant and never restates its value or a UTC offset.** `CLEANUP_HOUR` stays true when the hour moves, but "Sun 03:30 EET" goes stale, and "EET" is the winter offset only. The `docs/backend-ops.md` cadence table is the one written copy, and `tests/test_main_scheduler.py` checks it against the registered triggers.
+- **A comment names a schedule constant and never restates its value or a UTC offset.** `CLEANUP_HOUR` stays true when the hour moves, but "Sun 03:30 EET" goes stale, and "EET" is the winter offset only. The `docs/backend-ops.md` cadence table is the one written copy, and `tests/test_scheduler.py` checks it against the registered triggers.
 - **Cross-stack values live once in `shared/` and are generated into both stacks.** The backend imports `app._generated.shared_constants` and the frontend `frontend/src/_generated/sharedConstants.ts`, so the two can't disagree. `backend/tests/test_generated_sync.py` fails when the generated files drift.
 
 ### Helpers
@@ -22,6 +22,14 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 - **One invariant stays in one file.** For example, `app/auth/admin_lockout.py` owns both the lockout counter and its eviction policy, and `admin_auth.py` imports from it. See [security.md](security.md)'s Admin Console Auth section.
 - **Cross-router auth dependencies live in `app/auth/dependencies.py`** so no router imports another router's module. Router modules stay leaves of the import graph.
 - **Every frontend request goes through `frontend/src/api/client.ts`.** It owns the per-track 401 handling, so a raw `fetch` misses the session-expiry redirect. See [frontend.md](frontend.md)'s API Client section.
+
+### File Length
+
+- **A source file over 700 lines splits by area, and line count only nominates it.** Cohesion decides: a long file with one job, such as a state machine or one auth track, reads better whole than cut along a seam that doesn't exist. Such a file joins the *stay whole* allowlist in `backend/tests/test_file_length.py` with a one-line reason.
+- **A file waiting for its split sits on the *pending split* allowlist with its issue.** The test fails on an entry whose file is missing or at or under 700 lines, so each split removes its own entry.
+- **The guard fails rather than warns.** Every guard here fails, and nobody reads a warning. The pre-commit hook runs it when `backend/app/` or `frontend/src/` is staged, and CI's backend suite picks it up.
+- **Allowlisted files have no per-file ceiling.** A cap would be a second number to tune, and an allowlisted file already carries a recorded reason to stay long.
+- **The scan covers the backend app's Python and the frontend source's TypeScript.** `_generated/`, test files and CSS are never counted.
 
 ### Outbound Adapters
 
@@ -44,7 +52,7 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 ### Batch Jobs
 
 - **A query inside a per-row loop makes a job's cost grow with its row count.** The scheduled jobs touch every user or every pending event, so an N+1 loop turns a seconds-long job into minutes.
-- **Copy the existing shape when extending a job.** `app/ranking/score.py::build_daily_feeds()` and `app/llm/classifier.py::classify_pending()` fetch everything up front with `WHERE col IN (...)` and group in Python before the inner loop.
+- **Copy the existing shape when extending a job.** `app/ranking/daily_feed.py::build_daily_feeds()` and `app/llm/classifier.py::classify_pending()` fetch everything up front with `WHERE col IN (...)` and group in Python before the inner loop.
 - **A fixed query count is proven against real Postgres.** Run the job at two sizes inside `count_statements(db)` and compare the lengths. The helper and the rolled-back `db` fixture live in `backend/tests/conftest.py`.
 
 ### External Fan-Out

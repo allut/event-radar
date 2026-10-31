@@ -27,7 +27,7 @@ from app.constants.log_events import LOG_EVENT_LLM_DEGRADED
 from app.db import AsyncSessionLocal
 from app.dedup.llm_tiebreaker import run_dedup_pass_llm
 from app.ingestion.registry import ADAPTER_REGISTRY
-from app.models.models import Source
+from app.models.ingestion import Source
 from app.db import run_in_session
 
 log = logging.getLogger(__name__)

@@ -15,9 +15,9 @@ Deep-dive docs are not auto-loaded. Open the row's doc before editing what it co
 | Subject | Read before touching |
 |---|---|
 | **Pipeline** — `docs/pipeline.md` | `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/ranking/`, `app/events/`, `app/publish.py`, `app/routers/{browse,public,feedback,feed,events,webhooks}.py` |
-| **Security** — `docs/security.md` | `app/main.py`, `app/rate_limit.py`, `app/auth/`, `app/routers/{auth,organizer_auth,admin_auth,unsubscribe,utils}.py`, `app/ingestion/http_client.py`, any new endpoint |
+| **Security** — `docs/security.md` | `app/main.py`, `app/middleware.py`, `app/rate_limit.py`, `app/auth/`, `app/routers/{auth,organizer_auth,admin_auth,unsubscribe,utils}.py`, `app/ingestion/http_client.py`, any new endpoint |
 | **Security audit state** — `docs/security-audit.md` | fixing or adding an audit finding |
-| **Backend ops** — `docs/backend-ops.md` | `render.yaml`, `frontend/wrangler.toml`, `frontend/public/_headers`, `frontend/functions/`, `app/routers/{admin_*,reports}.py`, `app/cleanup.py`, `backend/scripts/`, scheduled jobs, CI |
+| **Backend ops** — `docs/backend-ops.md` | `render.yaml`, `frontend/wrangler.toml`, `frontend/public/_headers`, `frontend/functions/`, `app/routers/{admin_*,reports}.py`, `app/cleanup.py`, `backend/scripts/`, `app/scheduler.py`, scheduled jobs, CI |
 | **Frontend** — `docs/frontend.md` | `frontend/src/{routes,components,hooks,lib,content}/`, `frontend/scripts/generate-icons.ts`, `shared/i18n/`, `app/email/` |
 | **SEO and prerender** — `docs/seo.md` | `frontend/scripts/prerender.ts`, `frontend/functions/api/{seo-audit,prerender-cadence}.ts`, `useSeoMeta`, `SeoTags/`, `frontend/src/lib/{structuredData,jsonLd,seoValidation,seoAudit*,prerender*,r2ChainState}.ts` |
 | **Design system** — `docs/design-system.md` | any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, `frontend/src/lib/theme.ts`, `app/email/styles.py`, any visual change |
@@ -95,6 +95,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 - **Each backend helper has one home.** Router-shared helpers go in `app/routers/utils.py`. Domain packages (`app/auth/`, `app/email/`, `app/claims/`, `app/ingestion/`, `app/events/`, `app/promotions/`) own theirs and never import from `routers/utils.py`. Check both before writing one.
 - **Cross-router auth dependencies live in `app/auth/dependencies.py`**, so routers never import from each other's modules.
 - **Frontend helpers live in `frontend/src/utils.ts` and hooks in `frontend/src/hooks/`.** Every request goes through `frontend/src/api/client.ts`. Check there before writing a new one.
+- **A source file over 700 lines splits by area.** Line count nominates and cohesion decides: a long file with one job joins the allowlist in `backend/tests/test_file_length.py` with its reason.
 - **A leading underscore means module-private.** Drop the underscore before importing a name across modules. Tests, and a third-party library's own documented exports, are exempt.
 
 ### CSS

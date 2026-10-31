@@ -15,7 +15,8 @@ from app.auth.dependencies import get_current_user
 from app.config import settings
 from app.constants.promotions import PROMOTION_STAT_DAILY5_PLACED
 from app.db import get_db
-from app.models.models import DailyFeed, DailySponsoredSlot, PromotionDailyStat
+from app.models.feeds import DailyFeed
+from app.models.promotions import DailySponsoredSlot, PromotionDailyStat
 from app.promotions import counters
 from app.rate_limit import limiter
 from app.routers import feed

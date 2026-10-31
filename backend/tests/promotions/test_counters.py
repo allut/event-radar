@@ -20,7 +20,9 @@ from app.constants.promotions import (
     PROMOTION_STATUS_UNPAID,
 )
 from app.db import get_db
-from app.models.models import PromotionDailyStat, User, UserEventFeedback
+from app.models.feeds import UserEventFeedback
+from app.models.promotions import PromotionDailyStat
+from app.models.users import User
 from app.promotions import counters
 from app.rate_limit import limiter
 from app.routers import admin_promotions as admin_module

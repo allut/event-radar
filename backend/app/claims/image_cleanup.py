@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.claims.pinning import apply_pins, pin_key
 from app.ingestion.http_client import own_cloudinary_url
-from app.models.models import Event
+from app.models.events import Event
 
 
 async def clear_foreign_pinned_images(db: AsyncSession) -> int:

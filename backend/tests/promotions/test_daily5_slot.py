@@ -22,17 +22,12 @@ from app._generated.shared_constants import (
     PROMOTION_NOT_SHOWING_SLOTS_DISABLED,
 )
 from app.constants.promotions import PROMOTION_STATUS_PAID
-from app.models.models import (
-    DailyFeed,
-    DailySponsoredSlot,
-    EventClassification,
-    Promotion,
-    PromotionDailyStat,
-    User,
-    UserEventFeedback,
-)
+from app.models.events import EventClassification
+from app.models.feeds import DailyFeed, UserEventFeedback
+from app.models.promotions import DailySponsoredSlot, Promotion, PromotionDailyStat
+from app.models.users import User
 from app.promotions import counters
-from app.ranking.score import build_daily_feeds
+from app.ranking.daily_feed import build_daily_feeds
 from tests.conftest import count_statements
 from datetime import datetime
 

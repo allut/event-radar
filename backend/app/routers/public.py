@@ -29,7 +29,8 @@ from app.constants.events import (
 )
 from app.constants.rate_limits import RATE_LIMIT_PUBLIC
 from app.db import get_db
-from app.models.models import Event, EventClassification, Venue
+from app.models.events import Event, EventClassification
+from app.models.organizers import Venue
 from app.rate_limit import limiter
 from app.routers.utils import resolve_locale_param, serialize_event
 from app.events.queries import (

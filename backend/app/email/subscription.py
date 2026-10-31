@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.email import CONSENT_SOURCE_DIGEST_UNSUBSCRIBE
 from app.email.consent import withdraw_ad_consent
-from app.models.models import User
+from app.models.users import User
 
 
 def set_digest_subscription(user: User, enabled: bool, db: AsyncSession) -> None:

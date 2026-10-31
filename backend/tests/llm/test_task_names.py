@@ -1,6 +1,6 @@
 """Every LLM_TASK_* constant must fit `llm_calls.task`, or the cache insert fails."""
 from app.constants import llm as llm_constants
-from app.models.models import LlmCall
+from app.models.llm import LlmCall
 
 
 def test_every_task_name_fits_llm_calls_task_column() -> None:

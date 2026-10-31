@@ -11,7 +11,7 @@ from sqlalchemy.orm import aliased, selectinload
 from app.constants.core import TALLINN_TZ
 from app.constants.events import EVENT_STATUS_CANCELLED, EVENT_STATUS_PUBLISHED
 from app.events.venue import resolve_venue_name
-from app.models.models import Event, EventClassification
+from app.models.events import Event, EventClassification
 
 
 def canonical_event_filter() -> ColumnElement[bool]:
@@ -128,7 +128,7 @@ def event_series_key(title_orig: str, venue_name: str | None) -> tuple[str, str]
 
 def serialize_event_series_key(key: tuple[str, str]) -> str:
     """``event_series_key()``'s tuple, flattened to the single-string form
-    stored in ``Claim.event_series_key`` (models.py docstring) — a Series
+    stored in ``Claim.event_series_key`` (claims.py docstring) — a Series
     claim's key column can't hold a tuple, and the U+001F separator can never
     appear in either half (both go through ``normalized_title``, which only
     ever produces lowercase text and single spaces)."""
@@ -236,7 +236,7 @@ def escape_ilike_pattern(q: str) -> str:
     """Escape SQL LIKE wildcards in user-supplied search text, wrapped as a
     ``%...%`` substring pattern — otherwise a literal ``%``/``_`` in the
     search box would wildcard-match. Shared by the Explore keyword search and
-    organizer_claims.py's claim-discovery search (#414); pass the result to
+    organizer_claim_search.py's claimable-event search (#414); pass the result to
     ``.ilike(pattern, escape="\\\\")``."""
     escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"

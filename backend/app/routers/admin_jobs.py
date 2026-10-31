@@ -43,7 +43,7 @@ from app.ingestion.jobs import (
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
-from app.ranking.score import build_daily_feeds
+from app.ranking.daily_feed import build_daily_feeds
 from app.rate_limit import limiter
 from app.routers.utils import (
     acquire_admin_job_lock,
@@ -238,7 +238,7 @@ async def admin_cleanup(
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_build_feeds(request: Request) -> StreamingResponse:
     """Trigger daily feed builder for all active users (writes to daily_feeds)."""
-    # build_daily_feeds commits internally (score.py); no second commit needed.
+    # build_daily_feeds commits internally (daily_feed.py); no second commit needed.
     return _ndjson_response(
         stream_admin_job(
             "Feed build",
@@ -303,7 +303,7 @@ async def _run_pipeline_stages(dry_run: bool, queue: asyncio.Queue[bytes | None]
         ("dedup", dedup_pass_drain_now),
         ("classify", classify_pending_drain_now),
         ("publish", publish_pending_job),
-        # build_daily_feeds commits internally (score.py)
+        # build_daily_feeds commits internally (daily_feed.py)
         ("build_feeds", lambda: run_in_session(build_daily_feeds, commit=False)),
         (
             "send_digests",

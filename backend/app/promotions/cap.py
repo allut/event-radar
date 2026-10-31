@@ -15,7 +15,7 @@ from app.constants.promotions import (
     PROMOTION_LIVE_CAP,
     PROMOTION_STATUS_PAID,
 )
-from app.models.models import Promotion
+from app.models.promotions import Promotion
 from app.promotions.windows import window_dates, window_days
 
 

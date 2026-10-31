@@ -20,7 +20,7 @@ from app.email.consent import (
     withdraw_ad_consent,
 )
 from app.email.subscription import set_digest_subscription
-from app.models.models import EmailAdConsentLog
+from app.models.promotions import EmailAdConsentLog
 
 
 def _user(consent: bool = False, version: int | None = None, opt_in: bool = True):

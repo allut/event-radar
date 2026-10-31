@@ -53,11 +53,9 @@ from app.claims.pinning import clear_claim_pins, representative_event_for_claim
 from app.claims.target_resolution import ClaimTarget, bulk_resolve_publisher_events
 from app.db import AsyncSessionLocal
 from app.email.claim_resolution import send_claim_declined_email, send_claim_granted_email
-from app.models.models import (
-    Claim,
-    Event,
-    Organizer,
-)
+from app.models.claims import Claim
+from app.models.events import Event
+from app.models.organizers import Organizer
 from app.rate_limit import limiter
 from app.routers.utils import (
     ResolutionBody,

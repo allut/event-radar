@@ -75,7 +75,7 @@ Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). B
 
 - **Moving a resource off-origin breaks it silently unless the CSP widens to match.** A CDN font host is the likely case.
 - **The hash and its drift guard are in [security.md](security.md)'s Frontend CSP section.**
-- **The document block applies to `/*`, then un-sets each header on `/api/*` with the `!` prefix.** `_headers` has no negative lookahead. API responses carry only the backend's own `app/main.py::add_security_headers` headers.
+- **The document block applies to `/*`, then un-sets each header on `/api/*` with the `!` prefix.** `_headers` has no negative lookahead. API responses carry only the backend's own `app/middleware.py::add_security_headers` headers.
 - **`/api/seo-audit` and `/api/prerender-cadence` get their own locked-down block** (`default-src 'none'`, `Cache-Control: no-store`). Their own Functions answer them, so they never reach the backend proxy.
 
 ## External Cron Jobs
@@ -192,7 +192,7 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 
 ## Scheduled Jobs
 
-APScheduler runs embedded in the FastAPI process (`app/main.py::_register_scheduled_jobs()`), on Europe/Tallinn time. The cadence constants live in `app/constants/jobs.py`.
+APScheduler runs embedded in the FastAPI process (`app/scheduler.py::_register_scheduled_jobs()`), on Europe/Tallinn time. The cadence constants live in `app/constants/jobs.py`.
 
 | Cadence | Job |
 |---|---|
@@ -207,11 +207,11 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 | Sun 02:30 | `cleanup_stale_data` |
 
 - **The daily jobs run in a fixed order.** Refetch reconciles source detail pages, stale claims expire, then the feed build reads the result an hour before the digest sends it.
-- **Register every job in `_register_scheduled_jobs()`.** The DST guard in `tests/test_main_scheduler.py` and the cadence-table check read the scheduler from there only.
-- **No cron job runs in the 03:00 hour.** It happens twice on the October fall-back Sunday and not at all in March, so APScheduler fires the job twice or shifts it. `tests/test_main_scheduler.py` fails when one lands there.
+- **Register every job in `_register_scheduled_jobs()`.** The DST guard in `tests/test_scheduler.py` and the cadence-table check read the scheduler from there only.
+- **No cron job runs in the 03:00 hour.** It happens twice on the October fall-back Sunday and not at all in March, so APScheduler fires the job twice or shifts it. `tests/test_scheduler.py` fails when one lands there.
 - **`backfill_publisher_ids` and `expire_stale_claims` are scheduler-only.** Neither has an admin trigger. The publisher backfill has a CLI instead (see Maintenance Scripts).
 - **`ENABLE_SCHEDULER` turns the scheduler off in the devcontainer.** A `--reload` server left running overnight then can't arm live scrapes, LLM spend or digest email on a timer.
-- **`app/main.py::_start_scheduler()` honours `ENABLE_SCHEDULER=false` only when `APP_ENV=development`.** The var is absent from `render.yaml`, so production always runs the scheduler.
+- **`app/scheduler.py::start_scheduler()` honours `ENABLE_SCHEDULER=false` only when `APP_ENV=development`.** The var is absent from `render.yaml`, so production always runs the scheduler.
 
 ## CI
 

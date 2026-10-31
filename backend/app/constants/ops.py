@@ -67,7 +67,7 @@ LOG_QUIET_LOGGER_NAMES: tuple[str, ...] = (
     "httpx",
     "httpcore",
     # Two INFO lines per job run that duplicate the structured job_run line
-    # from app/main.py::_scheduled. Its ERROR "Job ... raised an exception"
+    # from app/scheduler.py::_scheduled. Its ERROR "Job ... raised an exception"
     # still ships.
     "apscheduler.executors.default",
 )

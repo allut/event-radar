@@ -24,7 +24,8 @@ from app.constants.auth import (
 from app.constants.organizer import ERROR_ORGANIZER_NOT_FOUND
 from app.constants.security import FEATURE_ADMIN_ENDPOINTS, SETTING_NAME_ADMIN_PASSWORD
 from app.db import get_db
-from app.models.models import Organizer, User
+from app.models.organizers import Organizer
+from app.models.users import User
 from app.auth.utils import require_configured_secret
 
 

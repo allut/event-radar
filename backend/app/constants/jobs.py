@@ -35,7 +35,7 @@ PIPELINE_RUN_OVERLAPPING_LOCK_KEYS = (
     ADMIN_ACTION_SEND_DIGESTS,
 )
 
-# APScheduler job ids (app/main.py::_register_scheduled_jobs) — also reasoned
+# APScheduler job ids (app/scheduler.py::_register_scheduled_jobs) — also reasoned
 # about in docs/backend-ops.md and /admin/pipeline/run, so a typo in one of
 # the two call sites that share a string (the log label passed to _scheduled
 # and the id= kwarg on scheduler.add_job) would silently misregister a job.

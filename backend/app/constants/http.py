@@ -2,7 +2,7 @@
 
 import http
 
-# ASGI scope/message "type" values (app/main.py's raw ASGI middleware classes —
+# ASGI scope/message "type" values (app/middleware.py's raw ASGI middleware classes —
 # HostCheckMiddleware, MaxBodySizeMiddleware, CsrfOriginCheckMiddleware). Fixed by
 # the ASGI spec, not application data, but still named here rather than repeated
 # as bare string literals in conditionals.

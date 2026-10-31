@@ -60,7 +60,9 @@ from app.constants.promotions import (
 )
 from app.constants.rate_limits import RATE_LIMIT_BROWSE
 from app.db import get_db
-from app.models.models import Event, EventClassification, User, UserEventFeedback, UserPersona
+from app.models.events import Event, EventClassification
+from app.models.feeds import UserEventFeedback
+from app.models.users import User, UserPersona
 from app.ranking.score import (
     AffinityCache,
     FeedbackContext,

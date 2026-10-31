@@ -54,10 +54,8 @@ from app.promotions.views import (
     serialize_promotion,
 )
 from app.promotions.windows import now_tallinn, tallinn_today
-from app.models.models import (
-    Event,
-    Organizer,
-)
+from app.models.events import Event
+from app.models.organizers import Organizer
 from app.rate_limit import limiter
 from app.routers.utils import (
     PromotionGrantBody,

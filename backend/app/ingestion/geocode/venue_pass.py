@@ -29,7 +29,7 @@ from app.ingestion.geocode.nominatim import (
     geocode_address,
     normalize_address_for_geocoding,
 )
-from app.models.models import Venue
+from app.models.organizers import Venue
 
 log = logging.getLogger(__name__)
 

@@ -27,7 +27,7 @@ from app.config import settings
 from app.db import get_db
 from app.email.consent import grant_ad_consent, withdraw_ad_consent
 from app.email.subscription import set_digest_subscription
-from app.models.models import Persona, User, UserIdentity, UserPersona
+from app.models.users import Persona, User, UserIdentity, UserPersona
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
 from app.routers.utils import (

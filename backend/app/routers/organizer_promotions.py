@@ -29,7 +29,9 @@ from app.constants.promotions import (
 from app.constants.rate_limits import RATE_LIMIT_BROWSE, RATE_LIMIT_SUBMIT
 from app.db import get_db
 from app.email.promotion_admin import send_request_notice
-from app.models.models import Event, Organizer, Promotion
+from app.models.events import Event
+from app.models.promotions import Promotion
+from app.models.organizers import Organizer
 from app.promotions.grant import PromotionRefused, validate_grant
 from app.promotions.organizer_view import (
     promotion_report,

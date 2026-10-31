@@ -47,7 +47,9 @@ from app.constants.promotions import (
 from app.email.promotion_notice import send_promotion_ended_email
 from app.email.resend import resend_http_client
 from app.events.localize import resolve_title
-from app.models.models import Event, Organizer, Promotion
+from app.models.events import Event
+from app.models.promotions import Promotion
+from app.models.organizers import Organizer
 from app.promotions.audit import record_system_action
 from app.promotions.cap import lock_cap
 from app.promotions.owners import resolve_owner_ids

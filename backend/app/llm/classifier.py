@@ -77,7 +77,7 @@ from app.llm.router import (
     prefetch_llm_cache,
     strict_bool,
 )
-from app.models.models import Event, EventClassification
+from app.models.events import Event, EventClassification
 from app.ingestion.patterns import alternation_pattern
 from app.events.venue import resolve_venue_name
 from app.events.queries import (

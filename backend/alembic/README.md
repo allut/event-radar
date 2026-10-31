@@ -7,7 +7,7 @@ This directory contains the Alembic migration environment for the Event Radar ba
 - **Script location**: `backend/alembic/` (set in `backend/alembic.ini`)
 - **Database URL**: read from `app.config.settings.DATABASE_URL` inside `env.py` — the `sqlalchemy.url` key in `alembic.ini` is intentionally left blank.
 - **Target database**: Neon Postgres (eu-central-1), async driver (`asyncpg`).
-- **Metadata**: `app.db.Base.metadata`; all models are registered by the import of `app.models.models` in `env.py`.
+- **Metadata**: `app.db.Base.metadata`; all models are registered by the import of `app.models` in `env.py`, whose `__init__.py` imports every module in `app/models/`.
 
 ## Common Commands
 
@@ -41,7 +41,7 @@ alembic revision -m "short description"
 
 ## Creating a New Migration
 
-1. Make your SQLAlchemy model changes in `app/models/models.py`.
+1. Make your SQLAlchemy model changes in the domain's module under `app/models/`.
 2. Auto-generate a candidate script:
    ```bash
    alembic revision --autogenerate -m "add_foo_column"
@@ -65,11 +65,7 @@ Migration scripts are named `NNNN_description.py` (zero-padded four-digit sequen
 
 ## Adding a New Model
 
-Import the model module in `env.py` so its tables are registered with `Base.metadata` before autogenerate runs:
-
-```python
-import app.models.new_module  # noqa: F401
-```
+Put the model in its domain's module under `app/models/`. For a new module, add it to the import in `app/models/__init__.py`, which `env.py` imports, so its tables are registered with `Base.metadata` before autogenerate runs; otherwise Alembic and the mapper registry never see it. A cross-module `Mapped[...]` gets its class from an `if TYPE_CHECKING:` import, because model modules never import each other at runtime.
 
 ## Notes
 

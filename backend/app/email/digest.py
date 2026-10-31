@@ -66,7 +66,9 @@ from app.email.templates import (
 )
 from app.i18n import day_name, month_name, t, ti
 from app.ingestion.http_client import http_post
-from app.models.models import DailyFeed, Event, User
+from app.models.events import Event
+from app.models.feeds import DailyFeed
+from app.models.users import User
 from app.promotions import counters
 from app.promotions.digest_slot import DigestSlot, load_digest_slots
 from app.events.localize import resolve_title, resolve_why_go

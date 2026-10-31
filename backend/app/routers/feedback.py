@@ -38,7 +38,9 @@ from app.constants.ranking import (
 from app.constants.promotions import PROMOTION_STAT_SLOT_DISLIKES
 from app.constants.rate_limits import RATE_LIMIT_FEEDBACK
 from app.db import get_db
-from app.models.models import Event, User, UserEventFeedback
+from app.models.events import Event
+from app.models.feeds import UserEventFeedback
+from app.models.users import User
 from app.promotions.counters import record_ref_hit
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user

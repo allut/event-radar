@@ -33,14 +33,9 @@ from app.constants.rate_limits import (
     RATE_LIMIT_SCOPE_ADMIN_READ,
 )
 from app.db import AsyncSessionLocal
-from app.models.models import (
-    DailyFeed,
-    Event,
-    EventReport,
-    EventSource,
-    RawEvent,
-    Source,
-)
+from app.models.events import Event, EventReport, EventSource
+from app.models.feeds import DailyFeed
+from app.models.ingestion import RawEvent, Source
 from app.rate_limit import limiter
 from app.events.localize import (
     resolve_description,

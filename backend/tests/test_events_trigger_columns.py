@@ -10,7 +10,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-from app.models.models import Event
+from app.models.events import Event
 
 MIGRATION = (
     Path(__file__).parent.parent

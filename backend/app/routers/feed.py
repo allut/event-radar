@@ -11,7 +11,9 @@ from app.constants.core import TALLINN_TZ
 from app.constants.promotions import PROMOTION_EXPLANATION_DAILY5
 from app.constants.rate_limits import RATE_LIMIT_BROWSE
 from app.db import get_db
-from app.models.models import DailyFeed, Event, User
+from app.models.events import Event
+from app.models.feeds import DailyFeed
+from app.models.users import User
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
 from app.routers.utils import (

@@ -17,22 +17,19 @@ from app.constants.ops import (
     RAW_INBOUND_EMAILS_RETENTION_DAYS,
     UNVERIFIED_ACCOUNT_RETENTION_DAYS,
 )
-from app.models.models import (
-    AuthMagicLink,
-    DailyFeed,
-    Event,
-    IngestionRun,
-    LlmCall,
-    Claim,
-    DailySponsoredSlot,
+from app.models.ingestion import IngestionRun, RawEvent, RawInboundEmail
+from app.models.claims import Claim
+from app.models.events import Event
+from app.models.feeds import DailyFeed
+from app.models.llm import LlmCall
+from app.models.promotions import DailySponsoredSlot
+from app.models.organizers import (
     Organizer,
     OrganizerIdentity,
     OrganizerMagicLink,
     Venue,
-    RawEvent,
-    RawInboundEmail,
-    User,
 )
+from app.models.users import AuthMagicLink, User
 
 
 async def _count_or_delete(

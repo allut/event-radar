@@ -36,7 +36,10 @@ from app.constants.promotions import PROMOTION_STATUS_PAID, PROMOTION_STATUS_UNP
 from app.db import get_db
 from app.events.queries import facet_conditions
 from app.constants.ranking import SIGNAL_BOOKMARK, SIGNAL_DISLIKE, SIGNAL_LIKE
-from app.models.models import EventClassification, EventReport, Promotion, User, UserEventFeedback
+from app.models.events import EventClassification, EventReport
+from app.models.feeds import UserEventFeedback
+from app.models.promotions import Promotion
+from app.models.users import User
 from app.promotions.fill import evaluate_gate, gate_closed_reason
 from app.rate_limit import limiter
 from app.routers import browse

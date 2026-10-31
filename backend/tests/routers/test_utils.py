@@ -722,7 +722,7 @@ class TestRecentUnusedLinkExists:
         must only match a pending link for the *same* sub — not any unused
         link for the organizer — or it can silently suppress the
         confirmation email while reporting it as sent."""
-        from app.models.models import OrganizerMagicLink
+        from app.models.organizers import OrganizerMagicLink
 
         mock_db.scalar = AsyncMock(return_value=None)
 
@@ -744,7 +744,7 @@ class TestRecentUnusedLinkExists:
     async def test_no_extra_predicate_omits_it_from_the_query(self, mock_db):
         """Existing callers (plain magic-link resend cooldown) must keep
         matching on the fk alone — the new parameter is additive."""
-        from app.models.models import OrganizerMagicLink
+        from app.models.organizers import OrganizerMagicLink
 
         mock_db.scalar = AsyncMock(return_value=None)
 

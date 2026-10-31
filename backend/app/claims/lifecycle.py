@@ -77,7 +77,9 @@ from app.email.claim_resolution import (
 )
 from app.email.resend import resend_http_client
 from app.ingestion.http_client import http_get_stored_url
-from app.models.models import Claim, Event, EventSource, Organizer
+from app.models.claims import Claim
+from app.models.events import Event, EventSource
+from app.models.organizers import Organizer
 from app.events.localize import resolve_title
 from app.events.venue import resolve_venue_name
 from app.events.queries import event_series_key, serialize_event_series_key
@@ -123,7 +125,7 @@ async def representative_event_source(
 def resolve_claim_target(event: Event, es: EventSource) -> ClaimTarget:
     """Cheap, HTTP-free target lookup for an *existing* claim (used by
     resolve_claim_for_event's public-page lookup and
-    organizer_claims._is_already_claimed's bulk cross-retirement check) —
+    organizer_claim_search._is_series_claimed's bulk cross-retirement check) —
     trusts `es.publisher_id` as already-stamped, which is safe here because
     any active claim was only ever created via `resolve_claim_target_live()`
     (`app.claims.target_resolution`, #427), which stamps the row before a
@@ -948,7 +950,7 @@ async def expire_stale_claims(db: AsyncSession) -> dict:
     comment) expires after the longer CLAIM_ADMIN_REVIEW_EXPIRY_DAYS instead
     of never, closing the permanent-lock hole #425 flagged. Commits
     internally (mirrors build_daily_feeds) so the expiry emails below
-    reflect only durably expired rows — app/main.py wires this job with
+    reflect only durably expired rows — app/scheduler.py wires this job with
     commit=False."""
     # UTC on purpose: TTL arithmetic (see CLAUDE.md "Conventions") — a Tallinn-aware
     # `now - timedelta(days=N)` would shift by an hour across a DST change.

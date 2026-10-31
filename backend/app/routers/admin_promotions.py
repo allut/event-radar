@@ -98,11 +98,9 @@ from app.promotions.views import (
 from app.promotions.trust import trust_panel
 from app.promotions.windows import now_tallinn, tallinn_today
 from app.promotions.withdraw import WithdrawResult, withdraw_all, withdraw_promotion
-from app.models.models import (
-    Event,
-    Organizer,
-    Promotion,
-)
+from app.models.events import Event
+from app.models.organizers import Organizer
+from app.models.promotions import Promotion
 from app.rate_limit import limiter
 from app.routers.utils import (
     PromotionGrantBody,

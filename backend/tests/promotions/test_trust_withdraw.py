@@ -16,13 +16,10 @@ from app.constants.promotions import (
     PROMOTION_END_REASON_FEATURE_WITHDRAWN,
     PROMOTION_STATUS_ENDED_EARLY,
 )
-from app.models.models import (
-    AdminAction,
-    EmailAdConsentLog,
-    EventReport,
-    PromotionDailyStat,
-    User,
-)
+from app.models.events import EventReport
+from app.models.audit import AdminAction
+from app.models.promotions import EmailAdConsentLog, PromotionDailyStat
+from app.models.users import User
 from app.promotions.grant import GrantRequest, grant_promotion
 from app.promotions.lifecycle import mark_paid
 from app.promotions.trust import trust_panel

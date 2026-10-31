@@ -17,7 +17,7 @@ from app.constants.email import (
 )
 from app.constants.rate_limits import RATE_LIMIT_ORGANIZER_CONTACT
 from app.email.contact import send_contact_message
-from app.models.models import Organizer
+from app.models.organizers import Organizer
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.auth.utils import mask_email

@@ -25,7 +25,7 @@ from app.constants.log_events import LOG_EVENT_IDENTITY_UNLINKED
 from app._generated.shared_constants import ORGANIZER_NAME_MAX_LEN
 from app.constants.rate_limits import RATE_LIMIT_AUTHENTICATED_WRITE, RATE_LIMIT_SUBMIT
 from app.db import get_db
-from app.models.models import Organizer, OrganizerIdentity
+from app.models.organizers import Organizer, OrganizerIdentity
 from app.promotions.flags import offer_enabled
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer

@@ -29,7 +29,7 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 
 | `event` | Meaning | Emitted from |
 |---|---|---|
-| `job_run` | scheduled job completed/failed (carries `job`, `status`, `duration_ms`) | `app/main.py::_scheduled` |
+| `job_run` | scheduled job completed/failed (carries `job`, `status`, `duration_ms`) | `app/scheduler.py::_scheduled` |
 | `rate_limit_block` | own per-IP 429 rejection (carries `path`) | `app/rate_limit.py` |
 | `llm_degraded` | LLM provider chain exhausted, or classify/dedup backlog deferred | `app/llm/router.py`, `app/ingestion/jobs.py` |
 | `auth_failed` | magic-link / admin-console login / claim-intent-link auth rejected | `app/routers/auth.py`, `organizer_auth.py`, `organizer_claims.py`, `app/auth/admin_lockout.py` |
@@ -38,7 +38,7 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `email_send_failed` | a Resend send failed (magic link, digest, contact, report notify/reporter, claim resolution, cancellation, Promotion notices) | `app/email/resend.py::send_resend_email` (every request-path send), `app/email/digest.py`, `app/claims/lifecycle.py`, `app/events/cancellation.py`, `app/promotions/sweep.py`, `app/routers/admin_claims.py`, `app/routers/admin_promotion_requests.py`, `app/routers/admin_promotions.py`, `app/routers/organizer_promotions.py`, `app/routers/stripe_webhook.py` |
 | `admin_action` | console-initiated or system Promotion action — audit trail; carries `action`, one of the `ADMIN_ACTION_*` values (`app/constants/admin.py`) | `app/routers/admin_auth.py`, `app/routers/utils.py`, `app/promotions/audit.py` |
 | `contact_honeypot_block` | contact-form honeypot field tripped (bot signal) | `app/routers/contact.py` |
-| `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/main.py` |
+| `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/middleware.py` |
 | `unverified_account_budget_exceeded` | global daily new-unverified-account budget crossed (mail-bomb early warning, OWASP audit F10) | `app/routers/utils.py::record_unverified_account_creation` |
 | `explore_ceiling_overflow` | `GET /explore` candidate query returned more than `BROWSE_RELEVANCE_CEILING` rows, so only the soonest were ranked (carries `ceiling`) | `app/routers/browse.py` |
 | `google_signin` | Google sign-in completed on either track (carries `track` — `user`/`organizer` — and `outcome`, e.g. `existing_login`/`new_account`/`auto_linked`/`confirmation_sent`) | `app/routers/auth.py`, `app/routers/organizer_auth.py` (the two Google callbacks) |

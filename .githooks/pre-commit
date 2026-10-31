@@ -40,6 +40,11 @@ if staged '^backend/'; then
   out=$(bash "$backend/scripts/scratch-test.sh" --no-db tests/test_code_rules.py tests/test_constants_unique.py -q 2>&1) || { echo "$out"; exit 1; }
 fi
 
+if staged '^(backend/app/|frontend/src/)'; then
+  echo "pre-commit: file length"
+  out=$(bash "$backend/scripts/scratch-test.sh" --no-db tests/test_file_length.py -q 2>&1) || { echo "$out"; exit 1; }
+fi
+
 if staged '^(frontend/|shared/)'; then
   echo "pre-commit: eslint"
   (cd frontend && npm run --silent lint)

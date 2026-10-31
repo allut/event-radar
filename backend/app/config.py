@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     ALLOW_INSECURE_DEV: bool = False
 
     # Development-only kill switch for the embedded APScheduler
-    # (app/main.py::_start_scheduler). The schedule drives live HTTP scrapes of
+    # (app/scheduler.py::start_scheduler). The schedule drives live HTTP scrapes of
     # third-party sites, real LLM spend, and real digest email on a timer — the
     # dev container sets this false (.devcontainer/docker-compose.yml) so
     # `uvicorn --reload` left running overnight can't arm all of it. Ignored

@@ -106,7 +106,8 @@ async def test_approve_writes_one_admin_action_row(
     db = mock_db
 
     async def _get(model, pk):
-        from app.models.models import Event, Organizer
+        from app.models.events import Event
+        from app.models.organizers import Organizer
 
         if model is Event:
             return event
@@ -193,7 +194,8 @@ async def test_approve_logs_nothing_when_commit_fails(
     db = mock_db
 
     async def _get(model, pk):
-        from app.models.models import Event, Organizer
+        from app.models.events import Event
+        from app.models.organizers import Organizer
 
         if model is Event:
             return event

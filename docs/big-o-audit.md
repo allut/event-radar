@@ -23,7 +23,7 @@ An audit leaves these out of its report.
 - **`backend/app/routers/browse.py::_browse_sql_path` runs an exact `COUNT(*)` per Explore page.** The total-results line needs it (#551). Revisit past about 50k upcoming events.
 - **`backend/app/routers/public.py::_showcase_stmt` has no SQL `LIMIT`.** Series collapse runs after the load, so a limit could drop a series' only surviving instance.
 - **`backend/app/promotions/withdraw.py::withdraw_all` ends each Promotion in its own transaction.** One refused refund must not roll back the rest.
-- **`backend/app/dedup/rules.py::candidate_pair_ids_in_window`'s pair `LIMIT` caps rows returned, not Postgres work.** The time-window self-join stays cheap at current event counts.
+- **`backend/app/dedup/passes.py::candidate_pair_ids_in_window`'s pair `LIMIT` caps rows returned, not Postgres work.** The time-window self-join stays cheap at current event counts.
 - **`backend/app/routers/public.py::prerender_events` is unpaginated.** The prerender build needs every event, and the response is cached.
 - **Serial, rate-limited crawls are deliberate.** See [conventions.md](conventions.md)'s External Fan-Out section.
 - **`backend/app/ingestion/adapter.py::insert_normalized_event` takes one savepoint per new event.** The savepoint keeps one bad row from rolling back the batch, and the scrape, not the insert, sets the pace.

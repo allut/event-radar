@@ -16,7 +16,7 @@ from app.constants.admin import (
     ADMIN_ACTION_PROMOTION_REPOINT,
     ADMIN_ACTION_PROMOTION_VOID,
 )
-from app.models.models import AdminAction
+from app.models.audit import AdminAction
 from app.promotions.cap import cap_strip
 from app.promotions.grant import GrantRequest, grant_promotion
 from app.promotions.lifecycle import mark_paid

@@ -29,7 +29,8 @@ from app.llm.router import (
     llm_http_client,
     llm_json,
 )
-from app.models.models import Event, LlmCall
+from app.models.events import Event
+from app.models.llm import LlmCall
 from app.ingestion.patterns import alternation_pattern, sql_alternation_pattern
 
 log = logging.getLogger(__name__)

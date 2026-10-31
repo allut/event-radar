@@ -2,7 +2,7 @@
 
 What's in here: organizer auth, event submission, trust gating and review, rich-text authoring, the organizer contact form, Organizer Settings, Event Claiming, and Promotions.
 
-An `Organizer` (`app/models/models.py`) is a portal account: a venue or promoter that submits events directly. It is not the Fienta organizer in [pipeline.md](pipeline.md), which is a ticketing-source id being polled. Saved Venues live in [data-model.md](data-model.md)'s Saved Venues section.
+An `Organizer` (`app/models/organizers.py`) is a portal account: a venue or promoter that submits events directly. It is not the Fienta organizer in [pipeline.md](pipeline.md), which is a ticketing-source id being polled. Saved Venues live in [data-model.md](data-model.md)'s Saved Venues section.
 
 ## Auth
 
@@ -107,7 +107,8 @@ A dedicated `/organizer/settings` route (`frontend/src/routes/OrganizerSettings/
 
 An organizer can claim an event Event Radar ingested from Fienta, KUMU, Estonia Concert Hall or Piletilevi. They prove ownership through a source-specific Proof channel, then edit the claimed content directly with no per-edit review.
 
-- **`app/claims/` is the service; `app/routers/organizer_claims.py` and `organizer_claim_edits.py` are the router boundary.**
+- **`app/claims/` is the service; `app/routers/organizer_claims.py`, `organizer_claim_search.py` and `organizer_claim_edits.py` are the router boundary.**
+- **The three routers share `/organizer/claims`.** The search router is included before `organizer_claims.py`, so `/{claim_id}` can't shadow `/search` and `/suggestions` (`tests/test_route_guards.py` guards the order).
 - **`CONTEXT.md`'s Event Claiming glossary defines the vocabulary:** Publisher, Proof channel, Publisher claim, Series claim, Claim justification, Dormant claim.
 - **[ADR 0004](adr/0004-claim-eligibility-tightening.md) explains the eligibility rules below.** [security.md](security.md)'s Claims section has the guards on this flow.
 
@@ -157,6 +158,7 @@ An organizer can claim an event Event Radar ingested from Fienta, KUMU, Estonia 
 
 - **An approved claim goes dormant when its event loses a claimed-vs-claimed dedup collision** to a better-quality duplicate. Its pins stop applying, but the row is never deleted.
 - **It reactivates automatically** once its target is canonical again.
+- **The dormancy logic lives in `app/claims/dormancy.py`.** `docs/pipeline.md`'s "Claimed Events" bullets describe how dedup applies it.
 
 ### Claim Resolution
 

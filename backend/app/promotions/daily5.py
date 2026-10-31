@@ -34,7 +34,8 @@ from app.constants.promotions import (
     PROMOTION_STATUS_PAID,
 )
 from app.constants.ranking import DAILY_5_COUNT, DAILY_5_LOOKAHEAD_DAYS
-from app.models.models import DailySponsoredSlot, Event, Promotion, PromotionDailyStat
+from app.models.events import Event
+from app.models.promotions import DailySponsoredSlot, Promotion, PromotionDailyStat
 from app.promotions import counters
 from app.promotions.fill import (
     GateResult,

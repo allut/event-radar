@@ -36,10 +36,7 @@ from app.constants.reports import (
 from app.db import AsyncSessionLocal
 from app.promotions.promoted import promoted_clause
 from app.promotions.windows import now_tallinn, tallinn_today
-from app.models.models import (
-    Event,
-    EventReport,
-)
+from app.models.events import Event, EventReport
 from app.events.cancellation import (
     cancel_event_and_resolve_reports,
     resolve_open_reports,

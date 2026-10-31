@@ -16,7 +16,8 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.models import DailySponsoredSlot, Event, Promotion
+from app.models.events import Event
+from app.models.promotions import DailySponsoredSlot, Promotion
 from app.promotions.daily5 import daily5_reason
 from app.promotions.fill import evaluate_gate, gate_closed_reason
 

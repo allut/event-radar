@@ -85,13 +85,9 @@ from app.ingestion.content_filters import content_flags
 from app.ingestion.http_client import http_post, safe_render_url
 from app.ingestion.pricing import normalize_currency
 from app.llm.classifier import classify_event
-from app.models.models import (
-    Event,
-    Organizer,
-    OrganizerImageUpload,
-    Source,
-    Venue,
-)
+from app.models.ingestion import Source
+from app.models.events import Event
+from app.models.organizers import Organizer, OrganizerImageUpload, Venue
 from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
@@ -731,7 +727,7 @@ async def upload_event_image(
 
     # Starlette has already spooled the full multipart body by the time this
     # handler runs (this cap only bounds what the handler itself holds, not
-    # what was received). app.main.MaxBodySizeMiddleware bounds the earlier,
+    # what was received). app.middleware.MaxBodySizeMiddleware bounds the earlier,
     # ASGI-server-wide stage (MAX_REQUEST_BODY_BYTES); this narrower check
     # stays as the image-specific limit.
     body = await file.read(IMAGE_UPLOAD_MAX_BYTES + 1)

@@ -962,7 +962,7 @@ class TestUpdateOwnEvent:
         """A PATCH that sends only venue_name (not venue_id) on an event
         already linked to a venue must not resurrect venue_name — the FK
         stays the sole venue source until explicitly unlinked."""
-        from app.models.models import Venue
+        from app.models.organizers import Venue
         from app.routers.organizer_events import PatchEventBody, update_own_event
 
         organizer = make_organizer(organizer_id=5)
@@ -1154,7 +1154,7 @@ class TestUploadEventImage:
     async def test_successful_upload_returns_secure_url(
         self, mock_db, make_request, make_organizer
     ):
-        from app.models.models import OrganizerImageUpload
+        from app.models.organizers import OrganizerImageUpload
         from app.routers.organizer_events import upload_event_image
 
         mock_db.scalar.return_value = 0

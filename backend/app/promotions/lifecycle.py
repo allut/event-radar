@@ -60,7 +60,8 @@ from app.constants.promotions import (
 )
 from app.config import settings
 from app.integrations.payments import PaymentGateway, RefundRequest
-from app.models.models import Event, Promotion
+from app.models.events import Event
+from app.models.promotions import Promotion
 from app.promotions.cap import lock_cap
 from app.promotions.restriction import clear_existing
 from app.promotions.grant import (

@@ -34,10 +34,8 @@ from app.constants.reports import (
     REPORT_AUTO_RESOLVE_NOTE,
 )
 from app.db import AsyncSessionLocal
-from app.models.models import (
-    Event,
-    Organizer,
-)
+from app.models.events import Event
+from app.models.organizers import Organizer
 from app.events.cancellation import (
     cancel_event_and_resolve_reports,
     send_report_resolution_emails,

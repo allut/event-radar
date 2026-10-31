@@ -24,7 +24,8 @@ from app.constants.promotions import (
     PROMOTION_STATUS_PAID,
     PROMOTION_STATUS_UNPAID,
 )
-from app.models.models import Event, Promotion
+from app.models.events import Event
+from app.models.promotions import Promotion
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion, validate_grant
 from tests.promotions.conftest import NOW, at_tallinn, d
 

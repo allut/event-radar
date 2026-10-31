@@ -13,7 +13,9 @@ from sqlalchemy import func, select
 from app.config import settings
 from app.integrations.payments import PaymentProviderError
 from app.integrations.providers import get_payment_gateway
-from app.models.models import AdminAction, Organizer, ProcessedStripeEvent, Promotion, PromotionSnapshot
+from app.models.audit import AdminAction
+from app.models.promotions import ProcessedStripeEvent, Promotion, PromotionSnapshot
+from app.models.organizers import Organizer
 from app.promotions import stripe_events
 from app.promotions.checkout import CheckoutInput, start_checkout
 from app.routers import stripe_webhook as webhook_router

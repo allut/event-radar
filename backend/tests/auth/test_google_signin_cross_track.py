@@ -40,7 +40,8 @@ def _new_account_db():
 class TestCrossTrackIndependence:
     @pytest.mark.asyncio
     async def test_same_sub_creates_independent_rows_on_each_track(self):
-        from app.models.models import OrganizerIdentity, UserIdentity
+        from app.models.organizers import OrganizerIdentity
+        from app.models.users import UserIdentity
         from app.routers.auth import _apply_google_linking_gate as user_gate
         from app.routers.organizer_auth import (
             _apply_google_linking_gate as organizer_gate,

@@ -20,12 +20,9 @@ from app.constants.reports import (
     REPORT_STATUS_OPEN,
 )
 from app.db import AsyncSessionLocal
-from app.models.models import (
-    Claim,
-    Event,
-    EventReport,
-    Source,
-)
+from app.models.claims import Claim
+from app.models.events import Event, EventReport
+from app.models.ingestion import Source
 from app.rate_limit import limiter
 from app.events.queries import canonical_event_filter
 router = APIRouter(prefix="/admin")

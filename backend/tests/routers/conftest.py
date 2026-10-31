@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 
-from app.models.models import AdminAction
+from app.models.audit import AdminAction
 from app.rate_limit import limiter
 
 

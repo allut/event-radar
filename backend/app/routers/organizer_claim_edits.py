@@ -63,7 +63,9 @@ from app.promotions.restriction import reassess_after_edit
 from app.promotions.windows import now_tallinn
 from app.ingestion.http_client import host_matches_domain, safe_render_url
 from app.ingestion.pricing import normalize_currency
-from app.models.models import ClaimEditAttempt, Event, Organizer
+from app.models.claims import ClaimEditAttempt
+from app.models.events import Event
+from app.models.organizers import Organizer
 from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer

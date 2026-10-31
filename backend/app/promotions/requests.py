@@ -42,7 +42,8 @@ from app.events.queries import (
     event_not_ended_filter,
     public_event_filter,
 )
-from app.models.models import Event, Promotion, PromotionRequest
+from app.models.events import Event
+from app.models.promotions import Promotion, PromotionRequest
 from app.promotions.cap import lock_cap
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion, validate_grant
 from app.promotions.owners import resolve_owner_ids

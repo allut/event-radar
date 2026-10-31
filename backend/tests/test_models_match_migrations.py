@@ -1,6 +1,6 @@
 """`alembic check` locally: the ORM's tables and indexes match what the
 migrations build. CI runs the same command; this catches drift (an index
-declared in models.py but not in a migration, or the reverse) before a push.
+declared in a model module but not in a migration, or the reverse) before a push.
 Runs against the migrated scratch database and skips without one."""
 
 import os

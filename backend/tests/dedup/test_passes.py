@@ -1,17 +1,17 @@
-"""Tests for app.dedup.rules DB-level pass helpers and the candidate_pair_ids
-path of cluster_events (missing-id skip + union)."""
+"""Tests for app.dedup.passes: DB-level dedup pass helpers."""
 
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.constants.core import TALLINN_TZ
-from app.dedup import rules
-from app.dedup.rules import (
+from app.constants.dedup import DEDUP_LOOKBACK_DAYS
+from app.dedup import passes
+from app.dedup.passes import (
+    bulk_assign_dedup_groups,
     candidate_pair_ids_in_window,
     clear_stale_dedup_groups,
-    cluster_events,
     dedup_window_cutoff,
     load_dedup_candidate_events,
     run_dedup_pass,
@@ -37,52 +37,13 @@ def _event(eid, title, venue=None, status="draft"):
 
 
 # ---------------------------------------------------------------------------
-# cluster_events — candidate_pair_ids path
-# ---------------------------------------------------------------------------
-
-
-def test_cluster_events_candidate_pairs_unions_and_skips_missing_ids():
-    # Titles differ in normalized form so apply_same_day_title_unions (which runs
-    # first inside cluster_events and unions same-normalized-title/same-day events)
-    # can NOT pre-union them — the grouping must come from the candidate-pair loop
-    # under test. token_set_ratio stays ~100 (one title is a token-subset of the
-    # other) so is_candidate_pair still matches.
-    a = _event(1, "Jazz Night", venue="Club X")
-    b = _event(2, "Jazz Night Live Session", venue="Club X")
-    events = [a, b]
-
-    # sanity: the same-day title union alone does NOT group these differing titles
-    from app.dedup.rules import _find, apply_same_day_title_unions
-
-    parent = {1: 1, 2: 2}
-    apply_same_day_title_unions(parent, events)
-    assert _find(parent, 1) != _find(parent, 2)
-
-    # (1, 99): id 99 is absent -> the `b is None: continue` branch.
-    # (1, 2): a real duplicate pair -> union into one group via the candidate loop.
-    result = cluster_events(events, candidate_pair_ids=[(1, 99), (1, 2)])
-
-    assert result[1] == result[2]
-
-
-def test_cluster_events_candidate_pairs_non_duplicate_not_grouped():
-    a = _event(1, "Jazz Night", venue="Club X")
-    b = _event(2, "Opera Gala", venue="Opera House")
-
-    result = cluster_events([a, b], candidate_pair_ids=[(1, 2)])
-
-    # unrelated titles/venues -> is_candidate_pair False -> no group
-    assert result == {}
-
-
-# ---------------------------------------------------------------------------
 # run_dedup_pass
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_run_dedup_pass_empty_returns_zeroes(mock_db, monkeypatch):
-    monkeypatch.setattr(rules, "load_dedup_candidate_events", AsyncMock(return_value=[]))
+    monkeypatch.setattr(passes, "load_dedup_candidate_events", AsyncMock(return_value=[]))
 
     result = await run_dedup_pass(mock_db)
 
@@ -95,13 +56,13 @@ async def test_run_dedup_pass_assigns_and_counts_updates(mock_db, monkeypatch):
     b = _event(2, "Jazz Night", venue="Club X")
 
     monkeypatch.setattr(
-        rules, "load_dedup_candidate_events", AsyncMock(return_value=[a, b])
+        passes, "load_dedup_candidate_events", AsyncMock(return_value=[a, b])
     )
     monkeypatch.setattr(
-        rules, "candidate_pair_ids_in_window", AsyncMock(return_value=[(1, 2)])
+        passes, "candidate_pair_ids_in_window", AsyncMock(return_value=[(1, 2)])
     )
-    monkeypatch.setattr(rules, "clear_stale_dedup_groups", AsyncMock())
-    monkeypatch.setattr(rules, "load_claims_for_events", AsyncMock(return_value={}))
+    monkeypatch.setattr(passes, "clear_stale_dedup_groups", AsyncMock())
+    monkeypatch.setattr(passes, "load_claims_for_events", AsyncMock(return_value={}))
 
     result = await run_dedup_pass(mock_db)
 
@@ -151,3 +112,64 @@ async def test_clear_stale_dedup_groups_executes_update(mock_db):
     await clear_stale_dedup_groups(mock_db, dedup_window_cutoff())
 
     mock_db.execute.assert_awaited_once()
+
+
+class TestLookbackConstant:
+    def test_lookback_days_reasonable(self):
+        # Must be positive and not excessively large (>365 defeats the purpose)
+        assert 7 <= DEDUP_LOOKBACK_DAYS <= 365
+
+
+class TestBulkAssignDedupGroups:
+    @pytest.mark.asyncio
+    async def test_changed_rows_share_one_values_update_and_memory_is_synced(
+        self, mock_db, make_event
+    ):
+        a, b, c = make_event(1), make_event(2), make_event(3)
+        a.dedup_group_id = None
+        b.dedup_group_id = None
+        c.dedup_group_id = 3  # unchanged
+
+        changed = await bulk_assign_dedup_groups(
+            mock_db, [a, b, c], {1: 1, 2: 1, 3: 3}
+        )
+
+        assert changed == 2
+        mock_db.execute.assert_awaited_once()  # one UPDATE, not one per group
+        assert a.dedup_group_id == 1 and b.dedup_group_id == 1
+
+    @pytest.mark.asyncio
+    async def test_no_changes_issue_no_update(self, mock_db, make_event):
+        a = make_event(1)
+        a.dedup_group_id = 1
+
+        assert await bulk_assign_dedup_groups(mock_db, [a], {1: 1}) == 0
+        mock_db.execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_chunks_at_configured_size(self, mock_db, make_event):
+        events = [make_event(i) for i in range(1, 6)]
+        for e in events:
+            e.dedup_group_id = None
+
+        with patch("app.dedup.passes.DEDUP_BULK_UPDATE_CHUNK_SIZE", 2):
+            await bulk_assign_dedup_groups(mock_db, events, {e.id: 1 for e in events})
+
+        assert mock_db.execute.await_count == 3  # 2 + 2 + 1
+
+
+# ---------------------------------------------------------------------------
+# candidate_pair_ids_in_window — SQL bounds
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_pair_query_has_upper_date_bound(mock_db):
+    result = MagicMock()
+    result.all.return_value = []
+    mock_db.execute.return_value = result
+
+    await candidate_pair_ids_in_window(mock_db, datetime.now(TALLINN_TZ))
+
+    compiled = str(mock_db.execute.call_args.args[0])
+    assert compiled.count("starts_at <=") >= 3  # window upper bound + a/b lookahead

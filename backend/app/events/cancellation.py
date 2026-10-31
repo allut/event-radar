@@ -22,7 +22,8 @@ from app.constants.reports import (
 )
 from app.email.report_reporter import send_report_outcome_email
 from app.email.resend import resend_http_client
-from app.models.models import Event, EventReport, User
+from app.models.events import Event, EventReport
+from app.models.users import User
 
 log = logging.getLogger(__name__)
 

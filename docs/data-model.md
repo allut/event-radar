@@ -2,7 +2,9 @@
 
 What's in here: what the key tables' columns mean and who writes them, the `events` triggers and indexes, migrations, connection pooling and serializer rules.
 
-`app/models/models.py` is the full column list. This doc covers what reading it won't tell you: meaning, authority, triggers and gotchas.
+`app/models/` is the full column list, one module per domain. This doc covers what reading it won't tell you: meaning, authority, triggers and gotchas.
+
+A new model goes in its domain's module. A new module needs a line in `app/models/__init__.py`, or Alembic and the mapper registry never see it. A cross-module `Mapped[...]` gets its class from an `if TYPE_CHECKING:` import, because model modules never import each other at runtime.
 
 ## Key Database Tables
 
@@ -106,9 +108,9 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 
 #### Claim Search Indexes
 
-- **Two pg_trgm GIN expression indexes back claim discovery** (migration 0051). `ix_events_search_text_trgm` covers `app/constants/events.py::EVENT_SEARCH_TEXT_SQL`: `title_orig` plus every locale's `title_localized`. It serves `GET /organizer/claims/search`, which therefore matches a title in any locale.
+- **Two pg_trgm GIN expression indexes back claimable-event search** (migration 0051). `ix_events_search_text_trgm` covers `app/constants/events.py::EVENT_SEARCH_TEXT_SQL`: `title_orig` plus every locale's `title_localized`. It serves `GET /organizer/claims/search`, which therefore matches a title in any locale.
 - **`ix_events_url_trgm` serves the domain `ILIKE` in `GET /organizer/claims/suggestions`.**
-- **The query side must match the index expression textually.** `app/routers/organizer_claims.py::claim_search_text()` builds it, and `backend/tests/test_claim_search_indexes.py` guards drift.
+- **The query side must match the index expression textually.** `app/routers/organizer_claim_search.py::claim_search_text()` builds it, and `backend/tests/test_claim_search_indexes.py` guards drift.
 - **They are expression indexes, not columns,** so the `updated_at` trigger's column list is untouched.
 
 #### Publish and Quality Indexes
@@ -169,7 +171,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 | `verification_contact` | the Piletilevi promoter mailbox a `piletilevi_mailbox` check compared against, shown to the admin |
 | `justification` | required for `series`, enforced in `app/claims/lifecycle.py` |
 | `resolved_at` | set once `status` leaves `pending` |
-| `dormant` | set by `app/dedup/rules.py::resolve_claim_dormancy()`; see [organizer-portal.md](organizer-portal.md)'s Dormant Claims section |
+| `dormant` | set by `app/claims/dormancy.py::resolve_claim_dormancy()`; see [organizer-portal.md](organizer-portal.md)'s Dormant Claims section |
 
 ### Promotions
 

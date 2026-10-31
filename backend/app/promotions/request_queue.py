@@ -13,7 +13,9 @@ from app._generated.shared_constants import (
     PROMOTION_VAT_RATE_PERCENT,
 )
 from app.constants.promotions import PROMOTION_REQUEST_STATUS_PENDING
-from app.models.models import Event, Organizer, PromotionRequest
+from app.models.events import Event
+from app.models.promotions import PromotionRequest
+from app.models.organizers import Organizer
 from app.promotions.grant import validate_grants
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.requests import promotable_event_ids

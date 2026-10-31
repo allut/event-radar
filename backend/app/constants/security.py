@@ -17,14 +17,14 @@ SECRET_KEY_MIN_LEN = 32
 # every token with a value visible in the public repo.
 SECRET_KEY_PLACEHOLDER_PREFIX = "change-me-"
 
-# Paths exempt from HostCheckMiddleware's Host-header validation (app/main.py).
+# Paths exempt from HostCheckMiddleware's Host-header validation (app/middleware.py).
 # Render's health probe reaches this process over the private network, so its
 # Host header is the instance's rotating internal address, not BACKEND_URL's
 # hostname — allowlisting it isn't viable since Starlette's allowed_hosts has
 # no CIDR support.
 HOST_CHECK_EXEMPT_PATHS: frozenset[str] = frozenset({"/health"})
 
-# Starlette TrustedHostMiddleware's fixed rejection body — app/main.py's
+# Starlette TrustedHostMiddleware's fixed rejection body — app/middleware.py's
 # HostCheckMiddleware matches this to tell an actual Host-header reject apart
 # from an ordinary downstream 400 (bad token, malformed body, ...) passing
 # through the same wrapped `send`. A future Starlette wording change would
@@ -108,7 +108,7 @@ ORGANIZER_HTML_SANITIZE_ALLOWED_ATTRS: dict[str, set[str]] = {"a": {"href"}}
 # CLOUDINARY_DELIVERY_PATH_TEMPLATE for the configured account.
 ALLOWED_IMAGE_HOSTS = frozenset({"res.cloudinary.com"})
 
-# Whole-request body ceiling (app.main.MaxBodySizeMiddleware) — above
+# Whole-request body ceiling (app.middleware.MaxBodySizeMiddleware) — above
 # IMAGE_UPLOAD_MAX_BYTES (the largest legitimate body today) since multipart
 # form overhead adds a little on top of the raw file. Nothing else in the
 # stack caps request size: Starlette receives and spools the full body before
@@ -136,14 +136,14 @@ DEV_CORS_ORIGINS_DEFAULT: frozenset[str] = frozenset(
     {"http://localhost:5173", "http://localhost:4173"}
 )
 
-# CSRF — methods CsrfOriginCheckMiddleware (app/main.py) enforces the Origin
+# CSRF — methods CsrfOriginCheckMiddleware (app/middleware.py) enforces the Origin
 # check against. Deliberately includes PUT even though the API never routes
 # it today (CORS_ALLOWED_METHODS above omits it) — this is a defense-in-depth
 # check ahead of #24's cookie migration, not a mirror of what's currently wired up.
 CSRF_UNSAFE_METHODS: frozenset[str] = frozenset({"POST", "PATCH", "DELETE", "PUT"})
 
 # Security response headers — applied to every response by SecurityHeadersMiddleware
-# (app.main). This is a pure JSON API with no first-party HTML/script surface, so the
+# (app.middleware.add_security_headers). This is a pure JSON API with no first-party HTML/script surface, so the
 # CSP can be maximally restrictive; frame-ancestors/X-Frame-Options block clickjacking.
 SECURITY_HEADERS: dict[str, str] = {
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
@@ -161,7 +161,7 @@ SECURITY_HEADERS: dict[str, str] = {
     ),
 }
 # HSTS is only safe to send over HTTPS — Render terminates TLS in front of the app,
-# so this is gated to production (see app.main) to avoid breaking local http://localhost.
+# so this is gated to production (see app.middleware) to avoid breaking local http://localhost.
 HSTS_HEADER_NAME = "Strict-Transport-Security"
 HSTS_MAX_AGE_SECONDS = 31536000  # 1 year, matches HSTS preload-list minimum
 HSTS_HEADER_VALUE = f"max-age={HSTS_MAX_AGE_SECONDS}; includeSubDomains"

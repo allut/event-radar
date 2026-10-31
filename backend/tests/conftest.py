@@ -27,7 +27,10 @@ from app._generated.shared_constants import (
 )
 from app.constants.core import TALLINN_TZ
 from app.constants.events import TALLINN_CENTER_LAT, TALLINN_CENTER_LNG
-from app.models.models import Claim, Event, EventSource, Organizer, Publisher, Source, Venue
+from app.models.ingestion import Source
+from app.models.claims import Claim, Publisher
+from app.models.events import Event, EventSource
+from app.models.organizers import Organizer, Venue
 
 
 DEV_DB_NAME = "eventradar"

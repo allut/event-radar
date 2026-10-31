@@ -35,7 +35,7 @@ from app.constants.promotions import (
     PROMOTION_STATUS_PAID,
     PROMOTION_STATUS_VOID,
 )
-from app.models.models import PromotionSnapshot
+from app.models.promotions import PromotionSnapshot
 from app.promotions.cap import cap_days
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion
 from app.promotions.lifecycle import (

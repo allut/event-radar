@@ -44,7 +44,7 @@ from app.constants.security import (
 )
 from app.db import AsyncSessionLocal, get_db
 from app.llm.newsletter_extractor import extract_events_from_email
-from app.models.models import RawInboundEmail
+from app.models.ingestion import RawInboundEmail
 from app.rate_limit import limiter
 from app.auth.utils import require_configured_secret
 
