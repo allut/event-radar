@@ -14,14 +14,15 @@ fi
 # The backend checks read files from disk, so with unstaged or untracked backend
 # or scripts/ changes they would pass on the working tree while the commit itself
 # is broken.
-# Check a copy of the index instead; its mypy cache persists under .git.
+# Check a copy of the index instead; its mypy cache persists under .git. The copy
+# holds frontend/src/ too, which the file-length guard scans.
 backend=backend
 mypy_cache=()
 if staged '^(backend/|shared/|scripts/)' \
   && { ! git diff --quiet -- backend/ scripts/ || [ -n "$(git ls-files --others --exclude-standard -- backend/ scripts/)" ]; }; then
   snapshot="$(git rev-parse --absolute-git-dir)/precommit-snapshot"
   rm -rf "$snapshot"
-  git ls-files -z -- backend/ scripts/ | git checkout-index -z --stdin --prefix="$snapshot/"
+  git ls-files -z -- backend/ scripts/ frontend/src/ | git checkout-index -z --stdin --prefix="$snapshot/"
   backend="$snapshot/backend"
   mypy_cache=(--cache-dir "$(git rev-parse --absolute-git-dir)/precommit-mypy-cache")
   echo "pre-commit: unstaged backend changes, checking the staged snapshot"
