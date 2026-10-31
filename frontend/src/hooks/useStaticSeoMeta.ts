@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import { t } from '../i18n';
-import { titleWithBrand } from '../utils';
+import { titleWithBrand } from '../utils/locale';
 import { useSeoMeta, type SeoMetaResult } from './useSeoMeta';
 
 /** Thin useSeoMeta wrapper for every route except Landing and /events/:id —

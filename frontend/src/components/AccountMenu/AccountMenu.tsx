@@ -4,7 +4,7 @@ import { api, organizerApi } from '../../api/client';
 import { API, QUERY_KEYS } from '../../constants/api';
 import type { NavItem } from '../../constants/routes';
 import { t } from '../../i18n';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import { useDropdown } from '../../hooks/useDropdown';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import styles from '../shared/Bar.module.css';

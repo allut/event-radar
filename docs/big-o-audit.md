@@ -13,7 +13,7 @@ These patterns fail a check, so an audit skips hunting them where the guard reac
 
 - **`backend/tests/test_code_rules.py::test_routers_query_outside_loops` fails a router awaiting a `db` query, or a helper taking `db`, inside a loop.** Code outside `app/routers/` still needs reading.
 - **`backend/tests/test_code_rules.py::test_llm_calls_pass_a_prefetched_cache` fails an `llm_json` call without `prefetched_cache=`.** A fan-out builds the map with `backend/app/llm/router.py::prefetch_llm_cache()`.
-- **ESLint fails a `new Intl.*` inside a function outside `frontend/src/utils.ts`.** Use module scope or `cachedDateTimeFormat()` from there.
+- **ESLint fails a `new Intl.*` inside a function outside `frontend/src/utils/intlFormat.ts`.** Use module scope or `cachedDateTimeFormat()` from there.
 - **`backend/tests/test_bigo_indexes.py` fails when the planner stops using migration 0070's indexes** for the publish gate, the Fienta stamp or the quality sort.
 
 ## Accepted by Design

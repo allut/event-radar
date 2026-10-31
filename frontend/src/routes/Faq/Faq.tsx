@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { t } from '../../i18n';
-import { inlineText, safeUrl, titleWithBrand } from '../../utils';
+import { inlineText, safeUrl } from '../../utils/html';
+import { titleWithBrand } from '../../utils/locale';
 import { useAuth } from '../../hooks/useAuth';
 import { useLogout } from '../../hooks/useLogout';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';

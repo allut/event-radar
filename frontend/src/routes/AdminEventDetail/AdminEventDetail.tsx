@@ -19,7 +19,10 @@ import {
 } from '../../constants/core';
 import { REPORT_STATUS } from '../../constants/prerender';
 import { ROUTES } from '../../constants/routes';
-import { apiErrorMessage, sanitizeHtml, formatAdminTimestamp, localeLabel, safeUrl } from '../../utils';
+import { apiErrorMessage } from '../../utils/apiErrors';
+import { sanitizeHtml, safeUrl } from '../../utils/html';
+import { formatAdminTimestamp } from '../../utils/intlFormat';
+import { localeLabel } from '../../utils/locale';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';

@@ -8,7 +8,7 @@ import { usePagedQuery } from '../../hooks/usePagedQuery';
 import { usePageSettledFocus } from '../../hooks/usePageSettledFocus';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import { t } from '../../i18n';
-import { withLocaleQuery, withQueryParam } from '../../utils';
+import { withLocaleQuery, withQueryParam } from '../../utils/url';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import PageState from '../../components/PageState';
 import EmptyState from '../../components/EmptyState';

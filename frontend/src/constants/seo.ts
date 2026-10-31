@@ -42,7 +42,7 @@ export const CRAWLABLE_ICON_PATHS: string[] = [
 export const ICON_REL = 'icon';
 export const ICON_LINK_SELECTOR = `link[rel="${ICON_REL}"]`;
 // og:description/meta description target length — Google truncates around
-// ~155–160 chars; truncateForMeta (utils.ts) cuts at a word boundary under this.
+// ~155–160 chars; truncateForMeta (utils/html.ts) cuts at a word boundary under this.
 export const SEO_DESCRIPTION_MAX_LENGTH = 157;
 
 // Hreflang code for "no specific locale matches" — useSeoMeta (producer)

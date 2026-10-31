@@ -10,7 +10,7 @@ import {
   SEO_XDEFAULT_CODE,
 } from '../constants/seo';
 import { canonicalUrlFor } from '../lib/urlLocale';
-import { localizedPath, stripLocalePrefix } from '../utils';
+import { localizedPath, stripLocalePrefix } from '../lib/urlLocale';
 
 export interface SeoMetaTag {
   name?: string;

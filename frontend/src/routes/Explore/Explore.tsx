@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { t } from '../../i18n';
-import { withLocaleQuery } from '../../utils';
+import { withLocaleQuery } from '../../utils/url';
 import { useAuth } from '../../hooks/useAuth';
 import { useEventCardNav } from '../../hooks/useEventCardNav';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
@@ -49,15 +49,13 @@ import { type SponsoredInfo } from '../../components/SponsoredSlot';
 import {
   activeFacetCount,
   buildExploreApiQuery,
-  categoryOptions,
-  cx,
   DEFAULT_EXPLORE_FILTERS,
   exploreFiltersToSearchParams,
   parseExploreFilters,
-  titleWithBrand,
-  vibeOptions,
   type ExploreFilters,
-} from '../../utils';
+} from '../../utils/exploreFilters';
+import { categoryOptions, titleWithBrand, vibeOptions } from '../../utils/locale';
+import { cx } from '../../utils/style';
 import RankingLink from '../../components/RankingLink';
 import styles from './Explore.module.css';
 

@@ -1,9 +1,25 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
+import { cx } from '../../utils/style';
 import {
-  cx, monthGridDays, weekdayHeaders, splitDateTimeValue, joinDateTimeValue,
-  formatPickerValue, formatMonthYearLabel, parseTypedDate, toDisplayDateTime, fromDisplayDateTime,
-  clamp, tallinnToday, toDateStr, isSameDay, addDays, addMonths, padIndex, weekdayOffset,
-} from '../../utils';
+  monthGridDays,
+  tallinnToday,
+  toDateStr,
+  isSameDay,
+  addDays,
+  addMonths,
+  padIndex,
+  weekdayOffset,
+} from '../../utils/calendar';
+import { weekdayHeaders, formatMonthYearLabel } from '../../utils/intlFormat';
+import {
+  splitDateTimeValue,
+  joinDateTimeValue,
+  formatPickerValue,
+  parseTypedDate,
+  toDisplayDateTime,
+  fromDisplayDateTime,
+} from '../../utils/dateTimePicker';
+import { clamp } from '../../utils/list';
 import { useDropdown } from '../../hooks/useDropdown';
 import {
   CALENDAR_WEEK_START,

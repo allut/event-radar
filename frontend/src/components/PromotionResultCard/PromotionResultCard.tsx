@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import styles from './PromotionResultCard.module.css';
 
 interface PromotionResultCardProps {

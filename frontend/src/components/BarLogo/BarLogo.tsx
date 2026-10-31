@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import DialMark from '../DialMark';
 import styles from '../shared/Bar.module.css';

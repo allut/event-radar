@@ -9,7 +9,7 @@ import {
   PROMOTION_REGISTRY_CODE_LENGTH,
   type PromotionListStatus,
 } from '../constants/organizerPromotions';
-import { cachedDateTimeFormat, formatCount } from '../utils';
+import { cachedDateTimeFormat, formatCount } from '../utils/intlFormat';
 import { tn } from '../i18n';
 
 export interface PromotionPrice {

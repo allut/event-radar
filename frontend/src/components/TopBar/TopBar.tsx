@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { t } from '../../i18n';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import {
   ACCOUNT_MENU_ITEMS,
   NAV_ITEMS,

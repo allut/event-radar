@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { localizedTo } from '../utils';
+import { localizedTo } from '../lib/urlLocale';
 import { usePathLocale } from './usePathLocale';
 
 /** Locale-prefixes an internal `to` target against the *current URL's* locale

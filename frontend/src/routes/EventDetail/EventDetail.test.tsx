@@ -41,8 +41,8 @@ vi.mock('../../hooks/useFeedback', () => ({
   })),
 }));
 
-vi.mock('../../utils', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../utils')>();
+vi.mock('../../utils/eventActions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/eventActions')>();
   return {
     ...actual,
     trackExternalClick: vi.fn(),
@@ -176,7 +176,7 @@ describe('EventDetail', () => {
   });
 
   it('calls trackExternalClick on tickets link click', async () => {
-    const { trackExternalClick } = await import('../../utils');
+    const { trackExternalClick } = await import('../../utils/eventActions');
     mockGet.mockResolvedValueOnce(eventData);
     renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
     await waitFor(() => screen.getByRole('link', { name: /ticket/i }));
@@ -313,7 +313,7 @@ describe('EventDetail', () => {
     });
 
     it('clicking tickets link does not call trackExternalClick (avoids 401 redirect)', async () => {
-      const { trackExternalClick } = await import('../../utils');
+      const { trackExternalClick } = await import('../../utils/eventActions');
       mockGet.mockResolvedValueOnce(eventData);
       renderWithProviders(<EventDetail />, { route: '/en/events/1', pathPattern: '/:locale/events/:id' });
       await waitFor(() => screen.getByRole('link', { name: /ticket/i }));

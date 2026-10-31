@@ -12,7 +12,8 @@ import { DEFAULT_CURRENCY } from '../_generated/sharedConstants';
 import { ROUTES } from '../constants/routes';
 import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN, SCHEMA_ORG_CONTEXT } from '../constants/seo';
 import { t } from '../i18n';
-import { localizedPath, safeUrl } from '../utils';
+import { localizedPath } from './urlLocale';
+import { safeUrl } from '../utils/html';
 
 /** JSON-LD builder for /events/:id (issue #49). Field mapping and omissions
  * (never `organizer`, never `offers.availability`) are documented on the
@@ -37,7 +38,7 @@ export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
   // rather than silently falling through to the plain-Offer branch (issue
   // #236). highPrice falls back to price_min when price_max is null (a
   // single-price event, per formatPrice's own price_min/price_max contract,
-  // utils.ts) — AggregateOffer requires lowPrice <= highPrice, which a null
+  // utils/price.ts) — AggregateOffer requires lowPrice <= highPrice, which a null
   // highPrice can't satisfy. seoValidation's assertEventJsonLd requires
   // priceCurrency whenever lowPrice is present, so once a price is emitted
   // here priceCurrency must be too — a free event legitimately loses its

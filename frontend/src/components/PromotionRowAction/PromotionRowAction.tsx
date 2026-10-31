@@ -4,7 +4,7 @@ import { ROUTES } from '../../constants/routes';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { t, ti } from '../../i18n';
 import type { PromotionRowFlags } from '../../lib/organizerPromotions';
-import { withQueryParam } from '../../utils';
+import { withQueryParam } from '../../utils/url';
 import PromotionBadge from '../PromotionBadge';
 import styles from './PromotionRowAction.module.css';
 

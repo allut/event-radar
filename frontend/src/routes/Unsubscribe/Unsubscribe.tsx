@@ -7,7 +7,7 @@ import { API } from '../../constants/api';
 import { AUTH_TOKEN_PARAM, type UnsubscribeState } from '../../constants/auth';
 import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
-import { withQueryParam } from '../../utils';
+import { withQueryParam } from '../../utils/url';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { usePathLocale } from '../../hooks/usePathLocale';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';

@@ -29,7 +29,8 @@ import {
 } from '../../constants/claims';
 import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
-import { apiErrorMessage, relativeTimeFromNow } from '../../utils';
+import { apiErrorMessage } from '../../utils/apiErrors';
+import { relativeTimeFromNow } from '../../utils/intlFormat';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast, type UseToastResult } from '../../hooks/useToast';

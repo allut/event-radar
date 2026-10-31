@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import styles from './Chip.module.css';
 
 export interface ChipOption {

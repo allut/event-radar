@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import { useDropdown } from '../../hooks/useDropdown';
 import type { ChipOption } from '../Chip';
 import styles from './SelectField.module.css';

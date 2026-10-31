@@ -1,5 +1,5 @@
 import { t, ti } from '../../i18n';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import { MAGIC_LINK_EXPIRY_MINUTES } from '../../_generated/sharedConstants';
 import { UI_STATE } from '../../constants/core';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';

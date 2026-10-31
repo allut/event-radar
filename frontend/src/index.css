@@ -430,7 +430,7 @@
 
   /* Category card-fallback gradients — keys mirror the 14-category taxonomy
      in shared/app-config.json (VALID_CATEGORIES); categories with no entry
-     here fall back to --gradient-fallback (categoryGradient() in utils.ts). */
+     here fall back to --gradient-fallback (categoryGradient() in utils/style.ts). */
   --gradient-nightlife:    linear-gradient(135deg, #1a0a1f 0%, #2d1040 100%);
   --gradient-music:        linear-gradient(135deg, #0a1020 0%, #1a2060 100%);
   --gradient-theater:      linear-gradient(135deg, #1a100a 0%, #3d2010 100%);

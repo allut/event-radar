@@ -32,8 +32,8 @@ vi.mock('../../hooks/useFeedback', () => ({
   })),
 }));
 
-vi.mock('../../utils', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../utils')>();
+vi.mock('../../utils/eventActions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/eventActions')>();
   return {
     ...actual,
     trackExternalClick: vi.fn(),
@@ -110,7 +110,7 @@ describe('EventCard', () => {
   });
 
   it('calls trackExternalClick on tickets link click', async () => {
-    const { trackExternalClick } = await import('../../utils');
+    const { trackExternalClick } = await import('../../utils/eventActions');
     const event = makeEvent({ id: 99, url: 'https://tickets.example.com' });
     renderWithProviders(<EventCard event={event} index={0} locale="en" />);
     await userEvent.click(screen.getByRole('link', { name: /tickets/i }));

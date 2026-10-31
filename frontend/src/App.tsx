@@ -8,7 +8,7 @@ import { useLocalePath } from './hooks/useLocalePath';
 import { QUERY_RETRY, QUERY_STALE_TIME } from './constants/api';
 import { LOCALE_ET } from './constants/core';
 import { ROUTES } from './constants/routes';
-import { localizedTo } from './utils';
+import { localizedTo } from './lib/urlLocale';
 import { getStoredLocale } from './lib/auth';
 import ErrorBoundary from './components/ErrorBoundary';
 import Landing from './routes/Landing';

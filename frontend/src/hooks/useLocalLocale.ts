@@ -1,7 +1,8 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { LOCALE_ET } from '../constants/core';
 import { getStoredLocale, setLocale } from '../lib/auth';
-import { isValidLocale, localizedTo } from '../utils';
+import { isValidLocale } from '../utils/locale';
+import { localizedTo } from '../lib/urlLocale';
 
 /** URL-backed locale for the organizer portal and Onboarding — routes that
  * have no PATCH /users/me-style locale endpoint to mirror. The locale is

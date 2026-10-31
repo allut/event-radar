@@ -9,7 +9,7 @@ import {
   pauseReasonKey,
   type PromotionReport as PromotionReportData,
 } from '../../lib/organizerPromotions';
-import { formatCount } from '../../utils';
+import { formatCount } from '../../utils/intlFormat';
 import styles from './OrganizerPromotions.module.css';
 
 const FOOTNOTE_KEYS = [

@@ -9,7 +9,7 @@ import {
   PROMOTION_REQUEST_COPY as COPY,
 } from '../../constants/promotions';
 import type { PromotionRequestRow } from '../../lib/promotions';
-import { apiErrorMessage } from '../../utils';
+import { apiErrorMessage } from '../../utils/apiErrors';
 import Modal from '../Modal';
 import styles from './PromotionRequests.module.css';
 

@@ -30,7 +30,9 @@ import {
 } from '../../constants/claims';
 import { COPY_FEEDBACK_MS, UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
-import { apiErrorMessage, copyToClipboard, numericRouteId } from '../../utils';
+import { apiErrorMessage } from '../../utils/apiErrors';
+import { copyToClipboard } from '../../utils/eventActions';
+import { numericRouteId } from '../../utils/url';
 import OrganizerTopBar from '../../components/OrganizerTopBar';
 import PageState from '../../components/PageState';
 import SeoTags from '../../components/SeoTags';

@@ -105,7 +105,7 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 
 ### Frontend URL Checks
 
-- **`frontend/src/utils.ts::safeUrl()` repeats the scheme check as defense in depth.** Route every untrusted URL through it before an `href` or `src`.
+- **`frontend/src/utils/html.ts::safeUrl()` repeats the scheme check as defense in depth.** Route every untrusted URL through it before an `href` or `src`.
 - **Route-param ids go through `numericRouteId()`, and `API.*` builders `encodeURIComponent` every path segment.**
 
 ## Stored HTML
@@ -115,7 +115,7 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 - **`HtmlListingAdapter` subclasses are covered by default.** `html_base.py::extract_localized_text()` sanitizes its JSON-LD description before returning it.
 - **Organizer-authored HTML gets a narrower allowlist.** `routers/utils.py::organizer_sanitize()` passes `ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS`/`_ATTRS` to `sanitize_html()`: only what the `RichTextEditor` toolbar can produce. Submit, edit and claim edits all call it.
 - **An `attribute_filter` makes that allowlist the true ceiling.** nh3 otherwise keeps generic attributes like `title` and `lang`. `rel` is exempt because it's nh3's own injected `noopener noreferrer`.
-- **The frontend's `sanitizeHtml()` (`frontend/src/utils.ts`) is defense in depth** at both `dangerouslySetInnerHTML` sites in `EventDetail.tsx`. The server-side pass is the real boundary.
+- **The frontend's `sanitizeHtml()` (`frontend/src/utils/html.ts`) is defense in depth** at both `dangerouslySetInnerHTML` sites in `EventDetail.tsx`. The server-side pass is the real boundary.
 
 ## Untrusted Values
 
@@ -182,7 +182,7 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 
 - **The app loads no analytics or advertising script.** GA4 was removed because "cookieless" doesn't answer ePrivacy Art. 5(3), which covers any access to the device, not only cookies. The Estonian DPA (AKI) applies the consent rule directly and lists analytics among the trackers that need prior consent.
 - **A new third-party measurement tool needs a consent prompt first.** Add it to the CSP and the privacy notice's section 4 only together with that prompt.
-- **`click_external` and `view` are the one passive-signal exception.** `utils.ts::trackExternalClick()` posts to our own `/feedback` endpoint, which needs the consumer session, so only a signed-in user's activity is recorded. It feeds their personalised feed, the function they asked for, so it is strictly necessary for it. Keep it out of any aggregate-reporting use.
+- **`click_external` and `view` are the one passive-signal exception.** `utils/eventActions.ts::trackExternalClick()` posts to our own `/feedback` endpoint, which needs the consumer session, so only a signed-in user's activity is recorded. It feeds their personalised feed, the function they asked for, so it is strictly necessary for it. Keep it out of any aggregate-reporting use.
 
 ## Dependency Audit
 

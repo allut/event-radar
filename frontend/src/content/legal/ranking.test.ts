@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { RANKING_TIERS_SIGNED_IN, RANKING_TIERS_SIGNED_OUT } from '../../_generated/sharedConstants';
-import { inlineText } from '../../utils';
+import { inlineText } from '../../utils/html';
 import { LEGAL_LOADERS } from './loaders';
 import { resolveLegalDoc } from '../slotsGate';
 import type { LegalDoc, LegalInline } from './types';

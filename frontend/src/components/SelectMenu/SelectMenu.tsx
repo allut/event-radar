@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import { useDropdown } from '../../hooks/useDropdown';
 import type { ChipOption } from '../Chip';
 import menuStyles from '../shared/Menu.module.css';

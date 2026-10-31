@@ -6,7 +6,7 @@ import { CLAIM_DISCOVERY_STATUS_CLAIMED, CLAIM_DISCOVERY_STATUS_PENDING } from '
 import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
-import { apiErrorMessage, isClaimJustificationRequiredError } from '../../utils';
+import { apiErrorMessage, isClaimJustificationRequiredError } from '../../utils/apiErrors';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
 import { useOrganizerAuth } from '../../hooks/useOrganizerAuth';
 import MagicLinkForm from '../MagicLinkForm';

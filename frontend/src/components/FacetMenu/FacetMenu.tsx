@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import { useDropdown } from '../../hooks/useDropdown';
 import { DROPDOWN_DEFAULT_FOCUS_SELECTOR } from '../../constants/core';
 import Chip, { type ChipOption } from '../Chip';

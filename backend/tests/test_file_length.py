@@ -23,7 +23,6 @@ STAY_WHOLE: dict[str, str] = {
 
 PENDING_SPLIT: dict[str, str] = {
     "backend/app/routers/utils.py": "#654",
-    "frontend/src/utils.ts": "#655",
 }
 
 

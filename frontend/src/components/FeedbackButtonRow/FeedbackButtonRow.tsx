@@ -1,6 +1,6 @@
 import { SIGNAL_CONFIG, type Signal } from '../../constants/feedback';
 import { t } from '../../i18n';
-import { cx, makeActiveClassMap } from '../../utils';
+import { cx, makeActiveClassMap } from '../../utils/style';
 import styles from './FeedbackButtonRow.module.css';
 
 const ACTIVE_CLASS = makeActiveClassMap(styles);

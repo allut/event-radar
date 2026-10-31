@@ -15,7 +15,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 
 ### Helper Homes
 
-- **`localizedPath()` and `stripLocalePrefix()` live in `frontend/src/lib/urlLocale.ts`, re-exported through `utils.ts`.** They're the one deliberate exception to "shared helpers live in `utils.ts`". The module's own comment says why.
+- **`localizedPath()` and `stripLocalePrefix()` live in `frontend/src/lib/urlLocale.ts`, DOM-free so Node build tooling can import it.**
 - **`StaticPage/`'s component has no importer, but its stylesheet is live.** `Contact.module.css` composes `.page`, `.main`, `.title` and `.body` from it. It stays as the scaffold for future static pages.
 - **`components/shared/` is the shared CSS layer.** See [design-system.md](design-system.md) §7 for the composing rules.
 - **`GoogleSignInButton/` is a plain `<a href>` to the backend's OAuth `start` endpoint, with no client-side OAuth.** Its plate colors are Google-mandated, held as `--google-btn-*` tokens in `index.css`. The mark itself is covered by design-system.md's Google Sign-In Mark section.
@@ -46,7 +46,7 @@ Routes (pages) live in `frontend/src/routes/`, shared components in `frontend/sr
 
 - **`routes/AdminApp/` dispatches admin screens on `pathname`, outside `ROUTE_DEFS` and the locale-prefix loop.** It's reached by typed URL or bookmark only.
 - **It loads behind one `React.lazy` chunk,** so a signed-out visit to a public route never downloads it.
-- **The admin console is English-only and skips the shared/i18n workflow.** Its strings are literals, such as `utils.ts::relativeTimeFromNow()`.
+- **The admin console is English-only and skips the shared/i18n workflow.** Its strings are literals, such as `utils/intlFormat.ts::relativeTimeFromNow()`.
 - **`<Pager>` is the exception: admin renders it from shared/i18n with `LOCALE_EN`.** One component serves every list, so its strings live in the catalogue rather than in a second English copy.
 - **Resolving queues page through `hooks/useAdminQueuePage.ts` and `AdminQueueSplitView`.** Each row-removing action tags its row in place and refetches the current page once, so rows pulled up from the next page append at the bottom and paging on never skips a row.
 - **An action passes `tagRow` the `actionSpot(item)` it captured when triggered:** the page offset and the row's slot. One that resolves after the admin changed page only refetches, and leaves the new page's note draft alone. On the same page it always tags, at the captured slot if a refetch already dropped the row.

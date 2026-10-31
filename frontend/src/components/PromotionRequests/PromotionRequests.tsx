@@ -25,7 +25,7 @@ import {
   type PromotionRequestRow,
   type PromotionRequestsResponse,
 } from '../../lib/promotions';
-import { relativeTimeFromNow } from '../../utils';
+import { relativeTimeFromNow } from '../../utils/intlFormat';
 import PageState from '../PageState';
 import PromotionGrantForm from '../PromotionGrantForm';
 import SegmentedControl from '../SegmentedControl';

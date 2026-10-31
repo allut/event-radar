@@ -9,7 +9,11 @@ import {
 import { API, QUERY_KEYS } from '../constants/api';
 import { t } from '../i18n';
 import { useOrganizerImageUpload } from './useOrganizerImageUpload';
-import { apiErrorMessage, hasHtmlContent, localizedTriplet, toIsoOrUndefined, toLocalInput, toggleCapped, type LocalizedTextFields } from '../utils';
+import { apiErrorMessage } from '../utils/apiErrors';
+import { hasHtmlContent } from '../utils/html';
+import { toIsoOrUndefined, toLocalInput } from '../utils/dateTimePicker';
+import { localizedTriplet, type LocalizedTextFields } from '../utils/locale';
+import { toggleCapped } from '../utils/list';
 
 export interface ClaimEventData {
   id: number;

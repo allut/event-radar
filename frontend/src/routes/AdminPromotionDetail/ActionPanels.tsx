@@ -11,7 +11,7 @@ import {
 } from '../../constants/promotions';
 import { formatEuro, isIsoDay, isStripePaid, parseEuroToCents, restrictionTag, type PromotionDetail } from '../../lib/promotions';
 import { PROMOTION_ACTION_PANEL_COPY as PANEL, PROMOTION_STRIPE_COPY as STRIPE } from '../../constants/promotions';
-import { tallinnToday, toDateStr } from '../../utils';
+import { tallinnToday, toDateStr } from '../../utils/calendar';
 import styles from './AdminPromotionDetail.module.css';
 
 /** One command the page runs: the request, resolved to the refreshed detail. */

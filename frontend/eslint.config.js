@@ -23,7 +23,7 @@ const RESTRICTED_SYNTAX = [
   {
     selector: "NewExpression[callee.name='Date'] > Literal[value=/^\\d{4}-\\d{2}-\\d{2}$/]",
     message:
-      'new Date(\'YYYY-MM-DD\') parses as UTC midnight; use parseISODateLocal() from utils.ts.',
+      'new Date(\'YYYY-MM-DD\') parses as UTC midnight; use parseISODateLocal() from utils/calendar.ts.',
   },
   {
     selector:
@@ -36,7 +36,7 @@ const RESTRICTED_SYNTAX = [
 const INTL_PER_CALL = {
   selector: ":function NewExpression[callee.object.name='Intl']",
   message:
-    'An Intl constructor per call is slow in a list render; build it at module scope or use cachedDateTimeFormat() from utils.ts.',
+    'An Intl constructor per call is slow in a list render; build it at module scope or use cachedDateTimeFormat() from utils/intlFormat.ts.',
 }
 
 export default tseslint.config(
@@ -75,8 +75,8 @@ export default tseslint.config(
     },
   },
   {
-    // utils.ts holds the formatter caches, whose miss path builds the formatter.
-    files: ['src/utils.ts'],
+    // utils/intlFormat.ts holds the formatter caches, whose miss path builds the formatter.
+    files: ['src/utils/intlFormat.ts'],
     rules: { 'no-restricted-syntax': ['error', ...RESTRICTED_SYNTAX] },
   },
   {

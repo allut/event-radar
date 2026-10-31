@@ -24,7 +24,7 @@ import {
   type PromotionRequestRow,
   type PromotionValidation,
 } from '../../lib/promotions';
-import { apiErrorMessage } from '../../utils';
+import { apiErrorMessage } from '../../utils/apiErrors';
 import DatePicker from '../DatePicker';
 import PageState from '../PageState';
 import PromotionCapStrip from '../PromotionCapStrip';

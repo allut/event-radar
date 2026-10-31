@@ -5,9 +5,8 @@ import { PRODUCTION_ORIGIN } from '../constants/seo';
  * (Estonian is bare, so there's nothing to strip for it), returning the bare
  * ROUTES.*-equivalent path.
  *
- * Kept in its own DOM-free module (not utils.ts, which pulls in api/client.ts
- * -> utils.ts's own `DOMPurify.addHook` module-level call) so it's safely
- * importable from plain Node build tooling — e.g. scripts/prerender.ts. */
+ * Kept DOM-free (no api/client.ts, no DOMPurify) so it's safely importable
+ * from plain Node build tooling — e.g. scripts/prerender.ts. */
 export function stripLocalePrefix(pathname: string): string {
   const seg = pathname.split('/')[1];
   if (seg && LOCALE_URL_PREFIX_CODES.includes(seg)) {

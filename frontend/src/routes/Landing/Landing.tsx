@@ -17,7 +17,12 @@ import {
 import { ROUTES } from '../../constants/routes';
 import { OG_FALLBACK_IMAGE_PATH, PRODUCTION_ORIGIN } from '../../constants/seo';
 import { t, ti } from '../../i18n';
-import { categoryGradient, cx, formatCount, formatEventTime, formatHeroDateline, formatHourMinute, formatPrice, padIndex, safeUrl, stripHtmlToText, truncateForMeta, withLocaleQuery } from '../../utils';
+import { categoryGradient, cx } from '../../utils/style';
+import { formatCount, formatEventTime, formatHeroDateline, formatHourMinute } from '../../utils/intlFormat';
+import { padIndex } from '../../utils/calendar';
+import { safeUrl, stripHtmlToText, truncateForMeta } from '../../utils/html';
+import { formatPrice } from '../../utils/price';
+import { withLocaleQuery } from '../../utils/url';
 import { useLocaleMutation } from '../../hooks/useLocaleMutation';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import { useMagicLinkRequest } from '../../hooks/useMagicLinkRequest';

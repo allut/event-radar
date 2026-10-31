@@ -11,7 +11,7 @@ import {
   PROMOTION_TRUST_COPY as COPY,
 } from '../../constants/promotions';
 import { formatDateTime, type PromotionComplaint } from '../../lib/promotions';
-import { apiErrorMessage } from '../../utils';
+import { apiErrorMessage } from '../../utils/apiErrors';
 import SelectField from '../SelectField';
 import styles from './PromotionTrust.module.css';
 

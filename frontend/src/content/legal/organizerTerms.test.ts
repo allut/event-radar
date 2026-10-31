@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ORGANIZER_TERMS_VERSION } from '../../_generated/sharedConstants';
 import { OPERATOR_FIELD_LABELS, OPERATOR_IDENTITY, ORGANIZER_TERMS_IS_DRAFT, type OperatorField } from '../../constants/operator';
-import { inlineText } from '../../utils';
+import { inlineText } from '../../utils/html';
 import { LEGAL_LOADERS } from './loaders';
 import type { LegalBlock, LegalInline } from './types';
 

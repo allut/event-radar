@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { adminApi } from '../../api/client';
 import { API, QUERY_KEYS } from '../../constants/api';
-import { padIndex } from '../../utils';
+import { padIndex } from '../../utils/calendar';
 import styles from './AdminDashboard.module.css';
 
 interface AdminCounts {

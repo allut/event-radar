@@ -13,7 +13,7 @@ import { ORGANIZER_NAME_MAX_LEN } from '../../_generated/sharedConstants';
 import { API, QUERY_KEYS } from '../../constants/api';
 import { AUTH_REDIRECT_DELAY_MS, GOOGLE_IDENTITY_PROVIDER } from '../../constants/auth';
 import { TOAST_IDLE, UI_STATE, type ToastState } from '../../constants/core';
-import { apiErrorMessage } from '../../utils';
+import { apiErrorMessage } from '../../utils/apiErrors';
 import SeoTags from '../../components/SeoTags';
 import styles from './OrganizerSettings.module.css';
 
