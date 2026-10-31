@@ -25,12 +25,12 @@ from tests.promotions.conftest import NOW, Clock, at_tallinn, d
 
 @pytest.fixture
 def mails(monkeypatch):
-    from app.routers import admin_promotions as admin_module
+    from app.routers.utils import promotions as notify_module
 
     ended = AsyncMock()
     voided = AsyncMock()
-    monkeypatch.setattr(admin_module, "send_promotion_ended_email", ended)
-    monkeypatch.setattr(admin_module, "send_promotion_void_email", voided)
+    monkeypatch.setattr(notify_module, "send_promotion_ended_email", ended)
+    monkeypatch.setattr(notify_module, "send_promotion_void_email", voided)
     return ended, voided
 
 

@@ -174,7 +174,7 @@ class TestClearNewlyFlagged:
 
     @pytest.mark.asyncio
     async def test_clear_resumes_it(self, client, db, make) -> None:
-        from app.routers import admin_promotions as admin_module  # noqa: F401
+        from app.routers import admin_promotion_commands as commands_module  # noqa: F401
         from tests.promotions.conftest import Clock
 
         promo, ev = await self.flagged_live(db, make)

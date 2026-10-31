@@ -16,7 +16,6 @@ STAY_WHOLE: dict[str, str] = {
     "backend/app/claims/lifecycle.py": "one job, the claim state machine",
     "backend/app/routers/organizer_events.py": "one resource; the Cloudinary upload only serves the submission form",
     "backend/app/ingestion/refetch.py": "one job, refetch and reconcile",
-    "backend/app/routers/admin_promotions.py": "one console area; the grant, the lifecycle commands and their bodies share the cap lock and audit helpers",
     "backend/app/routers/auth.py": "one auth track, parallel to organizer_auth.py; splitting breaks the symmetry",
     "frontend/src/routes/OrganizerPromotionRequest/OrganizerPromotionRequest.tsx": "one route, one form; CheckRow is already extracted",
 }
