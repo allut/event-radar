@@ -45,7 +45,7 @@ from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.ingestion.registry import ADAPTER_REGISTRY
 from app.ranking.daily_feed import build_daily_feeds
 from app.rate_limit import limiter
-from app.routers.utils import (
+from app.routers.utils.admin import (
     acquire_admin_job_lock,
     log_admin_action,
     ndjson_line,

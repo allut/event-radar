@@ -6,7 +6,7 @@ strings (email subjects, digest labels, day/month names) live in
 ``shared/i18n/*.json`` as the single source of truth.
 
 For per-event ``why_go`` bullets (read from DB JSONB), use
-``app.routers.utils.resolve_why_go`` — that lookup is not static text.
+``app.events.localize.resolve_why_go`` — that lookup is not static text.
 """
 
 from __future__ import annotations

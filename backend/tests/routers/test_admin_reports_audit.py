@@ -1,5 +1,5 @@
 """Coverage for the durable AdminAction audit row written by
-log_admin_action() (app/routers/utils.py) for the report queue — resolve and
+log_admin_action() (app/routers/utils/admin.py) for the report queue — resolve and
 takedown each add exactly one AdminAction to the caller's db session with the
 expected action/target, and no row is added when the lookup 404s before
 log_admin_action is ever called."""

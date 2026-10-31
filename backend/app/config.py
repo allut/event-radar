@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     # Second, explicit opt-in required (alongside APP_ENV == development) before
     # require_configured_secret() fails open on an unset secret. A dev-shaped
     # APP_ENV alone must never be sufficient to unprotect /admin/* or the inbound
-    # webhook — see routers/utils.py::require_configured_secret.
+    # webhook — see app/auth/utils.py::require_configured_secret.
     ALLOW_INSECURE_DEV: bool = False
 
     # Development-only kill switch for the embedded APScheduler

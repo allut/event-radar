@@ -112,7 +112,7 @@ async def _run_db_job(
     label: str, func: Callable[..., Awaitable[dict]]
 ) -> dict:
     """Run ``func(db)`` via the shared ``run_in_session`` runner
-    (routers/utils.py), always committing, and log the summary.
+    (app/db.py), always committing, and log the summary.
 
     Rollback-and-reraise-on-failure is handled by run_in_session; this adds
     only the per-label success/failure logging. Shared shape for every

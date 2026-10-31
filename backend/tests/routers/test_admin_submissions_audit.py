@@ -1,5 +1,5 @@
 """Coverage for the durable AdminAction audit row written by
-log_admin_action() (app/routers/utils.py) for the submission queue — approve and
+log_admin_action() (app/routers/utils/admin.py) for the submission queue — approve and
 retract each add exactly one AdminAction to the caller's db session with the
 expected action/target, and no row is added when the mutation itself raises
 before log_admin_action is ever called (e.g. a 404 lookup)."""

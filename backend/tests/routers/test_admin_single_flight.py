@@ -13,7 +13,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.constants.core import APP_ENV_DEVELOPMENT
-from app.routers.utils import _RUNNING_ADMIN_JOBS
+from app.routers.utils.admin import _RUNNING_ADMIN_JOBS
 from tests.routers.conftest import patch_admin_settings
 
 

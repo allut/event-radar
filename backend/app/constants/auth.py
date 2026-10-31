@@ -165,7 +165,7 @@ ADMIN_SESSION_EPOCH_HASH_LEN = 16
 MAGIC_LINK_RESEND_COOLDOWN_SECONDS = 120
 
 # PII masking — number of leading local-part characters kept visible by mask_email()
-# (routers/utils.py) so log lines stay correlatable without persisting raw addresses.
+# (app/auth/utils.py) so log lines stay correlatable without persisting raw addresses.
 EMAIL_MASK_VISIBLE_CHARS = 2
 
 # Auth success-detail response strings, shared verbatim across the consumer,

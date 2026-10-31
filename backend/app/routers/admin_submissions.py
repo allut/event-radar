@@ -42,12 +42,12 @@ from app.events.cancellation import (
 )
 from app.publish import publish_pending
 from app.rate_limit import limiter
-from app.routers.utils import (
+from app.routers.utils import serialize_event
+from app.routers.utils.admin import (
     ResolutionBody,
     validated_resolution_note,
     log_admin_action,
     run_admin_job,
-    serialize_event,
 )
 from app.events.queries import select_events_with_classification
 

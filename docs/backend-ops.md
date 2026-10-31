@@ -151,14 +151,14 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 ### Streaming
 
 - **Job triggers stream NDJSON**, one envelope line per stage with `Cache-Control: no-store`. The `/admin/pipeline` console reads them live.
-- **Add a single-stage trigger through `app/routers/utils/__init__.py::stream_admin_job()`.** A failure becomes a `status: "error"` line, not a 500, because the headers are already sent when a streamed job fails.
+- **Add a single-stage trigger through `app/routers/utils/admin.py::stream_admin_job()`.** A failure becomes a `status: "error"` line, not a 500, because the headers are already sent when a streamed job fails.
 - **`app/routers/admin_jobs.py::admin_pipeline_run` hand-rolls its stage loop.** It needs stop-on-first-failure with a per-stage result dict, which the single-line envelope can't express.
 - **Both paths run the job as its own `asyncio` task fed through a queue.** A client disconnect cancels the streaming generator, because Starlette races `listen_for_disconnect` against the body. A direct `await` would let that cancellation cut the job off mid-run.
 - **`run_admin_job()` backs the non-streaming mutating actions**, such as report and submission resolution and takedown. It returns JSON, and a 500 on failure.
 
 ### Audit Logging
 
-- **`app/routers/utils/__init__.py::log_admin_action()` adds an `AdminAction` row to the caller's own `db` session.** The row rides the mutation's transaction, so it's atomic, never a best-effort write.
+- **`app/routers/utils/admin.py::log_admin_action()` adds an `AdminAction` row to the caller's own `db` session.** The row rides the mutation's transaction, so it's atomic, never a best-effort write.
 - **It returns a closure that emits the Axiom `admin_action` log line.** Call it only after `await db.commit()` succeeds, so a rolled-back mutation never logs an action that didn't happen.
 - **`stream_admin_job`'s `db=None` sites call the closure at once.** They have no transaction to wait for.
 - **`app/db.py::assert_schema_at_head` runs first in the lifespan.** It stops a production boot when the DB isn't at the migration head, and only warns in development. The CI `migrations` job catches the same drift before merge; see CI.

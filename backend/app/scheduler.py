@@ -74,7 +74,7 @@ def _scheduled(
 
     Scheduled jobs must never raise (the scheduler would only log a bare
     traceback); admin-triggered runs of the same jobs go through
-    routers.utils.run_admin_job (which converts failures to 500s) or, for the
+    routers.utils.admin.run_admin_job (which converts failures to 500s) or, for the
     /admin/pipeline job triggers (issue #159), stream_admin_job (which
     streams a status="error" NDJSON line instead, since headers are already
     sent by the time a streamed job can fail).
@@ -114,7 +114,7 @@ def _in_session(
     func: Callable[..., Awaitable[dict]], *, commit: bool
 ) -> Callable[[], Awaitable[dict]]:
     """Bind a DB-scoped job function to the shared ``run_in_session`` runner
-    (routers/utils.py) so _scheduled's wrapper can call it with no arguments."""
+    (app/db.py) so _scheduled's wrapper can call it with no arguments."""
 
     async def _run() -> dict:
         return await run_in_session(func, commit=commit)
@@ -302,7 +302,7 @@ def start_scheduler() -> AsyncIOScheduler | None:
 
     Outside development the flag is ignored and the scheduler starts anyway — a
     stray env var must never be able to stop the pipeline in production. Same
-    double-gate reasoning as routers/utils.py::require_configured_secret.
+    double-gate reasoning as auth/utils.py::require_configured_secret.
     """
     if not settings.ENABLE_SCHEDULER:
         if settings.APP_ENV == APP_ENV_DEVELOPMENT:

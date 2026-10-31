@@ -43,13 +43,13 @@ from app.events.cancellation import (
     send_report_resolution_emails,
 )
 from app.rate_limit import limiter
-from app.routers.utils import (
+from app.routers.utils import validate_report_reason
+from app.routers.utils.admin import (
     ResolutionBody,
     event_or_404,
     validated_resolution_note,
     log_admin_action,
     run_admin_job,
-    validate_report_reason,
 )
 from app.events.venue import (
     resolve_venue_name,

@@ -81,6 +81,6 @@ ADMIN_ACTION_BUILD_FEEDS = "build_feeds"
 ADMIN_ACTION_SEND_DIGESTS = "send_digests"
 ADMIN_ACTION_PIPELINE_RUN = "pipeline_run"
 
-# routers/utils.py
+# routers/utils/admin.py
 ERROR_ADMIN_JOB_FAILED = "{name} failed; see server logs"
 ERROR_ADMIN_JOB_ALREADY_RUNNING = "{name} is already running; try again once it finishes."

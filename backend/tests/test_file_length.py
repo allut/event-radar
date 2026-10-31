@@ -21,9 +21,7 @@ STAY_WHOLE: dict[str, str] = {
     "frontend/src/routes/OrganizerPromotionRequest/OrganizerPromotionRequest.tsx": "one route, one form; CheckRow is already extracted",
 }
 
-PENDING_SPLIT: dict[str, str] = {
-    "backend/app/routers/utils/__init__.py": "#654",
-}
+PENDING_SPLIT: dict[str, str] = {}
 
 
 def _is_scanned(rel: Path) -> bool:
