@@ -137,6 +137,6 @@ A test may stub global `fetch` only when its subject calls `fetch` itself. Add a
 ## Spec Work
 
 - **Bug fixes and new behaviour need a test that failed before the change.** Three agents wrote code first on the Promotions spec, and review then found real defects in lock order and the withdraw refund.
-- **Spec work lands on an integration branch, then flattens to linear commits on `master`.** Run `python scripts/linearize-branch.py <branch> --base master` for the plan, add `--apply` for the new tip, then `git merge --ff-only <tip>`.
+- **Spec work lands on an integration branch, then flattens to linear commits on `master`.** Run `python scripts/linearize-branch.py <branch> --base master` for the plan, add `--apply` for the new tip, then `git merge --ff-only <tip>`. Each commit keeps the subject plus `Closes/Refs #N` lines, and a merge that carried several issues prints a warning to reword it.
 - **One agent owns each migration number.** The orchestrator rechains `down_revision` at merge, and `backend/tests/test_migration_chain.py` catches a collision or a stale "Revises" line.
 
