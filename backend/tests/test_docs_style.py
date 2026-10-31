@@ -4,6 +4,8 @@ The rules themselves live in docs/writing-docs.md. `test_docs_follow_house_style
 checks the ones a regex can judge without false positives;
 `test_code_doc_pointers_resolve` checks that every pointer from code into a doc
 still names a file, `§N` section and heading that exist;
+`test_code_path_cites_resolve` checks that every repo path a code comment names
+still names a tracked file;
 `test_doc_code_cites_resolve` checks that every backticked repo path and
 `path::symbol` cite in a governed doc still names a tracked file and a symbol in it;
 `test_readme_tree_entries_are_tracked` checks the README's Project structure tree.
@@ -80,6 +82,14 @@ UNTRACKED_CITES = {
 }
 UNTRACKED_PREFIXES = ("dist/",)
 
+
+# A repo path inside a comment: at least one directory, so a bare `fienta.py` is
+# left to the doc cites. Matches the same trailing-segment way the doc cites do.
+COMMENT_LINE = re.compile(r"(?:#|//|/\*|\*)\s.*|^\s*(?:\"\"\"|''')")
+COMMENT_PATH = re.compile(r"(?<![\w./@-])((?:[\w-]+/)+[\w.-]+\.(?:py|tsx?|css))\b(?!:\w)")
+# Paths a comment or fixture names on purpose that no commit tracks: placeholders
+# in prose and the synthetic files a test writes to a temp tree.
+UNTRACKED_COMMENT_CITES = {"routes/X.module.css", "backend/app/c.py", "frontend/src/a.ts"}
 
 README_TREE_HEADING = "Project structure"
 TREE_ENTRY = re.compile(r"^[├└]── (\S+)")
@@ -254,6 +264,31 @@ def test_code_doc_pointers_resolve() -> None:
     assert not failures, (
         "Code→doc pointers that no longer resolve (fix the pointer or the heading "
         "in the same commit):\n" + "\n".join(failures)
+    )
+
+
+def test_code_path_cites_resolve() -> None:
+    files, _ = _tracked()
+    failures: list[str] = []
+    for path in _code_files():
+        if not path.endswith((".py", ".ts", ".tsx")):
+            continue
+        try:
+            text = (REPO / path).read_text(encoding="utf-8")
+        except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
+            continue
+        for no, line in enumerate(text.splitlines(), start=1):
+            if not COMMENT_LINE.search(line):
+                continue
+            for cited in COMMENT_PATH.findall(line):
+                if cited in UNTRACKED_COMMENT_CITES:
+                    continue
+                if not any(f == cited or f.endswith("/" + cited) for f in files):
+                    failures.append(f"{path}:{no}: no tracked path {cited!r}")
+    assert not failures, (
+        "Code comments citing a path no commit tracks (fix the cite in the same commit "
+        "as the move; a deliberate placeholder goes in UNTRACKED_COMMENT_CITES):\n"
+        + "\n".join(failures)
     )
 
 

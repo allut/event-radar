@@ -140,7 +140,7 @@ export function parseFirstSitemapEventUrl(sitemapXml: string): string | undefine
  * (a font preload, an `<img>`) can't produce a false-positive "wrong
  * content-type" finding from a check that was never meant to cover it.
  * Regex, not an HTML parser: this only needs to catch the exact tag shape
- * Vite/prerender.ts emits, and functions/api/seo-audit.ts is already the
+ * frontend/scripts/prerender.ts emits, and functions/api/seo-audit.ts is already the
  * pure/network-free-logic-vs-fetching split this repo uses elsewhere
  * (evaluateLiveAudit above). Used to catch the app-shell-fallthrough failure
  * mode a copied-forward snapshot can ship (issue #97): a stale asset
