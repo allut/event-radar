@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 
+from app.models.models import AdminAction
 from app.rate_limit import limiter
 
 
@@ -15,6 +16,7 @@ ADMIN_ROUTER_MODULES = (
     "app.routers.admin",
     "app.routers.admin_events",
     "app.routers.admin_jobs",
+    "app.routers.admin_reports",
 )
 
 
@@ -26,6 +28,16 @@ def admin_app() -> FastAPI:
     for module_name in ADMIN_ROUTER_MODULES:
         app.include_router(importlib.import_module(module_name).router)
     return app
+
+
+def admin_action_calls(db) -> list[AdminAction]:
+    """The AdminAction rows a test's mocked db session had `add`ed. Shared by the
+    admin audit-row test modules."""
+    return [
+        call.args[0]
+        for call in db.add.call_args_list
+        if isinstance(call.args[0], AdminAction)
+    ]
 
 
 def ndjson_lines(resp) -> list:

@@ -79,16 +79,20 @@ class Clock:
 @pytest_asyncio.fixture
 async def client(db, monkeypatch) -> AsyncIterator[AsyncClient]:
     from app.routers import admin as admin_module
+    from app.routers import admin_reports as reports_module
 
     @asynccontextmanager
     async def session_ctx() -> AsyncIterator[Any]:
         yield db
 
-    monkeypatch.setattr(admin_module, "AsyncSessionLocal", session_ctx)
     Clock.now = NOW
-    monkeypatch.setattr(admin_module, "now_tallinn", lambda: Clock.now)
+    modules = (admin_module, reports_module)
+    for module in modules:
+        monkeypatch.setattr(module, "AsyncSessionLocal", session_ctx)
+        monkeypatch.setattr(module, "now_tallinn", lambda: Clock.now)
     app = FastAPI()
-    app.include_router(admin_module.router)
+    for module in modules:
+        app.include_router(module.router)
     app.dependency_overrides[get_current_admin] = lambda: None
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c

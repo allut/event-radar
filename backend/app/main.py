@@ -102,6 +102,7 @@ from app.routers.admin import router as admin_router
 from app.routers.admin_auth import router as admin_auth_router
 from app.routers.admin_events import router as admin_events_router
 from app.routers.admin_jobs import router as admin_jobs_router
+from app.routers.admin_reports import router as admin_reports_router
 from app.routers.auth import router as auth_router
 from app.routers.browse import router as browse_router
 from app.routers.contact import router as contact_router
@@ -789,6 +790,7 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 app.include_router(admin_auth_router)
 app.include_router(admin_events_router)
 app.include_router(admin_jobs_router)
+app.include_router(admin_reports_router)
 app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(browse_router)
