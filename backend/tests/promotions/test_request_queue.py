@@ -54,7 +54,7 @@ def grant_body(start: int = 10, end: int = 14, **kw: Any) -> dict:
 
 @pytest.fixture
 def declined_mail(monkeypatch) -> list[tuple]:
-    from app.routers import admin as admin_module
+    from app.routers import admin_promotion_requests as admin_module
 
     sent: list[tuple] = []
 

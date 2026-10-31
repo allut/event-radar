@@ -17,6 +17,7 @@ ADMIN_ROUTER_MODULES = (
     "app.routers.admin_claims",
     "app.routers.admin_events",
     "app.routers.admin_jobs",
+    "app.routers.admin_promotion_requests",
     "app.routers.admin_promotions",
     "app.routers.admin_reports",
     "app.routers.admin_submissions",
