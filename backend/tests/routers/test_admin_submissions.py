@@ -31,7 +31,7 @@ async def test_list_submissions_empty_page(admin_app, make_db_ctx, mock_db):
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -61,7 +61,7 @@ async def test_list_submissions_populated_page(admin_app, make_db_ctx, mock_db, 
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -99,7 +99,7 @@ async def test_list_submissions_excludes_cancelled(admin_app, make_db_ctx, mock_
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -127,7 +127,7 @@ async def test_list_submissions_returns_total_past_the_first_page(
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -159,7 +159,7 @@ async def test_list_submissions_breaks_created_at_ties_on_id(
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -191,7 +191,7 @@ async def test_submissions_list_and_counts_use_the_admin_read_bucket(
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -248,7 +248,7 @@ async def test_list_submissions_walks_tied_created_at_pages_without_repeats(admi
     walked: list[int] = []
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=ctx),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=ctx),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -281,7 +281,7 @@ async def test_retract_submission_cancels_event(admin_app, make_db_ctx, mock_db,
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
         caplog.at_level("INFO"),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -335,7 +335,7 @@ async def test_retract_submission_auto_resolves_open_reports(
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch("app.events.cancellation.send_report_outcome_email", new=AsyncMock()),
     ):
         mock_settings.ADMIN_PASSWORD = ""
@@ -368,7 +368,7 @@ async def test_retract_non_submission_returns_404(admin_app, make_db_ctx, mock_d
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -396,7 +396,7 @@ async def test_retract_submission_requires_nonblank_note(admin_app, make_db_ctx,
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -442,9 +442,9 @@ async def test_approve_submission_clears_needs_review(admin_app, make_db_ctx, mo
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch(
-            "app.routers.admin.publish_pending", new_callable=AsyncMock
+            "app.routers.admin_submissions.publish_pending", new_callable=AsyncMock
         ) as mock_publish,
         caplog.at_level("INFO"),
     ):
@@ -492,7 +492,7 @@ async def test_approve_submission_requires_nonblank_note(admin_app, make_db_ctx,
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -537,9 +537,9 @@ async def test_approve_submission_with_no_submitting_organizer_still_publishes(
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
         patch(
-            "app.routers.admin.publish_pending", new_callable=AsyncMock
+            "app.routers.admin_submissions.publish_pending", new_callable=AsyncMock
         ) as mock_publish,
     ):
         mock_settings.ADMIN_PASSWORD = ""

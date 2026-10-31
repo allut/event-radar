@@ -1,6 +1,6 @@
 """Coverage for the durable AdminAction audit row written by
-log_admin_action() (app/routers/utils.py) — approve/retract/resolve/takedown
-each add exactly one AdminAction to the caller's db session with the
+log_admin_action() (app/routers/utils.py) for the submission queue — approve and
+retract each add exactly one AdminAction to the caller's db session with the
 expected action/target, and no row is added when the mutation itself raises
 before log_admin_action is ever called (e.g. a 404 lookup)."""
 
@@ -35,7 +35,7 @@ async def test_retract_writes_one_admin_action_row(admin_app, make_db_ctx, mock_
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -69,7 +69,7 @@ async def test_retract_writes_no_admin_action_row_when_not_found(
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -118,8 +118,8 @@ async def test_approve_writes_one_admin_action_row(
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
-        patch("app.routers.admin.publish_pending", new_callable=AsyncMock),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.publish_pending", new_callable=AsyncMock),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -153,7 +153,7 @@ async def test_approve_writes_no_admin_action_row_when_not_found(
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -206,8 +206,8 @@ async def test_approve_logs_nothing_when_commit_fails(
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
-        patch("app.routers.admin.publish_pending", new_callable=AsyncMock),
+        patch("app.routers.admin_submissions.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_submissions.publish_pending", new_callable=AsyncMock),
         caplog.at_level("INFO"),
     ):
         mock_settings.ADMIN_PASSWORD = ""
