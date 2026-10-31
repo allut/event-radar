@@ -227,7 +227,7 @@ async def test_downstream_400_with_allowed_host_not_logged_as_host_rejected(capl
 # ---------------------------------------------------------------------------
 
 
-def testresolve_allowed_hosts_local_default_yields_empty_allowlist():
+def test_resolve_allowed_hosts_local_default_yields_empty_allowlist():
     """Regression guard for the 0.1.6 outage: an unset BACKEND_URL (falls
     back to its local-default config value) with no RENDER_EXTERNAL_HOSTNAME
     must yield *no* allowlist, not one that rejects every request."""
@@ -240,7 +240,7 @@ def testresolve_allowed_hosts_local_default_yields_empty_allowlist():
     mock_log.error.assert_called_once()
 
 
-def testresolve_allowed_hosts_render_hostname_alone():
+def test_resolve_allowed_hosts_render_hostname_alone():
     """RENDER_EXTERNAL_HOSTNAME must resolve the allowlist even when
     BACKEND_URL is still a local/dev default."""
     with patch("app.middleware.settings") as mock_settings:
@@ -252,7 +252,7 @@ def testresolve_allowed_hosts_render_hostname_alone():
     mock_log.error.assert_not_called()
 
 
-def testresolve_allowed_hosts_both_set_and_different():
+def test_resolve_allowed_hosts_both_set_and_different():
     with patch("app.middleware.settings") as mock_settings:
         mock_settings.RENDER_EXTERNAL_HOSTNAME = "srv-abc123.onrender.com"
         mock_settings.BACKEND_URL = "https://event-radar-api-r7l6.onrender.com"
@@ -262,7 +262,7 @@ def testresolve_allowed_hosts_both_set_and_different():
     mock_log.error.assert_not_called()
 
 
-def testresolve_allowed_hosts_both_set_and_equal_dedupes():
+def test_resolve_allowed_hosts_both_set_and_equal_dedupes():
     with patch("app.middleware.settings") as mock_settings:
         mock_settings.RENDER_EXTERNAL_HOSTNAME = "event-radar-api-r7l6.onrender.com"
         mock_settings.BACKEND_URL = "https://event-radar-api-r7l6.onrender.com"
