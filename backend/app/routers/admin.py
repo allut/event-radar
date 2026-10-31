@@ -131,8 +131,6 @@ from app.constants.rate_limits import (
     RATE_LIMIT_SCOPE_ADMIN_READ,
 )
 from app.constants.reports import (
-    ADMIN_RESOLUTION_NOTE_MAX_CHARS,
-    ERROR_RESOLUTION_NOTE_REQUIRED,
     REPORT_AUTO_RESOLVE_NOTE,
     REPORT_STATUS_OPEN,
 )
@@ -223,6 +221,10 @@ from app.publish import publish_pending
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import limiter
 from app.routers.utils import (
+    PromotionGrantBody,
+    ResolutionBody,
+    event_or_404,
+    validated_resolution_note,
     acquire_admin_job_lock,
     claim_dns_record_name,
     log_admin_action,
@@ -428,20 +430,6 @@ async def admin_dedup_groups(
     }
 
 
-class _ResolutionBody(BaseModel):
-    resolution_note: str = Field(max_length=ADMIN_RESOLUTION_NOTE_MAX_CHARS)
-
-
-def _validated_resolution_note(body: _ResolutionBody) -> str:
-    note = body.resolution_note.strip()
-    if not note:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=ERROR_RESOLUTION_NOTE_REQUIRED,
-        )
-    return note
-
-
 @router.get("/submissions", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
 async def admin_list_submissions(
@@ -515,13 +503,13 @@ async def _submission_or_404(db: AsyncSession, event_id: int) -> Event:
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_retract_submission(
-    event_id: int, body: _ResolutionBody, request: Request
+    event_id: int, body: ResolutionBody, request: Request
 ) -> dict:
     """Cancel an organizer-submitted event (soft delete — mirrors organizer's
     own DELETE /organizer/events/{id}; events are never hard-deleted). Also
     clears needs_review so this resolves the review-queue entry outright —
     admin_list_submissions additionally excludes cancelled events regardless."""
-    note = _validated_resolution_note(body)
+    note = validated_resolution_note(body)
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as db:
@@ -552,7 +540,7 @@ async def admin_retract_submission(
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_approve_submission(
-    event_id: int, body: _ResolutionBody, request: Request
+    event_id: int, body: ResolutionBody, request: Request
 ) -> dict:
     """Clear needs_review — an admin has eyeballed the submission and it's fine
     as-is. Also flips the submitting organizer to ``verified`` (a first-time
@@ -560,7 +548,7 @@ async def admin_approve_submission(
     Organizer.verified / app/publish.py) and runs the publish gate so this
     event (and any other now-eligible backlog) goes live immediately rather
     than waiting for the next scheduled publish_pending pass."""
-    note = _validated_resolution_note(body)
+    note = validated_resolution_note(body)
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as db:
@@ -734,7 +722,7 @@ async def _claim_or_404(db: AsyncSession, claim_id: int) -> Claim:
 
 @router.post("/claims/{claim_id}/grant", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Request) -> dict:
+async def admin_grant_claim(claim_id: int, body: ResolutionBody, request: Request) -> dict:
     """Manually approve a pending claim — available for any pending claim
     regardless of mechanism, letting an admin override an inconclusive or
     failed automated check (e.g. a DNS-TXT lookup that hasn't propagated
@@ -750,7 +738,7 @@ async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Reque
     other still-pending sibling claim on the same target once this grant
     lands.
     """
-    note = _validated_resolution_note(body)
+    note = validated_resolution_note(body)
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as db:
@@ -816,12 +804,12 @@ async def admin_grant_claim(claim_id: int, body: _ResolutionBody, request: Reque
 
 @router.post("/claims/{claim_id}/decline", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_decline_claim(claim_id: int, body: _ResolutionBody, request: Request) -> dict:
+async def admin_decline_claim(claim_id: int, body: ResolutionBody, request: Request) -> dict:
     """Decline a pending claim — frees its Publisher/Series key immediately
     (CLAIM_ACTIVE_STATUSES excludes revoked, same as a self-cancel). Unlike
     POST .../revoke this never touches Event.pinned_fields: a pending claim
     was never granted, so nothing was ever pinned against it."""
-    note = _validated_resolution_note(body)
+    note = validated_resolution_note(body)
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as db:
@@ -867,13 +855,13 @@ async def admin_decline_claim(claim_id: int, body: _ResolutionBody, request: Req
 
 @router.post("/claims/{claim_id}/revoke", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
-async def admin_revoke_claim(claim_id: int, body: _ResolutionBody, request: Request) -> dict:
+async def admin_revoke_claim(claim_id: int, body: ResolutionBody, request: Request) -> dict:
     """Revoke an already-granted claim (report escalation or discretion) —
     deletes the row outright (unlike decline, which just flips status) and
     reverts pinned fields on every event this claim covers to source
     authority immediately (#442), not just the representative one, so the
     next ingestion/refetch pass can overwrite them all again."""
-    note = _validated_resolution_note(body)
+    note = validated_resolution_note(body)
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as db:
@@ -1089,15 +1077,6 @@ async def admin_list_reports(
     }
 
 
-async def _event_or_404(db: AsyncSession, event_id: int) -> Event:
-    event = await db.get(Event, event_id)
-    if event is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
-        )
-    return event
-
-
 def _serialize_inspector_report(r: EventReport) -> dict:
     return {
         "id": r.id,
@@ -1302,17 +1281,17 @@ async def admin_get_event(event_id: int, request: Request) -> dict:
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_resolve_reports(
-    event_id: int, body: _ResolutionBody, request: Request
+    event_id: int, body: ResolutionBody, request: Request
 ) -> dict:
     """Close every open report on the event with an admin-supplied note.
     No event mutation — the lightweight "this is fine" action. Never
     immunizes the event: a fresh report on a resolved row reopens it (see
     routers/reports.py's upsert-reopen semantics)."""
-    note = _validated_resolution_note(body)
+    note = validated_resolution_note(body)
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as db:
-            event = await _event_or_404(db, event_id)
+            event = await event_or_404(db, event_id)
             resolved = await resolve_open_reports(db, event, note)
             result = {"event_id": event.id, "resolved_count": len(resolved)}
             emit_admin_log = log_admin_action(
@@ -1331,16 +1310,16 @@ async def admin_resolve_reports(
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_takedown_reported_event(
-    event_id: int, body: _ResolutionBody, request: Request
+    event_id: int, body: ResolutionBody, request: Request
 ) -> dict:
     """Cancel the event and auto-resolve its open reports with the same
     note — the decisive action for content that actually needs to come
     down. Never touches Organizer.verified."""
-    note = _validated_resolution_note(body)
+    note = validated_resolution_note(body)
 
     async def _run() -> dict:
         async with AsyncSessionLocal() as db:
-            event = await _event_or_404(db, event_id)
+            event = await event_or_404(db, event_id)
             resolved = await cancel_event_and_resolve_reports(
                 db, event, EVENT_CANCELLATION_REASON_REPORT_TAKEDOWN, note
             )
@@ -1682,22 +1661,6 @@ async def admin_stats(request: Request) -> dict:
 # ---------------------------------------------------------------------------
 
 
-class _PromotionGrantBody(BaseModel):
-    start_date: date
-    end_date: date
-    advertiser_legal_name: str = Field(max_length=PROMOTION_ADVERTISER_NAME_MAX_CHARS)
-    advertiser_registry_code: str = Field(max_length=PROMOTION_REGISTRY_CODE_MAX_LEN)
-    billing_email: EmailStr | None = Field(
-        default=None, max_length=PROMOTION_BILLING_EMAIL_MAX_CHARS
-    )
-    is_complimentary: bool = False
-    complimentary_note: str | None = Field(default=None, max_length=PROMOTION_NOTE_MAX_CHARS)
-    invoice_reference: str | None = Field(default=None, max_length=PROMOTION_INVOICE_REFERENCE_MAX_LEN)
-    # Required (both) when the event carries a Promotion restriction (#612).
-    restriction_clearance_confirmed: bool = False
-    restriction_clearance_note: str | None = Field(default=None, max_length=PROMOTION_NOTE_MAX_CHARS)
-
-
 @router.get("/promotions/cap-strip", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
 async def admin_promotion_cap_strip(request: Request) -> dict:
@@ -1931,7 +1894,7 @@ async def admin_promotion_context(event_id: int, request: Request) -> dict:
     """Grant form context: resolved owner (null = cannot grant), prefill,
     window rules, pricing and the event's existing Promotions."""
     async with AsyncSessionLocal() as db:
-        event = await _event_or_404(db, event_id)
+        event = await event_or_404(db, event_id)
         return await grant_context(db, event, now_tallinn())
 
 
@@ -1949,7 +1912,7 @@ async def admin_validate_promotion_dates(
     """Live date validation for the grant form: every window, overlap and cap
     problem for the candidate window, plus the price. Writes nothing."""
     async with AsyncSessionLocal() as db:
-        event = await _event_or_404(db, event_id)
+        event = await event_or_404(db, event_id)
         violations = await validate_grant(db, event, start_date, end_date, now_tallinn())
     return validation_payload(start_date, end_date, violations, is_complimentary)
 
@@ -1961,7 +1924,7 @@ async def admin_validate_promotion_dates(
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_grant_promotion(
-    event_id: int, body: _PromotionGrantBody, request: Request
+    event_id: int, body: PromotionGrantBody, request: Request
 ) -> dict:
     """Grant a Promotion for an owned event. Refused (409 no_owner / overlap /
     cap_exceeded, 422 for window and field rules) with `detail.errors` listing
@@ -1988,7 +1951,7 @@ async def admin_grant_promotion(
     async def _run() -> dict:
         now = now_tallinn()
         async with AsyncSessionLocal() as db:
-            event = await _event_or_404(db, event_id)
+            event = await event_or_404(db, event_id)
             try:
                 promotion = await grant_promotion(db, event, grant_request, now)
             except PromotionRefused as refused:
@@ -2207,7 +2170,7 @@ async def admin_list_promotion_requests(
 )
 @limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")
 async def admin_grant_promotion_request(
-    request_id: int, body: _PromotionGrantBody, request: Request
+    request_id: int, body: PromotionGrantBody, request: Request
 ) -> dict:
     """Grant a pending request from the form prefilled with it (dates and
     fields editable). Creates the Promotion and marks the request granted in

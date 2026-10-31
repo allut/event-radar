@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from fastapi import HTTPException, Response, status
@@ -44,6 +44,7 @@ from app.constants.claims import (
 )
 from app.constants.core import LOCALE_ET, TALLINN_TZ
 from app.constants.events import (
+    ERROR_EVENT_NOT_FOUND,
     EVENT_STATUS_CANCELLED,
     EVENT_STATUS_CLASSIFIED,
     EVENT_STATUS_PUBLISHED,
@@ -61,8 +62,17 @@ from app.constants.ranking import (
     PREFERENCE_SIGNALS,
     PREFERRED_TASTE_MIN_WEIGHT,
 )
-from app.constants.promotions import PROMOTION_CONFLICT_ERROR_CODES
+from app.constants.promotions import (
+    PROMOTION_ADVERTISER_NAME_MAX_CHARS,
+    PROMOTION_BILLING_EMAIL_MAX_CHARS,
+    PROMOTION_CONFLICT_ERROR_CODES,
+    PROMOTION_INVOICE_REFERENCE_MAX_LEN,
+    PROMOTION_NOTE_MAX_CHARS,
+    PROMOTION_REGISTRY_CODE_MAX_LEN,
+)
 from app.constants.reports import (
+    ADMIN_RESOLUTION_NOTE_MAX_CHARS,
+    ERROR_RESOLUTION_NOTE_REQUIRED,
     ERROR_INVALID_REPORT_REASON,
     REPORT_STATUS_OPEN,
     VALID_REPORT_REASONS,
@@ -950,3 +960,42 @@ def promotion_refusal(refused: PromotionRefused) -> HTTPException:
             "errors": [v.as_dict() for v in refused.violations],
         },
     )
+
+
+class ResolutionBody(BaseModel):
+    resolution_note: str = Field(max_length=ADMIN_RESOLUTION_NOTE_MAX_CHARS)
+
+
+def validated_resolution_note(body: ResolutionBody) -> str:
+    note = body.resolution_note.strip()
+    if not note:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=ERROR_RESOLUTION_NOTE_REQUIRED,
+        )
+    return note
+
+
+async def event_or_404(db: AsyncSession, event_id: int) -> Event:
+    event = await db.get(Event, event_id)
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=ERROR_EVENT_NOT_FOUND
+        )
+    return event
+
+
+class PromotionGrantBody(BaseModel):
+    start_date: date
+    end_date: date
+    advertiser_legal_name: str = Field(max_length=PROMOTION_ADVERTISER_NAME_MAX_CHARS)
+    advertiser_registry_code: str = Field(max_length=PROMOTION_REGISTRY_CODE_MAX_LEN)
+    billing_email: EmailStr | None = Field(
+        default=None, max_length=PROMOTION_BILLING_EMAIL_MAX_CHARS
+    )
+    is_complimentary: bool = False
+    complimentary_note: str | None = Field(default=None, max_length=PROMOTION_NOTE_MAX_CHARS)
+    invoice_reference: str | None = Field(default=None, max_length=PROMOTION_INVOICE_REFERENCE_MAX_LEN)
+    # Required (both) when the event carries a Promotion restriction (#612).
+    restriction_clearance_confirmed: bool = False
+    restriction_clearance_note: str | None = Field(default=None, max_length=PROMOTION_NOTE_MAX_CHARS)
