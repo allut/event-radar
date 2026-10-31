@@ -102,7 +102,7 @@ from app.models.events import Event
 from app.models.organizers import Organizer
 from app.models.promotions import Promotion
 from app.rate_limit import limiter
-from app.routers.utils import PromotionGrantBody, promotion_refusal
+from app.routers.utils.promotions import PromotionGrantBody, promotion_refusal
 from app.routers.utils.admin import event_or_404, log_admin_action, run_admin_job
 from app.events.localize import (
     resolve_title,

@@ -45,7 +45,7 @@ from app.promotions.views import validation_payload
 from app.promotions.windows import now_tallinn
 from app.events.localize import resolve_title
 from app.rate_limit import limiter
-from app.routers.utils import promotion_refusal
+from app.routers.utils.promotions import promotion_refusal
 
 log = logging.getLogger(__name__)
 

@@ -43,7 +43,7 @@ from app.events.cancellation import (
     send_report_resolution_emails,
 )
 from app.rate_limit import limiter
-from app.routers.utils import validate_report_reason
+from app.routers.utils.reports import validate_report_reason
 from app.routers.utils.admin import (
     ResolutionBody,
     event_or_404,
