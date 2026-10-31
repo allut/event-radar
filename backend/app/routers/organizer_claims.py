@@ -84,11 +84,8 @@ from app.models.organizers import Organizer, OrganizerMagicLink
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
 from app.promotions.organizer_view import promotion_flags_for
-from app.routers.utils import (
-    claim_dns_record_name,
-    resolve_locale_param,
-    serialize_event,
-)
+from app.routers.utils import claim_dns_record_name
+from app.routers.utils.serializers import resolve_locale_param, serialize_event
 from app.routers.utils.auth import (
     get_or_create_organizer,
     recent_unused_link_exists,

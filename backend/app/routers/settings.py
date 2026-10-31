@@ -30,7 +30,7 @@ from app.email.subscription import set_digest_subscription
 from app.models.users import Persona, User, UserIdentity, UserPersona
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
-from app.routers.utils import compute_preferred_taxonomy, serialize_user
+from app.routers.utils.serializers import compute_preferred_taxonomy, serialize_user
 from app.routers.utils.auth import is_identity_linked, set_session_cookie
 from app.ranking.score import persona_weight_tuple
 

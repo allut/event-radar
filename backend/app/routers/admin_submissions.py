@@ -42,7 +42,7 @@ from app.events.cancellation import (
 )
 from app.publish import publish_pending
 from app.rate_limit import limiter
-from app.routers.utils import serialize_event
+from app.routers.utils.serializers import serialize_event
 from app.routers.utils.admin import (
     ResolutionBody,
     validated_resolution_note,

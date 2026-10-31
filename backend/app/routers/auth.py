@@ -92,7 +92,7 @@ from app.constants.rate_limits import (
 from app.db import get_db
 from app.models.users import AuthMagicLink, User, UserIdentity, UserPersona
 from app.rate_limit import limiter
-from app.routers.utils import serialize_user
+from app.routers.utils.serializers import serialize_user
 from app.routers.utils.auth import (
     RequestLinkBody,
     VerifyTokenBody,

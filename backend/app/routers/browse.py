@@ -73,7 +73,7 @@ from app.ranking.score import (
 )
 from app.rate_limit import limiter
 from app.auth.dependencies import get_optional_user
-from app.routers.utils import (
+from app.routers.utils.serializers import (
     load_user_reported_events,
     load_user_signals,
     resolve_locale_param,

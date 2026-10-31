@@ -32,7 +32,7 @@ from app.db import get_db
 from app.models.events import Event, EventClassification
 from app.models.organizers import Venue
 from app.rate_limit import limiter
-from app.routers.utils import resolve_locale_param, serialize_event
+from app.routers.utils.serializers import resolve_locale_param, serialize_event
 from app.events.queries import (
     canonical_event_filter,
     collapse_series_duplicates,

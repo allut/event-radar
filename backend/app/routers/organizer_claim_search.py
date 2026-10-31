@@ -55,7 +55,7 @@ from app.models.claims import Claim
 from app.models.events import Event, EventSource
 from app.models.organizers import Organizer
 from app.rate_limit import limiter
-from app.routers.utils import resolve_locale_param
+from app.routers.utils.serializers import resolve_locale_param
 
 router = APIRouter(prefix="/organizer/claims", tags=["organizer-claims"])
 

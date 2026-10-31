@@ -106,13 +106,12 @@ from app.routers.utils import (
     organizer_sanitize,
     own_venue_or_404,
     replace_organizer_categories,
-    resolve_locale_param,
-    serialize_event,
     validate_categories,
     validate_price_ordering,
     validate_time_ordering,
     validate_tz_aware,
 )
+from app.routers.utils.serializers import resolve_locale_param, serialize_event
 from app.events.queries import select_events_with_classification
 
 log = logging.getLogger(__name__)

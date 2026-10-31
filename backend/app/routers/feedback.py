@@ -44,7 +44,7 @@ from app.models.users import User
 from app.promotions.counters import record_ref_hit
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
-from app.routers.utils import (
+from app.routers.utils.serializers import (
     load_user_reported_events,
     resolve_locale_param,
     serialize_event,
