@@ -118,8 +118,9 @@ def get_current_admin(
     admin console's second factor bypassable; OWASP audit #4 removed the last
     two Basic-eligible routes, /admin/counts and /admin/stats, since password-
     only access doubled as a guess oracle the per-IP lockout can't slow when
-    spread across many IPs). Shared by routers/admin.py and
-    routers/admin_auth.py, so it lives here rather than in either router.
+    spread across many IPs). Shared by every routers/admin_*.py
+    module (admin_auth.py included), so it lives here rather than in any one
+    router.
 
     A missing cookie still goes through the same require_configured_secret
     dev fail-open every other secret-gated surface uses (ADMIN_PASSWORD

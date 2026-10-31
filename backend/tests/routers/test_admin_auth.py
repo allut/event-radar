@@ -28,7 +28,7 @@ def _reset_totp_replay_state():
 
 
 def _build_app() -> FastAPI:
-    from app.routers.admin import router as admin_router
+    from app.routers.admin_jobs import router as admin_router
     from app.routers.admin_auth import router as admin_auth_router
 
     app = FastAPI()
@@ -207,7 +207,7 @@ async def test_admin_session_cookie_satisfies_get_current_admin():
     with patch_admin_settings() as mock_settings, patch(
         "app.routers.admin_auth.settings", mock_settings
     ), patch(
-        "app.routers.admin.publish_pending_job",
+        "app.routers.admin_jobs.publish_pending_job",
         new_callable=AsyncMock,
         return_value={"published": 0},
     ):

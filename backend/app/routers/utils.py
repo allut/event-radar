@@ -852,7 +852,7 @@ async def own_venue_or_404(db: AsyncSession, venue_id: int, organizer_id: int) -
 
 
 # {"YYYY-MM-DD": count} — in-memory, single-process, like the admin lockout
-# dict (routers/admin.py) — resets on deploy/restart, which just means one
+# dict (auth/admin_lockout.py) — resets on deploy/restart, which just means one
 # lost day of budget tracking, not a security regression.
 _unverified_account_creation_counts: dict[str, int] = {}
 _unverified_account_budget_alerted: set[str] = set()

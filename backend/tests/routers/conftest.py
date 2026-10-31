@@ -1,3 +1,4 @@
+import importlib
 import json
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
@@ -9,14 +10,20 @@ from fastapi import FastAPI
 from app.rate_limit import limiter
 
 
+# Every admin console router except admin_auth (login/session, mounted by its own tests).
+ADMIN_ROUTER_MODULES = (
+    "app.routers.admin",
+    "app.routers.admin_jobs",
+)
+
+
 @pytest.fixture
 def admin_app() -> FastAPI:
-    """Minimal FastAPI app wiring only the admin router — shared by every
-    admin-router test module that needs a bare app to mount it on."""
-    from app.routers.admin import router
-
+    """Minimal FastAPI app wiring every admin console router — shared by every
+    admin-router test module that needs a bare app to mount them on."""
     app = FastAPI()
-    app.include_router(router)
+    for module_name in ADMIN_ROUTER_MODULES:
+        app.include_router(importlib.import_module(module_name).router)
     return app
 
 

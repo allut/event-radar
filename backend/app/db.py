@@ -87,7 +87,7 @@ async def run_in_session(
     asked, roll back and re-raise on failure.
 
     Shared by every scheduler/admin entry point that needs its own session
-    (app/main.py's scheduled jobs and app/routers/admin.py's manual triggers).
+    (app/main.py's scheduled jobs and app/routers/admin_jobs.py's manual triggers).
     """
     async with AsyncSessionLocal() as db:
         try:

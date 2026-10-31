@@ -27,9 +27,9 @@ async def test_sync_organizers_calls_job_and_returns_result(admin_app, make_db_c
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.sync_fienta_organizers",
+            "app.routers.admin_jobs.sync_fienta_organizers",
             new_callable=AsyncMock,
             return_value=expected,
         ) as mock_sync,
@@ -57,9 +57,9 @@ async def test_sync_organizers_returns_500_on_job_error(admin_app, make_db_ctx, 
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.sync_fienta_organizers",
+            "app.routers.admin_jobs.sync_fienta_organizers",
             new_callable=AsyncMock,
             side_effect=RuntimeError("fienta down"),
         ),
@@ -96,7 +96,7 @@ async def test_cleanup_defaults_to_dry_run_and_does_not_commit(admin_app, make_d
         patch_admin_settings() as mock_settings,
         patch("app.db.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.cleanup_stale_data",
+            "app.routers.admin_jobs.cleanup_stale_data",
             new_callable=AsyncMock,
             return_value=expected,
         ) as mock_cleanup,
@@ -126,7 +126,7 @@ async def test_cleanup_dry_run_false_actually_deletes_and_commits(admin_app, mak
         patch_admin_settings() as mock_settings,
         patch("app.db.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.cleanup_stale_data",
+            "app.routers.admin_jobs.cleanup_stale_data",
             new_callable=AsyncMock,
             return_value={},
         ) as mock_cleanup,
@@ -153,7 +153,7 @@ async def test_cleanup_returns_500_on_job_error(admin_app, make_db_ctx, mock_db)
         patch_admin_settings() as mock_settings,
         patch("app.db.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.cleanup_stale_data",
+            "app.routers.admin_jobs.cleanup_stale_data",
             new_callable=AsyncMock,
             side_effect=RuntimeError("db down"),
         ),
@@ -185,9 +185,9 @@ async def test_build_feeds_calls_job_and_returns_result(admin_app, make_db_ctx, 
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.build_daily_feeds",
+            "app.routers.admin_jobs.build_daily_feeds",
             new_callable=AsyncMock,
             return_value=expected,
         ) as mock_build,
@@ -214,9 +214,9 @@ async def test_build_feeds_returns_500_on_job_error(admin_app, make_db_ctx, mock
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.build_daily_feeds",
+            "app.routers.admin_jobs.build_daily_feeds",
             new_callable=AsyncMock,
             side_effect=RuntimeError("db error"),
         ),
@@ -248,7 +248,7 @@ async def test_publish_calls_job_and_returns_result(admin_app):
     with (
         patch_admin_settings() as mock_settings,
         patch(
-            "app.routers.admin.publish_pending_job",
+            "app.routers.admin_jobs.publish_pending_job",
             new_callable=AsyncMock,
             return_value=expected,
         ) as mock_publish,
@@ -275,7 +275,7 @@ async def test_publish_returns_500_on_job_error(admin_app):
     with (
         patch_admin_settings() as mock_settings,
         patch(
-            "app.routers.admin.publish_pending_job",
+            "app.routers.admin_jobs.publish_pending_job",
             new_callable=AsyncMock,
             side_effect=RuntimeError("db error"),
         ),
@@ -307,7 +307,7 @@ async def test_geocode_calls_job_and_returns_result(admin_app):
     with (
         patch_admin_settings() as mock_settings,
         patch(
-            "app.routers.admin.geocode_pending_job",
+            "app.routers.admin_jobs.geocode_pending_job",
             new_callable=AsyncMock,
             return_value=expected,
         ) as mock_geocode,
@@ -334,7 +334,7 @@ async def test_geocode_returns_500_on_job_error(admin_app):
     with (
         patch_admin_settings() as mock_settings,
         patch(
-            "app.routers.admin.geocode_pending_job",
+            "app.routers.admin_jobs.geocode_pending_job",
             new_callable=AsyncMock,
             side_effect=RuntimeError("nominatim error"),
         ),
@@ -366,9 +366,9 @@ async def test_send_digests_defaults_to_dry_run(admin_app, make_db_ctx, mock_db)
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.send_daily_digests",
+            "app.routers.admin_jobs.send_daily_digests",
             new_callable=AsyncMock,
             return_value=expected,
         ) as mock_send,
@@ -394,9 +394,9 @@ async def test_send_digests_passes_dry_run_false(admin_app, make_db_ctx, mock_db
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.send_daily_digests",
+            "app.routers.admin_jobs.send_daily_digests",
             new_callable=AsyncMock,
             return_value=expected,
         ) as mock_send,
@@ -423,9 +423,9 @@ async def test_send_digests_returns_500_on_job_error(admin_app, make_db_ctx, moc
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.send_daily_digests",
+            "app.routers.admin_jobs.send_daily_digests",
             new_callable=AsyncMock,
             side_effect=RuntimeError("resend error"),
         ),
@@ -460,26 +460,26 @@ def _all_job_mocks(
 ):
     """Return a dict of patch targets → AsyncMock return values."""
     return {
-        "app.routers.admin.sync_fienta_organizers": AsyncMock(
+        "app.routers.admin_jobs.sync_fienta_organizers": AsyncMock(
             return_value=sync_result or {"added": [], "stale": []}
         ),
-        "app.routers.admin.ingest_all_enabled": AsyncMock(
+        "app.routers.admin_jobs.ingest_all_enabled": AsyncMock(
             return_value=ingest_result or []
         ),
-        "app.routers.admin.dedup_pass_drain_now": AsyncMock(
+        "app.routers.admin_jobs.dedup_pass_drain_now": AsyncMock(
             return_value=dedup_result or {"merged": 0}
         ),
-        "app.routers.admin.classify_pending_drain_now": AsyncMock(
+        "app.routers.admin_jobs.classify_pending_drain_now": AsyncMock(
             return_value=classify_result or {"classified": 0}
         ),
-        "app.routers.admin.publish_pending_job": AsyncMock(
+        "app.routers.admin_jobs.publish_pending_job": AsyncMock(
             return_value=publish_result or {"published": 0}
         ),
-        "app.routers.admin.build_daily_feeds": AsyncMock(
+        "app.routers.admin_jobs.build_daily_feeds": AsyncMock(
             return_value=feeds_result
             or {"built": 1, "empty": 0, "total_users": 1, "candidate_events": 5}
         ),
-        "app.routers.admin.send_daily_digests": AsyncMock(
+        "app.routers.admin_jobs.send_daily_digests": AsyncMock(
             return_value=digests_result
             or {"sent": 1, "skipped": 0, "errored": 0, "total_opted_in": 1, "dry_run": True}
         ),
@@ -493,14 +493,14 @@ async def test_pipeline_run_calls_all_seven_stages_in_order(admin_app, make_db_c
     mocks = _all_job_mocks()
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
-        patch("app.routers.admin.sync_fienta_organizers", mocks["app.routers.admin.sync_fienta_organizers"]),
-        patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
-        patch("app.routers.admin.dedup_pass_drain_now", mocks["app.routers.admin.dedup_pass_drain_now"]),
-        patch("app.routers.admin.classify_pending_drain_now", mocks["app.routers.admin.classify_pending_drain_now"]),
-        patch("app.routers.admin.publish_pending_job", mocks["app.routers.admin.publish_pending_job"]),
-        patch("app.routers.admin.build_daily_feeds", mocks["app.routers.admin.build_daily_feeds"]),
-        patch("app.routers.admin.send_daily_digests", mocks["app.routers.admin.send_daily_digests"]),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.sync_fienta_organizers", mocks["app.routers.admin_jobs.sync_fienta_organizers"]),
+        patch("app.routers.admin_jobs.ingest_all_enabled", mocks["app.routers.admin_jobs.ingest_all_enabled"]),
+        patch("app.routers.admin_jobs.dedup_pass_drain_now", mocks["app.routers.admin_jobs.dedup_pass_drain_now"]),
+        patch("app.routers.admin_jobs.classify_pending_drain_now", mocks["app.routers.admin_jobs.classify_pending_drain_now"]),
+        patch("app.routers.admin_jobs.publish_pending_job", mocks["app.routers.admin_jobs.publish_pending_job"]),
+        patch("app.routers.admin_jobs.build_daily_feeds", mocks["app.routers.admin_jobs.build_daily_feeds"]),
+        patch("app.routers.admin_jobs.send_daily_digests", mocks["app.routers.admin_jobs.send_daily_digests"]),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -535,14 +535,14 @@ async def test_pipeline_run_defaults_to_dry_run_for_digests(admin_app, make_db_c
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
-        patch("app.routers.admin.sync_fienta_organizers", mocks["app.routers.admin.sync_fienta_organizers"]),
-        patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
-        patch("app.routers.admin.dedup_pass_drain_now", mocks["app.routers.admin.dedup_pass_drain_now"]),
-        patch("app.routers.admin.classify_pending_drain_now", mocks["app.routers.admin.classify_pending_drain_now"]),
-        patch("app.routers.admin.publish_pending_job", mocks["app.routers.admin.publish_pending_job"]),
-        patch("app.routers.admin.build_daily_feeds", mocks["app.routers.admin.build_daily_feeds"]),
-        patch("app.routers.admin.send_daily_digests", mocks["app.routers.admin.send_daily_digests"]),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.sync_fienta_organizers", mocks["app.routers.admin_jobs.sync_fienta_organizers"]),
+        patch("app.routers.admin_jobs.ingest_all_enabled", mocks["app.routers.admin_jobs.ingest_all_enabled"]),
+        patch("app.routers.admin_jobs.dedup_pass_drain_now", mocks["app.routers.admin_jobs.dedup_pass_drain_now"]),
+        patch("app.routers.admin_jobs.classify_pending_drain_now", mocks["app.routers.admin_jobs.classify_pending_drain_now"]),
+        patch("app.routers.admin_jobs.publish_pending_job", mocks["app.routers.admin_jobs.publish_pending_job"]),
+        patch("app.routers.admin_jobs.build_daily_feeds", mocks["app.routers.admin_jobs.build_daily_feeds"]),
+        patch("app.routers.admin_jobs.send_daily_digests", mocks["app.routers.admin_jobs.send_daily_digests"]),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -553,7 +553,7 @@ async def test_pipeline_run_defaults_to_dry_run_for_digests(admin_app, make_db_c
             resp = await client.post("/admin/pipeline/run", auth=("admin", ""))
 
     assert resp.status_code == http.HTTPStatus.OK
-    _, kwargs = mocks["app.routers.admin.send_daily_digests"].call_args
+    _, kwargs = mocks["app.routers.admin_jobs.send_daily_digests"].call_args
     assert kwargs.get("dry_run") is True
 
 
@@ -565,14 +565,14 @@ async def test_pipeline_run_passes_dry_run_false_to_digests(admin_app, make_db_c
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
-        patch("app.routers.admin.sync_fienta_organizers", mocks["app.routers.admin.sync_fienta_organizers"]),
-        patch("app.routers.admin.ingest_all_enabled", mocks["app.routers.admin.ingest_all_enabled"]),
-        patch("app.routers.admin.dedup_pass_drain_now", mocks["app.routers.admin.dedup_pass_drain_now"]),
-        patch("app.routers.admin.classify_pending_drain_now", mocks["app.routers.admin.classify_pending_drain_now"]),
-        patch("app.routers.admin.publish_pending_job", mocks["app.routers.admin.publish_pending_job"]),
-        patch("app.routers.admin.build_daily_feeds", mocks["app.routers.admin.build_daily_feeds"]),
-        patch("app.routers.admin.send_daily_digests", mocks["app.routers.admin.send_daily_digests"]),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.sync_fienta_organizers", mocks["app.routers.admin_jobs.sync_fienta_organizers"]),
+        patch("app.routers.admin_jobs.ingest_all_enabled", mocks["app.routers.admin_jobs.ingest_all_enabled"]),
+        patch("app.routers.admin_jobs.dedup_pass_drain_now", mocks["app.routers.admin_jobs.dedup_pass_drain_now"]),
+        patch("app.routers.admin_jobs.classify_pending_drain_now", mocks["app.routers.admin_jobs.classify_pending_drain_now"]),
+        patch("app.routers.admin_jobs.publish_pending_job", mocks["app.routers.admin_jobs.publish_pending_job"]),
+        patch("app.routers.admin_jobs.build_daily_feeds", mocks["app.routers.admin_jobs.build_daily_feeds"]),
+        patch("app.routers.admin_jobs.send_daily_digests", mocks["app.routers.admin_jobs.send_daily_digests"]),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -585,7 +585,7 @@ async def test_pipeline_run_passes_dry_run_false_to_digests(admin_app, make_db_c
             )
 
     assert resp.status_code == http.HTTPStatus.OK
-    _, kwargs = mocks["app.routers.admin.send_daily_digests"].call_args
+    _, kwargs = mocks["app.routers.admin_jobs.send_daily_digests"].call_args
     assert kwargs.get("dry_run") is False
 
 
@@ -599,18 +599,18 @@ async def test_pipeline_run_stops_on_ingest_failure(admin_app, make_db_ctx, mock
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.sync_fienta_organizers",
+            "app.routers.admin_jobs.sync_fienta_organizers",
             new_callable=AsyncMock,
             return_value={"added": [], "stale": []},
         ),
-        patch("app.routers.admin.ingest_all_enabled", mock_ingest),
-        patch("app.routers.admin.dedup_pass_drain_now", mock_dedup),
-        patch("app.routers.admin.classify_pending_drain_now", new_callable=AsyncMock),
-        patch("app.routers.admin.publish_pending_job", new_callable=AsyncMock),
-        patch("app.routers.admin.build_daily_feeds", new_callable=AsyncMock),
-        patch("app.routers.admin.send_daily_digests", new_callable=AsyncMock),
+        patch("app.routers.admin_jobs.ingest_all_enabled", mock_ingest),
+        patch("app.routers.admin_jobs.dedup_pass_drain_now", mock_dedup),
+        patch("app.routers.admin_jobs.classify_pending_drain_now", new_callable=AsyncMock),
+        patch("app.routers.admin_jobs.publish_pending_job", new_callable=AsyncMock),
+        patch("app.routers.admin_jobs.build_daily_feeds", new_callable=AsyncMock),
+        patch("app.routers.admin_jobs.send_daily_digests", new_callable=AsyncMock),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -638,18 +638,18 @@ async def test_pipeline_run_stops_on_sync_failure(admin_app, make_db_ctx, mock_d
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=db_ctx),
+        patch("app.routers.admin_jobs.AsyncSessionLocal", return_value=db_ctx),
         patch(
-            "app.routers.admin.sync_fienta_organizers",
+            "app.routers.admin_jobs.sync_fienta_organizers",
             new_callable=AsyncMock,
             side_effect=RuntimeError("fienta down"),
         ),
-        patch("app.routers.admin.ingest_all_enabled", mock_ingest),
-        patch("app.routers.admin.dedup_pass_drain_now", new_callable=AsyncMock),
-        patch("app.routers.admin.classify_pending_drain_now", new_callable=AsyncMock),
-        patch("app.routers.admin.publish_pending_job", new_callable=AsyncMock),
-        patch("app.routers.admin.build_daily_feeds", new_callable=AsyncMock),
-        patch("app.routers.admin.send_daily_digests", new_callable=AsyncMock),
+        patch("app.routers.admin_jobs.ingest_all_enabled", mock_ingest),
+        patch("app.routers.admin_jobs.dedup_pass_drain_now", new_callable=AsyncMock),
+        patch("app.routers.admin_jobs.classify_pending_drain_now", new_callable=AsyncMock),
+        patch("app.routers.admin_jobs.publish_pending_job", new_callable=AsyncMock),
+        patch("app.routers.admin_jobs.build_daily_feeds", new_callable=AsyncMock),
+        patch("app.routers.admin_jobs.send_daily_digests", new_callable=AsyncMock),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT

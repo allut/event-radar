@@ -136,12 +136,12 @@ async def test_rate_limit_bucket_shared_across_different_admin_routes(admin_app)
     with (
         patch_admin_settings() as mock_settings,
         patch(
-            "app.routers.admin.publish_pending_job",
+            "app.routers.admin_jobs.publish_pending_job",
             new_callable=AsyncMock,
             return_value={"published": 0},
         ),
         patch(
-            "app.routers.admin.geocode_pending_job",
+            "app.routers.admin_jobs.geocode_pending_job",
             new_callable=AsyncMock,
             return_value={"geocoded": 0},
         ),

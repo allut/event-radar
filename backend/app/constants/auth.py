@@ -12,14 +12,13 @@ from app._generated.shared_constants import (
 # username removes half of the credential pair an attacker needs to brute-force.
 ADMIN_USERNAME_DEFAULT = "admin"
 
-# Consecutive-failure lockout on top of RATE_LIMIT_ADMIN (routers/admin.py::
-# _require_admin) — a static username/password pair has no other brute-force
+# Consecutive-failure lockout on top of RATE_LIMIT_ADMIN (auth/admin_lockout.py) — a static username/password pair has no other brute-force
 # damper. In-memory (single Render process, no Redis — matches the rest of
 # this codebase's "no Celery/Redis" design), so it resets on deploy/restart;
 # accepted since this pairs with, not replaces, a strong ADMIN_PASSWORD.
 ADMIN_AUTH_MAX_FAILURES = 5
 ADMIN_AUTH_LOCKOUT_SECONDS = 300
-# Bounds _admin_auth_failures (routers/admin.py) the same way browse.py bounds
+# Bounds _admin_auth_failures (auth/admin_lockout.py) the same way browse.py bounds
 # _score_cache — an unbounded dict keyed by client_key() would grow forever
 # under sustained scanning/brute-force traffic.
 ADMIN_AUTH_FAILURES_MAX_ENTRIES = 4096
@@ -210,7 +209,7 @@ ERROR_USER_NOT_FOUND = "User not found."
 
 ERROR_IDENTITY_NOT_FOUND = "No linked identity found for that provider."
 
-# routers/admin.py
+# routers/admin_auth.py, auth/admin_lockout.py
 ERROR_ADMIN_LOCKOUT = "Too many failed admin login attempts; try again later."
 ERROR_ADMIN_DISABLED = (
     "Admin endpoints disabled: ADMIN_USERNAME left at its default value"
