@@ -119,6 +119,11 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
 
 
+# ---------------------------------------------------------------------------
+# Promotions (#600): JSON API for the cap strip, the list and the grant form.
+# ---------------------------------------------------------------------------
+
+
 @router.get("/promotions/cap-strip", dependencies=[Depends(get_current_admin)])
 @limiter.shared_limit(RATE_LIMIT_BROWSE, scope=RATE_LIMIT_SCOPE_ADMIN_READ)
 async def admin_promotion_cap_strip(request: Request) -> dict:
@@ -564,6 +569,13 @@ async def _run_promotion_command(
             return payload
 
     return await run_admin_job(f"Promotion {action}", _run())
+
+
+# ---------------------------------------------------------------------------
+# Promotion lifecycle (#601): detail and commands. Each command runs under the
+# cap lock, writes its audit row in the same transaction and returns the
+# refreshed detail payload.
+# ---------------------------------------------------------------------------
 
 
 @router.get("/promotions/{promotion_id}", dependencies=[Depends(get_current_admin)])

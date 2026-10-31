@@ -116,7 +116,7 @@ async def test_inbound_mail_accepted_with_valid_body(mock_db):
 @pytest.mark.asyncio
 async def test_inbound_mail_fails_closed_in_production_when_secret_unset(mock_db):
     """Empty RESEND_WEBHOOK_SECRET in a non-development APP_ENV must refuse with 503
-    (mirrors routers/admin.py::_require_admin) instead of accepting unauthenticated POSTs."""
+    (mirrors auth/dependencies.py::get_current_admin) instead of accepting unauthenticated POSTs."""
     app = _build_app()
 
     async def override_db():

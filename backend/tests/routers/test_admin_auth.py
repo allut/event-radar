@@ -3,6 +3,7 @@ logout/me, and its consecutive-failure lockout (issue #154). /admin/* routes
 accept the session cookie only — HTTP Basic was removed (OWASP audit #4)."""
 
 import http
+import importlib
 from unittest.mock import AsyncMock, patch
 
 import pyotp
@@ -12,7 +13,7 @@ from httpx import ASGITransport, AsyncClient
 
 import app.auth.totp as totp_module
 from app.constants.auth import ADMIN_AUTH_MAX_FAILURES, ADMIN_USERNAME_DEFAULT
-from tests.routers.conftest import patch_admin_settings
+from tests.routers.conftest import ADMIN_ROUTER_MODULES, patch_admin_settings
 
 
 @pytest.fixture(autouse=True)
@@ -28,11 +29,11 @@ def _reset_totp_replay_state():
 
 
 def _build_app() -> FastAPI:
-    from app.routers.admin_jobs import router as admin_router
     from app.routers.admin_auth import router as admin_auth_router
 
     app = FastAPI()
-    app.include_router(admin_router)
+    for module_name in ADMIN_ROUTER_MODULES:
+        app.include_router(importlib.import_module(module_name).router)
     app.include_router(admin_auth_router)
     return app
 

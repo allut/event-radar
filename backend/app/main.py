@@ -98,7 +98,6 @@ from app.ingestion.organizer_sync import sync_fienta_organizers
 from app.logging_config import configure_logging, shutdown_log_shipping
 from app.ranking.score import build_daily_feeds
 from app.rate_limit import client_key, limiter, rate_limit_exceeded_handler
-from app.routers.admin import router as admin_router
 from app.routers.admin_auth import router as admin_auth_router
 from app.routers.admin_claims import router as admin_claims_router
 from app.routers.admin_events import router as admin_events_router
@@ -800,7 +799,6 @@ app.include_router(admin_overview_router)
 app.include_router(admin_promotion_requests_router)
 app.include_router(admin_promotions_router)
 app.include_router(admin_reports_router)
-app.include_router(admin_router)
 app.include_router(admin_submissions_router)
 app.include_router(auth_router)
 app.include_router(browse_router)

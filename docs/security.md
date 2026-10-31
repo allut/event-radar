@@ -44,7 +44,7 @@ What's in here: the middleware stack, rate limiting and its client key, URL and 
 - **Every endpoint carries `@limiter.limit(...)` with a `RATE_LIMIT_*` constant from `app/constants/rate_limits.py`**, authenticated ones included. Add both to any new endpoint, public or not.
 - **`backend/tests/test_route_guards.py` enforces this and the auth rule on the live app.** A route with no track dependency must be listed in its `PUBLIC_ROUTES`, which makes going public a reviewed choice.
 - **The limiter lives in `app/rate_limit.py`** so `main.py` and the routers can both import it without a cycle.
-- **All other `/admin/*` routes in `app/routers/admin.py` share one bucket** through `limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")`. Per-route limits would let an attacker cycling every admin route multiply the nominal cap.
+- **All other `/admin/*` routes in `app/routers/admin_*.py` share one bucket** through `limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")`. Per-route limits would let an attacker cycling every admin route multiply the nominal cap.
 - **Admin queue list GETs and `GET /admin/counts` share a second bucket at `RATE_LIMIT_BROWSE`**, scope `RATE_LIMIT_SCOPE_ADMIN_READ`. Numbered paging plus a refetch after each action costs several reads per action, which the 10/minute action bucket can't absorb. Admin writes stay on `RATE_LIMIT_ADMIN`.
 - **`admin_auth.py`'s three routes have their own buckets**, separate from the shared admin one. Login uses `RATE_LIMIT_ADMIN_LOGIN`. What admin login shares is the lockout counter; see Admin Console Auth.
 - **Each claim-edit GET/PATCH pair shares a `shared_limit(RATE_LIMIT_SUBMIT, …)` bucket** (`claim_event_get`, `claim_event_patch`).

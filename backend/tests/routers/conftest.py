@@ -13,7 +13,6 @@ from app.rate_limit import limiter
 
 # Every admin console router except admin_auth (login/session, mounted by its own tests).
 ADMIN_ROUTER_MODULES = (
-    "app.routers.admin",
     "app.routers.admin_claims",
     "app.routers.admin_events",
     "app.routers.admin_jobs",
@@ -133,7 +132,7 @@ def _reset_public_caches():
 @pytest.fixture(autouse=True)
 def _reset_rate_limiter():
     """The slowapi Limiter is a module-level singleton shared by every router
-    test in this directory. Since L2 (routers/admin.py) moved every /admin/*
+    test in this directory. Since L2 (routers/admin_*.py) moved every /admin/*
     route onto ONE shared_limit(..., scope="admin") bucket per client instead
     of one bucket per route, the whole admin test suite would otherwise share
     a single 10/minute allowance and start seeing spurious 429s partway

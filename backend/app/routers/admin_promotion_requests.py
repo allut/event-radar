@@ -73,6 +73,13 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
 
 
+# ---------------------------------------------------------------------------
+# Promotion requests (#615): the queue, grant and decline. Under
+# /promotion-requests (not /promotions/requests) so the int path of
+# /promotions/{promotion_id} never shadows it.
+# ---------------------------------------------------------------------------
+
+
 class _PromotionRequestDeclineBody(BaseModel):
     reason: str = Field(max_length=PROMOTION_DECLINE_REASON_MAX_CHARS)
 
