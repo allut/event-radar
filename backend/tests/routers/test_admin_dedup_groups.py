@@ -12,6 +12,101 @@ from app.constants.core import APP_ENV_DEVELOPMENT
 from tests.routers.conftest import patch_admin_settings, scalars_returning
 
 
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dedup_groups_rejects_basic_auth_alone(admin_app):
+    """OWASP audit G-5: unpublished/moderation-sensitive event content
+    (title, venue, url, is_explicit for draft/classified/rejected rows) must
+    require the TOTP-backed session cookie — correct HTTP Basic credentials
+    alone are no longer sufficient, even though they used to be (this route
+    was one of the three _require_admin Basic-eligible GETs)."""
+    app = admin_app
+    with patch_admin_settings() as mock_settings:
+        mock_settings.ADMIN_PASSWORD = "s3cret"
+        mock_settings.ADMIN_USERNAME = "admin"
+        mock_settings.APP_ENV = "production"
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/admin/dedup/groups", auth=("admin", "s3cret"))
+
+    assert resp.status_code == http.HTTPStatus.UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_dedup_groups_empty_page(admin_app, make_db_ctx, mock_db):
+    app = admin_app
+    db = mock_db
+    db.scalar = AsyncMock(return_value=0)
+    db.scalars = AsyncMock(return_value=scalars_returning([]))
+
+    with (
+        patch_admin_settings() as mock_settings,
+        patch("app.routers.admin_events.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/admin/dedup/groups", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.OK
+    body = resp.json()
+    assert body["group_count"] == 0
+    assert body["groups"] == []
+    assert body["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_dedup_groups_populated_page(admin_app, make_db_ctx, mock_db):
+    from datetime import datetime, timezone
+
+    app = admin_app
+    ev = MagicMock()
+    ev.id = 11
+    ev.dedup_group_id = 5
+    ev.title_orig = "Jazz"
+    ev.starts_at = datetime(2026, 7, 21, 20, 0, tzinfo=timezone.utc)
+    ev.venue_name = "Club"
+    ev.venue_id = None
+    ev.venue = None
+    ev.status = "published"
+    ev.url = "https://x"
+    ev.is_explicit = False
+
+    db = mock_db
+    db.scalar = AsyncMock(return_value=1)  # total_groups
+    # first scalars() -> page group ids; second -> event rows
+    db.scalars = AsyncMock(
+        side_effect=[scalars_returning([5]), scalars_returning([ev])]
+    )
+
+    with (
+        patch_admin_settings() as mock_settings,
+        patch("app.routers.admin_events.AsyncSessionLocal", return_value=make_db_ctx(db)),
+    ):
+        mock_settings.ADMIN_PASSWORD = ""
+        mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            resp = await client.get("/admin/dedup/groups", auth=("admin", ""))
+
+    assert resp.status_code == http.HTTPStatus.OK
+    body = resp.json()
+    assert body["group_count"] == 1
+    assert body["event_count"] == 1
+    assert body["groups"][0]["dedup_group_id"] == 5
+    assert body["groups"][0]["events"][0]["id"] == 11
+    assert body["groups"][0]["events"][0]["venue"] == "Club"
+
+
 def _dedup_event(event_id: int, group_id: int) -> MagicMock:
     from datetime import datetime, timezone
 
