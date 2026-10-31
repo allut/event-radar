@@ -103,6 +103,7 @@ from app.routers.admin_auth import router as admin_auth_router
 from app.routers.admin_claims import router as admin_claims_router
 from app.routers.admin_events import router as admin_events_router
 from app.routers.admin_jobs import router as admin_jobs_router
+from app.routers.admin_promotions import router as admin_promotions_router
 from app.routers.admin_reports import router as admin_reports_router
 from app.routers.admin_submissions import router as admin_submissions_router
 from app.routers.auth import router as auth_router
@@ -793,6 +794,7 @@ app.include_router(admin_auth_router)
 app.include_router(admin_claims_router)
 app.include_router(admin_events_router)
 app.include_router(admin_jobs_router)
+app.include_router(admin_promotions_router)
 app.include_router(admin_reports_router)
 app.include_router(admin_router)
 app.include_router(admin_submissions_router)

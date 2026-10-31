@@ -25,7 +25,7 @@ from tests.promotions.conftest import NOW, Clock, at_tallinn, d
 
 @pytest.fixture
 def mails(monkeypatch):
-    from app.routers import admin as admin_module
+    from app.routers import admin_promotions as admin_module
 
     ended = AsyncMock()
     voided = AsyncMock()

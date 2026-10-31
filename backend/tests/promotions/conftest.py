@@ -79,6 +79,7 @@ class Clock:
 @pytest_asyncio.fixture
 async def client(db, monkeypatch) -> AsyncIterator[AsyncClient]:
     from app.routers import admin as admin_module
+    from app.routers import admin_promotions as promotions_module
     from app.routers import admin_reports as reports_module
 
     @asynccontextmanager
@@ -86,7 +87,7 @@ async def client(db, monkeypatch) -> AsyncIterator[AsyncClient]:
         yield db
 
     Clock.now = NOW
-    modules = (admin_module, reports_module)
+    modules = (admin_module, promotions_module, reports_module)
     for module in modules:
         monkeypatch.setattr(module, "AsyncSessionLocal", session_ctx)
         monkeypatch.setattr(module, "now_tallinn", lambda: Clock.now)
