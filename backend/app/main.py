@@ -100,6 +100,7 @@ from app.ranking.score import build_daily_feeds
 from app.rate_limit import client_key, limiter, rate_limit_exceeded_handler
 from app.routers.admin import router as admin_router
 from app.routers.admin_auth import router as admin_auth_router
+from app.routers.admin_events import router as admin_events_router
 from app.routers.admin_jobs import router as admin_jobs_router
 from app.routers.auth import router as auth_router
 from app.routers.browse import router as browse_router
@@ -786,6 +787,7 @@ if _allowed_hosts:
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 app.include_router(admin_auth_router)
+app.include_router(admin_events_router)
 app.include_router(admin_jobs_router)
 app.include_router(admin_router)
 app.include_router(auth_router)

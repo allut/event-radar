@@ -4,7 +4,7 @@
 # siblings) are cross-stack: shared/app-config.json → app._generated.shared_constants.
 ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE: int = 500
 
-# Event inspector (routers/admin.py GET /admin/events/{id}, issue #157) caps
+# Event inspector (routers/admin_events.py GET /admin/events/{id}, issue #157) caps
 # how many raw_events rows it inlines — unlike the paginated queues above,
 # this is a fixed ceiling (not offset/limit query params) since it's one
 # sub-list within a single-event payload, not its own listing endpoint. Each
@@ -12,7 +12,7 @@ ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE: int = 500
 # for an event with a long refetch/dedup-merge history.
 ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT: int = 20
 
-# Admin dedup-groups pagination cap (routers/admin.py GET /admin/dedup/groups).
+# Admin dedup-groups pagination cap (routers/admin_events.py GET /admin/dedup/groups).
 ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE: int = 500
 
 # Admin review-queue pagination cap (routers/admin.py GET /admin/submissions): small
