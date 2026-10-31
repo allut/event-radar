@@ -69,7 +69,7 @@ from app.models.organizers import Organizer
 from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
-from app.routers.utils import (
+from app.routers.utils.organizer_content import (
     PriceField,
     apply_moderation_flags,
     apply_price_edit,

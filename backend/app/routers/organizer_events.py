@@ -95,7 +95,7 @@ from app.events.cancellation import (
     cancel_event_and_resolve_reports,
     send_report_resolution_emails,
 )
-from app.routers.utils import (
+from app.routers.utils.organizer_content import (
     PriceField,
     apply_moderation_flags,
     apply_price_edit,

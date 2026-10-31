@@ -37,12 +37,12 @@ class TestCheckImageHost:
     an arbitrary-host tracking pixel."""
 
     def test_none_is_a_noop(self):
-        from app.routers.utils import check_image_host
+        from app.routers.utils.organizer_content import check_image_host
 
         check_image_host(None)  # must not raise
 
     def test_own_cloudinary_account_accepted(self):
-        from app.routers.utils import check_image_host
+        from app.routers.utils.organizer_content import check_image_host
 
         with patch("app.ingestion.http_client.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
@@ -60,7 +60,7 @@ class TestCheckImageHost:
     )
     def test_other_cloudinary_account_or_path_rejected(self, url):
         from fastapi import HTTPException
-        from app.routers.utils import check_image_host
+        from app.routers.utils.organizer_content import check_image_host
 
         with patch("app.ingestion.http_client.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
@@ -70,7 +70,7 @@ class TestCheckImageHost:
 
     def test_unconfigured_cloud_name_fails_closed(self):
         from fastapi import HTTPException
-        from app.routers.utils import check_image_host
+        from app.routers.utils.organizer_content import check_image_host
 
         with patch("app.ingestion.http_client.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = ""
@@ -79,7 +79,7 @@ class TestCheckImageHost:
 
     def test_arbitrary_host_rejected(self):
         from fastapi import HTTPException
-        from app.routers.utils import check_image_host
+        from app.routers.utils.organizer_content import check_image_host
 
         with pytest.raises(HTTPException) as exc_info:
             check_image_host("https://evil.example.com/tracker.png")
@@ -90,7 +90,7 @@ class TestCheckImageHost:
         (e.g. a subdomain trick) must not slip through — hostname must match
         exactly, not via substring containment."""
         from fastapi import HTTPException
-        from app.routers.utils import check_image_host
+        from app.routers.utils.organizer_content import check_image_host
 
         with pytest.raises(HTTPException):
             check_image_host("https://res.cloudinary.com.evil.com/x.png")
@@ -108,7 +108,7 @@ class TestCheckImageHost:
     def test_parser_differential_spellings_rejected(self, url):
         """OWASP audit M-1: spellings Python and browsers read differently."""
         from fastapi import HTTPException
-        from app.routers.utils import check_image_host
+        from app.routers.utils.organizer_content import check_image_host
 
         with patch("app.ingestion.http_client.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"
@@ -116,7 +116,7 @@ class TestCheckImageHost:
                 check_image_host(url)
 
     def test_returns_reserialized_url(self):
-        from app.routers.utils import check_image_host
+        from app.routers.utils.organizer_content import check_image_host
 
         with patch("app.ingestion.http_client.settings") as mock_settings:
             mock_settings.CLOUDINARY_CLOUD_NAME = "demo"

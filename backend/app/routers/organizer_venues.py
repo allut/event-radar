@@ -34,7 +34,7 @@ from app.ingestion.pricing import normalize_currency
 from app.models.organizers import Organizer, Venue
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
-from app.routers.utils import (
+from app.routers.utils.organizer_content import (
     PriceField,
     own_venue_or_404,
     remoderate_venue_linked_events,

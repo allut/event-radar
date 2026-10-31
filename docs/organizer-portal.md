@@ -42,7 +42,7 @@ An `Organizer` (`app/models/organizers.py`) is a portal account: a venue or prom
 ### Organizer Categories
 
 - **An optional `categories` list replaces the LLM's categories** on an organizer's own submission, on create and edit, through `replace_organizer_categories()` after inline classification. Merging would inflate persona affinity, which sums weights over every category.
-- **`app/routers/utils/__init__.py::validate_categories()` checks the list.** Each slug must be in `VALID_CATEGORIES`; duplicates drop in order, and more than `ORGANIZER_MAX_CATEGORIES` (`shared/app-config.json`) is a 422.
+- **`app/routers/utils/organizer_content.py::validate_categories()` checks the list.** Each slug must be in `VALID_CATEGORIES`; duplicates drop in order, and more than `ORGANIZER_MAX_CATEGORIES` (`shared/app-config.json`) is a 422.
 - **An empty list on `PATCH` is a no-op.** The overwritten LLM set can't be restored, so an edit can never leave an event uncategorized.
 - **A bare classification row is created if the LLM call failed**, so the organizer's categories still land.
 - **`app/llm/classifier.py::_persist_classification` keeps an organizer's categories on a later retry.** Vibes, quality and the other fields still refresh.
