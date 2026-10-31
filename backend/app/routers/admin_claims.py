@@ -57,7 +57,7 @@ from app.models.claims import Claim
 from app.models.events import Event
 from app.models.organizers import Organizer
 from app.rate_limit import limiter
-from app.routers.utils import claim_dns_record_name
+from app.claims.dns_txt import claim_dns_record_name
 from app.routers.utils.admin import (
     ResolutionBody,
     validated_resolution_note,

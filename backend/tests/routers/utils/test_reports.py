@@ -1,4 +1,5 @@
 """Unit tests for app.routers.utils.reports."""
+
 import pytest
 from fastapi import HTTPException
 

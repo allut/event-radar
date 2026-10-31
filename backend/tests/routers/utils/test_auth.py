@@ -1,4 +1,5 @@
 """Unit tests for app.routers.utils.auth."""
+
 from unittest.mock import AsyncMock
 
 import pytest

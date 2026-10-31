@@ -1,4 +1,5 @@
 """Unit tests for app.routers.utils.admin."""
+
 import asyncio
 import json
 from unittest.mock import patch

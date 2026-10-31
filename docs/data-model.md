@@ -175,7 +175,7 @@ A new model goes in its domain's module. A new module needs a line in `app/model
 
 ### Promotions
 
-`promotions` holds one row per sold or granted Promotion window. `app/promotions/` owns the logic and never imports from `app/routers/utils/__init__.py`. See `CONTEXT.md`'s Promotions glossary.
+`promotions` holds one row per sold or granted Promotion window. `app/promotions/` owns the logic and never imports from `app/routers/utils/`. See `CONTEXT.md`'s Promotions glossary.
 
 - **`status` is commercial only:** `unpaid`, `paid`, `ended_early` or `void`. Scheduled, live and finished are computed from the window and today's Tallinn date by `app/promotions/windows.py::promotion_state()`, never stored.
 - **`start_date` and `end_date` are inclusive Tallinn dates,** 3 to 14 days long, starting tomorrow at the earliest. They end on or before the event's last Tallinn day. `days` is stored beside them.
