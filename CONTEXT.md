@@ -151,6 +151,15 @@ identity (imprint, invoices, Privacy notice) names it. A person who signs in to
 the admin console is an *admin*, not the Operator.
 _Avoid_: owner, company, seller, platform, sole trader
 
+## Discovery
+
+**Daily Five**:
+The five events a user is offered each day, chosen for them and rebuilt
+daily. A recurring series they've just been shown is set aside unless the day
+is short of events. Written *Daily 5* in docs and code; both name the same
+thing.
+_Avoid_: feed on its own (ambiguous with Explore), picks, top five
+
 ## Promotions
 
 **Promotion**:
