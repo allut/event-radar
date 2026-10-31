@@ -149,7 +149,7 @@ A new model goes in its domain's module. A new module needs a line in `app/model
 - **`deleted_at` is a soft delete.** It hides the venue from `GET /organizer/venues` and never touches events that already reference it.
 - **Update and delete return 404, not 403, on another organizer's venue,** matching `app/routers/organizer_events.py`.
 - **Editing any address field clears `lat`, `lng` and `geocode_attempted_at` synchronously,** which forces re-resolution.
-- **A rename re-moderates every linked event,** because events show the venue name at read time. `app/routers/utils.py::remoderate_venue_linked_events` re-applies the explicit and non-event flags in one query. A newly flagged published event drops to `classified`, and every linked live event gets `needs_review`.
+- **A rename re-moderates every linked event,** because events show the venue name at read time. `app/routers/utils/__init__.py::remoderate_venue_linked_events` re-applies the explicit and non-event flags in one query. A newly flagged published event drops to `classified`, and every linked live event gets `needs_review`.
 - **`ORGANIZER_DAILY_VENUE_CREATION_CAP` caps daily venue creation** with the same soft count-then-insert as the other organizer caps.
 
 ### Publishers and Claims
@@ -175,7 +175,7 @@ A new model goes in its domain's module. A new module needs a line in `app/model
 
 ### Promotions
 
-`promotions` holds one row per sold or granted Promotion window. `app/promotions/` owns the logic and never imports from `app/routers/utils.py`. See `CONTEXT.md`'s Promotions glossary.
+`promotions` holds one row per sold or granted Promotion window. `app/promotions/` owns the logic and never imports from `app/routers/utils/__init__.py`. See `CONTEXT.md`'s Promotions glossary.
 
 - **`status` is commercial only:** `unpaid`, `paid`, `ended_early` or `void`. Scheduled, live and finished are computed from the window and today's Tallinn date by `app/promotions/windows.py::promotion_state()`, never stored.
 - **`start_date` and `end_date` are inclusive Tallinn dates,** 3 to 14 days long, starting tomorrow at the earliest. They end on or before the event's last Tallinn day. `days` is stored beside them.

@@ -18,7 +18,7 @@ CLAUDE.md states each rule. This doc says why it holds and where its edges are. 
 
 ### Helpers
 
-- **Routers depend on domain packages, never the reverse.** A domain module that imports `app/routers/utils.py` pulls the HTTP layer into jobs and other domains, and invites import cycles.
+- **Routers depend on domain packages, never the reverse.** A domain module that imports `app/routers/utils/__init__.py` pulls the HTTP layer into jobs and other domains, and invites import cycles.
 - **One invariant stays in one file.** For example, `app/auth/admin_lockout.py` owns both the lockout counter and its eviction policy, and `admin_auth.py` imports from it. See [security.md](security.md)'s Admin Console Auth section.
 - **Cross-router auth dependencies live in `app/auth/dependencies.py`** so no router imports another router's module. Router modules stay leaves of the import graph.
 - **Every frontend request goes through `frontend/src/api/client.ts`.** It owns the per-track 401 handling, so a raw `fetch` misses the session-expiry redirect. See [frontend.md](frontend.md)'s API Client section.

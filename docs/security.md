@@ -80,7 +80,7 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 
 ### Organizer Images
 
-- **`app/routers/utils.py::check_image_host()` pins organizer and claim-edit `image_url` to our own Cloudinary account.** It calls `app/ingestion/http_client.py::own_cloudinary_url()`: the host must be in `ALLOWED_IMAGE_HOSTS` and the path under `/{CLOUDINARY_CLOUD_NAME}/image/upload/`. It fails closed when the cloud name is unset.
+- **`app/routers/utils/__init__.py::check_image_host()` pins organizer and claim-edit `image_url` to our own Cloudinary account.** It calls `app/ingestion/http_client.py::own_cloudinary_url()`: the host must be in `ALLOWED_IMAGE_HOSTS` and the path under `/{CLOUDINARY_CLOUD_NAME}/image/upload/`. It fails closed when the cloud name is unset.
 - **The path pin matters because `res.cloudinary.com` serves every account.** The daily digest embeds `image_url` as an `<img>`, so an arbitrary host would be an unconsented tracking pixel leaking each recipient's IP and open time.
 - **The digest embeds an image only from our Cloudinary account or an `ALLOWED_SOURCE_HOSTS` host** (`app/email/digest.py::_embeddable_image_url`). Any other `image_url` gets the branded band instead.
 - **Organizer and claim-edit images go through the signed `POST /organizer/events/image` upload.** The claim edit checks `image_url` only when the client sends it, so saving other fields never fails on an untouched scraped URL. Scraped sources are unaffected by the pin. `backend/scripts/clear_foreign_claim_images.py` clears the non-Cloudinary values claimants pinned before the host check existed, and leaves a pinned empty value alone.
@@ -113,7 +113,7 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 - **Every scraped rich-text field the frontend renders as HTML goes through `app/ingestion/sanitize.py::sanitize_html()` at ingest.** That's the localized `description` and `important_info`; `title` renders as escaped text. It's a strict `nh3` allowlist plus block-to-`<br>`, whitespace and Cloudflare email-decode passes.
 - **`html_to_text()` (same module) is the plain-text form for every non-HTML consumer:** LLM prompts, keyword filters and fuzzy dedup. A new HTML-rendered field uses `sanitize_html()`; one that feeds an LLM or matcher uses `html_to_text()`.
 - **`HtmlListingAdapter` subclasses are covered by default.** `html_base.py::extract_localized_text()` sanitizes its JSON-LD description before returning it.
-- **Organizer-authored HTML gets a narrower allowlist.** `routers/utils.py::organizer_sanitize()` passes `ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS`/`_ATTRS` to `sanitize_html()`: only what the `RichTextEditor` toolbar can produce. Submit, edit and claim edits all call it.
+- **Organizer-authored HTML gets a narrower allowlist.** `routers/utils/__init__.py::organizer_sanitize()` passes `ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS`/`_ATTRS` to `sanitize_html()`: only what the `RichTextEditor` toolbar can produce. Submit, edit and claim edits all call it.
 - **An `attribute_filter` makes that allowlist the true ceiling.** nh3 otherwise keeps generic attributes like `title` and `lang`. `rel` is exempt because it's nh3's own injected `noopener noreferrer`.
 - **The frontend's `sanitizeHtml()` (`frontend/src/utils/html.ts`) is defense in depth** at both `dangerouslySetInnerHTML` sites in `EventDetail.tsx`. The server-side pass is the real boundary.
 
@@ -123,7 +123,7 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 
 - **Regex runs in linear time on untrusted text.** Edge-`<br>` trimming is the loop-based `_strip_edge_brs()`. `CURRENCY_AMOUNT_RE` bounds digit runs, and `price_context_digest` truncates input to `PRICE_CONTEXT_INPUT_MAX_CHARS`. Both have timing regression tests.
 - **Numbers from LLMs and JSON-LD are bounded.** `parse_bounded_price()` accepts finite `0 <= x < PRICE_MAX_VALUE`, `normalize_currency()` enforces `VALID_CURRENCY_CODES`, non-finite quality is dropped, and refetched coordinates are bbox-gated.
-- **Request-body prices share the same ceiling.** Every `price_*` field on an organizer, claim-edit or venue body is `app/routers/utils.py::PriceField`, which also refuses `Infinity`. A bare float would overflow `Numeric(10,2)` into a 500.
+- **Request-body prices share the same ceiling.** Every `price_*` field on an organizer, claim-edit or venue body is `app/routers/utils/__init__.py::PriceField`, which also refuses `Infinity`. A bare float would overflow `Numeric(10,2)` into a 500.
 - **Validation replaces per-event savepoints.** Classify and refetch share one `AsyncSession` across concurrent workers, so a nested transaction there is unsafe.
 - **LLM booleans go through `app/llm/router.py::strict_bool()`** with fail-safe defaults.
 - **Why-go bullets are length-capped, stripped of URLs and emails, and explicit-filtered.** Venue-extract output may only reuse words from its input.
