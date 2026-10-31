@@ -19,7 +19,7 @@ ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE: int = 500
 # default page, generous cap.
 ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE: int = 500
 
-# Admin claims-queue pagination cap (routers/admin.py GET /admin/claims, issue #420).
+# Admin claims-queue pagination cap (routers/admin_claims.py GET /admin/claims, issue #420).
 ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE: int = 500
 
 # `action` field values for LOG_EVENT_ADMIN_ACTION (issue #155).

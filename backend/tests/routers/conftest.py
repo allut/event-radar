@@ -14,6 +14,7 @@ from app.rate_limit import limiter
 # Every admin console router except admin_auth (login/session, mounted by its own tests).
 ADMIN_ROUTER_MODULES = (
     "app.routers.admin",
+    "app.routers.admin_claims",
     "app.routers.admin_events",
     "app.routers.admin_jobs",
     "app.routers.admin_reports",

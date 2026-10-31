@@ -3,7 +3,7 @@ organizer's claim can land on: granted, declined (admin), expired
 (automated-mechanism inactivity sweep), self-cancelled. Branded/i18n pattern
 (EMAIL_DOCUMENT shell + styles.py/templates.py, t()/ti()), mirroring
 app/email/report_reporter.py. Revoke is deliberately not covered here — see
-app/routers/admin.py::admin_revoke_claim's docstring: it's a distinct action
+app/routers/admin_claims.py::admin_revoke_claim's docstring: it's a distinct action
 from decline and the spec only calls for an email on grant/decline/expiry.
 """
 
