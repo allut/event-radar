@@ -1,11 +1,7 @@
-"""Coverage for admin endpoints/branches not exercised by test_admin.py:
-session-only auth on /stats, /ingest, /ingest/{slug}, /dedup, /dedup/groups,
-/classify, /refetch, /stats.
+"""Coverage for GET /admin/stats and GET /admin/counts (routers/admin_overview.py).
 
 Every /admin/* route — /stats and /counts included (OWASP audit #4) — requires
-the TOTP-backed session cookie; HTTP Basic is not accepted anywhere. GET
-/admin/dedup/groups moved off Basic earlier (OWASP audit G-5) — see
-test_dedup_groups_rejects_basic_auth_alone below."""
+the TOTP-backed session cookie; HTTP Basic is not accepted anywhere."""
 
 import http
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -90,7 +86,7 @@ async def test_stats_returns_counts(admin_app, make_db_ctx, mock_db):
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_overview.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT

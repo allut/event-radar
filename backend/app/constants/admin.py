@@ -15,7 +15,7 @@ ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT: int = 20
 # Admin dedup-groups pagination cap (routers/admin_events.py GET /admin/dedup/groups).
 ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE: int = 500
 
-# Admin review-queue pagination cap (routers/admin.py GET /admin/submissions): small
+# Admin review-queue pagination cap (routers/admin_submissions.py GET /admin/submissions): small
 # default page, generous cap.
 ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE: int = 500
 
