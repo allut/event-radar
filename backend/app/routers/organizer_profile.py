@@ -29,10 +29,7 @@ from app.models.organizers import Organizer, OrganizerIdentity
 from app.promotions.flags import offer_enabled
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
-from app.routers.utils import (
-    is_identity_linked,
-    set_session_cookie,
-)
+from app.routers.utils.auth import is_identity_linked, set_session_cookie
 
 log = logging.getLogger(__name__)
 

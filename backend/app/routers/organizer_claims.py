@@ -86,10 +86,12 @@ from app.auth.dependencies import get_current_organizer
 from app.promotions.organizer_view import promotion_flags_for
 from app.routers.utils import (
     claim_dns_record_name,
-    get_or_create_organizer,
-    recent_unused_link_exists,
     resolve_locale_param,
     serialize_event,
+)
+from app.routers.utils.auth import (
+    get_or_create_organizer,
+    recent_unused_link_exists,
     set_session_cookie,
 )
 from app.claims.target_resolution import (

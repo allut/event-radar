@@ -92,7 +92,8 @@ from app.constants.rate_limits import (
 from app.db import get_db
 from app.models.users import AuthMagicLink, User, UserIdentity, UserPersona
 from app.rate_limit import limiter
-from app.routers.utils import (
+from app.routers.utils import serialize_user
+from app.routers.utils.auth import (
     RequestLinkBody,
     VerifyTokenBody,
     build_google_redirect_uri,
@@ -102,7 +103,6 @@ from app.routers.utils import (
     clear_session_cookie,
     recent_unused_link_exists,
     record_unverified_account_creation,
-    serialize_user,
     set_oauth_state_cookie,
     set_session_cookie,
 )

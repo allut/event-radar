@@ -35,7 +35,7 @@ SESSION_COOKIE_NAME = "session"
 SESSION_COOKIE_PATH = "/api"
 ORGANIZER_SESSION_COOKIE_NAME = "organizer_session"
 ORGANIZER_SESSION_COOKIE_PATH = "/api/organizer"
-# Shared by routers/utils.py::set_session_cookie/clear_session_cookie — a single
+# Shared by routers/utils/auth.py::set_session_cookie/clear_session_cookie — a single
 # source of truth so the two functions can never drift apart (clear_session_cookie
 # only actually clears the cookie in the browser if every attribute here matches
 # what set_session_cookie used to set it).

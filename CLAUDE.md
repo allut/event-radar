@@ -15,7 +15,7 @@ Deep-dive docs are not auto-loaded. Open the row's doc before editing what it co
 | Subject | Read before touching |
 |---|---|
 | **Pipeline** — `docs/pipeline.md` | `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/ranking/`, `app/events/`, `app/publish.py`, `app/routers/{browse,public,feedback,feed,events,webhooks}.py` |
-| **Security** — `docs/security.md` | `app/main.py`, `app/middleware.py`, `app/rate_limit.py`, `app/auth/`, `app/routers/{auth,organizer_auth,admin_auth,unsubscribe}.py`, `app/ingestion/http_client.py`, any new endpoint |
+| **Security** — `docs/security.md` | `app/main.py`, `app/middleware.py`, `app/rate_limit.py`, `app/auth/`, `app/routers/{auth,organizer_auth,admin_auth,unsubscribe}.py`, `app/routers/utils/auth.py`, `app/ingestion/http_client.py`, any new endpoint |
 | **Security audit state** — `docs/security-audit.md` | fixing or adding an audit finding |
 | **Backend ops** — `docs/backend-ops.md` | `render.yaml`, `frontend/wrangler.toml`, `frontend/public/_headers`, `frontend/functions/`, `app/routers/{admin_*,reports}.py`, `app/cleanup.py`, `backend/scripts/`, `app/scheduler.py`, scheduled jobs, CI |
 | **Frontend** — `docs/frontend.md` | `frontend/src/{routes,components,hooks,lib,utils,content}/`, `frontend/scripts/generate-icons.ts`, `shared/i18n/`, `app/email/` |

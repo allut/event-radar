@@ -94,7 +94,7 @@ A dedicated `/organizer/settings` route (`frontend/src/routes/OrganizerSettings/
 
 ### Sign-In Methods
 
-- **`GET /organizer/profile` returns `google_linked`**, from `app/routers/utils/__init__.py::is_identity_linked()`. The page shows linked or not-linked copy from it.
+- **`GET /organizer/profile` returns `google_linked`**, from `app/routers/utils/auth.py::is_identity_linked()`. The page shows linked or not-linked copy from it.
 - **Unlink calls `DELETE /organizer/profile/identities/google`.** It is unconditional, with no last-factor guard. It bumps `session_token_version` and re-issues the caller's own cookie, per [ADR 0002](adr/0002-google-sign-in-oauth-pkce.md).
 - **Google's name and photo are never stored**, so nothing prefills from them.
 

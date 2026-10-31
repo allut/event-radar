@@ -39,7 +39,7 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 | `admin_action` | console-initiated or system Promotion action — audit trail; carries `action`, one of the `ADMIN_ACTION_*` values (`app/constants/admin.py`) | `app/routers/admin_auth.py`, `app/routers/utils/__init__.py`, `app/promotions/audit.py` |
 | `contact_honeypot_block` | contact-form honeypot field tripped (bot signal) | `app/routers/contact.py` |
 | `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/middleware.py` |
-| `unverified_account_budget_exceeded` | global daily new-unverified-account budget crossed (mail-bomb early warning, OWASP audit F10) | `app/routers/utils/__init__.py::record_unverified_account_creation` |
+| `unverified_account_budget_exceeded` | global daily new-unverified-account budget crossed (mail-bomb early warning, OWASP audit F10) | `app/routers/utils/auth.py::record_unverified_account_creation` |
 | `explore_ceiling_overflow` | `GET /explore` candidate query returned more than `BROWSE_RELEVANCE_CEILING` rows, so only the soonest were ranked (carries `ceiling`) | `app/routers/browse.py` |
 | `google_signin` | Google sign-in completed on either track (carries `track` — `user`/`organizer` — and `outcome`, e.g. `existing_login`/`new_account`/`auto_linked`/`confirmation_sent`) | `app/routers/auth.py`, `app/routers/organizer_auth.py` (the two Google callbacks) |
 | `google_signin_degraded` | network/5xx failure talking to Google (token exchange or JWKS fetch) — upstream degradation, distinct from a rejected caller | `app/routers/auth.py`, `app/routers/organizer_auth.py`, `app/auth/google_oauth.py` |
