@@ -80,7 +80,7 @@ if staged '^(backend/app/constants/|frontend/src/constants/|shared/)'; then
     tests/test_move_to_shared.py::test_no_constant_is_copied_by_hand_across_stacks -q 2>&1) || { echo "$out"; exit 1; }
 fi
 
-if staged '^(CLAUDE\.md|README\.md|docs/)'; then
+if staged '^(CLAUDE\.md|README\.md|ROADMAP\.md|CODING_STANDARDS\.md|docs/)'; then
   echo "pre-commit: docs style"
   # The guard reads docs and the code they cite from disk; with unstaged or
   # untracked changes, point it at a checkout of the index instead.
