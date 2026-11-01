@@ -16,6 +16,8 @@ Paid Sponsored slots are built. These steps take them live:
 
 ## Code health
 
+- **Scan for secrets in the pre-commit hook and CI** ([#670](https://github.com/allut/event-radar/issues/670)).
+- **Keep real email addresses out of test and fixture files** with a guard test ([#671](https://github.com/allut/event-radar/issues/671)).
 - **Match claims by the stored series key in dedup** ([#664](https://github.com/allut/event-radar/issues/664)).
 - **Load LLM prompts, scrape selectors and ranking weights from runtime config**, so operators can tune them without a deploy. The repo keeps working defaults.
 
