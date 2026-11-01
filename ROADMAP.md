@@ -8,6 +8,7 @@ Paid Sponsored slots are built. These steps take them live:
 
 - **Run card checkout, invoices and refunds in Stripe test mode** ([#624](https://github.com/allut/event-radar/issues/624)).
 - **Verify the Äriregister lookup against the real API** ([#623](https://github.com/allut/event-radar/issues/623)).
+- **Name the Daily 5 Пятёрка дня throughout the Russian copy** ([#669](https://github.com/allut/event-radar/issues/669)), before the native-speaker review.
 - **Get the Estonian and Russian copy reviewed by native speakers** ([#625](https://github.com/allut/event-radar/issues/625)).
 - **Fill in the Operator details and get the Organizer terms legally reviewed** ([#622](https://github.com/allut/event-radar/issues/622)).
 - **Add the Operator imprint and notice emails** ([#621](https://github.com/allut/event-radar/issues/621)).
