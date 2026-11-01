@@ -213,10 +213,22 @@ and kept until an admin deletes it.
 _Avoid_: unknown key, dead setting
 
 **Dry run**:
-Trying an admin's unsaved draft of a scrape selector, an LLM prompt or a ranking
-value on real input, next to the value that applies now, without saving it. It
+Trying an admin's unsaved draft of a scrape selector, an LLM prompt, an LLM
+provider's settings or a ranking value on real input, next to the value that applies now, without saving it. It
 informs the admin and never blocks a save.
 _Avoid_: preview, test, validation (the check that rejects a bad value on save)
+
+## LLM
+
+**LLM provider**:
+An external model API that Event Radar can send a prompt to. Groq, Workers AI
+and Mistral are the three.
+_Avoid_: provider (that is an identity provider), backend, vendor
+
+**Provider chain**:
+The ordered LLM providers a prompt is tried against, falling through to the
+next one when a provider fails.
+_Avoid_: fallback list, router (the code that walks the chain)
 
 ## Ingestion
 
