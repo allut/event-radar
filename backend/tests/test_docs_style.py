@@ -97,7 +97,7 @@ TREE_ENTRY = re.compile(r"^[├└]── (\S+)")
 
 def _governed_docs() -> list[str]:
     docs = sorted(f"docs/{p.name}" for p in (REPO / "docs").glob("*.md"))
-    return ["CLAUDE.md", "README.md", "CODING_STANDARDS.md", *docs]
+    return ["CLAUDE.md", "README.md", "CODING_STANDARDS.md", "ROADMAP.md", *docs]
 
 
 def _prose_lines(text: str) -> list[tuple[int, str]]:

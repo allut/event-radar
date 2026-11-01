@@ -10,9 +10,9 @@ The pipeline ingests events from several sources, then dedups, classifies, publi
 
 ## Documentation Map
 
-Deep-dive docs are not auto-loaded. Open the row's doc before editing what it covers.
+Deep-dive docs are not auto-loaded. Open the row's doc before planning or editing what it covers.
 
-| Subject | Read before touching |
+| Subject | Read before planning or touching |
 |---|---|
 | **Pipeline** — `docs/pipeline.md` | `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/ranking/`, `app/events/`, `app/publish.py`, `app/routers/{browse,public,feedback,feed,events,webhooks}.py` |
 | **Security** — `docs/security.md` | `app/main.py`, `app/middleware.py`, `app/rate_limit.py`, `app/auth/`, `app/routers/{auth,organizer_auth,admin_auth,unsubscribe}.py`, `app/routers/utils/auth.py`, `app/ingestion/http_client.py`, any new endpoint |
@@ -68,7 +68,7 @@ The setup walkthrough is in `README.md`. Inside the container:
 
 - **Run the backend suite from the repo root with `bash backend/scripts/scratch-test.sh [pytest args]`.** It migrates, then drops, a throwaway database. The full suite takes ~4 min: run it with `run_in_background`. `backend/tests/conftest.py` refuses to run when `DATABASE_URL` names the dev `eventradar` database.
 - **UI work starts with an approved prototype built on the real `index.css`.** Recipe: `docs/design-system.md` "Prototype Shell". A change with no visual difference (data, wiring, when an existing control shows) needs none.
-- **After editing `CLAUDE.md`, `README.md` or `docs/*.md`, run `bash backend/scripts/scratch-test.sh --no-db tests/test_docs_style.py`.**
+- **After editing `CLAUDE.md`, `README.md`, `ROADMAP.md` or `docs/*.md`, run `bash backend/scripts/scratch-test.sh --no-db tests/test_docs_style.py`.**
 - **There is no e2e suite.** QA runs through the Playwright MCP server, and `.playwright-mcp/` is disposable scratch. Playwright stays a build dependency for the SEO prerender.
 
 ## Architecture
