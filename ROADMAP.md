@@ -4,7 +4,6 @@ Planned work on Event Radar, roughly in order. Each item links to its GitHub iss
 
 ## Production reliability
 
-- **Fix the Piletilevi ingest and refetch crash on price-API 400s** ([#674](https://github.com/allut/event-radar/issues/674)). No Piletilevi events have been ingested since 2026-10-30.
 - **Make the Axiom monitors catch a failing job or source** ([#675](https://github.com/allut/event-radar/issues/675)).
 
 ## Code health
