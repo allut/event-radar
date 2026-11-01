@@ -15,7 +15,6 @@ Paid Sponsored slots are built. These steps take them live:
 
 ## Code health
 
-- **Split oversized source files by area**, with a 700-line regrowth guard ([#668](https://github.com/allut/event-radar/issues/668)).
 - **Match claims by the stored series key in dedup** ([#664](https://github.com/allut/event-radar/issues/664)).
 - **Load LLM prompts, scrape selectors and ranking weights from runtime config**, so operators can tune them without a deploy. The repo keeps working defaults.
 
