@@ -15,6 +15,7 @@ Planned work on Event Radar, roughly in order. Each item links to its GitHub iss
 - **Sharpen the log-triage recipe** in `docs/observability.md` ([#678](https://github.com/allut/event-radar/issues/678)).
 - **Scan for secrets in the pre-commit hook and CI** ([#670](https://github.com/allut/event-radar/issues/670)).
 - **Keep real email addresses out of test and fixture files** with a guard test ([#671](https://github.com/allut/event-radar/issues/671)).
+- **Keep the owner's name and personal email out of every tracked file** with a guard test ([#711](https://github.com/allut/event-radar/issues/711)).
 - **Catch frontend tests that will fail once their hardcoded date passes** with a scheduled run that moves the clock forward ([#672](https://github.com/allut/event-radar/issues/672)).
 - **Hide console output from passing frontend tests in CI logs** ([#673](https://github.com/allut/event-radar/issues/673)).
 - **Match claims by the stored series key in dedup** ([#664](https://github.com/allut/event-radar/issues/664)).
@@ -22,6 +23,8 @@ Planned work on Event Radar, roughly in order. Each item links to its GitHub iss
 - **Fail a governed doc that has no Documentation Map row** with a guard test ([#708](https://github.com/allut/event-radar/issues/708)).
 - **Fail a backticked constant name in a doc that the code no longer defines** with a guard test ([#709](https://github.com/allut/event-radar/issues/709)).
 - **Compare the live Axiom monitors before editing the Monitors spec** in `docs/observability.md` ([#710](https://github.com/allut/event-radar/issues/710)).
+- **Fail the README tree check on a tracked top-level directory it doesn't list** ([#712](https://github.com/allut/event-radar/issues/712)).
+- **Document claiming an issue, removing its roadmap bullet, and the README word budget** ([#713](https://github.com/allut/event-radar/issues/713)).
 
 ## Features
 
