@@ -31,7 +31,8 @@ from app.constants.rate_limits import RATE_LIMIT_UNSUBSCRIBE
 from app.db import get_db
 from app.email.consent import grant_ad_consent, withdraw_ad_consent
 from app.email.subscription import set_digest_subscription
-from app.models.models import EmailAdConsentLog, User
+from app.models.promotions import EmailAdConsentLog
+from app.models.users import User
 from app.rate_limit import limiter
 from app.auth.utils import mask_email
 

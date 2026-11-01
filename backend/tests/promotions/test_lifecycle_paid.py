@@ -10,7 +10,7 @@ from app.constants.promotions import (
     PROMOTION_STATUS_PAID,
     PROMOTION_STATUS_UNPAID,
 )
-from app.models.models import PromotionSnapshot
+from app.models.promotions import PromotionSnapshot
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion
 from app.promotions.lifecycle import mark_paid
 from tests.promotions.conftest import NOW, at_tallinn, d

@@ -2,7 +2,9 @@
 
 What's in here: what the key tables' columns mean and who writes them, the `events` triggers and indexes, migrations, connection pooling and serializer rules.
 
-`app/models/models.py` is the full column list. This doc covers what reading it won't tell you: meaning, authority, triggers and gotchas.
+`app/models/` is the full column list, one module per domain. This doc covers what reading it won't tell you: meaning, authority, triggers and gotchas.
+
+A new model goes in its domain's module. A new module needs a line in `app/models/__init__.py`, or Alembic and the mapper registry never see it. A cross-module `Mapped[...]` gets its class from an `if TYPE_CHECKING:` import, because model modules never import each other at runtime.
 
 ## Key Database Tables
 
@@ -106,9 +108,9 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 
 #### Claim Search Indexes
 
-- **Two pg_trgm GIN expression indexes back claim discovery** (migration 0051). `ix_events_search_text_trgm` covers `app/constants/events.py::EVENT_SEARCH_TEXT_SQL`: `title_orig` plus every locale's `title_localized`. It serves `GET /organizer/claims/search`, which therefore matches a title in any locale.
+- **Two pg_trgm GIN expression indexes back claimable-event search** (migration 0051). `ix_events_search_text_trgm` covers `app/constants/events.py::EVENT_SEARCH_TEXT_SQL`: `title_orig` plus every locale's `title_localized`. It serves `GET /organizer/claims/search`, which therefore matches a title in any locale.
 - **`ix_events_url_trgm` serves the domain `ILIKE` in `GET /organizer/claims/suggestions`.**
-- **The query side must match the index expression textually.** `app/routers/organizer_claims.py::claim_search_text()` builds it, and `backend/tests/test_claim_search_indexes.py` guards drift.
+- **The query side must match the index expression textually.** `app/routers/organizer_claim_search.py::claim_search_text()` builds it, and `backend/tests/test_claim_search_indexes.py` guards drift.
 - **They are expression indexes, not columns,** so the `updated_at` trigger's column list is untouched.
 
 #### Publish and Quality Indexes
@@ -147,7 +149,7 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 - **`deleted_at` is a soft delete.** It hides the venue from `GET /organizer/venues` and never touches events that already reference it.
 - **Update and delete return 404, not 403, on another organizer's venue,** matching `app/routers/organizer_events.py`.
 - **Editing any address field clears `lat`, `lng` and `geocode_attempted_at` synchronously,** which forces re-resolution.
-- **A rename re-moderates every linked event,** because events show the venue name at read time. `app/routers/utils.py::remoderate_venue_linked_events` re-applies the explicit and non-event flags in one query. A newly flagged published event drops to `classified`, and every linked live event gets `needs_review`.
+- **A rename re-moderates every linked event,** because events show the venue name at read time. `app/routers/utils/organizer_content.py::remoderate_venue_linked_events` re-applies the explicit and non-event flags in one query. A newly flagged published event drops to `classified`, and every linked live event gets `needs_review`.
 - **`ORGANIZER_DAILY_VENUE_CREATION_CAP` caps daily venue creation** with the same soft count-then-insert as the other organizer caps.
 
 ### Publishers and Claims
@@ -169,11 +171,11 @@ What's in here: what the key tables' columns mean and who writes them, the `even
 | `verification_contact` | the Piletilevi promoter mailbox a `piletilevi_mailbox` check compared against, shown to the admin |
 | `justification` | required for `series`, enforced in `app/claims/lifecycle.py` |
 | `resolved_at` | set once `status` leaves `pending` |
-| `dormant` | set by `app/dedup/rules.py::resolve_claim_dormancy()`; see [organizer-portal.md](organizer-portal.md)'s Dormant Claims section |
+| `dormant` | set by `app/claims/dormancy.py::resolve_claim_dormancy()`; see [organizer-portal.md](organizer-portal.md)'s Dormant Claims section |
 
 ### Promotions
 
-`promotions` holds one row per sold or granted Promotion window. `app/promotions/` owns the logic and never imports from `app/routers/utils.py`. See `CONTEXT.md`'s Promotions glossary.
+`promotions` holds one row per sold or granted Promotion window. `app/promotions/` owns the logic and never imports from `app/routers/utils/`. See `CONTEXT.md`'s Promotions glossary.
 
 - **`status` is commercial only:** `unpaid`, `paid`, `ended_early` or `void`. Scheduled, live and finished are computed from the window and today's Tallinn date by `app/promotions/windows.py::promotion_state()`, never stored.
 - **`start_date` and `end_date` are inclusive Tallinn dates,** 3 to 14 days long, starting tomorrow at the earliest. They end on or before the event's last Tallinn day. `days` is stored beside them.

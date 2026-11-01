@@ -26,7 +26,7 @@ from app.constants.promotions import (
     PROMOTION_WITHDRAWN_NOTE,
     PROMOTION_WITHDRAWN_REFUND_NOTE,
 )
-from app.models.models import Promotion
+from app.models.promotions import Promotion
 from app.promotions.grant import PromotionRefused, vat_cents
 from app.integrations.payments import PaymentGateway, PaymentProviderError
 from app.promotions.lifecycle import PromotionNotFound, end_early, record_refund

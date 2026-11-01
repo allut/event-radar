@@ -20,7 +20,7 @@ What's in here: the middleware stack, rate limiting and its client key, URL and 
 ### Host Check
 
 - **`HostCheckMiddleware` rejects an unexpected `Host` header outside development.** It wraps `TrustedHostMiddleware`. Nothing builds an absolute URL from `Host` today, so this is one-line hardening against cache poisoning.
-- **`_resolve_allowed_hosts()` builds the allowlist** from `settings.RENDER_EXTERNAL_HOSTNAME` (Render injects it; never set it by hand) plus `settings.BACKEND_URL`'s hostname. Local hostnames (`DEV_DB_LOCAL_HOSTS`) are dropped from both.
+- **`resolve_allowed_hosts()` (in `app/middleware.py`) builds the allowlist** from `settings.RENDER_EXTERNAL_HOSTNAME` (Render injects it; never set it by hand) plus `settings.BACKEND_URL`'s hostname. Local hostnames (`DEV_DB_LOCAL_HOSTS`) are dropped from both.
 - **It fails open on purpose.** If both sources are empty or local, it logs an `ERROR` and the middleware isn't installed at all. An allowlist that rejects all public traffic would be a site-wide outage, which happened once when `BACKEND_URL` was left at its `localhost` default.
 - **Every reject logs `LOG_EVENT_HOST_REJECTED`** with the offending `Host` and path. It wraps inside `ProxyHeadersMiddleware`, so the log carries the real client IP.
 - **`/health` is exempt (`HOST_CHECK_EXEMPT_PATHS`).** Render's probe reaches the process over the private network with a rotating internal `Host`, and Starlette's `allowed_hosts` has no CIDR support.
@@ -44,7 +44,7 @@ What's in here: the middleware stack, rate limiting and its client key, URL and 
 - **Every endpoint carries `@limiter.limit(...)` with a `RATE_LIMIT_*` constant from `app/constants/rate_limits.py`**, authenticated ones included. Add both to any new endpoint, public or not.
 - **`backend/tests/test_route_guards.py` enforces this and the auth rule on the live app.** A route with no track dependency must be listed in its `PUBLIC_ROUTES`, which makes going public a reviewed choice.
 - **The limiter lives in `app/rate_limit.py`** so `main.py` and the routers can both import it without a cycle.
-- **All other `/admin/*` routes in `app/routers/admin.py` share one bucket** through `limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")`. Per-route limits would let an attacker cycling every admin route multiply the nominal cap.
+- **All other `/admin/*` routes in `app/routers/admin_*.py` share one bucket** through `limiter.shared_limit(RATE_LIMIT_ADMIN, scope="admin")`. Per-route limits would let an attacker cycling every admin route multiply the nominal cap.
 - **Admin queue list GETs and `GET /admin/counts` share a second bucket at `RATE_LIMIT_BROWSE`**, scope `RATE_LIMIT_SCOPE_ADMIN_READ`. Numbered paging plus a refetch after each action costs several reads per action, which the 10/minute action bucket can't absorb. Admin writes stay on `RATE_LIMIT_ADMIN`.
 - **`admin_auth.py`'s three routes have their own buckets**, separate from the shared admin one. Login uses `RATE_LIMIT_ADMIN_LOGIN`. What admin login shares is the lockout counter; see Admin Console Auth.
 - **Each claim-edit GET/PATCH pair shares a `shared_limit(RATE_LIMIT_SUBMIT, …)` bucket** (`claim_event_get`, `claim_event_patch`).
@@ -80,7 +80,7 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 
 ### Organizer Images
 
-- **`app/routers/utils.py::check_image_host()` pins organizer and claim-edit `image_url` to our own Cloudinary account.** It calls `app/ingestion/http_client.py::own_cloudinary_url()`: the host must be in `ALLOWED_IMAGE_HOSTS` and the path under `/{CLOUDINARY_CLOUD_NAME}/image/upload/`. It fails closed when the cloud name is unset.
+- **`app/routers/utils/organizer_content.py::check_image_host()` pins organizer and claim-edit `image_url` to our own Cloudinary account.** It calls `app/ingestion/http_client.py::own_cloudinary_url()`: the host must be in `ALLOWED_IMAGE_HOSTS` and the path under `/{CLOUDINARY_CLOUD_NAME}/image/upload/`. It fails closed when the cloud name is unset.
 - **The path pin matters because `res.cloudinary.com` serves every account.** The daily digest embeds `image_url` as an `<img>`, so an arbitrary host would be an unconsented tracking pixel leaking each recipient's IP and open time.
 - **The digest embeds an image only from our Cloudinary account or an `ALLOWED_SOURCE_HOSTS` host** (`app/email/digest.py::_embeddable_image_url`). Any other `image_url` gets the branded band instead.
 - **Organizer and claim-edit images go through the signed `POST /organizer/events/image` upload.** The claim edit checks `image_url` only when the client sends it, so saving other fields never fails on an untouched scraped URL. Scraped sources are unaffected by the pin. `backend/scripts/clear_foreign_claim_images.py` clears the non-Cloudinary values claimants pinned before the host check existed, and leaves a pinned empty value alone.
@@ -96,6 +96,7 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 ### Redirects
 
 - **`http_get()` streams the body and raises `ResponseTooLargeError` past `HTTP_MAX_RESPONSE_BYTES` (16 MiB).** The cap counts decoded bytes, so a false or missing `Content-Length` and a compressed bomb both hit it. The error is an `httpx.HTTPError` that `_is_retryable` skips. The largest real page is Fienta's events API at about 4 MiB.
+- **A non-2xx body is truncated at the cap, not rejected, and the `HTTPStatusError` carries it buffered.** The status error still raises and still retries, and `exc.response.json()` and `.text` work.
 - **A client that follows redirects must pin every hop with `host_guard_hook`** (`http_client.py`). httpx's `follow_redirects=True` has no same-origin rule, and a pre-fetch check only sees the first URL.
 - **The hook runs on each redirect hop**, checking `(scheme, hostname, port)` and re-running `resolves_to_private_ip()`. `fienta.py`, `html_base.py`, `refetch.py` and the publisher backfill client use it. Add it to any new adapter that follows redirects.
 
@@ -105,7 +106,7 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 
 ### Frontend URL Checks
 
-- **`frontend/src/utils.ts::safeUrl()` repeats the scheme check as defense in depth.** Route every untrusted URL through it before an `href` or `src`.
+- **`frontend/src/utils/html.ts::safeUrl()` repeats the scheme check as defense in depth.** Route every untrusted URL through it before an `href` or `src`.
 - **Route-param ids go through `numericRouteId()`, and `API.*` builders `encodeURIComponent` every path segment.**
 
 ## Stored HTML
@@ -113,9 +114,9 @@ The guard on a URL field depends on whether our server ever fetches it, not on w
 - **Every scraped rich-text field the frontend renders as HTML goes through `app/ingestion/sanitize.py::sanitize_html()` at ingest.** That's the localized `description` and `important_info`; `title` renders as escaped text. It's a strict `nh3` allowlist plus block-to-`<br>`, whitespace and Cloudflare email-decode passes.
 - **`html_to_text()` (same module) is the plain-text form for every non-HTML consumer:** LLM prompts, keyword filters and fuzzy dedup. A new HTML-rendered field uses `sanitize_html()`; one that feeds an LLM or matcher uses `html_to_text()`.
 - **`HtmlListingAdapter` subclasses are covered by default.** `html_base.py::extract_localized_text()` sanitizes its JSON-LD description before returning it.
-- **Organizer-authored HTML gets a narrower allowlist.** `routers/utils.py::organizer_sanitize()` passes `ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS`/`_ATTRS` to `sanitize_html()`: only what the `RichTextEditor` toolbar can produce. Submit, edit and claim edits all call it.
+- **Organizer-authored HTML gets a narrower allowlist.** `routers/utils/organizer_content.py::organizer_sanitize()` passes `ORGANIZER_HTML_SANITIZE_ALLOWED_TAGS`/`_ATTRS` to `sanitize_html()`: only what the `RichTextEditor` toolbar can produce. Submit, edit and claim edits all call it.
 - **An `attribute_filter` makes that allowlist the true ceiling.** nh3 otherwise keeps generic attributes like `title` and `lang`. `rel` is exempt because it's nh3's own injected `noopener noreferrer`.
-- **The frontend's `sanitizeHtml()` (`frontend/src/utils.ts`) is defense in depth** at both `dangerouslySetInnerHTML` sites in `EventDetail.tsx`. The server-side pass is the real boundary.
+- **The frontend's `sanitizeHtml()` (`frontend/src/utils/html.ts`) is defense in depth** at both `dangerouslySetInnerHTML` sites in `EventDetail.tsx`. The server-side pass is the real boundary.
 
 ## Untrusted Values
 
@@ -123,7 +124,7 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 
 - **Regex runs in linear time on untrusted text.** Edge-`<br>` trimming is the loop-based `_strip_edge_brs()`. `CURRENCY_AMOUNT_RE` bounds digit runs, and `price_context_digest` truncates input to `PRICE_CONTEXT_INPUT_MAX_CHARS`. Both have timing regression tests.
 - **Numbers from LLMs and JSON-LD are bounded.** `parse_bounded_price()` accepts finite `0 <= x < PRICE_MAX_VALUE`, `normalize_currency()` enforces `VALID_CURRENCY_CODES`, non-finite quality is dropped, and refetched coordinates are bbox-gated.
-- **Request-body prices share the same ceiling.** Every `price_*` field on an organizer, claim-edit or venue body is `app/routers/utils.py::PriceField`, which also refuses `Infinity`. A bare float would overflow `Numeric(10,2)` into a 500.
+- **Request-body prices share the same ceiling.** Every `price_*` field on an organizer, claim-edit or venue body is `app/routers/utils/organizer_content.py::PriceField`, which also refuses `Infinity`. A bare float would overflow `Numeric(10,2)` into a 500.
 - **Validation replaces per-event savepoints.** Classify and refetch share one `AsyncSession` across concurrent workers, so a nested transaction there is unsafe.
 - **LLM booleans go through `app/llm/router.py::strict_bool()`** with fail-safe defaults.
 - **Why-go bullets are length-capped, stripped of URLs and emails, and explicit-filtered.** Venue-extract output may only reuse words from its input.
@@ -182,7 +183,7 @@ Scraped pages and LLM output are both untrusted input. These guards stop one bad
 
 - **The app loads no analytics or advertising script.** GA4 was removed because "cookieless" doesn't answer ePrivacy Art. 5(3), which covers any access to the device, not only cookies. The Estonian DPA (AKI) applies the consent rule directly and lists analytics among the trackers that need prior consent.
 - **A new third-party measurement tool needs a consent prompt first.** Add it to the CSP and the privacy notice's section 4 only together with that prompt.
-- **`click_external` and `view` are the one passive-signal exception.** `utils.ts::trackExternalClick()` posts to our own `/feedback` endpoint, which needs the consumer session, so only a signed-in user's activity is recorded. It feeds their personalised feed, the function they asked for, so it is strictly necessary for it. Keep it out of any aggregate-reporting use.
+- **`click_external` and `view` are the one passive-signal exception.** `utils/eventActions.ts::trackExternalClick()` posts to our own `/feedback` endpoint, which needs the consumer session, so only a signed-in user's activity is recorded. It feeds their personalised feed, the function they asked for, so it is strictly necessary for it. Keep it out of any aggregate-reporting use.
 
 ## Dependency Audit
 
@@ -229,7 +230,7 @@ There are three auth tracks: consumer, organizer and admin. `CONTEXT.md` defines
 - **`users.email_verified` is false until someone proves the address.** `routers/auth.py::_get_or_create_user` inserts a `User` row on an unauthenticated `POST /auth/request-link`, before the address is shown to be reachable.
 - **Two writers set it, each in the same transaction as session issuance:** `verify_magic_link` on a consumed link, and Google sign-in's authoritative branch in `_apply_google_linking_gate`. A false row is provably one nobody has signed into.
 - **That guarantee holds from migration `0024_users_email_verified.py` on.** It backfilled every older row to true, because the purged magic-link history made real status underivable.
-- **`build_daily_feeds` (`app/ranking/score.py::_verified_user_ids`) and `send_daily_digests` (`app/email/digest.py`) both filter on it.** An anonymous request with someone else's address can't enroll them in the digest.
+- **`build_daily_feeds` (`app/ranking/daily_feed.py::_verified_user_ids`) and `send_daily_digests` (`app/email/digest.py`) both filter on it.** An anonymous request with someone else's address can't enroll them in the digest.
 
 ### Digest Unsubscribe
 

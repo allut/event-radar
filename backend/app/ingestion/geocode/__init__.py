@@ -43,7 +43,8 @@ from app.ingestion.geocode.venue_extract import (
     is_suspect_venue_name,
 )
 from app.ingestion.geocode.venue_pass import geocode_pending_venues
-from app.models.models import Event, Venue
+from app.models.events import Event
+from app.models.organizers import Venue
 
 __all__ = [
     "canonical_venue_name",

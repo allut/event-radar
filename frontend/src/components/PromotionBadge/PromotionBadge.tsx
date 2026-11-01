@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { PROMOTION_STATUS_TONE } from '../../constants/organizerPromotions';
 import { t } from '../../i18n';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import styles from './PromotionBadge.module.css';
 
 interface PromotionBadgeProps {

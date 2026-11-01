@@ -12,7 +12,8 @@ from app.constants.promotions import (
     PROMOTION_SNAPSHOT_DESCRIPTION_MAX_CHARS,
 )
 from app.events.localize import resolve_description, resolve_title
-from app.models.models import Event, Promotion, PromotionSnapshot
+from app.models.events import Event
+from app.models.promotions import Promotion, PromotionSnapshot
 
 
 def label_text(promotion: Promotion) -> str:

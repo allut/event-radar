@@ -19,7 +19,9 @@ import { API, PAGE_PARAM, QUERY_KEYS } from '../../constants/api';
 import { UI_STATE } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
 import type { PromotionRowFlags } from '../../lib/organizerPromotions';
-import { formatEventTime, titleWithBrand, withLocaleQuery, withQueryParam } from '../../utils';
+import { formatEventTime } from '../../utils/intlFormat';
+import { titleWithBrand } from '../../utils/locale';
+import { withLocaleQuery, withQueryParam } from '../../utils/url';
 import styles from './ClaimEvents.module.css';
 
 interface ClaimListEvent {

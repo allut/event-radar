@@ -11,7 +11,9 @@ from app.constants.admin import (
 )
 from app._generated.shared_constants import CLAIM_STATUS_REVOKED
 from app.constants.promotions import PROMOTION_LIVE_CAP
-from app.models.models import AdminAction, Event, Promotion, PromotionRequest
+from app.models.events import Event
+from app.models.audit import AdminAction
+from app.models.promotions import Promotion, PromotionRequest
 from app.promotions.grant import GrantRequest, grant_promotion
 from app.promotions.requests import RequestInput, create_request
 from app.promotions.sweep import sweep_promotions
@@ -54,7 +56,7 @@ def grant_body(start: int = 10, end: int = 14, **kw: Any) -> dict:
 
 @pytest.fixture
 def declined_mail(monkeypatch) -> list[tuple]:
-    from app.routers import admin as admin_module
+    from app.routers import admin_promotion_requests as admin_module
 
     sent: list[tuple] = []
 

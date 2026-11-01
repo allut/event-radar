@@ -27,15 +27,11 @@ from app.config import settings
 from app.db import get_db
 from app.email.consent import grant_ad_consent, withdraw_ad_consent
 from app.email.subscription import set_digest_subscription
-from app.models.models import Persona, User, UserIdentity, UserPersona
+from app.models.users import Persona, User, UserIdentity, UserPersona
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
-from app.routers.utils import (
-    compute_preferred_taxonomy,
-    is_identity_linked,
-    serialize_user,
-    set_session_cookie,
-)
+from app.routers.utils.serializers import compute_preferred_taxonomy, serialize_user
+from app.routers.utils.auth import is_identity_linked, set_session_cookie
 from app.ranking.score import persona_weight_tuple
 
 log = logging.getLogger(__name__)

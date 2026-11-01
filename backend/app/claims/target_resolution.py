@@ -30,7 +30,9 @@ from app.constants.ingestion import (
     SOURCE_SLUG_PILETILEVI,
 )
 from app.ingestion.http_client import http_get_stored_url
-from app.models.models import Event, EventSource, Publisher, RawEvent, Source
+from app.models.ingestion import RawEvent, Source
+from app.models.claims import Publisher
+from app.models.events import Event, EventSource
 from app.events.venue import resolve_venue_name
 from app.events.queries import event_series_key, serialize_event_series_key
 
@@ -247,7 +249,7 @@ async def bulk_resolve_publisher_events(
 ) -> dict[int, Event]:
     """One representative Event per Publisher id in ``publisher_ids``,
     bulk-loaded in two fixed queries regardless of how many ids are passed —
-    shared by admin.py::admin_list_claims and
+    shared by admin_claims.py::admin_list_claims and
     app.claims.lifecycle._send_claim_expiry_emails (#421). "Freshest listing
     wins" (highest EventSource.id per publisher_id) mirrors
     app.claims.lifecycle.representative_event_source's own single-row

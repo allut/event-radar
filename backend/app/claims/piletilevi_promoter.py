@@ -7,7 +7,7 @@ target for ``app.claims.dns_txt.verify_dns_txt_token``, or (no such domain)
 the raw mailto address for an exact-match check against the claiming
 organizer's own account email. Also resolves (#427) the promoter's own
 identity (profile URL + name) as the ``Publisher`` a Piletilevi claim resolves
-against — see CONTEXT.md's Event Claiming glossary and models.py's
+against — see CONTEXT.md's Event Claiming glossary and claims.py's
 ``Publisher`` docstring (the promoter profile URL is the ``external_id`` key
 a Piletilevi Publisher resolves against).
 

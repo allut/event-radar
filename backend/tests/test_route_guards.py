@@ -122,3 +122,22 @@ def test_public_routes_exist_and_carry_no_auth() -> None:
     )
     assert stale == []
     assert guarded == []
+
+
+def test_no_path_param_route_shadows_a_literal_route() -> None:
+    """Starlette matches in registration order, so an earlier `GET /a/{x}` would
+    catch `GET /a/b` and the request would 422 on the int check. Include order
+    in app/main.py keeps them apart (organizer_claim_search_router goes before
+    organizer_claims_router)."""
+    shadowed: list[str] = []
+    seen: list[APIRoute] = []
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+        if "{" not in route.path:
+            for earlier in seen:
+                shared = earlier.methods & route.methods
+                if shared and "{" in earlier.path and earlier.path_regex.match(route.path):
+                    shadowed.append(f"{sorted(shared)[0]} {earlier.path} shadows {route.path}")
+        seen.append(route)
+    assert shadowed == []

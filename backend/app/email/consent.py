@@ -12,7 +12,8 @@ from app.constants.email import (
     CONSENT_SOURCE_WORDING_CHANGE,
     EMAIL_AD_CONSENT_WORDING_VERSION,
 )
-from app.models.models import EmailAdConsentLog, User
+from app.models.promotions import EmailAdConsentLog
+from app.models.users import User
 
 
 def grant_ad_consent(user: User, db: AsyncSession, source: str) -> bool:

@@ -42,7 +42,7 @@ The deliverable is a **report** in chat: findings ranked by severity, each with 
 - **Shared session under `gather`:** concurrent coroutines querying one `AsyncSession`, or lazily loading a relationship in async code.
 - **Nested scan:** `in`, `.find`, `.includes` or `.index` over a list inside a loop, where a dict or set would do.
 - **Unbounded load:** whole tables or windows pulled into Python, then filtered, sorted or sliced there.
-- **Index gap:** a hot `WHERE` or `ORDER BY` that no index in `backend/app/models/models.py` serves, `NULLS` ordering included.
+- **Index gap:** a hot `WHERE` or `ORDER BY` that no index in `backend/app/models/` serves, `NULLS` ordering included.
 - **Repeated work:** parsing, normalising or constructing the same thing per item or per render, a full sort where top-k would do, or spread-accumulate in a loop.
 - **Waterfall:** serial awaits of independent I/O, or one request per list item.
 - **Unbounded cache:** module-level state that only grows.

@@ -11,7 +11,7 @@ from app.constants.promotions import (
     PROMOTION_STATUS_ENDED_EARLY,
     PROMOTION_STATUS_PAID,
 )
-from app.models.models import Promotion, PromotionDailyStat
+from app.models.promotions import Promotion, PromotionDailyStat
 from app.promotions.grant import vat_cents
 from app.promotions.windows import window_days
 

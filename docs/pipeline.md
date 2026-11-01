@@ -114,7 +114,7 @@ The LLM classifies each event against a fixed category and vibe taxonomy (`VALID
 
 ## Ranking
 
-`app/ranking/score.py` sums weighted terms. The weights are `SCORE_WEIGHT_*` constants in `app/constants/ranking.py`.
+`app/ranking/score.py` sums weighted terms. The weights are `SCORE_WEIGHT_*` constants in `app/constants/ranking.py`. Ranking is three modules: scoring in `app/ranking/score.py`, Daily 5 selection in `app/ranking/selection.py`, and the nightly and onboarding feed build in `app/ranking/daily_feed.py`.
 
 | Term | Signed in | Signed out |
 |---|---|---|
@@ -165,7 +165,7 @@ The public `/ranking` page states the signals and their order, never the weights
 
 ### Backfill Tiers
 
-`app/ranking/score.py::_select_with_backfill()` guarantees five events by relaxing constraints tier by tier:
+`app/ranking/selection.py::select_with_backfill()` guarantees five events by relaxing constraints tier by tier:
 
 | Tier | Pool | Per-category cap | Picker |
 |---|---|---|---|
@@ -456,4 +456,4 @@ The same three layers catch listings that aren't attendable events. That covers 
 - **`app/ingestion/html_utils.py` holds the low-level BeautifulSoup helpers** such as `attr_str`. They sit apart from `html_base.py` to avoid a circular import with `locale_urls.py`.
 - **`fetch_raw()` lets HTTP failures propagate to `SourceAdapter.run()`.** That is how `IngestionRun.error` and `source.last_status` get set. A swallowed exception makes a failed scrape look like a clean, empty run.
 - **Filter LLM classification output against `VALID_CATEGORIES`/`VALID_VIBES` before persisting.** Unknown values are dropped silently (`app/llm/classifier.py::_parse_classification()`).
-- **Dedup's time-window check stays in SQL; the fuzzy check stays in Python.** `app/dedup/rules.py::candidate_pair_ids_in_window()` pre-filters pairs with a sargable `BETWEEN` self-join. `run_dedup_pass` and `run_dedup_pass_llm` both consume it, and `is_candidate_pair` runs only on the pairs it returns.
+- **Dedup's time-window check stays in SQL; the fuzzy check stays in Python.** `app/dedup/passes.py::candidate_pair_ids_in_window()` pre-filters pairs with a sargable `BETWEEN` self-join. `run_dedup_pass` and `run_dedup_pass_llm` both consume it, and `is_candidate_pair` runs only on the pairs it returns.

@@ -3,7 +3,8 @@
 these helpers instead of reading the columns."""
 
 from app._generated.shared_constants import DEFAULT_USER_LOCALE, LOCALE_EN, LOCALE_RU
-from app.models.models import Event, Venue
+from app.models.events import Event
+from app.models.organizers import Venue
 
 
 def _linked_venue(event: Event) -> Venue | None:

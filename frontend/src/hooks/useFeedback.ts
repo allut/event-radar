@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { API, QUERY_KEYS } from '../constants/api';
 import type { Signal } from '../constants/feedback';
-import { patchCachedEvent } from '../utils';
+import { patchCachedEvent } from '../utils/eventActions';
 
 interface UseFeedbackOptions {
   initialSignal?: Signal | null;

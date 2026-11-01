@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import pytest
 
-from app.models.models import AdminAction
+from app.models.audit import AdminAction
 from app.promotions.sweep import sweep_promotions
 from sqlalchemy import select
 from tests.promotions.conftest import NOW

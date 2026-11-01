@@ -4,7 +4,7 @@ import { API } from '../constants/api';
 import type { LoginState } from '../constants/auth';
 import { UI_STATE } from '../constants/core';
 import { t } from '../i18n';
-import { apiErrorMessage } from '../utils';
+import { apiErrorMessage } from '../utils/apiErrors';
 
 export interface UseMagicLinkRequestResult {
   email: string;

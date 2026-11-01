@@ -1,5 +1,5 @@
 import { memo, useCallback, useState, type Ref } from 'react';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import styles from './AdminQueueSplitView.module.css';
 
 interface AdminQueueSplitViewProps<T> {

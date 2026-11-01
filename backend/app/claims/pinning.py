@@ -28,7 +28,8 @@ from app.constants.ingestion import REFETCH_PRICE_TOLERANCE
 from app.ingestion.http_client import http_get_stored_url, normalized_hostname
 from app.ingestion.jsonld import offers_from_jsonld_items, parse_jsonld_event_items
 from app.ingestion.price_fallback import PRICE_FALLBACK_EXTRACTORS
-from app.models.models import Claim, Event, EventSource
+from app.models.claims import Claim
+from app.models.events import Event, EventSource
 from app.claims.target_resolution import publisher_claim_event_ids
 from app.events.queries import (
     canonical_event_filter,
@@ -170,7 +171,7 @@ async def clear_claim_pins(db: AsyncSession, claim: Claim) -> list[int]:
 
 def pin_key(field: str, locale: str | None = None) -> str:
     """"<field>" or "<field>:<locale>" — the entry format Event.pinned_fields
-    stores (models.py docstring)."""
+    stores (events.py docstring)."""
     return f"{field}:{locale}" if locale else field
 
 

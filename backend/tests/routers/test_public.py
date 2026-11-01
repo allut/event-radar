@@ -429,7 +429,7 @@ class TestShowcaseRealDb:
     async def _event(self, make, *, quality, days, **kw):
         from datetime import timedelta
 
-        from app.models.models import EventClassification
+        from app.models.events import EventClassification
 
         ev = await make.event(starts_at=self.NOW + timedelta(days=days), ends_at=None, **kw)
         make.db.add(

@@ -32,7 +32,7 @@ from app.db import get_db
 from app.integrations.payments import PaymentGateway
 from app.integrations.providers import get_payment_gateway, get_registry_lookup
 from app.integrations.registry import RegistryLookup
-from app.models.models import Organizer
+from app.models.organizers import Organizer
 from app.promotions.checkout import CheckoutInput, CheckoutRefused, start_checkout
 from app.promotions.flags import checkout_enabled, offer_enabled
 from app.promotions.grant import PromotionRefused

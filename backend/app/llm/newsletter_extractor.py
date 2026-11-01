@@ -16,7 +16,7 @@ from app.constants.llm import (
 )
 from app.llm.prompts import NEWSLETTER_EXTRACT_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.llm.router import llm_json_or_none
-from app.models.models import RawEvent, RawInboundEmail, Source
+from app.models.ingestion import RawEvent, RawInboundEmail, Source
 
 log = logging.getLogger(__name__)
 

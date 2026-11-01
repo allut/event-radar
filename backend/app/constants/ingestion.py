@@ -4,6 +4,8 @@ from datetime import timedelta
 from typing import NamedTuple
 
 INGESTION_ERROR_MAX_LEN = 500
+# cap on the upstream error body quoted in a price-fetch WARNING (#674)
+PRICE_ERROR_BODY_SNIPPET_CHARS = 200
 PRICE_HINT_MAX_CHARS = 300  # cap on Event.price_hint, kept short for the LLM prompt
 
 # Word-boundary keyword prefilter for sexually-explicit listings (en/et/ru), checked
@@ -148,7 +150,7 @@ LOCALIZED_TEXT_MAX_DESC_CHARS = 5000
 ORGANIZER_MIN_EVENTS_FOR_AUTO_ADD = 3
 # Write-phase attempts for the weekly organizer sync: one retry when the server dropped the connection during the HTTP phase (#530).
 ORGANIZER_SYNC_DB_WRITE_ATTEMPTS = 2
-# Publisher.name (models/models.py) column width.
+# Publisher.name (models/claims.py) column width.
 PUBLISHER_NAME_MAX_LEN = 255
 # Page budget for the weekly city-filtered discovery scan; ~14 pages of 100 at today's volume (#634).
 FIENTA_ORGANIZER_SCAN_MAX_PAGES = 50
@@ -232,7 +234,7 @@ FIENTA_MAX_DETAIL_FETCHES = 300
 # but no coordinates (currently: Fienta). Usage policy requires a descriptive
 # User-Agent with contact info and a max of 1 request/second.
 NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
-NOMINATIM_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee; aleksei.lutkov@gmail.com)"
+NOMINATIM_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee; contact@eventradar.ee)"
 # Static Nominatim search params; the "q" param is set per-call with the address.
 NOMINATIM_QUERY_PARAMS: dict[str, str | int] = {"format": "json", "limit": 1}
 GEOCODE_REQUEST_DELAY_SECONDS: float = 1.0

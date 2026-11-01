@@ -317,6 +317,6 @@ class TestSetPersonaDigestOptIn:
         assert user.email_digest_opt_in is True
 
     def test_new_user_column_defaults_to_false(self):
-        from app.models.models import User
+        from app.models.users import User
 
         assert User.__table__.c.email_digest_opt_in.server_default.arg == "false"

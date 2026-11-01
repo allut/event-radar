@@ -120,7 +120,7 @@ async def prefetch_llm_cache(
     fan-out caller hands ``llm_json``. Without it each concurrent ``llm_json``
     runs its own cache ``SELECT`` on the shared session, which an
     ``AsyncSession`` refuses. One query per ``SQL_IN_CHUNK_SIZE`` hashes."""
-    from app.models.models import LlmCall
+    from app.models.llm import LlmCall
 
     hashes = list(dict.fromkeys(_content_hash(p) for p in prompts))
     cache: dict[str, tuple[dict[str, Any], str]] = {}
@@ -209,7 +209,7 @@ async def llm_json(
     Raises:
         LLMError: If every available provider fails.
     """
-    from app.models.models import LlmCall
+    from app.models.llm import LlmCall
 
     content_hash = _content_hash(prompt)
 

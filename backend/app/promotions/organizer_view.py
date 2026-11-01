@@ -49,7 +49,9 @@ from app.constants.promotions import (
     PROMOTION_UNAVAILABLE_HORIZON_DAYS,
 )
 from app.events.localize import resolve_title
-from app.models.models import Event, Organizer, Promotion, PromotionRequest
+from app.models.events import Event
+from app.models.promotions import Promotion, PromotionRequest
+from app.models.organizers import Organizer
 from app.promotions.cap import full_days
 from app.promotions.flags import checkout_enabled
 from app.promotions.owners import resolve_owner_ids

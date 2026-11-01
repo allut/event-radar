@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { cx, fileNameFromUrl, safeUrl } from '../../utils';
+import { cx } from '../../utils/style';
+import { fileNameFromUrl } from '../../utils/url';
+import { safeUrl } from '../../utils/html';
 import styles from './FileField.module.css';
 
 interface FileFieldProps {

@@ -61,7 +61,9 @@ from app.integrations.payments import (
     RefundRequest,
     StripeEvent,
 )
-from app.models.models import Event, Organizer, ProcessedStripeEvent, Promotion
+from app.models.events import Event
+from app.models.promotions import ProcessedStripeEvent, Promotion
+from app.models.organizers import Organizer
 from app.promotions.audit import record_system_action
 from app.promotions.grant import vat_cents
 from app.promotions.snapshots import take_snapshot

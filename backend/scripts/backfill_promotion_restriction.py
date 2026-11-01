@@ -23,7 +23,7 @@ async def main(confirm: bool) -> None:
     from app.config import settings
     from app.db import AsyncSessionLocal, engine
     from app.events.queries import event_not_ended_filter
-    from app.models.models import Event
+    from app.models.events import Event
     from app.promotions.restriction import backfill_restrictions
     from app.promotions.windows import now_tallinn
 

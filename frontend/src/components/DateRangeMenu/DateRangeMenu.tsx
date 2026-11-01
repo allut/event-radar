@@ -1,8 +1,19 @@
 import { memo, useMemo, useState } from 'react';
+import { cx } from '../../utils/style';
 import {
-  cx, monthGridDays, weekdayHeaders, formatMonthYearLabel, formatDateRangeShort, formatDateShort,
-  parseISODateLocal, toDateStr, tallinnToday, isSameDay, addMonths,
-} from '../../utils';
+  monthGridDays,
+  parseISODateLocal,
+  toDateStr,
+  tallinnToday,
+  isSameDay,
+  addMonths,
+} from '../../utils/calendar';
+import {
+  weekdayHeaders,
+  formatMonthYearLabel,
+  formatDateRangeShort,
+  formatDateShort,
+} from '../../utils/intlFormat';
 import { useDropdown } from '../../hooks/useDropdown';
 import { CALENDAR_WEEK_START } from '../../constants/core';
 import { DATE_PRESET_CUSTOM, DATE_PRESETS, type DatePreset } from '../../constants/explore';

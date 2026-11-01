@@ -7,7 +7,7 @@ import {
   REPORT_DETAIL_TEXTAREA_ROWS,
   REPORT_REASON_OPTIONS,
 } from '../../constants/feedback';
-import { apiErrorMessage } from '../../utils';
+import { apiErrorMessage } from '../../utils/apiErrors';
 import Modal from '../Modal';
 import styles from './ReportModal.module.css';
 

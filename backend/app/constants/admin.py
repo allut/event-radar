@@ -4,7 +4,7 @@
 # siblings) are cross-stack: shared/app-config.json → app._generated.shared_constants.
 ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE: int = 500
 
-# Event inspector (routers/admin.py GET /admin/events/{id}, issue #157) caps
+# Event inspector (routers/admin_events.py GET /admin/events/{id}, issue #157) caps
 # how many raw_events rows it inlines — unlike the paginated queues above,
 # this is a fixed ceiling (not offset/limit query params) since it's one
 # sub-list within a single-event payload, not its own listing endpoint. Each
@@ -12,14 +12,14 @@ ADMIN_REPORTS_QUEUE_MAX_PAGE_SIZE: int = 500
 # for an event with a long refetch/dedup-merge history.
 ADMIN_EVENT_INSPECTOR_RAW_EVENTS_LIMIT: int = 20
 
-# Admin dedup-groups pagination cap (routers/admin.py GET /admin/dedup/groups).
+# Admin dedup-groups pagination cap (routers/admin_events.py GET /admin/dedup/groups).
 ADMIN_DEDUP_GROUPS_MAX_PAGE_SIZE: int = 500
 
-# Admin review-queue pagination cap (routers/admin.py GET /admin/submissions): small
+# Admin review-queue pagination cap (routers/admin_submissions.py GET /admin/submissions): small
 # default page, generous cap.
 ADMIN_REVIEW_QUEUE_MAX_PAGE_SIZE: int = 500
 
-# Admin claims-queue pagination cap (routers/admin.py GET /admin/claims, issue #420).
+# Admin claims-queue pagination cap (routers/admin_claims.py GET /admin/claims, issue #420).
 ADMIN_CLAIMS_QUEUE_MAX_PAGE_SIZE: int = 500
 
 # `action` field values for LOG_EVENT_ADMIN_ACTION (issue #155).
@@ -81,6 +81,6 @@ ADMIN_ACTION_BUILD_FEEDS = "build_feeds"
 ADMIN_ACTION_SEND_DIGESTS = "send_digests"
 ADMIN_ACTION_PIPELINE_RUN = "pipeline_run"
 
-# routers/utils.py
+# routers/utils/admin.py
 ERROR_ADMIN_JOB_FAILED = "{name} failed; see server logs"
 ERROR_ADMIN_JOB_ALREADY_RUNNING = "{name} is already running; try again once it finishes."

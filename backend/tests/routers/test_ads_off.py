@@ -23,7 +23,7 @@ def _consenting(make_user, user_id: int = 5, opt_in: bool = True):
 
 def _latest_log(db, *, granted: bool = False, source: str = "email_link") -> None:
     """Script the user's latest consent-log row (the undo's precondition)."""
-    from app.models.models import EmailAdConsentLog
+    from app.models.promotions import EmailAdConsentLog
 
     db.scalar.return_value = EmailAdConsentLog(
         user_id=5, granted=granted, wording_version=1, source=source, locale="et"

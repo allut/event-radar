@@ -47,7 +47,7 @@ from app.constants.security import (
     SETTING_NAME_ADMIN_TOTP_SECRET,
 )
 from app.rate_limit import client_key, limiter
-from app.routers.utils import clear_session_cookie, set_session_cookie
+from app.routers.utils.auth import clear_session_cookie, set_session_cookie
 from app.auth.utils import require_configured_secret
 
 log = logging.getLogger(__name__)

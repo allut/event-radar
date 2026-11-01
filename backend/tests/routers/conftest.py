@@ -1,3 +1,4 @@
+import importlib
 import json
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
@@ -6,18 +7,42 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import FastAPI
 
+from app.models.audit import AdminAction
 from app.rate_limit import limiter
+
+
+# Every admin console router except admin_auth (login/session, mounted by its own tests).
+ADMIN_ROUTER_MODULES = (
+    "app.routers.admin_claims",
+    "app.routers.admin_events",
+    "app.routers.admin_jobs",
+    "app.routers.admin_overview",
+    "app.routers.admin_promotion_requests",
+    "app.routers.admin_promotions",
+    "app.routers.admin_promotion_commands",
+    "app.routers.admin_reports",
+    "app.routers.admin_submissions",
+)
 
 
 @pytest.fixture
 def admin_app() -> FastAPI:
-    """Minimal FastAPI app wiring only the admin router — shared by every
-    admin-router test module that needs a bare app to mount it on."""
-    from app.routers.admin import router
-
+    """Minimal FastAPI app wiring every admin console router — shared by every
+    admin-router test module that needs a bare app to mount them on."""
     app = FastAPI()
-    app.include_router(router)
+    for module_name in ADMIN_ROUTER_MODULES:
+        app.include_router(importlib.import_module(module_name).router)
     return app
+
+
+def admin_action_calls(db) -> list[AdminAction]:
+    """The AdminAction rows a test's mocked db session had `add`ed. Shared by the
+    admin audit-row test modules."""
+    return [
+        call.args[0]
+        for call in db.add.call_args_list
+        if isinstance(call.args[0], AdminAction)
+    ]
 
 
 def ndjson_lines(resp) -> list:
@@ -108,7 +133,7 @@ def _reset_public_caches():
 @pytest.fixture(autouse=True)
 def _reset_rate_limiter():
     """The slowapi Limiter is a module-level singleton shared by every router
-    test in this directory. Since L2 (routers/admin.py) moved every /admin/*
+    test in this directory. Since L2 (routers/admin_*.py) moved every /admin/*
     route onto ONE shared_limit(..., scope="admin") bucket per client instead
     of one bucket per route, the whole admin test suite would otherwise share
     a single 10/minute allowance and start seeing spurious 429s partway

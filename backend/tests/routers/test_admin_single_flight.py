@@ -13,7 +13,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.constants.core import APP_ENV_DEVELOPMENT
-from app.routers.utils import _RUNNING_ADMIN_JOBS
+from app.routers.utils.admin import _RUNNING_ADMIN_JOBS
 from tests.routers.conftest import patch_admin_settings
 
 
@@ -42,7 +42,7 @@ async def test_second_concurrent_classify_call_gets_409(admin_app):
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.classify_pending_drain_now", job),
+        patch("app.routers.admin_jobs.classify_pending_drain_now", job),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -71,7 +71,7 @@ async def test_second_concurrent_full_ingest_call_gets_409(admin_app):
 
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.ingest_all_enabled", job),
+        patch("app.routers.admin_jobs.ingest_all_enabled", job),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -102,7 +102,7 @@ async def test_second_concurrent_cleanup_call_gets_409(admin_app, make_db_ctx, m
     with (
         patch_admin_settings() as mock_settings,
         patch("app.db.AsyncSessionLocal", return_value=db_ctx),
-        patch("app.routers.admin.cleanup_stale_data", job),
+        patch("app.routers.admin_jobs.cleanup_stale_data", job),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -133,7 +133,7 @@ async def test_second_concurrent_send_digests_call_gets_409(admin_app, make_db_c
     with (
         patch_admin_settings() as mock_settings,
         patch("app.db.AsyncSessionLocal", return_value=db_ctx),
-        patch("app.routers.admin.send_daily_digests", job),
+        patch("app.routers.admin_jobs.send_daily_digests", job),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -167,13 +167,13 @@ async def test_second_concurrent_pipeline_run_call_gets_409(admin_app, make_db_c
     with (
         patch_admin_settings() as mock_settings,
         patch("app.db.AsyncSessionLocal", return_value=db_ctx),
-        patch("app.routers.admin.sync_fienta_organizers", job),
-        patch("app.routers.admin.ingest_all_enabled", AsyncMock(return_value=[])),
-        patch("app.routers.admin.dedup_pass_drain_now", AsyncMock(return_value={"merged": 0})),
-        patch("app.routers.admin.classify_pending_drain_now", AsyncMock(return_value={"classified": 0})),
-        patch("app.routers.admin.publish_pending_job", AsyncMock(return_value={"published": 0})),
-        patch("app.routers.admin.build_daily_feeds", AsyncMock(return_value={"built": 0, "empty": 0, "total_users": 0, "candidate_events": 0})),
-        patch("app.routers.admin.send_daily_digests", AsyncMock(return_value={"sent": 0, "skipped": 0, "errored": 0, "total_opted_in": 0, "dry_run": True})),
+        patch("app.routers.admin_jobs.sync_fienta_organizers", job),
+        patch("app.routers.admin_jobs.ingest_all_enabled", AsyncMock(return_value=[])),
+        patch("app.routers.admin_jobs.dedup_pass_drain_now", AsyncMock(return_value={"merged": 0})),
+        patch("app.routers.admin_jobs.classify_pending_drain_now", AsyncMock(return_value={"classified": 0})),
+        patch("app.routers.admin_jobs.publish_pending_job", AsyncMock(return_value={"published": 0})),
+        patch("app.routers.admin_jobs.build_daily_feeds", AsyncMock(return_value={"built": 0, "empty": 0, "total_users": 0, "candidate_events": 0})),
+        patch("app.routers.admin_jobs.send_daily_digests", AsyncMock(return_value={"sent": 0, "skipped": 0, "errored": 0, "total_opted_in": 0, "dry_run": True})),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -208,13 +208,13 @@ async def test_standalone_classify_blocked_while_pipeline_run_is_mid_classify_st
     with (
         patch_admin_settings() as mock_settings,
         patch("app.db.AsyncSessionLocal", return_value=db_ctx),
-        patch("app.routers.admin.sync_fienta_organizers", AsyncMock(return_value={"added": [], "stale": []})),
-        patch("app.routers.admin.ingest_all_enabled", AsyncMock(return_value=[])),
-        patch("app.routers.admin.dedup_pass_drain_now", AsyncMock(return_value={"merged": 0})),
-        patch("app.routers.admin.classify_pending_drain_now", classify_job),
-        patch("app.routers.admin.publish_pending_job", AsyncMock(return_value={"published": 0})),
-        patch("app.routers.admin.build_daily_feeds", AsyncMock(return_value={"built": 0, "empty": 0, "total_users": 0, "candidate_events": 0})),
-        patch("app.routers.admin.send_daily_digests", AsyncMock(return_value={"sent": 0, "skipped": 0, "errored": 0, "total_opted_in": 0, "dry_run": True})),
+        patch("app.routers.admin_jobs.sync_fienta_organizers", AsyncMock(return_value={"added": [], "stale": []})),
+        patch("app.routers.admin_jobs.ingest_all_enabled", AsyncMock(return_value=[])),
+        patch("app.routers.admin_jobs.dedup_pass_drain_now", AsyncMock(return_value={"merged": 0})),
+        patch("app.routers.admin_jobs.classify_pending_drain_now", classify_job),
+        patch("app.routers.admin_jobs.publish_pending_job", AsyncMock(return_value={"published": 0})),
+        patch("app.routers.admin_jobs.build_daily_feeds", AsyncMock(return_value={"built": 0, "empty": 0, "total_users": 0, "candidate_events": 0})),
+        patch("app.routers.admin_jobs.send_daily_digests", AsyncMock(return_value={"sent": 0, "skipped": 0, "errored": 0, "total_opted_in": 0, "dry_run": True})),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
@@ -244,7 +244,7 @@ async def test_lock_released_after_completion_allows_a_later_call(admin_app):
     with (
         patch_admin_settings() as mock_settings,
         patch(
-            "app.routers.admin.classify_pending_drain_now",
+            "app.routers.admin_jobs.classify_pending_drain_now",
             new_callable=AsyncMock,
             return_value={"classified": 1},
         ),

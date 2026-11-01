@@ -6,7 +6,9 @@ import { CLAIM_SEARCH_DEBOUNCE_MS, CLAIM_SEARCH_MIN_CHARS } from '../../constant
 import { ROUTES } from '../../constants/routes';
 import { t, ti } from '../../i18n';
 import { useLocaleNavigate } from '../../hooks/useLocaleNavigate';
-import { apiErrorMessage, formatEventTime, isClaimJustificationRequiredError, withLocaleQuery, withQueryParam } from '../../utils';
+import { apiErrorMessage, isClaimJustificationRequiredError } from '../../utils/apiErrors';
+import { formatEventTime } from '../../utils/intlFormat';
+import { withLocaleQuery, withQueryParam } from '../../utils/url';
 import styles from './ClaimEventPicker.module.css';
 
 interface ClaimCandidate {

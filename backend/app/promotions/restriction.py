@@ -45,7 +45,8 @@ from app.events.venue import resolve_venue_name
 from app.ingestion.sanitize import html_to_text
 from app.llm.prompts import LLM_PROMOTION_RESTRICTION_PROMPT_TEMPLATE, escape_prompt_delimiters
 from app.llm.router import llm_http_client, llm_json_or_none, prefetch_llm_cache
-from app.models.models import Event, Promotion
+from app.models.events import Event
+from app.models.promotions import Promotion
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.windows import RuleViolation, tallinn_today
 

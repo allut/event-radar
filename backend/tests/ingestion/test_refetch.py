@@ -35,7 +35,8 @@ from app.ingestion.refetch import (
 from app.ingestion.selectors import KUMU_SITE_NAME_ET, KUMU_SITE_TITLE_SUFFIX
 from app.ingestion.sources.kumu import kumu_localized_text
 from app.email.resend import resend_http_client
-from app.models.models import Event, EventReport, User
+from app.models.events import Event, EventReport
+from app.models.users import User
 from tests.conftest import count_statements
 
 # --- HTML builders -----------------------------------------------------------

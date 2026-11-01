@@ -29,17 +29,18 @@ Every shipped line is one JSON object (`JsonLogFormatter`):
 
 | `event` | Meaning | Emitted from |
 |---|---|---|
-| `job_run` | scheduled job completed/failed (carries `job`, `status`, `duration_ms`) | `app/main.py::_scheduled` |
+| `job_run` | scheduled job completed/failed (carries `job`, `status`, `duration_ms`) | `app/scheduler.py::_scheduled` |
 | `rate_limit_block` | own per-IP 429 rejection (carries `path`) | `app/rate_limit.py` |
 | `llm_degraded` | LLM provider chain exhausted, or classify/dedup backlog deferred | `app/llm/router.py`, `app/ingestion/jobs.py` |
 | `auth_failed` | magic-link / admin-console login / claim-intent-link auth rejected | `app/routers/auth.py`, `organizer_auth.py`, `organizer_claims.py`, `app/auth/admin_lockout.py` |
 | `webhook_rejected` | inbound-mail bad signature / bad body | `app/routers/webhooks.py` |
 | `report_submitted` | `POST /reports` succeeded | `app/routers/reports.py` |
-| `email_send_failed` | a Resend send failed (magic link, digest, contact, report notify/reporter, claim resolution, cancellation, Promotion notices) | `app/email/resend.py::send_resend_email` (every request-path send), `app/email/digest.py`, `app/claims/lifecycle.py`, `app/events/cancellation.py`, `app/promotions/sweep.py`, `app/routers/admin.py`, `app/routers/organizer_promotions.py`, `app/routers/stripe_webhook.py` |
-| `admin_action` | console-initiated or system Promotion action — audit trail; carries `action`, one of the `ADMIN_ACTION_*` values (`app/constants/admin.py`) | `app/routers/admin_auth.py`, `app/routers/utils.py`, `app/promotions/audit.py` |
+| `email_send_failed` | a Resend send failed (magic link, digest, contact, report notify/reporter, claim resolution, cancellation, Promotion notices) | `app/email/resend.py::send_resend_email` (every request-path send), `app/email/digest.py`, `app/claims/lifecycle.py`, `app/events/cancellation.py`, `app/promotions/sweep.py`, `app/routers/admin_claims.py`, `app/routers/admin_promotion_requests.py`, `app/routers/utils/promotions.py`, `app/routers/organizer_promotions.py`, `app/routers/stripe_webhook.py` |
+| `admin_action` | console-initiated or system Promotion action — audit trail; carries `action`, one of the `ADMIN_ACTION_*` values (`app/constants/admin.py`) | `app/routers/admin_auth.py`, `app/routers/utils/admin.py`, `app/promotions/audit.py` |
 | `contact_honeypot_block` | contact-form honeypot field tripped (bot signal) | `app/routers/contact.py` |
-| `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/main.py` |
-| `unverified_account_budget_exceeded` | global daily new-unverified-account budget crossed (mail-bomb early warning, OWASP audit F10) | `app/routers/utils.py::record_unverified_account_creation` |
+| `host_rejected` | `HostCheckMiddleware` rejected a request's Host header — signals cache-poisoning/host-spoofing probes | `app/middleware.py` |
+| `unverified_account_budget_exceeded` | global daily new-unverified-account budget crossed (mail-bomb early warning, OWASP audit F10) | `app/routers/utils/auth.py::record_unverified_account_creation` |
+| `promotion_ref_seen_full` | the in-memory `?ref=` open dedup set reached `PROMOTION_REF_SEEN_MAX_ENTRIES`, so new clients' opens stop counting until midnight (logged once per day) | `app/promotions/counters.py` |
 | `explore_ceiling_overflow` | `GET /explore` candidate query returned more than `BROWSE_RELEVANCE_CEILING` rows, so only the soonest were ranked (carries `ceiling`) | `app/routers/browse.py` |
 | `google_signin` | Google sign-in completed on either track (carries `track` — `user`/`organizer` — and `outcome`, e.g. `existing_login`/`new_account`/`auto_linked`/`confirmation_sent`) | `app/routers/auth.py`, `app/routers/organizer_auth.py` (the two Google callbacks) |
 | `google_signin_degraded` | network/5xx failure talking to Google (token exchange or JWKS fetch) — upstream degradation, distinct from a rejected caller | `app/routers/auth.py`, `app/routers/organizer_auth.py`, `app/auth/google_oauth.py` |
@@ -97,7 +98,7 @@ A sweep of the production stream for bugs, such as a weekly check. Run the four 
    this one notifier.
 2. **Dataset** — `event-radar-logs`, the dataset named in `LOG_SHIP_URL`
    (`.../v1/datasets/<dataset>/ingest`). The APL below uses it.
-3. Create each monitor from the table, pasting its APL and setting
+3. Create the three monitors in Created Monitors, pasting each APL and setting
    type/threshold/window/frequency.
 
 ## Monitors
@@ -105,39 +106,47 @@ A sweep of the production stream for bugs, such as a weekly check. Run the four 
 APL is illustrative — adjust field names to what the live stream shows, and tune
 thresholds after observing a few days of baseline volume.
 
+- **The Axiom free tier allows three monitors, and all three are in use.** They are #2, #3 and #7, the ones that catch silent failures.
+- **Adding a monitor means retiring one of the three first.** Prefer widening a live monitor's query over swapping one out.
+- **The other rows are not created.** Log triage's four queries cover what they would catch, so it surfaces at the next sweep, not as an alert. Their APL stays here for when a slot frees up.
+
+### Created Monitors
+
+Checked against Axiom on 2026-11-01.
+
 | # | Monitor | Type | APL / condition | Alert when |
 |---|---|---|---|---|
-| 1 | Error spike | Threshold | `['event-radar-logs'] \| where level == "ERROR" \| summarize count()` | count > 5 in 5 min |
 | 2 | Scheduled job failed | Match | `['event-radar-logs'] \| where event == "job_run" and status == "error"` | any match (msg carries `job` + `exc`) |
-| 3 | Dead scheduler / stale feed ⭐ | Threshold (below) | `['event-radar-logs'] \| where event == "job_run" and job == "build_daily_feeds" and status == "ok" \| summarize count()` over 25h | count < 1 |
-| 3b | Stale ingest ⭐ | Threshold (below) | as #3, `job == "hourly ingest"`, window 120 min | count < 1 |
+| 3 | Dead scheduler / stale feed | Threshold (below) | `['event-radar-logs'] \| where event == "job_run" and job == "build_daily_feeds" and status == "ok" \| summarize count()` over 25h | count < 1 |
+| 7 | Log-stream silence | Threshold (below) | `['event-radar-logs'] \| summarize count()` over 60 min, evaluated every 30 min | count < 1 |
+
+### Not Created (Free-Tier Cap)
+
+| # | Query | Type | APL / condition | Alert when |
+|---|---|---|---|---|
+| 1 | Error spike | Threshold | `['event-radar-logs'] \| where level == "ERROR" \| summarize count()` | count > 5 in 5 min |
+| 3b | Stale ingest | Threshold (below) | as #3, `job == "hourly ingest"`, window 120 min | count < 1 |
 | 3c | Digest not sent | Threshold (below) | as #3, `job == "send_daily_digests"`, window 25h | count < 1 |
 | 4 | LLM degradation | Threshold | `['event-radar-logs'] \| where event == "llm_degraded" \| summarize count()` over 30 min | count > 3 |
 | 5 | Auth / abuse spike | Threshold | `['event-radar-logs'] \| where event in ("auth_failed", "rate_limit_block") \| summarize count()` over 10 min | count > 20 |
 | 6 | Webhook probing | Threshold | `['event-radar-logs'] \| where event == "webhook_rejected" \| summarize count()` over 15 min | count > 5 |
-| 7 | Log-stream silence | Threshold (below) | `['event-radar-logs'] \| summarize count()` over 30 min | count < 1 |
-| 8 | Job-duration anomaly *(optional)* | AnomalyDetection | `['event-radar-logs'] \| where event == "job_run" \| summarize avg(duration_ms) by job, bin_auto(_time)` | auto-baselined drift |
+| 8 | Job-duration anomaly | AnomalyDetection | `['event-radar-logs'] \| where event == "job_run" \| summarize avg(duration_ms) by job, bin_auto(_time)` | auto-baselined drift |
 | 9 | Report abuse spike | Threshold | `['event-radar-logs'] \| where event == "report_submitted" \| summarize count()` over 10 min | placeholder — tune after baseline volume observed |
-| 10 | Admin action audit ⭐ | Match | `['event-radar-logs'] \| where event == "admin_action"` | any match — the audit trail (`ADMIN_ACTION_*` values) exists but had no monitor watching it (OWASP audit F11); this makes every console-initiated admin action visible, not alert-worthy on its own |
-| 11 | Host-header probing | Threshold | `['event-radar-logs'] \| where event == "host_rejected" \| summarize count()` over 15 min | count > 5 — signals cache-poisoning/host-spoofing probes (OWASP audit F11) |
-| 12 | Google sign-in degraded | Threshold | `['event-radar-logs'] \| where event == "google_signin_degraded" \| summarize count()` over 15 min | count > 3 — sustained failures talking to Google (token exchange or JWKS fetch), not just an occasional blip |
+| 10 | Admin action audit | Match | `['event-radar-logs'] \| where event == "admin_action"` | any match — the `ADMIN_ACTION_*` audit trail (OWASP audit F11), for visibility, not alert-worthy on its own |
+| 11 | Host-header probing | Threshold | `['event-radar-logs'] \| where event == "host_rejected" \| summarize count()` over 15 min | count > 5 — cache-poisoning/host-spoofing probes (OWASP audit F11) |
+| 12 | Google sign-in degraded | Threshold | `['event-radar-logs'] \| where event == "google_signin_degraded" \| summarize count()` over 15 min | count > 3 — sustained failures talking to Google (token exchange or JWKS fetch) |
 
-**Priority if the free tier caps monitor count:** #2 (job failed), #3/#3b (dead
-scheduler), #7 (silence) are the must-haves — they catch the real operational
-failure modes. #1, #4, #5, #6, #9, #10, #11 are next. #8 is a nice-to-have.
+### Why #3 and #7 Hold Two of the Slots
 
-### Why #3/#3b/#7 matter most
+The embedded APScheduler lives inside the single web process. A scheduler can
+die quietly on Render's always-on Starter plan too: a wedged event loop, a
+process restarted without the scheduler starting, or a job that hangs instead
+of failing.
 
-The embedded APScheduler lives inside the single web process. The backend now
-runs on Render's always-on Starter plan (the old free tier's 15-min idle sleep
-no longer applies — see `docs/backend-ops.md`), but a scheduler can still die
-quietly: a wedged event loop, a process restarted without the scheduler
-starting, or a job that hangs instead of failing.
-
-When that happens **nothing
-errors** — jobs simply never run, so an error-only monitor stays silent. #3/#3b detect the *absence* of a successful
-`job_run` in the window the job should have run; #7 detects the whole stream
-going quiet (app down **or** shipping broken).
+When that happens **nothing errors** — jobs simply never run, so an error-only
+monitor stays silent. #3 detects the *absence* of a successful `job_run` in the
+window the daily feed build should have run; #7 detects the whole stream going
+quiet (app down **or** shipping broken).
 
 ## Residual risks
 
@@ -146,9 +155,9 @@ going quiet (app down **or** shipping broken).
   nothing fires.
 - **An external uptime check would close that gap.** For example, a second
   cron-job.org job that alerts on a failed `GET /health`. It's not set up
-  (declined for now), so this is the one uncovered case.
-- **Free-tier limits.** Monitor count and evaluation frequency may be capped on
-  the Axiom plan in use — use the priority order above if so.
+  (declined for now).
+- **A job that stops running without the scheduler dying goes unalerted.** #3 watches only the daily feed build, so a stalled hourly ingest or an unsent digest waits for the next Log triage. #2 still catches any job that fails outright.
+- **A failure caught inside a job never reaches #2.** `ingest_all_enabled` catches one source's exception and still reports `status=ok`, so a single dead source's ERROR line shows up only in triage query 1.
 
 ## Verification
 

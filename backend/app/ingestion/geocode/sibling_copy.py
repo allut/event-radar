@@ -18,7 +18,7 @@ from app.constants.ingestion import (
     VENUE_NAME_PARENS_RE,
     VENUE_SIBLING_RATIO_THRESHOLD,
 )
-from app.models.models import Event
+from app.models.events import Event
 
 log = logging.getLogger(__name__)
 

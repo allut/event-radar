@@ -9,7 +9,7 @@ import {
   pauseReasonKey,
   type OrganizerPromotionItem,
 } from '../../lib/organizerPromotions';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import PromotionReport from './PromotionReport';
 import styles from './OrganizerPromotions.module.css';
 

@@ -7,7 +7,7 @@ ORGANIZER_DAILY_SUBMISSION_CAP = 20
 # Same count-then-act soft ceiling as ORGANIZER_DAILY_SUBMISSION_CAP, but for
 # POST /organizer/events/image — submissions alone don't bound Cloudinary
 # free-tier upload quota, since an upload can happen without ever completing
-# a submission (organizer_image_uploads, app/models/models.py).
+# a submission (organizer_image_uploads, app/models/organizers.py).
 ORGANIZER_DAILY_IMAGE_UPLOAD_CAP = 20
 # Same count-then-act soft ceiling, but for POST /organizer/venues — venues
 # are created independently of a submission, so neither existing cap bounds
@@ -20,7 +20,7 @@ ORGANIZER_DAILY_VENUE_CREATION_CAP = 20
 # rules (price fields and categories never participate).
 
 # Field length caps for SubmitEventBody/PatchEventBody (routers/organizer_events.py).
-# venue_name and currency mirror the Event column widths (models/models.py) so an
+# venue_name and currency mirror the Event column widths (models/events.py) so an
 # over-length value 422s instead of raising asyncpg.StringDataRightTruncation; the
 # Text-column fields (title/description/important_info) have no DB-enforced width,
 # so these are abuse-prevention ceilings, not truncation-avoidance.

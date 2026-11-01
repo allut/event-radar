@@ -29,7 +29,9 @@ import {
   PRICE_INPUT_MIN,
   PRICE_INPUT_STEP,
 } from '../../constants/organizer';
-import { categoryOptions, currencySymbol, hasHtmlContent, localeLabel, localizedFieldLabel, titleWithBrand } from '../../utils';
+import { categoryOptions, localeLabel, localizedFieldLabel, titleWithBrand } from '../../utils/locale';
+import { hasHtmlContent } from '../../utils/html';
+import { currencySymbol } from '../../utils/price';
 
 import { useSeoMeta } from '../../hooks/useSeoMeta';
 import SeoTags from '../../components/SeoTags';

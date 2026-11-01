@@ -22,14 +22,10 @@ from app.constants.promotions import (
     PROMOTION_TRUST_WINDOW_DAYS,
 )
 from app.constants.reports import REPORT_STATUS_RESOLVED
-from app.models.models import (
-    AdminAction,
-    EmailAdConsentLog,
-    EventReport,
-    Promotion,
-    PromotionDailyStat,
-    User,
-)
+from app.models.events import EventReport
+from app.models.audit import AdminAction
+from app.models.promotions import EmailAdConsentLog, Promotion, PromotionDailyStat
+from app.models.users import User
 from app.promotions.windows import tallinn_today
 
 

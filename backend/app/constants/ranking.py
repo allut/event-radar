@@ -23,7 +23,7 @@ assert len(PERSONA_RANK_WEIGHTS) == PERSONA_MAX_SELECTABLE, (
     "PERSONA_RANK_WEIGHTS must have exactly PERSONA_MAX_SELECTABLE entries"
 )
 
-# Users per page in build_daily_feeds (score.py) — bounds the per-page
+# Users per page in build_daily_feeds (daily_feed.py) — bounds the per-page
 # personas_by_user/fb_by_user dicts and the event_rows x users
 # scoring loop in RAM regardless of total registered-user count.
 FEED_BUILD_USER_BATCH_SIZE = 500
@@ -35,7 +35,7 @@ DAILY_5_BACKFILL_MAX_PER_CATEGORY = 3  # relaxed per-category cap during backfil
 # Tier-1 MMR keeps DAILY_5_MAX_PER_CATEGORY (2). Exceeded only by the final
 # uncapped sweep, so the feed still reaches DAILY_5_COUNT when events are scarce.
 DAILY_5_LOOKAHEAD_DAYS = 14
-# _select_with_backfill truncates each scored pool to n * this multiplier via
+# select_with_backfill truncates each scored pool to n * this multiplier via
 # heapq.nlargest before running the MMR/backfill tiers, instead of sorting the
 # whole pool — generous enough that the full-sort fallback is rarely needed
 # (score.py Big-O audit H6).
@@ -82,7 +82,7 @@ BROWSE_MAX_PAGE_SIZE: int = 60
 # scan, and RATE_LIMIT_BROWSE alone doesn't bound the per-request cost.
 
 # Shared pagination validation floors — every `limit`/`offset` Query() across
-# admin.py/browse.py/feedback.py enforces the same lower bound; centralized so
+# admin_*.py/browse.py/feedback.py enforces the same lower bound; centralized so
 # it can't drift per-endpoint.
 PAGINATION_MIN_LIMIT: int = 1
 PAGINATION_MIN_OFFSET: int = 0

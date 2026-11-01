@@ -10,10 +10,10 @@ tie-break; see ``rules.build_cluster_assignments``).
 
 STATUS: WIRED — the scheduled dedup job (main.py → jobs.dedup_pass) calls
 ``run_dedup_pass_llm()``. Stage 1's *time* pre-filter is the shared SQL
-self-join in ``rules.candidate_pair_ids_in_window``; the fuzzy title/venue check
+self-join in ``passes.candidate_pair_ids_in_window``; the fuzzy title/venue check
 (``rules.is_candidate_pair``) then runs in Python on those pairs; stage 2 (this
 module) confirms each surviving candidate with the LLM. When no LLM provider is
-configured, the pass degrades to the rule-only ``rules.run_dedup_pass``.
+configured, the pass degrades to the rule-only ``passes.run_dedup_pass``.
 
 Cache-aware loop: before consulting the LLM, all fuzzy-passing pairs are bulk
 prefetched against the ``llm_calls`` cache by content hash. Cached decisions are
@@ -47,23 +47,27 @@ from app.constants.llm import (
 )
 from app.events.venue import resolve_venue_name
 from app.llm.prompts import LLM_DEDUP_PROMPT_TEMPLATE, escape_prompt_delimiters
-from app.dedup.rules import (
-    union,
+from app.claims.dormancy import (
     apply_claim_dormancy,
-    apply_same_day_title_unions,
-    build_cluster_assignments,
+    load_claims_for_events,
+    resolve_claim_dormancy,
+)
+from app.dedup.passes import (
     bulk_assign_dedup_groups,
     candidate_pair_ids_in_window,
     clear_stale_dedup_groups,
     dedup_window_cutoff,
-    is_candidate_pair,
-    lowered_text,
-    load_claims_for_events,
     load_dedup_candidate_events,
     load_description_lengths,
-    resolve_claim_dormancy,
     run_dedup_pass,
+)
+from app.dedup.rules import (
+    apply_same_day_title_unions,
+    build_cluster_assignments,
+    is_candidate_pair,
+    lowered_text,
     same_group,
+    union,
 )
 from app.llm.router import (
     content_hash,
@@ -72,7 +76,8 @@ from app.llm.router import (
     llm_json_or_none,
     strict_bool,
 )
-from app.models.models import Event, LlmCall
+from app.models.events import Event
+from app.models.llm import LlmCall
 
 log = logging.getLogger(__name__)
 

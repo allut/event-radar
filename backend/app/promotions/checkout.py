@@ -54,7 +54,9 @@ from app.integrations.payments import (
     PaymentProviderError,
 )
 from app.integrations.registry import RegistryLookup
-from app.models.models import Event, Organizer, Promotion, StripeCustomer
+from app.models.events import Event
+from app.models.promotions import Promotion, StripeCustomer
+from app.models.organizers import Organizer
 from app.promotions.cap import lock_cap
 from app.promotions.grant import PromotionRefused, net_price_cents, validate_grant
 from app.promotions.owners import resolve_owner_ids

@@ -1,7 +1,7 @@
 import { LOCALES } from '../../_generated/sharedConstants';
 import { THEME_OPTIONS } from '../../constants/theme';
 import { t } from '../../i18n';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import { useDropdown } from '../../hooks/useDropdown';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { setThemeOverride, type ResolvedTheme } from '../../lib/theme';

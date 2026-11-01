@@ -1,4 +1,4 @@
-"""Unit tests for the security response-header middleware (app.main.add_security_headers).
+"""Unit tests for the security response-header middleware (app.middleware.add_security_headers).
 
 Hits /health (no DB dependency, lifespan not triggered without `with TestClient`)
 to assert the headers land on every response, and that HSTS is gated to production.
@@ -22,7 +22,7 @@ def test_security_headers_present_on_every_response():
 
 
 def test_hsts_absent_in_development():
-    with patch("app.main.settings") as mock_settings:
+    with patch("app.middleware.settings") as mock_settings:
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT
         resp = client.get("/health")
 
@@ -30,7 +30,7 @@ def test_hsts_absent_in_development():
 
 
 def test_hsts_present_in_production():
-    with patch("app.main.settings") as mock_settings:
+    with patch("app.middleware.settings") as mock_settings:
         mock_settings.APP_ENV = "production"
         resp = client.get("/health")
 

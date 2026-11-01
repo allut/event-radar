@@ -7,7 +7,8 @@ from sqlalchemy import select
 
 from app.constants.admin import ADMIN_ACTION_PROMOTION_GRANT
 from app.constants.promotions import PROMOTION_LIVE_CAP
-from app.models.models import AdminAction, Promotion
+from app.models.audit import AdminAction
+from app.models.promotions import Promotion
 from app.promotions.grant import GrantRequest, grant_promotion
 from tests.promotions.conftest import NOW, Clock, at_tallinn, d
 

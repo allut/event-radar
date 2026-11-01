@@ -44,7 +44,7 @@ from app.constants.security import (
 )
 from app.db import AsyncSessionLocal, get_db
 from app.llm.newsletter_extractor import extract_events_from_email
-from app.models.models import RawInboundEmail
+from app.models.ingestion import RawInboundEmail
 from app.rate_limit import limiter
 from app.auth.utils import require_configured_secret
 
@@ -55,7 +55,7 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 # closing the replay window described in OWASP audit G-6: a captured,
 # validly-signed request replayed inside WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS
 # re-verifies and would otherwise re-trigger extraction. Bounded LRU mirrors
-# admin.py's _admin_auth_failures pattern — resets on deploy/restart, which
+# auth/admin_lockout.py's _admin_auth_failures pattern — resets on deploy/restart, which
 # is fine since the replay window itself is only 5 minutes.
 _seen_webhook_ids: OrderedDict[str, None] = OrderedDict()
 

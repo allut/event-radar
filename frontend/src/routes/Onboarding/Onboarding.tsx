@@ -10,7 +10,7 @@ import { API, QUERY_KEYS } from '../../constants/api';
 import { PERSONAS } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
 import { t, ti, personaName, personaVibe } from '../../i18n';
-import { apiErrorMessage } from '../../utils';
+import { apiErrorMessage } from '../../utils/apiErrors';
 import { useStaticSeoMeta } from '../../hooks/useStaticSeoMeta';
 import PersonaCard from '../../components/PersonaCard';
 import TopBar from '../../components/TopBar';

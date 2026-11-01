@@ -16,7 +16,9 @@ from app.constants.ingestion import (
 )
 from app.constants.ranking import VALID_TIMES
 from app.ingestion.registry import SOURCE_CATALOG, SourceDef
-from app.models.models import Persona, Publisher, Source
+from app.models.ingestion import Source
+from app.models.claims import Publisher
+from app.models.users import Persona
 
 log = logging.getLogger(__name__)
 

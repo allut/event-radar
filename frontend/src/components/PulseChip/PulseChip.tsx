@@ -5,7 +5,7 @@ import { API, QUERY_KEYS } from '../../constants/api';
 import { EXPLORE_TODAY_SEARCH } from '../../constants/explore';
 import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
-import { withLocaleQuery } from '../../utils';
+import { withLocaleQuery } from '../../utils/url';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import styles from '../shared/Bar.module.css';
 

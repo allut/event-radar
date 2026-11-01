@@ -1,6 +1,6 @@
 import { useLocation } from 'react-router-dom';
 import { LOCALE_ET } from '../constants/core';
-import { localeFromPath } from '../utils';
+import { localeFromPath } from '../lib/urlLocale';
 
 /** The current URL's locale: its `/en`/`/ru` prefix, else Estonian on a bare
  * path (or an unrecognized segment). The saved preference is deliberately

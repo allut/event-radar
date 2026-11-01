@@ -1,6 +1,6 @@
 import type { PersonaData } from '../../_generated/i18nData';
 import { t, ti } from '../../i18n';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import styles from './PersonaCard.module.css';
 
 interface PersonaCardProps {

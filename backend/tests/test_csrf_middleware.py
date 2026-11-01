@@ -1,4 +1,4 @@
-"""Tests for CsrfOriginCheckMiddleware in app/main.py."""
+"""Tests for CsrfOriginCheckMiddleware in app/middleware.py."""
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -6,7 +6,7 @@ from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from app.main import CsrfOriginCheckMiddleware
+from app.middleware import CsrfOriginCheckMiddleware
 
 TRUSTED_ORIGINS = frozenset({"https://trusted.example.com"})
 

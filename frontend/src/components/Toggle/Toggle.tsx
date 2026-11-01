@@ -1,4 +1,4 @@
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import styles from './Toggle.module.css';
 
 interface ToggleProps {

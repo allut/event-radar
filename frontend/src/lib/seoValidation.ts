@@ -357,11 +357,9 @@ type LiveEventFields = Pick<
  * exact mirror) and price (read off the `data-price-*` marker left by
  * EventDetail.tsx, since price isn't part of the JSON-LD payload — issue
  * #46 defers `AggregateOffer`) must match what the live API returns right
- * now for the same event. `formatPrice` (frontend/src/utils.ts) renders a
+ * now for the same event. `formatPrice` (frontend/src/utils/price.ts) renders a
  * price exactly when `price_min` is non-null — see its implementation —
- * so that's the presence signal used here, without needing to import it
- * (utils.ts pulls in `dompurify`, which requires a DOM global `formatPrice`
- * doesn't otherwise need, and this module must also run under plain Node). */
+ * so that's the presence signal used here, without needing to import it. */
 export function compareEventStaleness(parsed: ParsedSnapshot, live: LiveEventFields): string[] {
   const issues: string[] = [];
   const jsonLd = asRecord(parsed.jsonLd[0]);

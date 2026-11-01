@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 # closes the window exactly, including for a still-valid *older* code once a
 # *newer* one has been accepted — a code string check alone doesn't catch
 # that case. In-memory only, like the admin auth lockout dict
-# (routers/admin.py) — resets on deploy/restart, which just means one lost
+# (auth/admin_lockout.py) — resets on deploy/restart, which just means one lost
 # accepted-step memory, not a security regression.
 _last_accepted_step: int | None = None
 

@@ -15,7 +15,9 @@ from sqlalchemy import select
 from app.config import settings
 from app.constants.core import TALLINN_TZ
 from app.email import digest
-from app.models.models import DailyFeed, DailySponsoredSlot, User
+from app.models.feeds import DailyFeed
+from app.models.promotions import DailySponsoredSlot
+from app.models.users import User
 from app.promotions import counters
 from app.promotions.digest_slot import load_digest_slots
 from tests.conftest import Factory

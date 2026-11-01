@@ -14,7 +14,8 @@ from app.config import settings
 from app.constants.promotions import PROMOTION_LIVE_CAP
 from app.db import get_db
 from app.integrations.providers import get_payment_gateway, get_registry_lookup
-from app.models.models import Organizer, Promotion, StripeCustomer
+from app.models.promotions import Promotion, StripeCustomer
+from app.models.organizers import Organizer
 from app.promotions.checkout import CheckoutInput, CheckoutRefused, start_checkout
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion
 from app.routers import organizer_promotion_checkout as checkout_router

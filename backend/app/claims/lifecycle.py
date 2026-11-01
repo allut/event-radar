@@ -77,7 +77,9 @@ from app.email.claim_resolution import (
 )
 from app.email.resend import resend_http_client
 from app.ingestion.http_client import http_get_stored_url
-from app.models.models import Claim, Event, EventSource, Organizer
+from app.models.claims import Claim
+from app.models.events import Event, EventSource
+from app.models.organizers import Organizer
 from app.events.localize import resolve_title
 from app.events.venue import resolve_venue_name
 from app.events.queries import event_series_key, serialize_event_series_key
@@ -123,7 +125,7 @@ async def representative_event_source(
 def resolve_claim_target(event: Event, es: EventSource) -> ClaimTarget:
     """Cheap, HTTP-free target lookup for an *existing* claim (used by
     resolve_claim_for_event's public-page lookup and
-    organizer_claims._is_already_claimed's bulk cross-retirement check) —
+    organizer_claim_search._is_series_claimed's bulk cross-retirement check) —
     trusts `es.publisher_id` as already-stamped, which is safe here because
     any active claim was only ever created via `resolve_claim_target_live()`
     (`app.claims.target_resolution`, #427), which stamps the row before a
@@ -404,7 +406,7 @@ async def approved_claim_exists(db: AsyncSession, target: ClaimTarget) -> bool:
     claim against a target that already has other *pending* claims, only
     against one with an existing *approved* claim, so that case needs an
     explicit pre-insert check instead of relying on IntegrityError. Not
-    module-private: also called from admin.py's manual grant endpoint, which
+    module-private: also called from admin_claims.py's manual grant endpoint, which
     needs the same pre-flip guard as the organizer-facing auto-grant path."""
     return (
         await db.scalar(
@@ -463,7 +465,7 @@ async def auto_decline_other_pending_claims(
 ) -> None:
     """(#431) Proof preempts assertion: once a claim on `target` is granted —
     either the organizer-facing auto-grant path or an admin's manual grant
-    (admin.py's admin_grant_claim) — every other still-pending claim on that
+    (admin_claims.py's admin_grant_claim) — every other still-pending claim on that
     same target auto-declines, mirroring admin_decline_claim's status
     transition and reusing its decline email, just with no admin note (falls
     back to the email's generic decline copy). The shared target's
@@ -471,7 +473,7 @@ async def auto_decline_other_pending_claims(
     supplies the email's event title — not the winning claim's event — since
     a Publisher target's freshest traced-back listing can differ from whichever specific event the winner
     happened to claim through. Not module-private: also called from
-    admin.py's manual grant endpoint.
+    admin_claims.py's manual grant endpoint.
 
     Excludes `winning_organizer_id`'s own other pending rows (#448) — those
     should no longer exist since create_claim now returns an organizer's
@@ -948,7 +950,7 @@ async def expire_stale_claims(db: AsyncSession) -> dict:
     comment) expires after the longer CLAIM_ADMIN_REVIEW_EXPIRY_DAYS instead
     of never, closing the permanent-lock hole #425 flagged. Commits
     internally (mirrors build_daily_feeds) so the expiry emails below
-    reflect only durably expired rows — app/main.py wires this job with
+    reflect only durably expired rows — app/scheduler.py wires this job with
     commit=False."""
     # UTC on purpose: TTL arithmetic (see CLAUDE.md "Conventions") — a Tallinn-aware
     # `now - timedelta(days=N)` would shift by an hour across a DST change.

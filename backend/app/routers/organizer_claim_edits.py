@@ -63,11 +63,13 @@ from app.promotions.restriction import reassess_after_edit
 from app.promotions.windows import now_tallinn
 from app.ingestion.http_client import host_matches_domain, safe_render_url
 from app.ingestion.pricing import normalize_currency
-from app.models.models import ClaimEditAttempt, Event, Organizer
+from app.models.claims import ClaimEditAttempt
+from app.models.events import Event
+from app.models.organizers import Organizer
 from app.publish import publish_pending
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_organizer
-from app.routers.utils import (
+from app.routers.utils.organizer_content import (
     PriceField,
     apply_moderation_flags,
     apply_price_edit,
@@ -76,12 +78,12 @@ from app.routers.utils import (
     merged_localized,
     organizer_sanitize,
     prepend_organizer_categories,
-    serialize_event,
     validate_categories,
     validate_price_ordering,
     validate_time_ordering,
     validate_tz_aware,
 )
+from app.routers.utils.serializers import serialize_event
 from app.events.queries import select_events_with_classification
 from app.events.venue import resolve_venue_name
 

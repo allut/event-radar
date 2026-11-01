@@ -19,7 +19,10 @@ import {
 } from '../../constants/core';
 import { REPORT_STATUS } from '../../constants/prerender';
 import { ROUTES } from '../../constants/routes';
-import { apiErrorMessage, sanitizeHtml, formatAdminTimestamp, localeLabel, safeUrl } from '../../utils';
+import { apiErrorMessage } from '../../utils/apiErrors';
+import { sanitizeHtml, safeUrl } from '../../utils/html';
+import { formatAdminTimestamp } from '../../utils/intlFormat';
+import { localeLabel } from '../../utils/locale';
 import PageState from '../../components/PageState';
 import Toast from '../../components/Toast';
 import { useToast } from '../../hooks/useToast';
@@ -236,7 +239,7 @@ export default function AdminEventDetail({ eventId }: { eventId: string }) {
     );
   }
   // submitted_by_organizer_id !== null mirrors the backend's own gate
-  // (_submission_or_404, admin.py) — approve/retract 404 without it, so the
+  // (_submission_or_404, admin_submissions.py) — approve/retract 404 without it, so the
   // buttons must not render as if they'd work.
   if (event.needs_review && event.submitted_by_organizer_id !== null) {
     actions.push(

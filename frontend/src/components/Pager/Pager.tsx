@@ -8,7 +8,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { PAGE_QUERY_PARAM, PAGER_LIVE_KEY, type PagerLiveNoun } from '../../constants/api';
 import { t, ti } from '../../i18n';
 import { PAGER_LINK_STATE } from '../../hooks/usePageParam';
-import { cx, formatCount } from '../../utils';
+import { cx } from '../../utils/style';
+import { formatCount } from '../../utils/intlFormat';
 import visually from '../shared/Visually.module.css';
 import styles from './Pager.module.css';
 

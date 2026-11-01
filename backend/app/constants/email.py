@@ -47,7 +47,7 @@ HEADER_LIST_UNSUBSCRIBE = "List-Unsubscribe"
 # Svix's own recommended default tolerance.
 WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS = 300
 # Bounds the in-memory seen-svix-id LRU (routers/webhooks.py::_seen_webhook_ids)
-# the same way ADMIN_AUTH_FAILURES_MAX_ENTRIES bounds admin.py's lockout dict —
+# the same way ADMIN_AUTH_FAILURES_MAX_ENTRIES bounds auth/admin_lockout.py's lockout dict —
 # a validly-signed request replayed inside WEBHOOK_TIMESTAMP_TOLERANCE_SECONDS
 # would otherwise re-verify and re-trigger extraction (OWASP audit G-6).
 WEBHOOK_SEEN_IDS_MAX_ENTRIES = 4096

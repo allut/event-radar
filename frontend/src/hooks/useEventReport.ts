@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { QUERY_KEYS } from '../constants/api';
-import { patchCachedEvent } from '../utils';
+import { patchCachedEvent } from '../utils/eventActions';
 
 export interface UseEventReportResult {
   reportOpen: boolean;

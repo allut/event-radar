@@ -16,7 +16,7 @@ from app.constants.admin import (
     ADMIN_ACTION_PROMOTION_REPOINT,
     ADMIN_ACTION_PROMOTION_VOID,
 )
-from app.models.models import AdminAction
+from app.models.audit import AdminAction
 from app.promotions.cap import cap_strip
 from app.promotions.grant import GrantRequest, grant_promotion
 from app.promotions.lifecycle import mark_paid
@@ -25,12 +25,12 @@ from tests.promotions.conftest import NOW, Clock, at_tallinn, d
 
 @pytest.fixture
 def mails(monkeypatch):
-    from app.routers import admin as admin_module
+    from app.routers.utils import promotions as notify_module
 
     ended = AsyncMock()
     voided = AsyncMock()
-    monkeypatch.setattr(admin_module, "send_promotion_ended_email", ended)
-    monkeypatch.setattr(admin_module, "send_promotion_void_email", voided)
+    monkeypatch.setattr(notify_module, "send_promotion_ended_email", ended)
+    monkeypatch.setattr(notify_module, "send_promotion_void_email", voided)
     return ended, voided
 
 

@@ -1,7 +1,8 @@
 import { type ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { t, ti } from '../../i18n';
-import { isOrganizerPortalPath, safeUrl } from '../../utils';
+import { isOrganizerPortalPath } from '../../utils/url';
+import { safeUrl } from '../../utils/html';
 import { COPYRIGHT_YEAR, SOCIAL_LINKS, type SocialIcon } from '../../constants/core';
 import { ROUTES } from '../../constants/routes';
 import { useLocalePath } from '../../hooks/useLocalePath';

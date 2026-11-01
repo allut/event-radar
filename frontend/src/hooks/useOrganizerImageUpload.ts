@@ -3,7 +3,7 @@ import { organizerApi } from '../api/client';
 import { ORGANIZER_IMAGE_ALLOWED_MIME } from '../_generated/sharedConstants';
 import { API } from '../constants/api';
 import { t } from '../i18n';
-import { apiErrorMessage } from '../utils';
+import { apiErrorMessage } from '../utils/apiErrors';
 
 /** Signed Cloudinary upload for an organizer's event image
  * (POST /organizer/events/image), shared by the submission form and the claim

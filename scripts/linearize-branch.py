@@ -12,10 +12,12 @@ run `git merge --ff-only <tip>` on BASE once the plan looks right.
 """
 
 import argparse
+import re
 import subprocess
+import sys
 
 GIT = "/usr/bin/git"
-TRAILER = "Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>"
+ISSUE_REF = re.compile(r"\b(Closes|Refs)\s+#(\d+)", re.IGNORECASE)
 
 
 def git(*args: str, stdin: str | None = None) -> str:
@@ -26,20 +28,32 @@ def git(*args: str, stdin: str | None = None) -> str:
 
 
 def merge_message(body: str, second_parent: str, base: str, previous: str) -> str:
-    """Subject lines of the commits a merge brought in, oldest as the title."""
-    subjects = [
-        s
-        for s in git(
-            "log", "--no-merges", "--format=%s", f"{base}..{second_parent}", "--not", previous
-        ).splitlines()
-        if s
+    """Oldest brought-in commit as the title, with every issue reference they carry."""
+    messages = [
+        m.strip()
+        for m in git(
+            "log", "--no-merges", "--format=%B%x1f", f"{base}..{second_parent}", "--not", previous
+        ).split("\x1f")
+        if m.strip()
     ]
-    if not subjects:
-        return body
-    if len(subjects) == 1:
-        return subjects[0]
-    body = "\n".join(f"- {s}" for s in reversed(subjects[:-1]))
-    return f"{subjects[-1]}\n\n{body}"
+    return "\n\n".join(messages[-1:] + messages[:-1]) if messages else body
+
+
+def commit_message(message: str) -> str:
+    """The subject plus Closes/Refs #N lines, the shape .githooks/commit-msg enforces.
+
+    commit-tree runs no hooks, so the shape is built here. A reference that any
+    commit closes stays Closes.
+    """
+    subject = message.strip().splitlines()[0]
+    found: dict[str, str] = {}
+    for kind, number in ISSUE_REF.findall(message):
+        if found.get(number) != "Closes":
+            found[number] = kind.capitalize()
+    lines = [f"{kind} #{number}" for number, kind in sorted(found.items(), key=lambda i: int(i[0]))]
+    if len(found) > 1:
+        print(f"warning: '{subject}' carries {len(found)} issues; reword it", file=sys.stderr)
+    return subject + ("\n\n" + "\n".join(lines) if lines else "")
 
 
 def main() -> None:
@@ -78,12 +92,10 @@ def main() -> None:
             message = body
         else:
             message = merge_message(body, parents[1], args.base, previous)
-        message = message.rstrip()
-        if "Co-Authored-By" not in message:
-            message += f"\n\n{TRAILER}"
+        message = commit_message(message)
         print(f"{commit[:8]} {tree[:8]} {message.splitlines()[0][:110]}")
         if args.apply:
-            new_tip = git("commit-tree", tree, "-p", new_tip, stdin=message)
+            new_tip = git("commit-tree", tree, "-p", new_tip, stdin=message + "\n")
         previous_tree = tree
         previous = commit
 

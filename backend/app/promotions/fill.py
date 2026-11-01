@@ -60,7 +60,9 @@ from app.events.queries import (
     public_event_filter,
     select_events_with_classification,
 )
-from app.models.models import Event, EventReport, Promotion, UserEventFeedback
+from app.models.events import Event, EventReport
+from app.models.feeds import UserEventFeedback
+from app.models.promotions import Promotion
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.windows import tallinn_today
 

@@ -15,7 +15,8 @@ from app.constants.ingestion import (
     STALE_ORGANIZER_RETIRE_DAYS,
 )
 from app.ingestion.organizer_sync import sync_fienta_organizers
-from app.models.models import Publisher, Source
+from app.models.ingestion import Source
+from app.models.claims import Publisher
 
 
 def _source(config: dict) -> Source:

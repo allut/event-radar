@@ -16,7 +16,7 @@ VALID_REPORT_STATUSES = frozenset({REPORT_STATUS_OPEN, REPORT_STATUS_RESOLVED})
 ADMIN_RESOLUTION_NOTE_MAX_CHARS = 2000
 
 # System-generated resolution_note for the auto-resolve-on-cancellation cascade
-# (utils.py::resolve_open_reports) — every path that cancels an event (admin
+# (events/cancellation.py::resolve_open_reports) — every path that cancels an event (admin
 # retract, organizer retract, organizer self-delete, report takedown's own
 # explicit note) reuses this so the reporter-outcome email (issue #127) has a
 # consistent fallback message regardless of which door triggered it.

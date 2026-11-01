@@ -27,11 +27,11 @@ class Settings(BaseSettings):
     # Second, explicit opt-in required (alongside APP_ENV == development) before
     # require_configured_secret() fails open on an unset secret. A dev-shaped
     # APP_ENV alone must never be sufficient to unprotect /admin/* or the inbound
-    # webhook — see routers/utils.py::require_configured_secret.
+    # webhook — see app/auth/utils.py::require_configured_secret.
     ALLOW_INSECURE_DEV: bool = False
 
     # Development-only kill switch for the embedded APScheduler
-    # (app/main.py::_start_scheduler). The schedule drives live HTTP scrapes of
+    # (app/scheduler.py::start_scheduler). The schedule drives live HTTP scrapes of
     # third-party sites, real LLM spend, and real digest email on a timer — the
     # dev container sets this false (.devcontainer/docker-compose.yml) so
     # `uvicorn --reload` left running overnight can't arm all of it. Ignored

@@ -11,7 +11,9 @@ import pytest
 from sqlalchemy import delete, func, select
 
 from app.constants.promotions import PROMOTION_LIVE_CAP
-from app.models.models import Event, Organizer, Promotion, PromotionSnapshot
+from app.models.events import Event
+from app.models.promotions import Promotion, PromotionSnapshot
+from app.models.organizers import Organizer
 from app.promotions import grant as grant_module
 from app.promotions.grant import GrantRequest, PromotionRefused, grant_promotion
 from app.promotions.lifecycle import edit_promotion

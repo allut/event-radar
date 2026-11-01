@@ -4,7 +4,7 @@ import { BROWSE_QUERY_MAX_LEN } from '../../_generated/sharedConstants';
 import { EXPLORE_PARAM } from '../../constants/explore';
 import { ROUTES } from '../../constants/routes';
 import { t } from '../../i18n';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import { useDropdown } from '../../hooks/useDropdown';
 import { useLocalePath } from '../../hooks/useLocalePath';
 import styles from '../shared/Bar.module.css';

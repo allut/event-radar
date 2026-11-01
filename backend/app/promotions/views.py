@@ -27,7 +27,10 @@ from app.constants.promotions import (
     PROMOTION_STATE_LIVE,
     PROMOTION_STATE_SCHEDULED,
 )
-from app.models.models import AdminAction, Event, Organizer, Promotion, PromotionDailyStat
+from app.models.events import Event
+from app.models.audit import AdminAction
+from app.models.promotions import Promotion, PromotionDailyStat
+from app.models.organizers import Organizer
 from app.promotions.fill import evaluate_gate
 from app.promotions.grant import net_price_cents, vat_cents
 from app.promotions.owners import resolve_owner_ids

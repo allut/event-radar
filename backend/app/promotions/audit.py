@@ -7,7 +7,8 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.constants.log_events import LOG_EVENT_ADMIN_ACTION
-from app.models.models import AdminAction, Promotion
+from app.models.audit import AdminAction
+from app.models.promotions import Promotion
 
 log = logging.getLogger(__name__)
 

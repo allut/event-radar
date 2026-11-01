@@ -16,8 +16,9 @@ services:
       # (win32 esbuild/rollup binaries) and would break Vite under Linux.
       - eventradar-node-modules:/workspaces/event-radar/frontend/node_modules
       # Claude Code config/credentials in a named volume: survives rebuild,
-      # and stays isolated from the host's Windows ~/.claude (which wires in
-      # the RTK git hook -- the `rtk` binary does not exist in this image).
+      # and stays isolated from the host's Windows ~/.claude. sync-claude-config.sh
+      # mirrors the host config in one way (its rtk hook resolves against the
+      # binary the Dockerfile installs).
       - claude-code-config:/home/vscode/.claude
       # anvil's config.json + anvil.db ledger. Named volume, not a host bind:
       # the host copy carries a plugin-root junction to a Windows path and a

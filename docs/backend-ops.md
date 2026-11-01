@@ -75,7 +75,7 @@ Production runs on Render Frankfurt (backend) and Cloudflare Pages (frontend). B
 
 - **Moving a resource off-origin breaks it silently unless the CSP widens to match.** A CDN font host is the likely case.
 - **The hash and its drift guard are in [security.md](security.md)'s Frontend CSP section.**
-- **The document block applies to `/*`, then un-sets each header on `/api/*` with the `!` prefix.** `_headers` has no negative lookahead. API responses carry only the backend's own `app/main.py::add_security_headers` headers.
+- **The document block applies to `/*`, then un-sets each header on `/api/*` with the `!` prefix.** `_headers` has no negative lookahead. API responses carry only the backend's own `app/middleware.py::add_security_headers` headers.
 - **`/api/seo-audit` and `/api/prerender-cadence` get their own locked-down block** (`default-src 'none'`, `Cache-Control: no-store`). Their own Functions answer them, so they never reach the backend proxy.
 
 ## External Cron Jobs
@@ -151,14 +151,14 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 ### Streaming
 
 - **Job triggers stream NDJSON**, one envelope line per stage with `Cache-Control: no-store`. The `/admin/pipeline` console reads them live.
-- **Add a single-stage trigger through `app/routers/utils.py::stream_admin_job()`.** A failure becomes a `status: "error"` line, not a 500, because the headers are already sent when a streamed job fails.
-- **`app/routers/admin.py::admin_pipeline_run` hand-rolls its stage loop.** It needs stop-on-first-failure with a per-stage result dict, which the single-line envelope can't express.
+- **Add a single-stage trigger through `app/routers/utils/admin.py::stream_admin_job()`.** A failure becomes a `status: "error"` line, not a 500, because the headers are already sent when a streamed job fails.
+- **`app/routers/admin_jobs.py::admin_pipeline_run` hand-rolls its stage loop.** It needs stop-on-first-failure with a per-stage result dict, which the single-line envelope can't express.
 - **Both paths run the job as its own `asyncio` task fed through a queue.** A client disconnect cancels the streaming generator, because Starlette races `listen_for_disconnect` against the body. A direct `await` would let that cancellation cut the job off mid-run.
 - **`run_admin_job()` backs the non-streaming mutating actions**, such as report and submission resolution and takedown. It returns JSON, and a 500 on failure.
 
 ### Audit Logging
 
-- **`app/routers/utils.py::log_admin_action()` adds an `AdminAction` row to the caller's own `db` session.** The row rides the mutation's transaction, so it's atomic, never a best-effort write.
+- **`app/routers/utils/admin.py::log_admin_action()` adds an `AdminAction` row to the caller's own `db` session.** The row rides the mutation's transaction, so it's atomic, never a best-effort write.
 - **It returns a closure that emits the Axiom `admin_action` log line.** Call it only after `await db.commit()` succeeds, so a rolled-back mutation never logs an action that didn't happen.
 - **`stream_admin_job`'s `db=None` sites call the closure at once.** They have no transaction to wait for.
 - **`app/db.py::assert_schema_at_head` runs first in the lifespan.** It stops a production boot when the DB isn't at the migration head, and only warns in development. The CI `migrations` job catches the same drift before merge; see CI.
@@ -192,7 +192,7 @@ Operate the pipeline through the admin console at `/admin`, not curl. Its login,
 
 ## Scheduled Jobs
 
-APScheduler runs embedded in the FastAPI process (`app/main.py::_register_scheduled_jobs()`), on Europe/Tallinn time. The cadence constants live in `app/constants/jobs.py`.
+APScheduler runs embedded in the FastAPI process (`app/scheduler.py::_register_scheduled_jobs()`), on Europe/Tallinn time. The cadence constants live in `app/constants/jobs.py`.
 
 | Cadence | Job |
 |---|---|
@@ -207,11 +207,11 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 | Sun 02:30 | `cleanup_stale_data` |
 
 - **The daily jobs run in a fixed order.** Refetch reconciles source detail pages, stale claims expire, then the feed build reads the result an hour before the digest sends it.
-- **Register every job in `_register_scheduled_jobs()`.** The DST guard in `tests/test_main_scheduler.py` and the cadence-table check read the scheduler from there only.
-- **No cron job runs in the 03:00 hour.** It happens twice on the October fall-back Sunday and not at all in March, so APScheduler fires the job twice or shifts it. `tests/test_main_scheduler.py` fails when one lands there.
+- **Register every job in `_register_scheduled_jobs()`.** The DST guard in `tests/test_scheduler.py` and the cadence-table check read the scheduler from there only.
+- **No cron job runs in the 03:00 hour.** It happens twice on the October fall-back Sunday and not at all in March, so APScheduler fires the job twice or shifts it. `tests/test_scheduler.py` fails when one lands there.
 - **`backfill_publisher_ids` and `expire_stale_claims` are scheduler-only.** Neither has an admin trigger. The publisher backfill has a CLI instead (see Maintenance Scripts).
 - **`ENABLE_SCHEDULER` turns the scheduler off in the devcontainer.** A `--reload` server left running overnight then can't arm live scrapes, LLM spend or digest email on a timer.
-- **`app/main.py::_start_scheduler()` honours `ENABLE_SCHEDULER=false` only when `APP_ENV=development`.** The var is absent from `render.yaml`, so production always runs the scheduler.
+- **`app/scheduler.py::start_scheduler()` honours `ENABLE_SCHEDULER=false` only when `APP_ENV=development`.** The var is absent from `render.yaml`, so production always runs the scheduler.
 
 ## CI
 
@@ -270,7 +270,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 
 ## Maintenance Scripts
 
-`backend/scripts/` holds one-off operational scripts, run by hand from `backend/` with the venv active. Each adds `backend/` to `sys.path`, so `from app.*` resolves from any working directory.
+`backend/scripts/` holds one-off operational scripts, run by hand from `backend/` with the backend's Python (the venv on a native setup, `/opt/venv` in the devcontainer). Each adds `backend/` to `sys.path`, so `from app.*` resolves from any working directory.
 
 - **An `_`-prefixed filename is a machine-local throwaway.** `.gitignore` excludes `backend/scripts/_*`. Give a script a plain name only when it belongs in version control.
 
@@ -284,7 +284,7 @@ APScheduler runs embedded in the FastAPI process (`app/main.py::_register_schedu
 - **The truncate can't be undone.** It's for resetting a dev or staging DB or clearing bad ingested data, not routine use.
 
 ```bash
-cd backend                              # venv active
+cd backend                              # backend Python on PATH
 python scripts/reset_events.py          # dry run: target DB + row counts
 python scripts/reset_events.py --yes    # actually truncate (irreversible)
 ```

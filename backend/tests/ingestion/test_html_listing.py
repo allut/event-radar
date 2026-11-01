@@ -43,6 +43,7 @@ from app.ingestion.sources.piletilevi import (
     _piletilevi_important_info,
     _price_bounds_from_store,
     classify_store_price_400,
+    fetch_store_prices,
     full_res_piletilevi_image,
     piletilevi_localized_text,
 )
@@ -1622,6 +1623,35 @@ class TestPiletileviPrice400:
 
         assert adapter.price_outcomes == {}
         assert [r for r in caplog.records if r.levelname == "WARNING" and "price fetch failed" in r.message]
+
+    @pytest.mark.asyncio
+    async def test_real_http_get_400_presale_body_is_classified(self, caplog):
+        # Drives the real http_get() streaming path, which a mocked
+        # HTTPStatusError skips: its unread body crashed this call (#674).
+        async def chunks():
+            yield json_module.dumps({"code": "web_event_sale_has_not_started"}).encode()
+
+        handler = lambda r: httpx.Response(400, content=chunks())  # noqa: E731
+        with caplog.at_level("INFO"):
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                result = await fetch_store_prices(client, "WAYI3N7U5G", "piletilevi")
+
+        assert result == (None, "sale_not_started")
+        assert [r for r in caplog.records if r.levelname == "INFO" and "price unavailable" in r.message]
+        assert not [r for r in caplog.records if r.levelname == "WARNING"]
+
+    @pytest.mark.asyncio
+    async def test_unclassified_400_warning_carries_bounded_body_snippet(self, caplog):
+        body = json_module.dumps({"code": "mystery_code", "pad": "x" * 1000})
+        handler = lambda r: httpx.Response(400, text=body)  # noqa: E731
+        with caplog.at_level("INFO"):
+            async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+                result = await fetch_store_prices(client, "WAYI3N7U5G", "piletilevi")
+
+        assert result == (None, None)
+        [warning] = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert "mystery_code" in warning.message
+        assert "x" * 300 not in warning.message
 
 
 class TestClassifyStorePrice400:

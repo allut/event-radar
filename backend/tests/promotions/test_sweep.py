@@ -17,7 +17,7 @@ from app.constants.promotions import (
     PROMOTION_STATUS_UNPAID,
     PROMOTION_STATUS_VOID,
 )
-from app.models.models import AdminAction
+from app.models.audit import AdminAction
 from app.promotions import sweep as sweep_module
 from app.promotions.grant import GrantRequest, grant_promotion
 from app.promotions.lifecycle import mark_paid

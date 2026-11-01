@@ -18,7 +18,7 @@ from app._generated.shared_constants import (
 )
 from app.constants.promotions import PROMOTION_LIVE_CAP
 from app.db import get_db
-from app.models.models import Promotion, PromotionDailyStat, PromotionRequest
+from app.models.promotions import Promotion, PromotionDailyStat, PromotionRequest
 from app.promotions.grant import GrantRequest, grant_promotion
 from app.promotions import requests as requests_module
 from app.promotions.lifecycle import mark_paid

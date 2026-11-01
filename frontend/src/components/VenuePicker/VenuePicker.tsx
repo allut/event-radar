@@ -10,7 +10,9 @@ import {
 import { API, QUERY_KEYS } from '../../constants/api';
 import { type ContentLang } from '../../constants/core';
 import { t, ti } from '../../i18n';
-import { apiErrorMessage, cx, localizedFieldLabel } from '../../utils';
+import { apiErrorMessage } from '../../utils/apiErrors';
+import { localizedFieldLabel } from '../../utils/locale';
+import { cx } from '../../utils/style';
 import styles from './VenuePicker.module.css';
 
 export interface SavedVenue {

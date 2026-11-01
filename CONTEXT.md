@@ -151,6 +151,101 @@ identity (imprint, invoices, Privacy notice) names it. A person who signs in to
 the admin console is an *admin*, not the Operator.
 _Avoid_: owner, company, seller, platform, sole trader
 
+**Operator details**:
+The facts that identify the Operator wherever it is published: its registered
+name (legal form included), registry code, seat and VAT number. The Operator
+supplies them to the running app and Event Radar's source never holds them.
+Until a field is supplied, a legal page that needs it shows a visible
+placeholder, and anything else that needs it (the site footer, an email, an
+invoice) is withheld. The Organizer terms particulars (date in force, complaint
+reply time, mediators, competent court) are not Operator details: they are
+part of the terms' text.
+_Avoid_: operator identity, imprint (the imprint is one page that shows them),
+company info
+
+## Runtime Config
+
+**Runtime config**:
+The store of values an admin can change in the running app without a deploy.
+It holds only what an admin has changed; everything else is the repo default.
+_Avoid_: settings (a user's preferences), config, admin settings
+
+**Runtime value**:
+One entry in runtime config: the smallest unit that is valid on its own. Values
+that are only valid together, such as a set of weights that must sum to one,
+are a single runtime value.
+_Avoid_: setting, config key, parameter
+
+**Tunable runtime value**:
+A runtime value that ships with a repo default and is changed by admins more
+than rarely. A bad one is fixed by editing it again.
+
+**Private runtime value**:
+A runtime value that must not appear in a public repo, so it has no repo
+default. Until an admin supplies it, whatever needs it either shows a visible
+placeholder or is withheld. Each Operator details field is one.
+_Avoid_: secret (credentials stay outside runtime config)
+
+**Repo default**:
+The value a tunable runtime value takes when no admin has changed it. It lives
+in Event Radar's source and changes only with a deploy.
+_Avoid_: fallback, factory value, seed
+
+**Override**:
+An admin's replacement for a runtime value's repo default, or the supplied
+value of a private runtime value. Resetting to default removes the override.
+_Avoid_: custom value, edit
+
+**Stale override**:
+An override whose repo default has changed since the admin wrote it. It still
+applies, and asks the admin to reconcile it with the new default.
+_Avoid_: outdated override, conflict
+
+**Invalid override**:
+An override that no longer passes its runtime value's checks, usually after a
+code change. It does not apply: the repo default does, or a private runtime
+value reads as not yet supplied.
+_Avoid_: broken override, corrupt value
+
+**Orphaned override**:
+An override for a runtime value Event Radar no longer defines. It is ignored,
+and kept until an admin deletes it.
+_Avoid_: unknown key, dead setting
+
+**Dry run**:
+Trying an admin's unsaved draft of a scrape selector, an LLM prompt, an LLM
+provider's settings or a ranking value on real input, next to the value that applies now, without saving it. It
+informs the admin and never blocks a save.
+_Avoid_: preview, test, validation (the check that rejects a bad value on save)
+
+## LLM
+
+**LLM provider**:
+An external model API that Event Radar can send a prompt to. Groq, Workers AI
+and Mistral are the three.
+_Avoid_: provider (that is an identity provider), backend, vendor
+
+**Provider chain**:
+The ordered LLM providers a prompt is tried against, falling through to the
+next one when a provider fails.
+_Avoid_: fallback list, router (the code that walks the chain)
+
+## Ingestion
+
+**Retired source**:
+A source Event Radar no longer has code to read. It is always off, and no
+admin can switch it on.
+_Avoid_: disabled source, dead source
+
+## Discovery
+
+**Daily Five**:
+The five events a user is offered each day, chosen for them and rebuilt
+daily. A recurring series they've just been shown is set aside unless the day
+is short of events. Written *Daily 5* in docs and code; both name the same
+thing.
+_Avoid_: feed on its own (ambiguous with Explore), picks, top five
+
 ## Promotions
 
 **Promotion**:

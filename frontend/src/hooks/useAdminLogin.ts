@@ -7,7 +7,7 @@ import type { LoginState } from '../constants/auth';
 import { UI_STATE } from '../constants/core';
 import { ROUTES } from '../constants/routes';
 import { setAdminSignedInHint } from '../lib/adminAuth';
-import { apiErrorMessage } from '../utils';
+import { apiErrorMessage } from '../utils/apiErrors';
 
 export interface UseAdminLoginResult {
   username: string;

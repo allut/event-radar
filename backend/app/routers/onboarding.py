@@ -24,8 +24,8 @@ from app.constants.ranking import (
 from app.constants.rate_limits import RATE_LIMIT_AUTHENTICATED_WRITE
 from app.db import get_db
 from app.email.subscription import set_digest_subscription
-from app.models.models import Persona, User, UserPersona
-from app.ranking.score import build_daily_feed_for_user
+from app.models.users import Persona, User, UserPersona
+from app.ranking.daily_feed import build_daily_feed_for_user
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
 

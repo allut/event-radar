@@ -8,7 +8,7 @@ const STAGES = ['sync_organizers', 'ingest', 'dedup', 'classify', 'publish', 'bu
 // Representative multi-stage result: three ok stages (a flat-dict shape and
 // ingest's list-of-per-source shape), one failure, and the stages after it
 // never ran — matches _run_pipeline_stages' stop-at-first-failure contract
-// (backend/app/routers/admin.py).
+// (backend/app/routers/admin_jobs.py).
 const PARTIAL_RUN: NdjsonLine[] = [
   { stage: 'sync_organizers', status: 'ok', result: { checked: 42, added: 2, retired: 0 }, error: null },
   {

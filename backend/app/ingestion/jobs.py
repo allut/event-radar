@@ -27,7 +27,7 @@ from app.constants.log_events import LOG_EVENT_LLM_DEGRADED
 from app.db import AsyncSessionLocal
 from app.dedup.llm_tiebreaker import run_dedup_pass_llm
 from app.ingestion.registry import ADAPTER_REGISTRY
-from app.models.models import Source
+from app.models.ingestion import Source
 from app.db import run_in_session
 
 log = logging.getLogger(__name__)
@@ -112,7 +112,7 @@ async def _run_db_job(
     label: str, func: Callable[..., Awaitable[dict]]
 ) -> dict:
     """Run ``func(db)`` via the shared ``run_in_session`` runner
-    (routers/utils.py), always committing, and log the summary.
+    (app/db.py), always committing, and log the summary.
 
     Rollback-and-reraise-on-failure is handled by run_in_session; this adds
     only the per-label success/failure logging. Shared shape for every

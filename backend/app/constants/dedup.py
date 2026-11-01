@@ -44,7 +44,7 @@ AGGREGATE_LAST_VALUE_FIELDS = frozenset(
     {"total", "candidate_pairs", "grouped", "groups"}
 )
 
-# Rows per bulk UPDATE ... FROM (VALUES ...) in dedup/rules.py::bulk_assign_dedup_groups
+# Rows per bulk UPDATE ... FROM (VALUES ...) in dedup/passes.py::bulk_assign_dedup_groups
 # — 2 bind params per row, well under asyncpg's 32767-parameter cap.
 DEDUP_BULK_UPDATE_CHUNK_SIZE = 5000
 

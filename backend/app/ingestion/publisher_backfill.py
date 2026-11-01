@@ -35,7 +35,8 @@ from app.constants.ingestion import (
 from app.ingestion.adapter import load_publisher_lookup
 from app.ingestion.http_client import AsyncRateLimiter, host_guard_hook
 from app.ingestion.sources.fienta import FientaAdapter
-from app.models.models import Event, EventSource, RawEvent, Source
+from app.models.ingestion import RawEvent, Source
+from app.models.events import Event, EventSource
 from app.events.queries import event_not_ended_filter
 
 log = logging.getLogger(__name__)

@@ -25,11 +25,12 @@ from app.constants.promotions import (
 from app.constants.rate_limits import RATE_LIMIT_EVENTS_DETAIL
 from app.auth.dependencies import get_optional_user
 from app.db import get_db
-from app.models.models import Event, User
+from app.models.events import Event
+from app.models.users import User
 from app.promotions.counters import record_ref_hit
 from app.promotions.fill import is_bot_user_agent
 from app.rate_limit import client_key, limiter
-from app.routers.utils import (
+from app.routers.utils.serializers import (
     load_user_reported_events,
     load_user_signals,
     resolve_locale_param,

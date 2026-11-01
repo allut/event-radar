@@ -113,7 +113,8 @@ from app.ingestion.sources.piletilevi import (
     piletilevi_store_login,
     piletilevi_store_price_fields,
 )
-from app.models.models import Event, EventSource, Source
+from app.models.ingestion import Source
+from app.models.events import Event, EventSource
 
 log = logging.getLogger(__name__)
 

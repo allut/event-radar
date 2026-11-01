@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { t, ti } from '../../i18n';
-import { cx } from '../../utils';
+import { cx } from '../../utils/style';
 import type { ChipOption } from '../Chip';
 import styles from './CategoryPicker.module.css';
 

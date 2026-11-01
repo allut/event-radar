@@ -38,7 +38,7 @@ Every visual value is a custom property in `:root` in `frontend/src/index.css`. 
 - **Gold as text uses `--accent-ink`**, never `--accent` or `--accent-light`. Those fail AA as text on the light ground.
 - **Breakpoint tokens are documentation only.** Custom properties can't drive `@media` conditions, so `--bp-narrow`, `--bp-wide` and their single-consumer siblings name a value the `@media` rule still writes as a literal. Keep the two in sync, and leave `@media (max-width: var(--bp-narrow))` unwritten.
 - **An off-scale spacing step gets a name.** Steps like `--space-0-42` exist because two or more call sites needed them. Add a named step rather than inlining a rem literal or forcing the wrong step.
-- **Category gradients mirror the taxonomy.** The `--gradient-<category>` keys follow `VALID_CATEGORIES` in `shared/app-config.json`. A missing key falls through `utils.ts::categoryGradient()` to `--gradient-fallback`. A new category needs a gradient pair in both themes.
+- **Category gradients mirror the taxonomy.** The `--gradient-<category>` keys follow `VALID_CATEGORIES` in `shared/app-config.json`. A missing key falls through `utils/style.ts::categoryGradient()` to `--gradient-fallback`. A new category needs a gradient pair in both themes.
 
 ## 4. Typography
 

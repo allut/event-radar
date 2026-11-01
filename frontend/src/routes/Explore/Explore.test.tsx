@@ -575,7 +575,7 @@ describe('Explore', () => {
     // Real timers made this test's debounce wait flaky under a loaded CI
     // runner (timeout races against the actual 400ms clock). Fake timers +
     // userEvent's advanceTimers option drive the debounce deterministically
-    // instead — same pattern as utils.test.ts / useToast.test.ts / Settings.test.tsx.
+    // instead — same pattern as utils/eventActions.test.ts / useToast.test.ts / Settings.test.tsx.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
 

@@ -33,7 +33,7 @@ def _fill_event_detail_fields(e: MagicMock) -> MagicMock:
 async def _get(db: AsyncMock, app, make_db_ctx, event_id: int = 42):
     with (
         patch_admin_settings() as mock_settings,
-        patch("app.routers.admin.AsyncSessionLocal", return_value=make_db_ctx(db)),
+        patch("app.routers.admin_events.AsyncSessionLocal", return_value=make_db_ctx(db)),
     ):
         mock_settings.ADMIN_PASSWORD = ""
         mock_settings.APP_ENV = APP_ENV_DEVELOPMENT

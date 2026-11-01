@@ -23,7 +23,7 @@ from app.email.templates import (
     REPORT_NOTIFY_SUBJECT_PROMOTED,
     REPORT_NOTIFY_TEXT_BODY,
 )
-from app.models.models import Event
+from app.models.events import Event
 
 
 async def send_report_notification(

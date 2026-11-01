@@ -16,7 +16,8 @@ from app._generated.shared_constants import (
     CLAIM_STATUS_APPROVED,
 )
 from app.constants.events import EVENT_STATUS_CANCELLED
-from app.models.models import Claim, Event, EventSource
+from app.models.claims import Claim
+from app.models.events import Event, EventSource
 
 
 async def resolve_owner_ids(

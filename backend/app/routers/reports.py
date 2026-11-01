@@ -26,12 +26,13 @@ from app.constants.reports import (
 )
 from app.db import get_db
 from app.email.report_notify import send_report_notification
-from app.models.models import Event, EventReport, User
+from app.models.events import Event, EventReport
+from app.models.users import User
 from app.rate_limit import limiter
 from app.auth.dependencies import get_current_user
 from app.promotions.promoted import is_event_promoted
 from app.promotions.windows import now_tallinn, tallinn_today
-from app.routers.utils import validate_report_reason
+from app.routers.utils.reports import validate_report_reason
 from app.events.queries import public_event_filter
 
 log = logging.getLogger(__name__)

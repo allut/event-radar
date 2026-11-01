@@ -19,7 +19,9 @@ from app.email.templates import (
     PROMOTION_RESTRICTION_NOTIFY_SUBJECT,
     PROMOTION_RESTRICTION_NOTIFY_TEXT,
 )
-from app.models.models import Event, Organizer, Promotion, PromotionRequest
+from app.models.events import Event
+from app.models.promotions import Promotion, PromotionRequest
+from app.models.organizers import Organizer
 
 
 async def send_restriction_flagged_notice(

@@ -22,7 +22,8 @@ from app.ingestion.publisher_backfill import (
     _raw_organizer_by_external_id,
     backfill_publisher_ids,
 )
-from app.models.models import EventSource, Source
+from app.models.ingestion import Source
+from app.models.events import EventSource
 
 
 def _source(slug: str, id_: int, kind: str = SOURCE_KIND_API, config: dict | None = None) -> Source:

@@ -4,7 +4,7 @@
 # reserved so it doesn't leak into the curated shipped schema (docs/observability.md).
 
 # Structured log `event` field values (shipped as a first-class JSON key via
-# `extra={"event": ...}`) — each keys an Axiom monitor. See docs/observability.md.
+# `extra={"event": ...}`) — each keys an Axiom monitor or triage query. See docs/observability.md.
 LOG_EVENT_JOB_RUN = "job_run"  # scheduled-job completion/failure telemetry
 LOG_EVENT_RATE_LIMIT_BLOCK = "rate_limit_block"  # own per-IP 429 rejection
 LOG_EVENT_LLM_DEGRADED = "llm_degraded"  # provider chain exhausted / backlog deferred
@@ -16,7 +16,7 @@ LOG_EVENT_HOST_REJECTED = "host_rejected"  # HostCheckMiddleware Host-header rej
 LOG_EVENT_REPORT_SUBMITTED = "report_submitted"  # POST /reports success
 LOG_EVENT_ADMIN_ACTION = "admin_action"  # /admin/auth/* login/logout (issue #154)
 # Global (not per-IP) daily unverified-account-creation budget crossed — see
-# routers/utils.py::record_unverified_account_creation (OWASP audit F10).
+# routers/utils/auth.py::record_unverified_account_creation (OWASP audit F10).
 LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED = "unverified_account_budget_exceeded"
 # promotions/counters.py::first_ref_hit's per-day set hit
 # PROMOTION_REF_SEEN_MAX_ENTRIES — ?ref= opens stop counting until midnight.

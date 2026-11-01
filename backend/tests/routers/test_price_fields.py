@@ -1,4 +1,4 @@
-"""Every request-body price_* field is a bounded PriceField (routers/utils.py).
+"""Every request-body price_* field is a bounded PriceField (routers/utils/organizer_content.py).
 
 events.price_* and venues.price_* are Numeric(10,2): an unbounded float, or the
 Infinity that json.loads accepts, reaches the database and fails as a DataError

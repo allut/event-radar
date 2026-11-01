@@ -10,7 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.constants.email import EMAIL_AD_CONSENT_WORDING_VERSION
 from app.email.consent import log_account_deletion, reset_consent_for_wording_change
-from app.models.models import EmailAdConsentLog, User
+from app.models.promotions import EmailAdConsentLog
+from app.models.users import User
 
 
 @pytest_asyncio.fixture

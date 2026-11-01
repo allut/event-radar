@@ -5,7 +5,7 @@ import { api } from '../api/client';
 import { API } from '../constants/api';
 import { LOCALE_ET } from '../constants/core';
 import { getStoredLocale, setLocale, clearLocale, isAuthenticated } from '../lib/auth';
-import { localizedTo } from '../utils';
+import { localizedTo } from '../lib/urlLocale';
 import { usePathLocale } from './usePathLocale';
 
 export interface UseLocaleMutationResult {

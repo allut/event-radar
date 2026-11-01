@@ -14,7 +14,8 @@ from app.constants.ingestion import (
     SOURCE_SLUG_FIENTA,
     SOURCE_SLUG_KUMU,
 )
-from app.models.models import Publisher, Source
+from app.models.ingestion import Source
+from app.models.claims import Publisher
 from app.seeds import _upsert_fienta, seed_publishers
 
 

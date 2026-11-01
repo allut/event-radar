@@ -33,7 +33,8 @@ from app.constants.promotions import (
     PROMOTION_STATUS_PAID,
     PROMOTION_STATUS_UNPAID,
 )
-from app.models.models import Event, Promotion
+from app.models.events import Event
+from app.models.promotions import Promotion
 from app.promotions.cap import lock_cap, tally_cap_days
 from app.promotions.owners import resolve_owner_ids
 from app.promotions.restriction import clearance_violations, is_restricted, record_clearance

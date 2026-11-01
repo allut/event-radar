@@ -99,9 +99,9 @@ from app.constants.rate_limits import (
     RATE_LIMIT_LOGOUT_ALL,
 )
 from app.db import get_db
-from app.models.models import Organizer, OrganizerIdentity, OrganizerMagicLink
+from app.models.organizers import Organizer, OrganizerIdentity, OrganizerMagicLink
 from app.rate_limit import limiter
-from app.routers.utils import (
+from app.routers.utils.auth import (
     RequestLinkBody,
     VerifyTokenBody,
     build_google_redirect_uri,
