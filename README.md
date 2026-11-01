@@ -19,7 +19,7 @@ How the pieces fit is in [CLAUDE.md's Architecture](CLAUDE.md#architecture) and 
 - **Organizer portal:** venues and promoters submit and edit their own events, with images, saved venues and rich text.
 - **Event claiming:** an organizer proves they are an event's Publisher, then edits the ingested event directly.
 - **Promotions:** an organizer buys labelled Sponsored slots for an event they own, paid by card through Stripe. Organic ranking never changes.
-- **Reports:** flag an event's content. An admin reviews it and emails you the outcome.
+- **Reports:** report an event's inappropriate content. An admin resolves it and emails you the outcome.
 - **One-click unsubscribe:** stop the digest from the email itself, without signing in.
 - **Admin console:** operators run the pipeline and work the dedup, submission, claim, report and promotion queues.
 - **Light and dark themes:** follows your device theme, with a per-browser override.
@@ -35,6 +35,8 @@ How the pieces fit is in [CLAUDE.md's Architecture](CLAUDE.md#architecture) and 
 | Email | Resend |
 | Payments | Stripe |
 | Images | Cloudinary |
+| Geocoding | Nominatim |
+| Company lookup | Äriregister |
 | SEO | Playwright prerender, Cloudflare Pages Functions, Cloudflare R2 |
 | Logs | Axiom |
 | Tests | pytest, Vitest, Testing Library |
@@ -52,7 +54,7 @@ Use the devcontainer unless you have a reason not to. It matches CI and needs no
 You need Docker Desktop (WSL2 backend on Windows) and the VS Code [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension.
 
 1. **Free port 5432** if a host `db` container is running: `docker compose down`.
-2. **Run *F1 → Dev Containers: Reopen in Container*.** `.devcontainer/post-create.sh` writes `backend/.env` with a generated `SECRET_KEY`, installs dependencies and runs `alembic upgrade head`.
+2. **Run *F1 → Dev Containers: Reopen in Container*.** `.devcontainer/post-create.sh` writes `backend/.env` with a generated `SECRET_KEY`, installs dependencies, enables `.githooks/` and runs `alembic upgrade head`.
 3. **Wait for the dev servers.** `.devcontainer/post-start.sh` starts the backend on :8000 and the frontend on :5173 on every container start.
 4. **Sign in** as described in [First sign-in](#first-sign-in).
 
@@ -66,16 +68,17 @@ Things to know inside the container:
 - **`gh` authenticates on start and attach** from the host's forwarded git credentials (`.devcontainer/gh-auth.sh`). If `gh auth status` is red, rerun that script or `gh auth login`.
 - **The `claude` CLI signs in once, into a persistent named volume** separate from the host's `~/.claude`. `post-start.sh` refreshes it on each start, and `.devcontainer/sync-claude-config.sh` mirrors the host's Claude Code config in. The image installs RTK, so the host's RTK hook works too.
 - **`.devcontainer/claude-plugins.json` lists container-only Claude Code plugins.** `sync-claude-config.sh` merges it into the container's `~/.claude/settings.json` on each start and never touches the host's config.
-- **`.devcontainer/mem-watchdog.sh` is a manual diagnostic** for the intermittent "reload the VS Code window" hang. It isn't part of the normal dev loop.
+- **`.devcontainer/mem-watchdog.sh` is a manual diagnostic** for the intermittent "reload the VS Code window" hang.
 
 ### Native setup
 
 You need Python 3.12, Node.js 24 (`NODE_VERSION` in `frontend/wrangler.toml`) and Postgres 16, ideally through Docker Compose.
 
-1. **Clone and create `backend/.env`.** Paste the generated value in as `SECRET_KEY`. `DATABASE_URL` already points at the Compose Postgres, and `.env.example` lists the optional LLM and email keys.
+1. **Clone, enable the git hooks and create `backend/.env`.** Paste the generated value in as `SECRET_KEY`. `DATABASE_URL` already points at the Compose Postgres, and `.env.example` lists optional service keys.
 
    ```bash
    git clone <repository-url> && cd event-radar
+   git config core.hooksPath .githooks
    cp backend/.env.example backend/.env
    python -c "import secrets; print(secrets.token_hex(32))"
    ```
@@ -113,6 +116,9 @@ event-radar/
 ├── docs/               deep-dive docs, ADRs, agent workflow docs
 ├── .devcontainer/      devcontainer image and lifecycle scripts
 ├── .github/workflows/  CI and the dependency CVE audit
+├── .githooks/          pre-commit checks and commit-message trimming
+├── .claude/            Claude Code settings, hooks and skills
+├── .vscode/            dev-server and log tasks
 ├── CLAUDE.md           engineering rules and the Documentation Map
 ├── CODING_STANDARDS.md review-only rules and where every standard lives
 ├── CONTEXT.md          domain glossary
