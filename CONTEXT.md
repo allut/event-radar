@@ -151,6 +151,15 @@ identity (imprint, invoices, Privacy notice) names it. A person who signs in to
 the admin console is an *admin*, not the Operator.
 _Avoid_: owner, company, seller, platform, sole trader
 
+**Operator details**:
+The facts that name the Operator wherever it is published: its name and legal
+form, registry code, seat, VAT number, and the Organizer terms particulars
+(date in force, complaint reply time, mediators, competent court). The Operator
+supplies them to the running app; Event Radar's source never holds them, and
+until a field is supplied every page that needs it shows a visible placeholder.
+_Avoid_: operator identity, imprint (the imprint is one page that shows them),
+company info
+
 ## Discovery
 
 **Daily Five**:
