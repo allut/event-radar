@@ -152,11 +152,14 @@ the admin console is an *admin*, not the Operator.
 _Avoid_: owner, company, seller, platform, sole trader
 
 **Operator details**:
-The facts that name the Operator wherever it is published: its name and legal
-form, registry code, seat, VAT number, and the Organizer terms particulars
-(date in force, complaint reply time, mediators, competent court). The Operator
-supplies them to the running app; Event Radar's source never holds them, and
-until a field is supplied every page that needs it shows a visible placeholder.
+The facts that identify the Operator wherever it is published: its registered
+name (legal form included), registry code, seat and VAT number. The Operator
+supplies them to the running app and Event Radar's source never holds them.
+Until a field is supplied, a legal page that needs it shows a visible
+placeholder, and anything else that needs it (the site footer, an email, an
+invoice) is withheld. The Organizer terms particulars (date in force, complaint
+reply time, mediators, competent court) are not Operator details: they are
+part of the terms' text.
 _Avoid_: operator identity, imprint (the imprint is one page that shows them),
 company info
 
@@ -179,8 +182,8 @@ than rarely. A bad one is fixed by editing it again.
 
 **Private runtime value**:
 A runtime value that must not appear in a public repo, so it has no repo
-default. Until an admin supplies it, everything that needs it shows a visible
-placeholder. Each Operator details field is one.
+default. Until an admin supplies it, whatever needs it either shows a visible
+placeholder or is withheld. Each Operator details field is one.
 _Avoid_: secret (credentials stay outside runtime config)
 
 **Repo default**:
@@ -200,14 +203,21 @@ _Avoid_: outdated override, conflict
 
 **Invalid override**:
 An override that no longer passes its runtime value's checks, usually after a
-code change. It does not apply: the repo default does, or for a private
-runtime value the placeholder.
+code change. It does not apply: the repo default does, or a private runtime
+value reads as not yet supplied.
 _Avoid_: broken override, corrupt value
 
 **Orphaned override**:
 An override for a runtime value Event Radar no longer defines. It is ignored,
 and kept until an admin deletes it.
 _Avoid_: unknown key, dead setting
+
+## Ingestion
+
+**Retired source**:
+A source Event Radar no longer has code to read. It is always off, and no
+admin can switch it on.
+_Avoid_: disabled source, dead source
 
 ## Discovery
 
