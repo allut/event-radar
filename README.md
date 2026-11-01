@@ -150,7 +150,7 @@ Planned work is in [ROADMAP.md](ROADMAP.md). Individual items are tracked in [Gi
 
 ## License
 
-Copyright (C) 2026 Aleksei Lutkov.
+Copyright (C) 2026 the Event Radar contributors.
 
 - **Event Radar is licensed under the [GNU Affero General Public License v3.0](LICENSE).** Anyone who runs a modified copy as a network service must offer its users the complete source of that copy.
 - **The license grants no rights to the Event Radar name or logo.** This is an additional term under AGPL section 7(e). A fork runs under its own name.

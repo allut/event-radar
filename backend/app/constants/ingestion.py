@@ -234,7 +234,7 @@ FIENTA_MAX_DETAIL_FETCHES = 300
 # but no coordinates (currently: Fienta). Usage policy requires a descriptive
 # User-Agent with contact info and a max of 1 request/second.
 NOMINATIM_BASE_URL = "https://nominatim.openstreetmap.org/search"
-NOMINATIM_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee; aleksei.lutkov@gmail.com)"
+NOMINATIM_USER_AGENT = "EventRadarBot/1.0 (+https://eventradar.ee; contact@eventradar.ee)"
 # Static Nominatim search params; the "q" param is set per-call with the address.
 NOMINATIM_QUERY_PARAMS: dict[str, str | int] = {"format": "json", "limit": 1}
 GEOCODE_REQUEST_DELAY_SECONDS: float = 1.0

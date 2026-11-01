@@ -33,7 +33,7 @@ def mark_organizer_verified(organizer: _VerifiableOrganizer) -> bool:
 def mask_email(email: str) -> str:
     """Mask an email for log output — keep the first few local-part characters and
     the full domain so entries stay correlatable without persisting raw PII in
-    cleartext logs (e.g. 'aleksei.lutkov@gmail.com' -> 'al***@gmail.com')."""
+    cleartext logs (e.g. 'jane.doe@example.com' -> 'ja***@example.com')."""
     local, sep, domain = email.partition("@")
     if not sep:
         return "***"

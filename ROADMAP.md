@@ -18,7 +18,6 @@ Planned work on Event Radar, roughly in order. Each item links to its GitHub iss
 - **Catch frontend tests that will fail once their hardcoded date passes** with a scheduled run that moves the clock forward ([#672](https://github.com/allut/event-radar/issues/672)).
 - **Hide console output from passing frontend tests in CI logs** ([#673](https://github.com/allut/event-radar/issues/673)).
 - **Match claims by the stored series key in dedup** ([#664](https://github.com/allut/event-radar/issues/664)).
-- **Remove the owner's name and email from the README, constants and tests** ([#686](https://github.com/allut/event-radar/issues/686)).
 - **Run the docs style check on any staged Markdown**, so the governed-doc list lives in one place ([#707](https://github.com/allut/event-radar/issues/707)).
 - **Fail a governed doc that has no Documentation Map row** with a guard test ([#708](https://github.com/allut/event-radar/issues/708)).
 - **Fail a backticked constant name in a doc that the code no longer defines** with a guard test ([#709](https://github.com/allut/event-radar/issues/709)).

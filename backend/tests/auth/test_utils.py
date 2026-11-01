@@ -67,7 +67,7 @@ class TestRequireConfiguredSecret:
 
 class TestMaskEmail:
     def test_keeps_visible_prefix_and_domain(self):
-        assert mask_email("aleksei.lutkov@gmail.com") == "al***@gmail.com"
+        assert mask_email("jane.doe@example.com") == "ja***@example.com"
 
     def test_short_local_part(self):
         assert mask_email("a@b.com") == "a***@b.com"
