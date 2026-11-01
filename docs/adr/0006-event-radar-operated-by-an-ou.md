@@ -1,10 +1,12 @@
-# Event Radar is operated by a general-purpose OÜ
+# Event Radar will be operated by a general-purpose OÜ
 
 Status: accepted
 
-The Operator of Event Radar is a private limited company (OÜ), founded as a
+The Operator of Event Radar will be a private limited company (OÜ), founded as a
 general-purpose company for any of the owner's products that get monetised,
-not one named after Event Radar. It runs all of Event Radar: it sells
+not one named after Event Radar. It has not been founded yet: until the
+switchover, the owner runs Event Radar as a private individual. Once founded, it
+runs all of Event Radar: it sells
 Promotions, issues the invoices, holds Event Radar's Stripe account, controls
 personal data, and is the party to the Terms and the Organizer terms. It must
 exist before `PROMOTIONS_OFFER_ENABLED` is turned on, because a Promotion

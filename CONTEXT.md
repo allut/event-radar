@@ -144,10 +144,12 @@ _Avoid_: revoked claim, suspended claim, inactive claim
 ## Operator
 
 **Operator**:
-The legal person that runs Event Radar: it sells Promotions, controls the
+The person or company that runs Event Radar: it sells Promotions, controls the
 personal data of consumers and Organizers, and is the party to the Terms and
 the Organizer terms. There is exactly one at any time, and every published
-identity (imprint, invoices, Privacy notice) names it. A person who signs in to
+identity (imprint, invoices, Privacy notice) names it. Today it is the owner as
+a private individual; at the switchover it becomes a general-purpose OÜ that is
+not founded yet (ADR 0006). A person who signs in to
 the admin console is an *admin*, not the Operator.
 _Avoid_: owner, company, seller, platform, sole trader
 
