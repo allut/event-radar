@@ -213,9 +213,9 @@ and kept until an admin deletes it.
 _Avoid_: unknown key, dead setting
 
 **Dry run**:
-Trying an admin's unsaved draft of a scrape selector or an LLM prompt on real
-input, next to the value that applies now, without saving it. It informs the
-admin and never blocks a save.
+Trying an admin's unsaved draft of a scrape selector, an LLM prompt or a ranking
+value on real input, next to the value that applies now, without saving it. It
+informs the admin and never blocks a save.
 _Avoid_: preview, test, validation (the check that rejects a bad value on save)
 
 ## Ingestion
