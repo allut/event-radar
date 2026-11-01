@@ -160,6 +160,55 @@ until a field is supplied every page that needs it shows a visible placeholder.
 _Avoid_: operator identity, imprint (the imprint is one page that shows them),
 company info
 
+## Runtime Config
+
+**Runtime config**:
+The store of values an admin can change in the running app without a deploy.
+It holds only what an admin has changed; everything else is the repo default.
+_Avoid_: settings (a user's preferences), config, admin settings
+
+**Runtime value**:
+One entry in runtime config: the smallest unit that is valid on its own. Values
+that are only valid together, such as a set of weights that must sum to one,
+are a single runtime value.
+_Avoid_: setting, config key, parameter
+
+**Tunable runtime value**:
+A runtime value that ships with a repo default and is changed by admins more
+than rarely. A bad one is fixed by editing it again.
+
+**Private runtime value**:
+A runtime value that must not appear in a public repo, so it has no repo
+default. Until an admin supplies it, everything that needs it shows a visible
+placeholder. Each Operator details field is one.
+_Avoid_: secret (credentials stay outside runtime config)
+
+**Repo default**:
+The value a tunable runtime value takes when no admin has changed it. It lives
+in Event Radar's source and changes only with a deploy.
+_Avoid_: fallback, factory value, seed
+
+**Override**:
+An admin's replacement for a runtime value's repo default, or the supplied
+value of a private runtime value. Resetting to default removes the override.
+_Avoid_: custom value, edit
+
+**Stale override**:
+An override whose repo default has changed since the admin wrote it. It still
+applies, and asks the admin to reconcile it with the new default.
+_Avoid_: outdated override, conflict
+
+**Invalid override**:
+An override that no longer passes its runtime value's checks, usually after a
+code change. It does not apply: the repo default does, or for a private
+runtime value the placeholder.
+_Avoid_: broken override, corrupt value
+
+**Orphaned override**:
+An override for a runtime value Event Radar no longer defines. It is ignored,
+and kept until an admin deletes it.
+_Avoid_: unknown key, dead setting
+
 ## Discovery
 
 **Daily Five**:
