@@ -84,7 +84,7 @@ def _logging_rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Res
 
     slowapi's default handler is otherwise silent, so per-IP rate-limit blocks
     (scraping / brute-force probes) leave no trace in the log stream. The
-    ``event`` field keys the auth/abuse-spike monitor (see docs/observability.md).
+    ``event`` field keys the auth/abuse-spike query (see docs/observability.md).
     """
     log.warning(
         "rate limit exceeded: path=%s",

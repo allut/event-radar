@@ -4,7 +4,7 @@
 # reserved so it doesn't leak into the curated shipped schema (docs/observability.md).
 
 # Structured log `event` field values (shipped as a first-class JSON key via
-# `extra={"event": ...}`) — each keys an Axiom monitor. See docs/observability.md.
+# `extra={"event": ...}`) — each keys an Axiom monitor or triage query. See docs/observability.md.
 LOG_EVENT_JOB_RUN = "job_run"  # scheduled-job completion/failure telemetry
 LOG_EVENT_RATE_LIMIT_BLOCK = "rate_limit_block"  # own per-IP 429 rejection
 LOG_EVENT_LLM_DEGRADED = "llm_degraded"  # provider chain exhausted / backlog deferred

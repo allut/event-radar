@@ -62,7 +62,7 @@ LOG_SHIP_SUPPRESS_OK_JOBS: frozenset[str] = frozenset(
 )
 
 # Scheduler job labels whose runtime string is load-bearing: the "hourly
-# ingest" value is matched verbatim by an Axiom monitor (docs/observability.md
+# ingest" value is matched verbatim by the Stale ingest query (docs/observability.md
 # #3b), so these keep their historical spelling rather than reusing JOB_ID_*.
 JOB_LABEL_HOURLY_INGEST = "hourly ingest"
 JOB_LABEL_DEDUP_PASS = "dedup pass"
