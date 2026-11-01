@@ -2,6 +2,11 @@
 
 Planned work on Event Radar, roughly in order. Each item links to its GitHub issue where one exists.
 
+## Production reliability
+
+- **Fix the Piletilevi ingest and refetch crash on price-API 400s** ([#674](https://github.com/allut/event-radar/issues/674)). No Piletilevi events have been ingested since 2026-10-30.
+- **Make the Axiom monitors catch a failing job or source** ([#675](https://github.com/allut/event-radar/issues/675)).
+
 ## Promotions go-live
 
 Paid Sponsored slots are built. These steps take them live:
@@ -16,6 +21,9 @@ Paid Sponsored slots are built. These steps take them live:
 
 ## Code health
 
+- **Pin the `http_get()` and `http_post()` error contract in tests**, and stop building `HTTPStatusError` around `MagicMock` responses ([#676](https://github.com/allut/event-radar/issues/676)).
+- **Have review read the callers of a shared helper whose contract changes** ([#677](https://github.com/allut/event-radar/issues/677)).
+- **Sharpen the log-triage recipe** in `docs/observability.md` ([#678](https://github.com/allut/event-radar/issues/678)).
 - **Scan for secrets in the pre-commit hook and CI** ([#670](https://github.com/allut/event-radar/issues/670)).
 - **Keep real email addresses out of test and fixture files** with a guard test ([#671](https://github.com/allut/event-radar/issues/671)).
 - **Catch frontend tests that will fail once their hardcoded date passes** with a scheduled run that moves the clock forward ([#672](https://github.com/allut/event-radar/issues/672)).
