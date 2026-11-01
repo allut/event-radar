@@ -17,7 +17,9 @@ Deep-dive docs are not auto-loaded. Open the row's doc before planning or editin
 | **Pipeline** — `docs/pipeline.md` | `app/ingestion/`, `app/dedup/`, `app/llm/`, `app/ranking/`, `app/events/`, `app/publish.py`, `app/routers/{browse,public,feedback,feed,events,webhooks}.py` |
 | **Security** — `docs/security.md` | `app/main.py`, `app/middleware.py`, `app/rate_limit.py`, `app/auth/`, `app/routers/{auth,organizer_auth,admin_auth,unsubscribe}.py`, `app/routers/utils/auth.py`, `app/ingestion/http_client.py`, any new endpoint |
 | **Security audit state** — `docs/security-audit.md` | fixing or adding an audit finding |
-| **Backend ops** — `docs/backend-ops.md` | `render.yaml`, `frontend/wrangler.toml`, `frontend/public/_headers`, `frontend/functions/`, `app/routers/{admin_*,reports}.py`, `app/cleanup.py`, `backend/scripts/`, `app/scheduler.py`, scheduled jobs, CI |
+| **Big-O audit state** — `docs/big-o-audit.md` | fixing or adding a complexity finding |
+| **Review standards** — `CODING_STANDARDS.md` | reviewing a diff |
+| **Backend ops** — `docs/backend-ops.md` | `render.yaml`, `frontend/wrangler.toml`, `frontend/public/_headers`, `frontend/functions/`, `app/routers/{admin_*,reports}.py`, `app/routers/utils/admin.py`, `app/cleanup.py`, `backend/scripts/`, `app/scheduler.py`, `.githooks/`, scheduled jobs, CI |
 | **Frontend** — `docs/frontend.md` | `frontend/src/{routes,components,hooks,lib,utils,content}/`, `frontend/scripts/generate-icons.ts`, `shared/i18n/`, `app/email/` |
 | **SEO and prerender** — `docs/seo.md` | `frontend/scripts/prerender.ts`, `frontend/functions/api/{seo-audit,prerender-cadence}.ts`, `useSeoMeta`, `SeoTags/`, `frontend/src/lib/{structuredData,jsonLd,seoValidation,seoAudit*,prerender*,r2ChainState}.ts` |
 | **Design system** — `docs/design-system.md` | any `.module.css`, `frontend/src/index.css`, `frontend/src/components/shared/`, `frontend/src/lib/theme.ts`, `app/email/styles.py`, any visual change |
@@ -26,7 +28,7 @@ Deep-dive docs are not auto-loaded. Open the row's doc before planning or editin
 | **Data model** — `docs/data-model.md` | `app/models/`, a migration, a query on a new column, a serializer |
 | **Rule rationale** — `docs/conventions.md` | the reason behind a Code Quality Rule below |
 | **Writing docs** — `docs/writing-docs.md` | `CLAUDE.md`, `README.md`, any `docs/*.md` |
-| **Observability** — `docs/observability.md` | `app/logging_config.py`, `LOG_*` constants in `app/constants/ops.py`, Axiom monitors, the log-record shape, log triage |
+| **Observability** — `docs/observability.md` | `app/logging_config.py`, `app/constants/log_events.py`, `LOG_*` constants in `app/constants/ops.py`, Axiom monitors, the log-record shape, log triage |
 | **Domain glossary** — `CONTEXT.md` | naming a new domain concept |
 | **Decisions** — `docs/adr/` | an architectural decision |
 | **Agent workflow** — `docs/agents/` | the issue tracker, triage labels and domain docs |
@@ -68,7 +70,7 @@ The setup walkthrough is in `README.md`. Inside the container:
 
 - **Run the backend suite from the repo root with `bash backend/scripts/scratch-test.sh [pytest args]`.** It migrates, then drops, a throwaway database. The full suite takes ~4 min: run it with `run_in_background`. `backend/tests/conftest.py` refuses to run when `DATABASE_URL` names the dev `eventradar` database.
 - **UI work starts with an approved prototype built on the real `index.css`.** Recipe: `docs/design-system.md` "Prototype Shell". A change with no visual difference (data, wiring, when an existing control shows) needs none.
-- **After editing `CLAUDE.md`, `README.md`, `ROADMAP.md` or `docs/*.md`, run `bash backend/scripts/scratch-test.sh --no-db tests/test_docs_style.py`.**
+- **After editing `CLAUDE.md`, `README.md`, `ROADMAP.md`, `CODING_STANDARDS.md` or `docs/*.md`, run `bash backend/scripts/scratch-test.sh --no-db tests/test_docs_style.py`.**
 - **There is no e2e suite.** QA runs through the Playwright MCP server, and `.playwright-mcp/` is disposable scratch. Playwright stays a build dependency for the SEO prerender.
 
 ## Architecture
@@ -122,7 +124,7 @@ LLM router                Groq → Cloudflare Workers AI → Mistral
 ## Traps
 
 - **Production builds from `release`, not `master`.** `master` is the CI/PR branch. A Cloudflare Pages build of any other branch skips the prerender pass (`PRERENDER_CADENCE_GIT_BRANCH`, `frontend/src/constants/prerender.ts`).
-- **CI's `lint` job and `.githooks/pre-commit` run ruff, mypy, eslint and type-check.** Ruff's config is `backend/ruff.toml`; there is no `backend/pyproject.toml`. The devcontainer enables the hook (`git config core.hooksPath .githooks`). Elsewhere, enable it yourself, or run the four checks by hand before committing.
+- **CI's `lint` job runs ruff, mypy, eslint and type-check; `.githooks/pre-commit` runs them on staged areas, plus guard tests.** Ruff's config is `backend/ruff.toml`; there is no `backend/pyproject.toml`. The devcontainer enables the hook (`git config core.hooksPath .githooks`). Elsewhere, enable it yourself, or run the four checks by hand before committing.
 - **Edit translations and shared values in `shared/`, then run `python scripts/generate_shared.py`.** Commit the JSON and the regenerated `_generated/` files together, and leave `_generated/` to the script. `backend/tests/test_generated_sync.py` fails on drift. To move an existing backend constant there, run `python scripts/move_to_shared.py <domain> NAME` (`--dry-run` first).
 - **The three auth tracks never mix.** Consumer, organizer and admin sessions use separate signing salts and cookies, and consumer and organizer accounts live in separate tables. `CONTEXT.md` names them and `docs/security.md` has the flows.
 

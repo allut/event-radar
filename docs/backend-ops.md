@@ -270,7 +270,7 @@ APScheduler runs embedded in the FastAPI process (`app/scheduler.py::_register_s
 
 ## Maintenance Scripts
 
-`backend/scripts/` holds one-off operational scripts, run by hand from `backend/` with the venv active. Each adds `backend/` to `sys.path`, so `from app.*` resolves from any working directory.
+`backend/scripts/` holds one-off operational scripts, run by hand from `backend/` with the backend's Python (the venv on a native setup, `/opt/venv` in the devcontainer). Each adds `backend/` to `sys.path`, so `from app.*` resolves from any working directory.
 
 - **An `_`-prefixed filename is a machine-local throwaway.** `.gitignore` excludes `backend/scripts/_*`. Give a script a plain name only when it belongs in version control.
 
@@ -284,7 +284,7 @@ APScheduler runs embedded in the FastAPI process (`app/scheduler.py::_register_s
 - **The truncate can't be undone.** It's for resetting a dev or staging DB or clearing bad ingested data, not routine use.
 
 ```bash
-cd backend                              # venv active
+cd backend                              # backend Python on PATH
 python scripts/reset_events.py          # dry run: target DB + row counts
 python scripts/reset_events.py --yes    # actually truncate (irreversible)
 ```

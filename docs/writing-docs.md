@@ -4,7 +4,7 @@ What's in here: the house style for `CLAUDE.md`, `README.md` and `docs/*.md`, th
 
 ## Scope
 
-- **Governs `CLAUDE.md`, `README.md`, `CODING_STANDARDS.md` and the top-level `docs/*.md`.** Docs are agent-first and still readable by humans: agents open them before editing code, so exact pointers matter more than polish.
+- **Governs `CLAUDE.md`, `README.md`, `CODING_STANDARDS.md`, `ROADMAP.md` and the top-level `docs/*.md`.** Docs are agent-first and still readable by humans: agents open them before editing code, so exact pointers matter more than polish.
 - **`docs/adr/*`, `CONTEXT.md` and `docs/agents/*` keep their own formats.** The domain-modeling skill owns the ADR and glossary shapes.
 
 ## Shape
@@ -20,6 +20,7 @@ What's in here: the house style for `CLAUDE.md`, `README.md` and `docs/*.md`, th
 - **Cap every bullet and paragraph at 60 words.** A longer topic becomes sibling bullets or its own subheading. The count is whitespace tokens, inline code included. Nested bullets count on their own.
 - **Aim for sentences of about 20 words, 30 at most.** One idea per sentence.
 - **`CLAUDE.md` and `README.md` each stay within 1,500 words.** A line that would cross the limit means moving something into an area doc, or raising the limit on purpose in the guard.
+- **`CLAUDE.md` runs close to its limit, so budget an addition before writing it.** The guard counts whitespace tokens across the whole file, tables and fences included, so `wc -w CLAUDE.md` matches it. Pay for a new line by trimming one, usually a fact an area doc already holds.
 
 ## Banner
 
