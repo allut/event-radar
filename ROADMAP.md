@@ -18,6 +18,8 @@ Paid Sponsored slots are built. These steps take them live:
 
 - **Scan for secrets in the pre-commit hook and CI** ([#670](https://github.com/allut/event-radar/issues/670)).
 - **Keep real email addresses out of test and fixture files** with a guard test ([#671](https://github.com/allut/event-radar/issues/671)).
+- **Catch frontend tests that will fail once their hardcoded date passes** with a scheduled run that moves the clock forward ([#672](https://github.com/allut/event-radar/issues/672)).
+- **Hide console output from passing frontend tests in CI logs** ([#673](https://github.com/allut/event-radar/issues/673)).
 - **Match claims by the stored series key in dedup** ([#664](https://github.com/allut/event-radar/issues/664)).
 - **Load LLM prompts, scrape selectors and ranking weights from runtime config**, so operators can tune them without a deploy. The repo keeps working defaults.
 
