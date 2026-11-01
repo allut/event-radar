@@ -4,6 +4,8 @@ from datetime import timedelta
 from typing import NamedTuple
 
 INGESTION_ERROR_MAX_LEN = 500
+# cap on the upstream error body quoted in a price-fetch WARNING (#674)
+PRICE_ERROR_BODY_SNIPPET_CHARS = 200
 PRICE_HINT_MAX_CHARS = 300  # cap on Event.price_hint, kept short for the LLM prompt
 
 # Word-boundary keyword prefilter for sexually-explicit listings (en/et/ru), checked

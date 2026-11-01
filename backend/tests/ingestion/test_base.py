@@ -343,6 +343,38 @@ class TestHttpGetBodyCap:
             with pytest.raises(httpx.HTTPStatusError):
                 await http_get(client, "https://fienta.com/e/1")
 
+    @pytest.mark.asyncio
+    async def test_error_status_carries_readable_body(self):
+        # An async-iterator body stays unread like a real wire response; a
+        # bytes body is pre-buffered by httpx.Response and hides the bug (#674).
+        async def chunks():
+            yield b'{"code":"nope"}'
+
+        handler = lambda r: httpx.Response(400, content=chunks())  # noqa: E731
+        async with self._client(handler) as client:
+            with pytest.raises(httpx.HTTPStatusError) as exc_info:
+                await http_get(client, "https://fienta.com/e/1")
+        assert exc_info.value.response.status_code == 400
+        assert exc_info.value.response.json() == {"code": "nope"}
+        assert exc_info.value.response.text == '{"code":"nope"}'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("declared", [None, "500"])
+    async def test_oversize_error_body_is_truncated_not_too_large(self, monkeypatch, declared):
+        monkeypatch.setattr(http_client, "HTTP_MAX_RESPONSE_BYTES", 100)
+
+        async def chunks():
+            for _ in range(10):
+                yield b"x" * 50
+
+        headers = {"Content-Length": declared} if declared else {}
+        handler = lambda r: httpx.Response(404, content=chunks(), headers=headers)  # noqa: E731
+        async with self._client(handler) as client:
+            with pytest.raises(httpx.HTTPStatusError) as exc_info:
+                await http_get(client, "https://fienta.com/e/1")
+        assert exc_info.value.response.status_code == 404
+        assert exc_info.value.response.content == b"x" * 100
+
     def test_too_large_is_not_retryable(self):
         assert _is_retryable(ResponseTooLargeError("big")) is False
 

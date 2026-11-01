@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup, NavigableString, Tag
 
 from app.constants.core import TALLINN_TZ
 from app.constants.http import HTTP_ACCEPT_JSON_HEADERS
-from app.constants.ingestion import SOURCE_SLUG_PILETILEVI
+from app.constants.ingestion import PRICE_ERROR_BODY_SNIPPET_CHARS, SOURCE_SLUG_PILETILEVI
 from app.ingestion.http_client import http_get, http_post
 from app.ingestion.jsonld import (
     location_from_jsonld_items,
@@ -154,7 +154,13 @@ async def fetch_store_prices(
         if outcome is not None:
             log.info("%s price unavailable code=%s: %s", slug, code, outcome)
             return None, outcome
-        log.warning("%s price fetch failed code=%s: %s", slug, code, exc)
+        log.warning(
+            "%s price fetch failed code=%s: %s body=%r",
+            slug,
+            code,
+            exc,
+            exc.response.text[:PRICE_ERROR_BODY_SNIPPET_CHARS],
+        )
         return None, None
     except (httpx.RequestError, ValueError) as exc:
         log.warning("%s price fetch failed code=%s: %s", slug, code, exc)

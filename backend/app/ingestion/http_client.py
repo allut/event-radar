@@ -227,23 +227,31 @@ async def http_get(
 
     The body is read in chunks and abandoned with ResponseTooLargeError once it
     passes HTTP_MAX_RESPONSE_BYTES (decoded bytes, so a compressed bomb counts
-    too); Content-Length is only an early exit, never trusted."""
+    too); Content-Length is only an early exit, never trusted. A non-2xx body
+    is instead truncated at the cap, so the HTTPStatusError still raises (and
+    still retries on 429/5xx) carrying a readable, bounded body."""
     async with client.stream("GET", url, params=params, headers=headers) as r:
-        r.raise_for_status()
         declared = r.headers.get("Content-Length", "")
-        if declared.isdigit() and int(declared) > HTTP_MAX_RESPONSE_BYTES:
+        if (
+            r.is_success
+            and declared.isdigit()
+            and int(declared) > HTTP_MAX_RESPONSE_BYTES
+        ):
             raise ResponseTooLargeError(f"response too large: {url}")
         body = bytearray()
         async for chunk in r.aiter_bytes(HTTP_RESPONSE_CHUNK_BYTES):
             body.extend(chunk)
             if len(body) > HTTP_MAX_RESPONSE_BYTES:
+                if not r.is_success:
+                    del body[HTTP_MAX_RESPONSE_BYTES:]
+                    break
                 raise ResponseTooLargeError(f"response too large: {url}")
         # Rebuild with the decoded body so callers get a plain buffered
         # Response; drop the headers describing the original wire encoding.
         headers_out = httpx.Headers(r.headers)
         for name in ("content-encoding", "content-length"):
             headers_out.pop(name, None)
-        return httpx.Response(
+        buffered = httpx.Response(
             r.status_code,
             headers=headers_out,
             content=bytes(body),
@@ -251,6 +259,10 @@ async def http_get(
             extensions=r.extensions,
             history=r.history,
         )
+    # Raise from the buffered copy, so an HTTPStatusError's .response has a
+    # readable .json()/.text — the streamed one is closed unread (#674).
+    buffered.raise_for_status()
+    return buffered
 
 
 async def http_get_stored_url(
