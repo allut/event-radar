@@ -4,6 +4,8 @@
 
 Event Radar ingests events from Tallinn's ticketing platforms, venue sites and organizer submissions. It deduplicates and classifies them with an LLM, publishes the ones that pass a quality gate, and ranks five picks per user each morning. It runs on near-free managed infrastructure: the Render backend is the only paid line.
 
+It's for people in Tallinn deciding what to do this week, and for the venues and promoters who want to reach them.
+
 How the pieces fit is in [CLAUDE.md's Architecture](CLAUDE.md#architecture) and [docs/pipeline.md](docs/pipeline.md).
 
 ## Features
@@ -115,6 +117,8 @@ event-radar/
 ├── CODING_STANDARDS.md review-only rules and where every standard lives
 ├── CONTEXT.md          domain glossary
 ├── docker-compose.yml  local Postgres 16
+├── LICENSE             GNU AGPL v3.0
+├── ROADMAP.md          planned work
 └── render.yaml         Render backend service
 ```
 
@@ -133,3 +137,14 @@ Production builds from the `release` branch, not `master`. Topology, secrets and
 ## Documentation
 
 [CLAUDE.md's Documentation Map](CLAUDE.md#documentation-map) routes to every deep-dive doc in `docs/`. The domain glossary is [CONTEXT.md](CONTEXT.md), architecture decisions are in [docs/adr/](docs/adr/), and the shared-file workflow is in [shared/README.md](shared/README.md).
+
+## Roadmap
+
+Planned work is in [ROADMAP.md](ROADMAP.md). Individual items are tracked in [GitHub Issues](https://github.com/allut/event-radar/issues).
+
+## License
+
+Copyright (C) 2026 Aleksei Lutkov.
+
+- **Event Radar is licensed under the [GNU Affero General Public License v3.0](LICENSE).** Anyone who runs a modified copy as a network service must offer its users the complete source of that copy.
+- **The license grants no rights to the Event Radar name or logo.** This is an additional term under AGPL section 7(e). A fork runs under its own name.
