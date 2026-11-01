@@ -5,6 +5,8 @@ Planned work on Event Radar, roughly in order. Each item links to its GitHub iss
 ## Production reliability
 
 - **Make the Axiom monitors catch a failing job or source** ([#675](https://github.com/allut/event-radar/issues/675)).
+- **Keep an admin's switch-off of a failing source across deploys** ([#698](https://github.com/allut/event-radar/issues/698)). This is the first tunable value in runtime config ([#693](https://github.com/allut/event-radar/issues/693)).
+- **Let admins fix a broken source or a bad prompt without a deploy**: scrape selectors ([#702](https://github.com/allut/event-radar/issues/702)), LLM prompts ([#700](https://github.com/allut/event-radar/issues/700)), the LLM provider chain ([#704](https://github.com/allut/event-radar/issues/704)) and ranking values ([#699](https://github.com/allut/event-radar/issues/699)). Each has a dry run ([#701](https://github.com/allut/event-radar/issues/701), [#703](https://github.com/allut/event-radar/issues/703), [#705](https://github.com/allut/event-radar/issues/705), [#706](https://github.com/allut/event-radar/issues/706)), and the repo keeps working defaults.
 
 ## Code health
 
@@ -28,7 +30,7 @@ Planned work on Event Radar, roughly in order. Each item links to its GitHub iss
 
 Paid Sponsored slots are built. These steps take them live:
 
-- **Load the Operator details, LLM prompts, scrape selectors and ranking weights from runtime config** ([#679](https://github.com/allut/event-radar/issues/679)), so admins can tune them without a deploy and the repo holds no Operator PII. The Operator details come first, since the two Operator steps below wait on them. For everything else, the repo keeps working defaults.
+- **Supply the Operator details through runtime config** ([#693](https://github.com/allut/event-radar/issues/693)), so the repo holds no Operator PII. This takes the store ([#694](https://github.com/allut/event-radar/issues/694)), entering the details in the admin console ([#695](https://github.com/allut/event-radar/issues/695)), baking them into the legal pages ([#696](https://github.com/allut/event-radar/issues/696)) and naming the Operator on Stripe invoices ([#697](https://github.com/allut/event-radar/issues/697)). The two Operator steps below wait on these.
 - **Run card checkout, invoices and refunds in Stripe test mode** ([#624](https://github.com/allut/event-radar/issues/624)).
 - **Verify the Äriregister lookup against the real API** ([#623](https://github.com/allut/event-radar/issues/623)).
 - **Name the Daily 5 Пятёрка дня throughout the Russian copy** ([#669](https://github.com/allut/event-radar/issues/669)), before the native-speaker review.
