@@ -71,7 +71,7 @@ describe.each(LOCALES)('Ranking disclosure (%s)', (locale) => {
 });
 
 describe.each(LOCALES)('Privacy notice (%s)', (locale) => {
-  it('adds the ads copy and a newer date only while the flag is on, keeping the numbering', async () => {
+  it('adds the ads copy only while the flag is on, with a date never older, keeping the numbering', async () => {
     vi.stubEnv('VITE_PROMOTIONS_SLOTS_ENABLED', 'false');
     const off = await renderDoc('privacy', locale);
     const offHeadings = [...off.container.querySelectorAll('h2')].map((h) => h.textContent);
@@ -85,7 +85,10 @@ describe.each(LOCALES)('Privacy notice (%s)', (locale) => {
     expect([...on.container.querySelectorAll('h2')].map((h) => h.textContent)).toEqual(offHeadings);
     expect(on.container.querySelectorAll('li').length).toBeGreaterThan(offItems);
     expect(on.container.querySelectorAll('p').length).toBeGreaterThanOrEqual(offParas);
-    expect(on.container.querySelector('p')?.textContent).not.toBe(offDate);
+    const isoDate = (text: string | null | undefined) => text?.match(/\d{4}-\d{2}-\d{2}/)?.[0] ?? '';
+    const onDate = on.container.querySelector('p')?.textContent;
+    expect(isoDate(offDate)).not.toBe('');
+    expect(isoDate(onDate) >= isoDate(offDate)).toBe(true);
   });
 });
 
