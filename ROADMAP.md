@@ -25,6 +25,9 @@ Planned work on Event Radar, roughly in order. Each item links to its GitHub iss
 - **Compare the live Axiom monitors before editing the Monitors spec** in `docs/observability.md` ([#710](https://github.com/allut/event-radar/issues/710)).
 - **Fail the README tree check on a tracked top-level directory it doesn't list** ([#712](https://github.com/allut/event-radar/issues/712)).
 - **Document claiming an issue, removing its roadmap bullet, and the README word budget** ([#713](https://github.com/allut/event-radar/issues/713)).
+- **Run the frontend tests related to staged files in pre-commit** ([#715](https://github.com/allut/event-radar/issues/715)).
+- **Say when a future decision takes effect** in ADRs and the glossary ([#716](https://github.com/allut/event-radar/issues/716)).
+- **Document the paid-slots legal date rule** in `docs/frontend.md` ([#717](https://github.com/allut/event-radar/issues/717)).
 
 ## Features
 
