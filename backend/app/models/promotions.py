@@ -33,7 +33,7 @@ class Promotion(Base):
     """A paid (or complimentary) window of whole Tallinn days during which one
     owned event may fill Sponsored slots. `status` is commercial only;
     scheduled / live / finished are computed from the window and today's
-    Tallinn date (app/promotions/windows.py). See docs/data-model.md."""
+    Tallinn date (app/promotions/windows.py)."""
 
     __tablename__ = "promotions"
     __table_args__ = (
@@ -87,7 +87,7 @@ class Promotion(Base):
     advertiser_registry_code: Mapped[str] = mapped_column(String(32), nullable=False)
     billing_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # "admin" for a direct grant; NULL for checkout and system. There is no
-    # admins table (ADR 0001), so no admin id.
+    # admins table, so no admin id.
     granted_by: Mapped[str | None] = mapped_column(String(16), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -156,7 +156,7 @@ class PromotionRequest(Base):
     """An Organizer's request for a Promotion on an event they own (#614). An
     admin grants it (creating the Promotion, #615) or declines it with a reason.
     `status` is pending | granted | declined | withdrawn | expired. At most one
-    pending request per event (partial unique index). See docs/organizer-portal.md."""
+    pending request per event (partial unique index)."""
 
     __tablename__ = "promotion_requests"
     __table_args__ = (
@@ -190,7 +190,7 @@ class PromotionRequest(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     decline_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # "admin" once an admin resolved it (no admins table, ADR 0001).
+    # "admin" once an admin resolved it (no admins table).
     resolved_by: Mapped[str | None] = mapped_column(String(16), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -254,7 +254,7 @@ class PromotionDailyStat(Base):
     """Anonymous delivery totals for one Promotion on one Tallinn day (#606).
     Never pruned. No viewer identifiers: only counts. Written by the in-process
     counter's bulk upsert (app/promotions/counters.py) and, for the gate and
-    Daily 5 / digest columns, by their own tickets. See docs/pipeline.md."""
+    Daily 5 / digest columns, by their own tickets."""
 
     __tablename__ = "promotion_daily_stats"
     __table_args__ = (
@@ -281,8 +281,7 @@ class DailySponsoredSlot(Base):
     from `daily_feeds` so no consent-free path can pick it up, and pruned on
     the same retention. `promotion_id` is NULL when a mid-day swap found
     nothing left, so the collapse sticks for the day. Feeds the Daily 5 slot,
-    the digest slot, the 3-day cooldown and Daily 5 reach. See
-    docs/pipeline.md."""
+    the digest slot, the 3-day cooldown and Daily 5 reach."""
 
     __tablename__ = "daily_sponsored_slots"
     __table_args__ = (

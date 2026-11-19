@@ -102,7 +102,7 @@ class TestVerifyPiletileviClaim:
             patch(
                 "app.claims.verification.resolve_promoter_contact",
                 new_callable=AsyncMock,
-                return_value=PromoterContact(domain="own-domain.ee", email=None),
+                return_value=PromoterContact(domain="own-domain.example", email=None),
             ),
             patch(
                 "app.claims.verification.verify_dns_txt_token",
@@ -117,7 +117,7 @@ class TestVerifyPiletileviClaim:
         assert result == VerificationResult(
             CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
             CLAIM_VERIFICATION_OUTCOME_AUTO_GRANT,
-            domain="own-domain.ee",
+            domain="own-domain.example",
         )
 
     @pytest.mark.asyncio
@@ -126,7 +126,7 @@ class TestVerifyPiletileviClaim:
             patch(
                 "app.claims.verification.resolve_promoter_contact",
                 new_callable=AsyncMock,
-                return_value=PromoterContact(domain="own-domain.ee", email=None),
+                return_value=PromoterContact(domain="own-domain.example", email=None),
             ),
             patch(
                 "app.claims.verification.verify_dns_txt_token",
@@ -141,7 +141,7 @@ class TestVerifyPiletileviClaim:
         assert result == VerificationResult(
             CLAIM_VERIFICATION_MECHANISM_PILETILEVI_PROMOTER,
             CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
-            domain="own-domain.ee",
+            domain="own-domain.example",
         )
 
     @pytest.mark.asyncio
@@ -169,7 +169,7 @@ class TestVerifyPiletileviClaim:
         with patch(
             "app.claims.verification.resolve_promoter_contact",
             new_callable=AsyncMock,
-            return_value=PromoterContact(domain=None, email="promoter@other.com"),
+            return_value=PromoterContact(domain=None, email="promoter@other.example"),
         ):
             result = await verify_piletilevi_claim(
                 MagicMock(), "<html/>", "https://x", "tok", "organizer@example.com"
@@ -178,7 +178,7 @@ class TestVerifyPiletileviClaim:
         assert result == VerificationResult(
             CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
             CLAIM_VERIFICATION_OUTCOME_ADMIN_REVIEW,
-            contact="promoter@other.com",
+            contact="promoter@other.example",
         )
 
     @pytest.mark.asyncio

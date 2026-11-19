@@ -78,8 +78,7 @@ export const CHAIN_STALENESS_TIMEOUT_MINUTES = 30;
 // R2 key prefix (issue #366/#365) under which the prerender chain-state
 // manifest lives — one burst's index + content objects sit at
 // `${CHAIN_STATE_PREFIX}${sanitizedBurstId}/...`. Parallel optimization
-// layer to the CHAIN_MARKER_PREFIX git-commit flow above, not a replacement
-// — see docs/seo.md "Chain-State Manifest (R2)".
+// layer to the CHAIN_MARKER_PREFIX git-commit flow above, not a replacement.
 export const CHAIN_STATE_PREFIX = 'prerender-chain-state/';
 // R2 bucket lifecycle rule expiring everything under CHAIN_STATE_PREFIX
 // after this many days — a crash backstop, comfortably past
@@ -127,7 +126,7 @@ export const CONTENT_READY_TIMEOUT_MS = 45_000;
 // with a growing published-event catalog (three locale variants each), a
 // fully sequential run risks blowing past Cloudflare Pages' build cap.
 // Bounded, not unbounded, mirroring
-// this repo's external-API fan-out convention (CLAUDE.md). Used by the
+// this repo's external-API fan-out convention. Used by the
 // filesystem/`fetch()`-only validation pass below, which has no Chromium
 // involvement and so isn't subject to RENDER_POOL_CONCURRENCY's constraint.
 export const PRERENDER_CONCURRENCY = 6;
@@ -144,7 +143,7 @@ export const EVENT_DETAIL_RATE_LIMIT_PER_MINUTE = 100;
 // Bounded pool for the change-detection fetch pass (issue #80) — real
 // GET requests against PRODUCTION_ORIGIN, one per event route, so this stays
 // bounded rather than unbounded, mirroring this repo's external-API fan-out
-// convention (CLAUDE.md). Separate from PRERENDER_CONCURRENCY/the rate gate
+// convention. Separate from PRERENDER_CONCURRENCY/the rate gate
 // above since these are plain page fetches, not the rate-limited
 // GET /events/{id} endpoint.
 export const CHANGE_DETECTION_CONCURRENCY = 6;
@@ -167,7 +166,7 @@ export const CHANGE_MARKER_JSONLD_FIELD = 'dateModified';
 // stop-at-cap behavior is verifiable without a real 10-minute wait (e.g.
 // `PRERENDER_RENDER_BUDGET_MINUTES=0 npm run build`).
 export const DEFAULT_RENDER_BUDGET_MINUTES = 10;
-// Measured render throughput (~100 routes/min, docs/seo.md "Measured Cost")
+// Measured render throughput (~100 routes/min)
 // and the share of it predictRoundContinues trusts (issue #537). The margin
 // sits below 1 because a wrong "done" guess costs a continuing round — the
 // one already near the build cap — a post-render flush of its held PUTs,

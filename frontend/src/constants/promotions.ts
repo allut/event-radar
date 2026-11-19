@@ -351,7 +351,7 @@ export const PROMOTION_SURFACE_LABELS: Readonly<Record<string, string>> = {
   daily5: 'Daily 5',
   digest: 'Digest',
 };
-// docs/backend-ops.md "Promotions: Trust Review and Withdrawal" thresholds.
+// Promotions trust-review and withdrawal thresholds.
 export const PROMOTION_TRIPWIRE_MIN_WITHDRAWALS = 3;
 export const PROMOTION_TRIPWIRE_MIN_DISLIKES = 3;
 export const PROMOTION_TRIPWIRE_MIN_COMPLAINTS = 2;
@@ -395,7 +395,7 @@ export const PROMOTION_TRUST_COPY = {
   verdictClear: 'No stop-selling condition holds',
   verdictClearBody: 'Nothing to do this week. Review again next week.',
   thresholdsHint:
-    'Thresholds from docs/backend-ops.md, Promotions: Trust Review and Withdrawal. Withdraw at once on regulator contact (TTJA or AKI) about ad disclosure or a dark-pattern problem, and when a Stop-selling condition still holds 4 weeks after a fix.',
+    'Withdraw at once on regulator contact (TTJA or AKI) about ad disclosure or a dark-pattern problem, and when a Stop-selling condition still holds 4 weeks after a fix.',
   complaintHeading: 'Log a complaint',
   complaintSource: 'Arrived by',
   complaintWho: 'Complainant (optional)',

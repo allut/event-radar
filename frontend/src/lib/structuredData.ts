@@ -16,8 +16,7 @@ import { localizedPath } from './urlLocale';
 import { safeUrl } from '../utils/html';
 
 /** JSON-LD builder for /events/:id (issue #49). Field mapping and omissions
- * (never `organizer`, never `offers.availability`) are documented on the
- * issue and in docs/seo.md "Structured Data" — don't add either without a
+ * (never `organizer`, never `offers.availability`) are deliberate — don't add either without a
  * data-model change to back them with real data. */
 export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
   const location: Place | undefined =
@@ -33,7 +32,7 @@ export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
       : undefined;
 
   const offerUrl = safeUrl(event.url);
-  // Numeric truthiness (CLAUDE.md) — gate on `!== null`, not on `price_min`
+  // Numeric truthiness — gate on `!== null`, not on `price_min`
   // being falsy, so a free event's price_min: 0 still emits lowPrice: 0
   // rather than silently falling through to the plain-Offer branch (issue
   // #236). highPrice falls back to price_min when price_max is null (a
@@ -86,8 +85,7 @@ export function buildEventJsonLd(event: EventData): WithContext<SchemaEvent> {
  * item pointing at our own locale-matched detail page (never emitted by
  * buildEventJsonLd itself, and distinct from its `offers.url`, the external
  * ticket vendor link). `numberOfItems`/`itemListOrder` are deliberately
- * omitted — see
- * docs/seo.md "Structured Data". */
+ * omitted. */
 export function buildExploreItemListJsonLd(events: EventData[], locale: string): WithContext<ItemList> {
   return {
     '@context': SCHEMA_ORG_CONTEXT,

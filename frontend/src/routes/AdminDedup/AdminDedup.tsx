@@ -123,7 +123,7 @@ export default function AdminDedup() {
             ))}
           </div>
         )}
-        {/* The pager's strings come from shared/i18n even here: docs/frontend.md "Admin Console" */}
+        {/* The pager's strings come from shared/i18n even here */}
         <Pager {...pagerProps} locale={LOCALE_EN} liveNoun="items" className={styles.pager} />
       </div>
     </div>

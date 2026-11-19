@@ -1,4 +1,4 @@
-// Ratchet (docs/frontend.md, shared/ table): a frontend constant that mirrors a
+// Ratchet: a frontend constant that mirrors a
 // backend one drifts silently, so cross-stack values belong in shared/. This
 // counts the comments in constants/*.ts that say "mirrors backend" or name a
 // backend constant ("backend PROMOTION_ERROR_*") and pins each file's count.

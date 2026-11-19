@@ -3,8 +3,8 @@ import type { LegalDoc } from './types';
 
 const doc: LegalDoc = {
   title: 'Privaatsuspoliitika',
-  lastUpdated: '2026-10-17',
-  lastUpdatedSlots: '2026-10-18',
+  lastUpdated: '2026-11-02',
+  lastUpdatedSlots: '2026-11-02',
   intro: [
     {
       kind: 'p',
@@ -20,7 +20,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Vastutav töötleja on Aleksei Lutkov, kes haldab Event Radarit füüsilisest isikust ettevõtjana Eestis. Privaatsusküsimuste või oma õiguste kasutamiseks võta ühendust ',
+            'Vastutav töötleja on Aleksei Lutkov, kes haldab Event Radarit Eestis eraisikuna. Privaatsusküsimuste või oma õiguste kasutamiseks võta ühendust ',
             { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             '.',
           ],

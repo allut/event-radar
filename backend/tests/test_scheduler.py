@@ -1,7 +1,5 @@
 """Tests for the ENABLE_SCHEDULER dev-only kill switch (app/scheduler.py::start_scheduler)."""
 
-import re
-from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -149,16 +147,3 @@ def test_weekly_jobs_fire_once_on_dst_change_days():
             fires = _fires_on_day(cron_jobs[job_id], day)
             assert len(fires) == 1, (job_id, day, fires)
             assert fires[0].astimezone(TALLINN_TZ).hour == hour
-
-
-_BACKEND_OPS_DOC = Path(__file__).resolve().parents[2] / "docs" / "backend-ops.md"
-_CADENCE_ROW = re.compile(r"^\| (?:Daily|Sun) (\d{2}):(\d{2}) \| `(\w+)` \|$", re.M)
-
-
-def test_cadence_table_matches_registered_cron_triggers():
-    rows = _CADENCE_ROW.findall(_BACKEND_OPS_DOC.read_text(encoding="utf-8"))
-    cron_jobs = _cron_jobs()
-    assert {job_id for _, _, job_id in rows} == set(cron_jobs)
-    for hour, minute, job_id in rows:
-        fields = {f.name: str(f) for f in cron_jobs[job_id].fields}
-        assert (fields["hour"], fields["minute"]) == (str(int(hour)), str(int(minute))), job_id

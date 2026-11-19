@@ -6,7 +6,7 @@ from app.constants.admin import (
     ADMIN_ACTION_SEND_DIGESTS,
 )
 
-# Scheduler cadence (see docs/backend-ops.md "Scheduled Jobs" for the full cron schedule)
+# Scheduler cadence
 ORGANIZER_SYNC_HOUR = 2  # weekly on Sunday; never hour 3 (it repeats on fall-back day, #633)
 ORGANIZER_SYNC_MINUTE = 0
 CLEANUP_HOUR = 2  # weekly on Sunday, after ORGANIZER_SYNC_HOUR:ORGANIZER_SYNC_MINUTE
@@ -36,7 +36,7 @@ PIPELINE_RUN_OVERLAPPING_LOCK_KEYS = (
 )
 
 # APScheduler job ids (app/scheduler.py::_register_scheduled_jobs) — also reasoned
-# about in docs/backend-ops.md and /admin/pipeline/run, so a typo in one of
+# about in /admin/pipeline/run, so a typo in one of
 # the two call sites that share a string (the log label passed to _scheduled
 # and the id= kwarg on scheduler.add_job) would silently misregister a job.
 JOB_ID_SYNC_FIENTA_ORGANIZERS = "sync_fienta_organizers"
@@ -62,8 +62,7 @@ LOG_SHIP_SUPPRESS_OK_JOBS: frozenset[str] = frozenset(
 )
 
 # Scheduler job labels whose runtime string is load-bearing: the "hourly
-# ingest" value is matched verbatim by the Stale ingest query (docs/observability.md
-# #3b), so these keep their historical spelling rather than reusing JOB_ID_*.
+# ingest" value is matched verbatim by the Stale ingest log query, so these keep their historical spelling rather than reusing JOB_ID_*.
 JOB_LABEL_HOURLY_INGEST = "hourly ingest"
 JOB_LABEL_DEDUP_PASS = "dedup pass"
 JOB_LABEL_ORGANIZER_SYNC = "organizer sync"

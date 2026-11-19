@@ -28,7 +28,7 @@ from tests.promotions.test_daily5_slot import _n, organic, promoted, today
 def _flags(monkeypatch):
     monkeypatch.setattr(settings, "PROMOTIONS_SLOTS_ENABLED", True)
     monkeypatch.setattr(settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(settings, "FRONTEND_URL", "https://app.radar.ee")
+    monkeypatch.setattr(settings, "FRONTEND_URL", "https://app.radar.example")
     counters.reset()
     yield
     counters.reset()

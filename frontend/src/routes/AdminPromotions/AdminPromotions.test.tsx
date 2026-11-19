@@ -33,7 +33,7 @@ function promotion(overrides: Record<string, unknown> = {}) {
     id: 1,
     event_id: 7,
     event_title: 'Noblessner Food Fest',
-    organizer_name: 'Noblessner Events OÜ',
+    organizer_name: 'Example Harbour Events OÜ',
     status: 'paid',
     state: 'live',
     paused_reason: null,
@@ -52,7 +52,7 @@ function promotion(overrides: Record<string, unknown> = {}) {
     invoice_url: null,
     awaiting_checkout: false,
     checkout_expires_at: null,
-    advertiser_legal_name: 'Noblessner Events OÜ',
+    advertiser_legal_name: 'Example Harbour Events OÜ',
     ...overrides,
   };
 }

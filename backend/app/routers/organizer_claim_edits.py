@@ -1,8 +1,7 @@
 """Claim-editing surface (#416): the dedicated pinned-field editor a granted
 claimant uses to correct "their" event — distinct from EventSubmit, whose
 form has no vocabulary for the pinned/synced field split. Locked entirely
-until the claim is granted. See CONTEXT.md's Event Claiming glossary and
-docs/organizer-portal.md.
+until the claim is granted.
 """
 
 import logging
@@ -386,8 +385,7 @@ async def _save_claim_event(
         )
 
     # FAQ #claimed-edits describes this behaviour — update the copy (all locales) if it changes
-    # Price fields: co-authoritative, never pinned (#416 — CONTEXT.md's Event
-    # Claiming glossary). accept_new_price adopts a freshly recomputed ingest
+    # Price fields: co-authoritative, never pinned (#416). accept_new_price adopts a freshly recomputed ingest
     # price instead of whatever price_* the request body carried — the only
     # case this save needs to fetch the source detail page at all; an
     # unrelated edit (title, dates, ...) must not pay for an outbound

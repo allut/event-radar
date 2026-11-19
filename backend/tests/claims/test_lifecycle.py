@@ -510,7 +510,7 @@ class TestCreateClaim:
             patch(
                 "app.claims.verification.resolve_promoter_contact",
                 new_callable=AsyncMock,
-                return_value=PromoterContact(domain="own-domain.ee", email=None),
+                return_value=PromoterContact(domain="own-domain.example", email=None),
             ) as resolve_contact,
             patch(
                 "app.claims.verification.verify_dns_txt_token",

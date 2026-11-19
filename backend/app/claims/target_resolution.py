@@ -6,9 +6,7 @@ stamped `EventSource.publisher_id`), `resolve_claim_target_live()` is the one
 place a *new* claim's target gets decided, and does not trust an unstamped
 row alone: it re-resolves live per source, stamping the row on success so a
 later call for the same listing skips re-resolving. Fienta never crawls live
-here — see `_resolve_fienta_publisher`. See
-CONTEXT.md's Event Claiming glossary and Publisher mirroring in
-docs/pipeline.md "Organizer Lifecycle".
+here — see `_resolve_fienta_publisher`.
 """
 
 import logging

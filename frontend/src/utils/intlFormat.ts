@@ -201,7 +201,7 @@ export function formatDateRangeShort(from: string, to: string, locale: string): 
 }
 
 /** English-only ("just now" / "3h ago" / "2d ago") — admin console is
- * deliberately exempt from the shared/i18n workflow (see docs/frontend.md "Admin Console"). */
+ * deliberately exempt from the shared/i18n workflow. */
 export function relativeTimeFromNow(iso: string): string {
   const hours = Math.round((Date.now() - new Date(iso).getTime()) / MS_PER_HOUR);
   if (hours < 1) return 'just now';

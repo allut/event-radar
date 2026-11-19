@@ -25,8 +25,8 @@ async def test_no_api_key_logs_and_skips_send(patch_client, monkeypatch, caplog)
 @pytest.mark.asyncio
 async def test_success_posts_expected_payload(patch_client, monkeypatch):
     monkeypatch.setattr(email.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(email.settings, "RESEND_FROM_ADDRESS", "noreply@radar.ee")
-    monkeypatch.setattr(email.settings, "FRONTEND_URL", "https://app.radar.ee")
+    monkeypatch.setattr(email.settings, "RESEND_FROM_ADDRESS", "noreply@radar.example")
+    monkeypatch.setattr(email.settings, "FRONTEND_URL", "https://app.radar.example")
 
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
     post = patch_client(resend, resp)
@@ -37,7 +37,7 @@ async def test_success_posts_expected_payload(patch_client, monkeypatch):
     _args, kwargs = post.call_args
     assert kwargs["headers"]["Authorization"] == "Bearer re_key"
     body = kwargs["json"]
-    assert body["from"] == "noreply@radar.ee"
+    assert body["from"] == "noreply@radar.example"
     assert body["to"] == ["user@example.com"]
     assert body["subject"]
     assert body["html"]
@@ -75,7 +75,7 @@ async def test_magic_link_url_carries_locale_prefix(
     patch_client, monkeypatch, locale, prefix, verify_path
 ):
     monkeypatch.setattr(email.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(email.settings, "FRONTEND_URL", "https://app.radar.ee")
+    monkeypatch.setattr(email.settings, "FRONTEND_URL", "https://app.radar.example")
     post = patch_client(resend, MagicMock(status_code=httpx.codes.OK, text="ok"))
 
     await email.send_magic_link(
@@ -83,7 +83,7 @@ async def test_magic_link_url_carries_locale_prefix(
     )
 
     body = post.call_args.kwargs["json"]
-    expected = f"https://app.radar.ee{prefix}{verify_path}?token=tok123"
+    expected = f"https://app.radar.example{prefix}{verify_path}?token=tok123"
     assert expected in body["text"]
     assert expected in body["html"]
 
@@ -94,7 +94,7 @@ async def test_google_link_confirmation_url_carries_locale_prefix(
     patch_client, monkeypatch, locale, prefix
 ):
     monkeypatch.setattr(email.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(email.settings, "FRONTEND_URL", "https://app.radar.ee")
+    monkeypatch.setattr(email.settings, "FRONTEND_URL", "https://app.radar.example")
     post = patch_client(resend, MagicMock(status_code=httpx.codes.OK, text="ok"))
 
     await email.send_google_link_confirmation(
@@ -102,6 +102,6 @@ async def test_google_link_confirmation_url_carries_locale_prefix(
     )
 
     body = post.call_args.kwargs["json"]
-    expected = f"https://app.radar.ee{prefix}/organizer/verify?token=tok123"
+    expected = f"https://app.radar.example{prefix}/organizer/verify?token=tok123"
     assert expected in body["text"]
     assert expected in body["html"]

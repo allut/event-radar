@@ -33,8 +33,7 @@ def client_key(request: Request) -> str:
     """Rate-limit / audit-log key: the real client IP.
 
     Production topology is two hops — browser -> Cloudflare Pages Function
-    proxy -> Render -> uvicorn (see frontend/functions/api/[[path]].ts and
-    docs/security.md) — so the rightmost X-Forwarded-For entry Render's own
+    proxy -> Render -> uvicorn (see frontend/functions/api/[[path]].ts) — so the rightmost X-Forwarded-For entry Render's own
     proxy appends is always a Cloudflare egress address, not the visitor
     (OWASP audit G-1). The Cloudflare Function forwards the true client IP as
     X-Client-IP alongside X-Edge-Auth, a shared secret proving the header came
@@ -84,7 +83,7 @@ def _logging_rate_limit_handler(request: Request, exc: RateLimitExceeded) -> Res
 
     slowapi's default handler is otherwise silent, so per-IP rate-limit blocks
     (scraping / brute-force probes) leave no trace in the log stream. The
-    ``event`` field keys the auth/abuse-spike query (see docs/observability.md).
+    ``event`` field keys the auth/abuse-spike query.
     """
     log.warning(
         "rate limit exceeded: path=%s",

@@ -1,4 +1,4 @@
-"""Drop users.theme_preference and organizers.theme_preference (ADR 0003):
+"""Drop users.theme_preference and organizers.theme_preference:
 the resolved theme is now device-driven with a browser-local, expiring
 override — there is no durable account-level theme to store.
 

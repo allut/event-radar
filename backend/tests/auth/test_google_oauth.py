@@ -1,4 +1,4 @@
-"""Tests for app/auth/google_oauth.py (ADR 0002) — PKCE, authorization-URL
+"""Tests for app/auth/google_oauth.py — PKCE, authorization-URL
 building, the code-for-token exchange, and ID-token verification."""
 
 import base64
@@ -86,9 +86,9 @@ class TestIsAuthoritativeIdentity:
         assert is_authoritative_identity(
             {
                 "sub": "1",
-                "email": "a@company.com",
+                "email": "a@company.example",
                 "email_verified": True,
-                "hd": "company.com",
+                "hd": "company.example",
             }
         )
 
@@ -138,7 +138,7 @@ class TestVerifyGoogleIdToken:
 
         private_key, public_key = rsa_keypair
         monkeypatch.setattr(settings, "GOOGLE_OAUTH_CLIENT_ID", "test-client-id")
-        token = _sign_test_id_token(private_key, hd="acme.com")
+        token = _sign_test_id_token(private_key, hd="acme.example")
 
         fake_signing_key = MagicMock(key=public_key)
         monkeypatch.setattr(
@@ -152,7 +152,7 @@ class TestVerifyGoogleIdToken:
             "sub": "1234567890",
             "email": "person@gmail.com",
             "email_verified": True,
-            "hd": "acme.com",
+            "hd": "acme.example",
         }
         assert set(identity.keys()) == {"sub", "email", "email_verified", "hd"}
 

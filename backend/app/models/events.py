@@ -228,8 +228,8 @@ class Event(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
     # Organizer direct-submission fields (Phase 1). NULL for every
-    # scraper-ingested event. See docs/organizer-portal.md for the submit ->
-    # inline classify -> inline publish -> post-hoc review lifecycle.
+    # scraper-ingested event. Lifecycle: submit ->
+    # inline classify -> inline publish -> post-hoc review.
     submitted_by_organizer_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("organizers.id", ondelete="SET NULL"),
@@ -246,8 +246,7 @@ class Event(Base):
     # detail-refetch. Entries are field names, or "<field>:<locale>" for a
     # per-locale text field (title_localized/description_localized/
     # important_info_localized). Price fields (price_min/price_max/currency/
-    # has_free_tier) never participate — see CONTEXT.md's Event Claiming
-    # glossary and issue #410.
+    # has_free_tier) never participate (issue #410).
     pinned_fields: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb"), default=list
     )

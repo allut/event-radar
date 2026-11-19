@@ -1,6 +1,5 @@
 """Claim lifecycle (#413): create / self-cancel / recheck / expiry-sweep,
-wiring #412's standalone verification engine into real `Claim` rows. See
-CONTEXT.md's Event Claiming glossary and docs/organizer-portal.md.
+wiring #412's standalone verification engine into real `Claim` rows.
 """
 
 import asyncio
@@ -952,7 +951,7 @@ async def expire_stale_claims(db: AsyncSession) -> dict:
     internally (mirrors build_daily_feeds) so the expiry emails below
     reflect only durably expired rows — app/scheduler.py wires this job with
     commit=False."""
-    # UTC on purpose: TTL arithmetic (see CLAUDE.md "Conventions") — a Tallinn-aware
+    # UTC on purpose: TTL arithmetic — a Tallinn-aware
     # `now - timedelta(days=N)` would shift by an hour across a DST change.
     now = datetime.now(timezone.utc)
     automated_cutoff = now - timedelta(days=CLAIM_EXPIRY_DAYS)

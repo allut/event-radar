@@ -28,7 +28,7 @@ class TestOrganizerFromJsonldItems:
                 "@type": "Organization",
                 "@id": "https://www.piletilevi.ee/en/promoters/123/acme",
                 "name": "Acme Productions",
-                "url": "https://acme.ee",
+                "url": "https://acme.example",
             },
         }
         soup = _soup(event)
@@ -37,19 +37,19 @@ class TestOrganizerFromJsonldItems:
         assert result == {
             "external_id": "https://www.piletilevi.ee/en/promoters/123/acme",
             "name": "Acme Productions",
-            "url": "https://acme.ee",
+            "url": "https://acme.example",
         }
 
     def test_falls_back_to_url_when_no_id(self):
         event = {
             "@type": "Event",
-            "organizer": {"@type": "Organization", "name": "Acme", "url": "https://acme.ee"},
+            "organizer": {"@type": "Organization", "name": "Acme", "url": "https://acme.example"},
         }
         soup = _soup(event)
         result = organizer_from_jsonld_items(parse_jsonld_event_items(soup))
 
         assert result is not None
-        assert result["external_id"] == "https://acme.ee"
+        assert result["external_id"] == "https://acme.example"
 
     def test_none_when_organizer_absent(self):
         event = {"@type": "Event", "name": "No Organizer"}

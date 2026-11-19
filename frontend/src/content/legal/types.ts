@@ -42,7 +42,7 @@ export interface LegalDoc {
   title: string;
   /** ISO date, e.g. '2026-07-24'. */
   lastUpdated: string;
-  /** Replaces `lastUpdated` while the slots flag is on, for a doc whose slots-on copy is newer. */
+  /** Replaces `lastUpdated` while the slots flag is on; never older than it. Set it to the day the flag flips. */
   lastUpdatedSlots?: string;
   /** Shows the DRAFT notice above the title (Organizer terms until legal review). */
   draft?: boolean;

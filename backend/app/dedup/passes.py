@@ -59,7 +59,7 @@ async def candidate_pair_ids_in_window(
 
     The fuzzy title/venue check runs in Python on these pairs via
     ``is_candidate_pair`` — never push that into SQL, and never push this time
-    check into Python (docs/pipeline.md "Pipeline Code Rules"). The self-join is bounded by the existing
+    check into Python. The self-join is bounded by the existing
     (starts_at, status) B-tree: the planner can range-scan ``b`` on a sargable
     BETWEEN around ``a.starts_at``.
 

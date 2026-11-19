@@ -27,9 +27,9 @@ const pendingClaims = {
       publisher: { id: 5, name: 'KUMU' },
       event_series_key: null,
       verification_mechanism: 'dns_txt',
-      verification_domain: 'kesklinnajazz.ee',
+      verification_domain: 'jazz-venue.example',
       verification_contact: null,
-      dns_record_name: '_eventradar-verify.kesklinnajazz.ee',
+      dns_record_name: '_eventradar-verify.jazz-venue.example',
       proof_token: 'er-verify-abc123',
       justification: null,
       event_id: 42,
@@ -60,11 +60,11 @@ const pendingClaims = {
       kind: 'publisher',
       status: 'pending',
       organizer: { id: 12, email: 'promoter@example.com', name: null },
-      publisher: { id: 7, name: 'Nikulin Circus' },
+      publisher: { id: 7, name: 'Example Circus' },
       event_series_key: null,
       verification_mechanism: 'piletilevi_mailbox',
       verification_domain: null,
-      verification_contact: 'bookings@nikulincircus.ee',
+      verification_contact: 'bookings@examplecircus.example',
       dns_record_name: null,
       proof_token: 'er-verify-jkl012',
       justification: null,
@@ -113,7 +113,7 @@ describe('AdminClaims', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Kesklinna Jazz Klubi' })).toBeInTheDocument());
     expect(screen.getByText('DNS-TXT check')).toBeInTheDocument();
-    expect(screen.getByText('_eventradar-verify.kesklinnajazz.ee')).toBeInTheDocument();
+    expect(screen.getByText('_eventradar-verify.jazz-venue.example')).toBeInTheDocument();
     expect(mockGet).toHaveBeenCalledWith('/admin/claims?status=pending&limit=50&offset=0');
   });
 
@@ -135,7 +135,7 @@ describe('AdminClaims', () => {
     await userEvent.click(screen.getByRole('button', { name: /promoter@example.com/ }));
     expect(screen.getByText('Contact-mailbox check')).toBeInTheDocument();
     expect(screen.getAllByText('promoter@example.com').length).toBeGreaterThan(0);
-    expect(screen.getByText('bookings@nikulincircus.ee')).toBeInTheDocument();
+    expect(screen.getByText('bookings@examplecircus.example')).toBeInTheDocument();
     expect(screen.getByText('No match')).toBeInTheDocument();
   });
 

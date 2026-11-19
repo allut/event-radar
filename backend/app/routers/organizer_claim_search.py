@@ -1,4 +1,4 @@
-"""Organizer finding a claimable event (#414, narrowed by #441/ADR 0004):
+"""Organizer finding a claimable event (#414, narrowed by #441):
 search and onboarding suggestions. Both exclude events that already carry an
 *approved* claim on their Publisher/Series target — a pending-only target
 still surfaces, since a rival claimant must be able to start proving ownership
@@ -89,7 +89,7 @@ def _publisher_claimed_sql() -> ColumnElement[bool]:
     claim holds. Pushed into the candidate query so the LIMIT window is filled
     with claimable rows instead of being trimmed in Python afterwards (which
     returned short pages once many candidates were already claimed). Approved
-    only since #441/ADR 0004: a pending-only target still has to surface as
+    only since #441: a pending-only target still has to surface as
     claimable so a rival claimant can start proving ownership."""
     # Aliased + explicitly correlated to the outer Event: un-aliased, SQLAlchemy
     # correlates the inner EventSource to the EXISTS's own EventSource and the

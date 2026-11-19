@@ -1,4 +1,4 @@
-"""Cross-track test for Google sign-in (ADR 0002, #298): the same Google
+"""Cross-track test for Google sign-in: the same Google
 `sub` signing in on both the consumer and organizer tracks must produce two
 independent rows — a `UserIdentity` and an `OrganizerIdentity` — that never
 merge and never collide, mirroring how email already works across the two

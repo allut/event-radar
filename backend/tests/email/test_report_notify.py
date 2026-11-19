@@ -25,10 +25,10 @@ async def test_no_api_key_logs_and_skips_send(patch_client, monkeypatch, make_ev
 @pytest.mark.asyncio
 async def test_success_posts_expected_content(patch_client, monkeypatch, make_event):
     monkeypatch.setattr(report_notify.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(report_notify.settings, "RESEND_FROM_ADDRESS", "noreply@radar.ee")
-    monkeypatch.setattr(report_notify.settings, "CONTACT_TO_ADDRESS", "owner@radar.ee")
-    monkeypatch.setattr(report_notify.settings, "FRONTEND_URL", "https://radar.ee")
-    monkeypatch.setattr(report_notify.settings, "BACKEND_URL", "https://api.radar.ee")
+    monkeypatch.setattr(report_notify.settings, "RESEND_FROM_ADDRESS", "noreply@radar.example")
+    monkeypatch.setattr(report_notify.settings, "CONTACT_TO_ADDRESS", "owner@radar.example")
+    monkeypatch.setattr(report_notify.settings, "FRONTEND_URL", "https://radar.example")
+    monkeypatch.setattr(report_notify.settings, "BACKEND_URL", "https://api.radar.example")
 
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
     post = patch_client(resend, resp)
@@ -47,15 +47,15 @@ async def test_success_posts_expected_content(patch_client, monkeypatch, make_ev
     _args, kwargs = post.call_args
     assert kwargs["headers"]["Authorization"] == "Bearer re_key"
     body = kwargs["json"]
-    assert body["from"] == "noreply@radar.ee"
-    assert body["to"] == ["owner@radar.ee"]
+    assert body["from"] == "noreply@radar.example"
+    assert body["to"] == ["owner@radar.example"]
     assert "Rave" in body["subject"]
 
     html_body = body["html"]
     # user-supplied fields escaped
     assert "&lt;night&gt;" in html_body
     assert "&lt;content&gt;" in html_body
-    assert "https://radar.ee/events/42" in html_body
+    assert "https://radar.example/events/42" in html_body
     assert event.url in html_body
     assert "sexual_or_explicit" in html_body
     assert "reporter@example.com" in html_body
@@ -65,12 +65,12 @@ async def test_success_posts_expected_content(patch_client, monkeypatch, make_ev
     assert "r***@example.com" not in html_body
     # single console deep link, no curl snippets
     assert "curl" not in html_body
-    assert "https://radar.ee/admin/reports?report=42" in html_body
+    assert "https://radar.example/admin/reports?report=42" in html_body
 
     text_body = body["text"]
     assert "reporter@example.com" in text_body
     assert "curl" not in text_body
-    assert "https://radar.ee/admin/reports?report=42" in text_body
+    assert "https://radar.example/admin/reports?report=42" in text_body
 
 
 @pytest.mark.asyncio

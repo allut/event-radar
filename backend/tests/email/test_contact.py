@@ -22,8 +22,8 @@ async def test_no_api_key_logs_and_skips_send(patch_client, monkeypatch):
 @pytest.mark.asyncio
 async def test_success_posts_expected_payload(patch_client, monkeypatch):
     monkeypatch.setattr(contact.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(contact.settings, "RESEND_FROM_ADDRESS", "noreply@radar.ee")
-    monkeypatch.setattr(contact.settings, "CONTACT_TO_ADDRESS", "owner@radar.ee")
+    monkeypatch.setattr(contact.settings, "RESEND_FROM_ADDRESS", "noreply@radar.example")
+    monkeypatch.setattr(contact.settings, "CONTACT_TO_ADDRESS", "owner@radar.example")
 
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
     post = patch_client(resend, resp)
@@ -34,8 +34,8 @@ async def test_success_posts_expected_payload(patch_client, monkeypatch):
     _args, kwargs = post.call_args
     assert kwargs["headers"]["Authorization"] == "Bearer re_key"
     body = kwargs["json"]
-    assert body["from"] == "noreply@radar.ee"
-    assert body["to"] == ["owner@radar.ee"]
+    assert body["from"] == "noreply@radar.example"
+    assert body["to"] == ["owner@radar.example"]
     assert body["reply_to"] == "jane@example.com"
     assert "Jane" in body["subject"]
     # user-supplied HTML must be escaped in the html body

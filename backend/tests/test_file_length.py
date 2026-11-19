@@ -2,7 +2,7 @@
 
 Line count only nominates a file; cohesion decides. A long file with one job goes
 in STAY_WHOLE with its reason. A file still waiting for its split goes in
-PENDING_SPLIT with the issue that removes it. See docs/conventions.md, File Length.
+PENDING_SPLIT with the issue that removes it.
 """
 
 from __future__ import annotations

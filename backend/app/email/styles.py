@@ -10,7 +10,7 @@ stripped.
 one bundle, the light palette with a ``prefers-color-scheme:dark`` override,
 so a client that honors OS dark mode renders dark and one that doesn't (or
 strips ``<style>``) still gets a readable, intentional light render. There is
-no per-recipient theme column to branch on (ADR 0003) — a stored theme can't
+no per-recipient theme column to branch on — a stored theme can't
 track a device that changes after the mail is sent. The bundle declares its
 scheme via ``<meta name="color-scheme">`` (see ``EmailStyles.color_scheme``
 and ``EMAIL_DOCUMENT``) so clients stop guessing and inverting on their own.
@@ -285,7 +285,7 @@ EMAIL_STYLES = _build_styles(
 
 
 def get_email_styles() -> EmailStyles:
-    """The one email bundle (ADR 0003) — light base, declares 'light dark',
+    """The one email bundle — light base, declares 'light dark',
     and carries a prefers-color-scheme:dark override so a client honoring OS
     theme still renders dark instead of force-inverting a purely-light email."""
     return EMAIL_STYLES

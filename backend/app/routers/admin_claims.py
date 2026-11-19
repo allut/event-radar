@@ -76,8 +76,7 @@ router = APIRouter(prefix="/admin")
 # Claims queue (#420): grant/decline an admin-review-routed claim, revoke an
 # already-granted one. Distinct from /admin/submissions (organizer-trust
 # review) and /admin/reports (content moderation) — a claim's grant/decline/
-# revoke is its own decision shape. See CONTEXT.md's Event Claiming glossary
-# and app/claims/lifecycle.py for the organizer-facing create/cancel/recheck
+# revoke is its own decision shape. See app/claims/lifecycle.py for the organizer-facing create/cancel/recheck
 # endpoints this complements.
 # ---------------------------------------------------------------------------
 

@@ -1,4 +1,4 @@
-"""Drift guards for CLAUDE.md Code Quality Rules that ruff can't express.
+"""Drift guards for code quality rules that ruff can't express.
 
 Each check scans `app/` source text or its AST, so it needs no database.
 """

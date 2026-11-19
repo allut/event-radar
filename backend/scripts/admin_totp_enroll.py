@@ -4,11 +4,11 @@ Not part of the running app — run once locally to generate a fresh secret,
 scan the printed QR code into an authenticator app (Google Authenticator,
 1Password, Authy, ...), then set the printed secret as ADMIN_TOTP_SECRET in
 the Render dashboard (see render.yaml). There are no backup codes — losing
-the authenticator means rotating ADMIN_TOTP_SECRET (see docs/backend-ops.md).
+the authenticator means rotating ADMIN_TOTP_SECRET.
 
 Run from backend/ with the venv active:
     python scripts/admin_totp_enroll.py
-    python scripts/admin_totp_enroll.py --account admin@eventradar.ee
+    python scripts/admin_totp_enroll.py --account admin@example.com
 """
 
 import argparse
@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pyotp
 import qrcode  # type: ignore[import-untyped]
 
-# Matches the FastAPI app title / product name (CLAUDE.md "Project Overview") —
+# Matches the FastAPI app title / product name —
 # not worth a shared constant for a script that runs once per admin enrolled.
 ISSUER_NAME = "Event Radar Admin"
 DEFAULT_ACCOUNT_NAME = "admin"

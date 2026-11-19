@@ -32,7 +32,7 @@ function detail(overrides: Record<string, unknown> = {}, actions: Record<string,
     event_id: 7,
     event_title: 'Noblessner Food Fest',
     organizer_id: 3,
-    organizer_name: 'Noblessner Events OÜ',
+    organizer_name: 'Example Harbour Events OÜ',
     status: 'paid',
     state: 'live',
     paused_reason: null,
@@ -47,9 +47,9 @@ function detail(overrides: Record<string, unknown> = {}, actions: Record<string,
     complimentary_note: null,
     invoice_reference: 'ER-M-0007',
     invoice_source: 'admin',
-    advertiser_legal_name: 'Noblessner Events OÜ',
+    advertiser_legal_name: 'Example Harbour Events OÜ',
     advertiser_registry_code: '12345678',
-    billing_email: 'info@noblessner.ee',
+    billing_email: 'info@noblessner.example',
     granted_by: 'admin',
     paid_at: '2026-10-13T11:20:00+03:00',
     ended_at: null,
@@ -82,7 +82,7 @@ function detail(overrides: Record<string, unknown> = {}, actions: Record<string,
         end_date: '2026-10-20',
         net_price_cents: 3500,
         vat_rate_percent: '24.00',
-        label_text: 'REKLAAM · Noblessner Events OÜ',
+        label_text: 'REKLAAM · Example Harbour Events OÜ',
       },
     ],
     audit: [
@@ -333,7 +333,7 @@ describe('AdminPromotionDetail', () => {
     serve(detail());
     renderWithProviders(<AdminPromotionDetail promotionId="5" />);
     const snaps = await screen.findByRole('region', { name: /Content snapshots/ });
-    expect(within(snaps).getByText('REKLAAM · Noblessner Events OÜ')).toBeInTheDocument();
+    expect(within(snaps).getByText('REKLAAM · Example Harbour Events OÜ')).toBeInTheDocument();
     expect(within(snaps).getByText(/mark paid/)).toBeInTheDocument();
     expect(within(snaps).getByText(/Noblessneri toidufestival/)).toBeInTheDocument();
   });

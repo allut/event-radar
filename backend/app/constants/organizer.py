@@ -16,7 +16,7 @@ ORGANIZER_DAILY_VENUE_CREATION_CAP = 20
 
 # Claim-editing surface (#416). Field-name pinning vocabulary lives directly
 # in organizer_claim_edits.py (pin_key() calls) rather than as constants
-# here — see CONTEXT.md's Event Claiming glossary for the pinned/synced
+# here; see there for the pinned/synced
 # rules (price fields and categories never participate).
 
 # Field length caps for SubmitEventBody/PatchEventBody (routers/organizer_events.py).

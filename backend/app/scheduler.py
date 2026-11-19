@@ -162,7 +162,7 @@ _run_sweep_promotions = _scheduled(
 
 
 def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
-    """Wire the full cron schedule (see docs/backend-ops.md "Scheduled Jobs" for the cadence)."""
+    """Wire the full cron schedule."""
     # Organizer discovery — weekly Sunday at ORGANIZER_SYNC_HOUR (never hour 3: it repeats on fall-back day, #633)
     scheduler.add_job(
         _run_organizer_sync,
@@ -293,7 +293,7 @@ def start_scheduler() -> AsyncIOScheduler | None:
     """Construct, wire and start the embedded scheduler, or return None when the
     development-only ENABLE_SCHEDULER kill switch is off.
 
-    Off is for throwaway environments (the dev container defaults to it): the
+    Off is for throwaway environments such as local development: the
     schedule drives real HTTP scrapes of live third-party sites, real LLM calls,
     and real digest email, and `uvicorn --reload` left running overnight arms all
     of it. Every job here also has a manual POST /admin/* trigger, so nothing

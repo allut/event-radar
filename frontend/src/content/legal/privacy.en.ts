@@ -3,8 +3,8 @@ import type { LegalDoc } from './types';
 
 const doc: LegalDoc = {
   title: 'Privacy Policy',
-  lastUpdated: '2026-10-17',
-  lastUpdatedSlots: '2026-10-18',
+  lastUpdated: '2026-11-02',
+  lastUpdatedSlots: '2026-11-02',
   intro: [
     {
       kind: 'p',
@@ -20,7 +20,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'The data controller is Aleksei Lutkov, operating Event Radar as a sole trader in Estonia. For any privacy question or to exercise your rights, contact ',
+            'The data controller is Aleksei Lutkov, a private individual operating Event Radar in Estonia. For any privacy question or to exercise your rights, contact ',
             { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             '.',
           ],

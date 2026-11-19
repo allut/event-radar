@@ -41,7 +41,7 @@ def _make_claim(
     publisher_id: int | None = 5,
     event_series_key: str | None = None,
     verification_mechanism: str | None = CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
-    verification_domain: str | None = "example.ee",
+    verification_domain: str | None = "example.com",
     verification_contact: str | None = None,
     justification: str | None = None,
     proof_token: str = "er-verify-abc123",
@@ -222,7 +222,7 @@ async def test_list_pending_claims_shows_dns_evidence_and_resolves_publisher_eve
         kind=CLAIM_KIND_PUBLISHER,
         publisher_id=5,
         verification_mechanism=CLAIM_VERIFICATION_MECHANISM_DNS_TXT,
-        verification_domain="kesklinnajazz.ee",
+        verification_domain="jazz-venue.example",
     )
     event = _make_event(event_id=42)
     es = MagicMock()
@@ -253,7 +253,7 @@ async def test_list_pending_claims_shows_dns_evidence_and_resolves_publisher_eve
     assert resp.status_code == http.HTTPStatus.OK
     row = resp.json()["claims"][0]
     assert row["verification_mechanism"] == CLAIM_VERIFICATION_MECHANISM_DNS_TXT
-    assert row["dns_record_name"] == "_eventradar-verify.kesklinnajazz.ee"
+    assert row["dns_record_name"] == "_eventradar-verify.jazz-venue.example"
     assert row["event_id"] == 42
     assert row["organizer"]["email"] == "organizer@example.com"
     assert row["publisher"]["name"] == "Test Publisher"
@@ -308,7 +308,7 @@ async def test_list_pending_claims_shows_mailbox_mismatch_evidence(
         publisher_id=7,
         verification_mechanism=CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX,
         verification_domain=None,
-        verification_contact="promoter@other.com",
+        verification_contact="promoter@other.example",
     )
 
     db = mock_db
@@ -332,7 +332,7 @@ async def test_list_pending_claims_shows_mailbox_mismatch_evidence(
     assert resp.status_code == http.HTTPStatus.OK
     row = resp.json()["claims"][0]
     assert row["verification_mechanism"] == CLAIM_VERIFICATION_MECHANISM_PILETILEVI_MAILBOX
-    assert row["verification_contact"] == "promoter@other.com"
+    assert row["verification_contact"] == "promoter@other.example"
     assert row["organizer"]["email"] == "organizer@example.com"
 
 

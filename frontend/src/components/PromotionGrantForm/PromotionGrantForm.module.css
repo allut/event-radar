@@ -37,7 +37,7 @@
 
 .input { composes: input inputFieldSize from '../shared/AdminCommerce.module.css'; }
 
-/* Doubled: out-ranks AdminCommerce's .input font-family (design-system.md §7). */
+/* Doubled: out-ranks AdminCommerce's .input font-family. */
 .mono.mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;

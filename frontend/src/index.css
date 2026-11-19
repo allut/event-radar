@@ -29,8 +29,8 @@
   --border-subtle: #1c2333;
   --success: #4cad7f;
   --danger: #d95757;
-  /* Google's mandated Dark-theme button triple (docs/adr/0002 Design-system
-     exception) — not part of our palette, never redefine outside this pair. */
+  /* Google's mandated Dark-theme button triple —
+     not part of our palette, never redefine outside this pair. */
   --google-btn-bg: #131314;
   --google-btn-border: #8e918f;
   --google-btn-text: #e3e3e3;
@@ -88,7 +88,7 @@
   --font-body: 'Manrope Variable', system-ui, sans-serif;
   /* System stack only (no bundled webfont) — used by the admin console's
      data/label treatment (issue #154). Never a webfont: font-src 'self' in
-     the SPA's CSP (docs/backend-ops.md) only serves the two @fontsource
+     the SPA's CSP only serves the two @fontsource
      faces already bundled in main.tsx. */
   --font-mono: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   /* Admin console's own type stack (issue #211) — deliberately not an alias
@@ -307,7 +307,7 @@
      siblings drop to first/current/last (340px admin column, 390px phone). */
   --bp-pager-stack: 560px;
   --bp-pager-collapse: 440px;
-  /* Wide band (docs/design-system.md §10): floor where page widths jump to the
+  /* Wide band: floor where page widths jump to the
      1760px wrap and the card grid locks to 6 columns. Above a 1920px
      laptop viewport (2880×1620 @150%), below a 2560px monitor. */
   --bp-wide: 2000px;
@@ -454,7 +454,7 @@
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
   --scrim-vertical: linear-gradient(0deg, rgba(15, 17, 25, 0.94) 6%, rgba(15, 17, 25, 0.55) 42%, rgba(15, 17, 25, 0.72));
   /* Display scale (#465): rem bounds, max ÷ min ≤ 1.5 so every token reaches
-     2x by 300% browser zoom — see docs/design-system.md §4. */
+     2x by 300% browser zoom. */
   --font-size-display-hero: clamp(4rem, 7.2vw, 6rem);
   --font-size-display-plate: clamp(2.75rem, 5vw, 4rem); /* .figValue, the stat numerals */
   --font-size-display-section: clamp(2.375rem, 4.4vw, 3.5rem);
@@ -469,7 +469,7 @@
   --plates-max-width: 1240px;               /* wide-band plate row cap (rows stagger to alternate wrap edges) */
   --plate-text-min: 260px;                  /* B3 text-column grid minimum */
   --plate-image-filter: saturate(0.85) contrast(1.04);
-  /* Top bar (direction A · Programme) -- docs/design-system.md §3. */
+  /* Top bar (direction A · Programme). */
   --accent-ink: #e8a838;              /* gold used as text; light value darkened for AA */
   --bar-h: 72px;                      /* desktop bar, unscrolled */
   --bar-h-condensed: 54px;            /* desktop bar, scrolled */
@@ -522,7 +522,7 @@
   --border-subtle: #e6e9f0;
   --success: #1f7a4f;     /* darkened from the dark-theme hex for AA as text on white */
   --danger: #b23a3a;      /* darkened from the dark-theme hex for AA as text on white */
-  /* Google's mandated Light-theme button triple (docs/adr/0002). */
+  /* Google's mandated Light-theme button triple. */
   --google-btn-bg: #ffffff;
   --google-btn-border: #747775;
   --google-btn-text: #1f1f1f;
@@ -579,7 +579,7 @@
   --poster-glow-warm: var(--poster-glow-warm-light);
 }
 
-/* Wide band (docs/design-system.md §10, map #459) — pure reflow, no fluid tokens.
+/* Wide band (map #459) — pure reflow, no fluid tokens.
    Literal mirrors --bp-wide (custom properties can't drive @media).
    Theme-neutral, so the light block above needs no counterpart. */
 @media (min-width: 2000px) {

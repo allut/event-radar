@@ -49,7 +49,6 @@ class Organizer(Base):
         Boolean, nullable=False, server_default="false"
     )
     # Optional display name (#175) — no logo/contact-info fields, out of scope
-    # per docs/organizer-portal.md "Organizer Settings".
     name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Durable "has authenticated" signal (mirrors User.email_verified). The
     # weekly cleanup prunes organizers where this is NULL; magic-link rows are
@@ -82,7 +81,7 @@ class OrganizerMagicLink(Base):
         DateTime(timezone=True), nullable=True
     )
     # Set when this magic link was sent to confirm a pending Google-identity
-    # link (ADR 0002) rather than to start a session — mirrors
+    # link rather than to start a session — mirrors
     # AuthMagicLink.pending_google_sub.
     pending_google_sub: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
@@ -145,7 +144,7 @@ class OrganizerImageUpload(Base):
 
 class Venue(Base):
     """A reusable venue an organizer builds up across event submissions
-    (docs/organizer-portal.md, #173). name/name_en/name_ru mirror the
+    (#173). name/name_en/name_ru mirror the
     Persona per-locale-column pattern rather than Event's JSONB
     localized-field pattern, since a venue has no ingestion path that fills
     locales piecemeal. address is a single non-localized column — street

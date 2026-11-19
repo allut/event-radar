@@ -40,9 +40,9 @@ def test_confirmation_is_distinct_from_the_plain_sign_in_email():
 
 
 def test_confirmation_escapes_the_address():
-    html = build_google_link_confirmation_html(VERIFY_URL, 15, "a<b>@x.com", "en")
-    assert "a<b>@x.com" not in html
-    assert "a&lt;b&gt;@x.com" in html
+    html = build_google_link_confirmation_html(VERIFY_URL, 15, "a<b>@x.example", "en")
+    assert "a<b>@x.example" not in html
+    assert "a&lt;b&gt;@x.example" in html
 
 
 @pytest.mark.parametrize("locale", ["en", "et", "ru"])
@@ -59,7 +59,7 @@ async def test_send_google_link_confirmation_posts_own_subject_and_link(
     patch_client, monkeypatch
 ):
     monkeypatch.setattr(email.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(email.settings, "FRONTEND_URL", "https://app.radar.ee")
+    monkeypatch.setattr(email.settings, "FRONTEND_URL", "https://app.radar.example")
     post = patch_client(resend, MagicMock(status_code=httpx.codes.OK, text="ok"))
 
     await email.send_google_link_confirmation(
@@ -69,7 +69,7 @@ async def test_send_google_link_confirmation_posts_own_subject_and_link(
     body = post.call_args.kwargs["json"]
     assert body["to"] == ["person@yahoo.com"]
     assert body["subject"] == "Confirm Google sign-in for Event Radar"
-    assert "https://app.radar.ee/en/organizer/verify?token=tok123" in body["text"]
+    assert "https://app.radar.example/en/organizer/verify?token=tok123" in body["text"]
 
 
 @pytest.mark.asyncio
@@ -112,8 +112,8 @@ async def test_send_identity_linked_notice_skips_without_api_key(
 
 
 def test_notice_headers_carry_brand_mark():
-    confirmation = build_google_link_confirmation_html(VERIFY_URL, 15, "a@b.com", "en")
-    notice = build_identity_linked_html("a@b.com", "en")
+    confirmation = build_google_link_confirmation_html(VERIFY_URL, 15, "a@b.example", "en")
+    notice = build_identity_linked_html("a@b.example", "en")
 
     assert "cid:event-radar-mark" in confirmation
     assert "cid:event-radar-mark" in notice

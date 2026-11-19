@@ -8,7 +8,7 @@ interface GoogleSignInButtonProps {
 }
 
 /** Plain top-level-navigation link to the backend's OAuth `start` endpoint —
- * no client-side OAuth logic, no state handling in JS (ADR 0002). Reused
+ * no client-side OAuth logic, no state handling in JS. Reused
  * verbatim by the consumer track (#297) via its own `href`. */
 export default function GoogleSignInButton({ href, locale }: GoogleSignInButtonProps) {
   return (

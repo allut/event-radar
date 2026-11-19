@@ -111,7 +111,7 @@ class TestHostIsAllowed:
         assert host_is_allowed("en.fienta.com") is True
 
     def test_unrelated_host_rejected(self):
-        assert host_is_allowed("evil.com") is False
+        assert host_is_allowed("evil.example") is False
 
     def test_lookalike_suffix_not_matched(self):
         # "notfienta.com" ends with "fienta.com" as a raw string but is not a
@@ -195,7 +195,7 @@ class TestSafeFetchableUrl:
 
     @pytest.mark.asyncio
     async def test_non_allowlisted_host_rejected(self):
-        result = await safe_fetchable_url("https://evil.com/e/123", "fienta")
+        result = await safe_fetchable_url("https://evil.example/e/123", "fienta")
         assert result is None
 
     @pytest.mark.asyncio
@@ -511,7 +511,7 @@ class TestIsNonEventText:
 
     def test_in_person_koolitus_not_flagged(self):
         assert is_non_event_text(
-            "Vaimse tervise esmaabi koolitus Tallinnas", "Peaasjad MTÜ"
+            "Vaimse tervise esmaabi koolitus Tallinnas", "Example Essentials MTÜ"
         ) is False
 
     def test_gift_card_in_description_scope_note(self):
@@ -1340,13 +1340,13 @@ class TestInsertNormalizedEvent:
             external_id="ext-3",
             title="Organizer Event",
             starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
-            url="https://mytheatre.ee/tickets/42",
+            url="https://mytheatre.example/tickets/42",
         )
 
         result = await insert_normalized_event(mock_db, source, normalized)
 
         assert result is not None
-        assert result.url == "https://mytheatre.ee/tickets/42"
+        assert result.url == "https://mytheatre.example/tickets/42"
 
     @pytest.mark.asyncio
     async def test_adapter_kind_drops_arbitrary_host_url(self, mock_db):
@@ -1359,7 +1359,7 @@ class TestInsertNormalizedEvent:
             external_id="ext-4",
             title="Scraped Event",
             starts_at=datetime(2026, 6, 1, 18, 0, tzinfo=TALLINN_TZ),
-            url="https://mytheatre.ee/tickets/42",
+            url="https://mytheatre.example/tickets/42",
         )
 
         result = await insert_normalized_event(mock_db, source, normalized)
@@ -1532,8 +1532,8 @@ class TestSafeRenderUrl:
     @pytest.mark.parametrize(
         "url",
         [
-            "https://evil.com\\@fienta.com/x",
-            "https://evil.com%5C@fienta.com/x",
+            "https://evil.example\\@fienta.com/x",
+            "https://evil.example%5C@fienta.com/x",
             "https://user:pw@fienta.com/x",
             "https://fienta.com:8443/x",
             "https://fienta.com/a b",
@@ -1599,7 +1599,7 @@ class TestLocaleVariantGuardRejection:
 
         soup = BeautifulSoup(
             '<html lang="et"><link rel="alternate" hreflang="en" '
-            'href="https://example.ee/en/e/1"></html>',
+            'href="https://example.com/en/e/1"></html>',
             "html.parser",
         )
 
@@ -1612,7 +1612,7 @@ class TestLocaleVariantGuardRejection:
         titles, descs, infos = await fetch_locale_variants(
             None,
             soup,
-            "https://example.ee/e/1",
+            "https://example.com/e/1",
             frozenset({"et", "en"}),
             lambda s, loc: ("t", "d", None),
             fetch=_fetch,

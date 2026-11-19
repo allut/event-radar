@@ -1,10 +1,10 @@
-/* Google's mandated Light/Dark button triple (docs/adr/0002 Design-system
-   exception) — --google-btn-* tokens (index.css), not our palette. The
+/* Google's mandated Light/Dark button triple —
+   --google-btn-* tokens (index.css), not our palette. The
    shared btnOutline base gives border-radius:0 + the hairline border shape;
    every color it would otherwise inherit is overridden below since Google's
    triple is fixed, not theme-derived from our accent.
    min-height (not height) + padding let the box grow when the label wraps —
-   ET/RU run ~1.6x EN (docs/design-system.md §4) and wrap at narrow widths. */
+   ET/RU run ~1.6x EN and wrap at narrow widths. */
 .button {
   composes: btnOutline from '../Button.module.css';
   display: flex;

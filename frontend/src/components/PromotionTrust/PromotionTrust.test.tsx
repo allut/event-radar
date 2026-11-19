@@ -51,7 +51,7 @@ function promo(overrides: Record<string, unknown> = {}) {
     id: 12,
     event_id: 7,
     event_title: 'Noblessner Food Fest',
-    organizer_name: 'Noblessner Events OÜ',
+    organizer_name: 'Example Harbour Events OÜ',
     status: 'paid',
     state: 'live',
     start_date: '2026-10-14',
@@ -69,7 +69,7 @@ function promo(overrides: Record<string, unknown> = {}) {
     invoice_url: null,
     awaiting_checkout: false,
     checkout_expires_at: null,
-    advertiser_legal_name: 'Noblessner Events OÜ',
+    advertiser_legal_name: 'Example Harbour Events OÜ',
     ...overrides,
   };
 }
@@ -157,13 +157,13 @@ describe('Complaint logger', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('A note is required.');
     expect(mockPost).not.toHaveBeenCalled();
 
-    await userEvent.type(screen.getByLabelText('Complainant (optional)'), 'maria.k@example.ee');
+    await userEvent.type(screen.getByLabelText('Complainant (optional)'), 'maria.k@example.com');
     await userEvent.type(screen.getByLabelText('Note (required)'), 'The promoted card looked like a normal listing.');
     await userEvent.click(screen.getByRole('button', { name: 'Log complaint' }));
     await waitFor(() =>
       expect(mockPost).toHaveBeenCalledWith('/admin/promotions/complaints', {
         source: 'email',
-        complainant: 'maria.k@example.ee',
+        complainant: 'maria.k@example.com',
         note: 'The promoted card looked like a normal listing.',
       }),
     );

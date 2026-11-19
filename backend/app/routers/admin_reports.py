@@ -76,7 +76,7 @@ async def admin_list_reports(
 ) -> dict:
     """Content-moderation review queue: one row per event aggregating its
     REPORT_STATUS_OPEN reports (distinct from GET /admin/submissions, which
-    is organizer-trust review — see CONTEXT.md's Report/Resolve glossary).
+    is organizer-trust review).
     Excludes cancelled events. ``reason``/``illegal_only`` narrow which
     events qualify for the queue (an event with at least one matching open
     report); each qualifying event's row still aggregates *all* of its open

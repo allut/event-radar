@@ -2,7 +2,7 @@
 
 Seeds signals that share one ``created_at`` and walks GET /feedback/events
 page by page: nothing may repeat or go missing. Needs a migrated Postgres
-(the devcontainer db); skipped when DATABASE_URL is unset or unreachable.
+(a local Postgres); skipped when DATABASE_URL is unset or unreachable.
 Everything runs inside one transaction that is rolled back.
 """
 

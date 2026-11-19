@@ -240,7 +240,7 @@ async def verify_magic_link(
 
     # Atomic UPDATE: collapses read-then-write into one statement, preventing the
     # TOCTOU race where two concurrent requests both see used_at IS NULL.
-    # Also returns pending_google_sub (ADR 0002): set when this link was sent
+    # Also returns pending_google_sub: set when this link was sent
     # to confirm a Google-identity link rather than to start a session.
     result = await db.execute(
         update(AuthMagicLink)
@@ -267,8 +267,8 @@ async def verify_magic_link(
 
     # Same transaction as the link-consume UPDATE above, one shared commit below:
     # marks the account durably verified — a session token can only ever be
-    # issued from here or from the Google-sign-in linking gate (ADR 0002:
-    # google_callback's authoritative/absorption branches), so email_verified
+    # issued from here or from the Google-sign-in linking gate
+    # (google_callback's authoritative/absorption branches), so email_verified
     # now has two writers, not one. Unconditional SET is idempotent for a user
     # who already verified before. Sharing the transaction (rather than an
     # intermediate commit) means a failure here rolls back the link-consume
@@ -290,7 +290,7 @@ async def verify_magic_link(
         )
 
     if pending_google_sub is not None:
-        # ADR 0002 — this magic link was sent to confirm a pending Google
+        # This magic link was sent to confirm a pending Google
         # identity link (non-authoritative address), not to start a session
         # directly. Create the link now that control of the address is proven
         # — and only in the browser that started the Google sign-in (OWASP
@@ -414,7 +414,7 @@ async def get_me(
 
 
 # ---------------------------------------------------------------------------
-# Google sign-in (ADR 0002) — consumer track. Mirrors organizer_auth.py's
+# Google sign-in — consumer track. Mirrors organizer_auth.py's
 # organizer-track implementation; see that module's docstrings for the
 # shared PKCE/state-cookie/linking-gate rationale. Divergences from the
 # organizer track are called out inline where they occur.
@@ -457,7 +457,7 @@ def _error_redirect(error_code: str) -> RedirectResponse:
 @router.get("/google/start")
 @limiter.limit(RATE_LIMIT_GOOGLE_SIGNIN_START)
 async def start_google_signin(request: Request) -> RedirectResponse:
-    """Kick off the consumer-track Google sign-in flow (ADR 0002). 404 when
+    """Kick off the consumer-track Google sign-in flow. 404 when
     the flag is off — the endpoint doesn't exist for an outside prober, not
     just "disabled"."""
     if not settings.GOOGLE_SIGNIN_CONSUMER_ENABLED:
@@ -495,7 +495,7 @@ async def _get_or_create_user_for_google(db: AsyncSession, email: str) -> User:
 async def _send_google_confirmation_link(db: AsyncSession, user: User, sub: str) -> None:
     """Send a confirmation magic link that, once used, absorbs `sub` into
     user_identities (see verify_magic_link above) rather than starting a
-    session directly — ADR 0002's non-authoritative-address gate."""
+    session directly — the non-authoritative-address gate."""
     if await recent_unused_link_exists(
         db,
         AuthMagicLink,
@@ -545,7 +545,7 @@ async def _link_new_google_identity(
     except IntegrityError:
         # A concurrent callback for the same Google account (double-click,
         # two tabs) won the identity-link race first — never surface a 500
-        # here (docs/security.md "Auth", callback invariant). Roll back (which also
+        # here (callback invariant). Roll back (which also
         # undoes this request's own uncommitted User insert/email_verified
         # flip, if any — the winning request's row is what persists) and
         # fall back to that winner's identity.
@@ -573,7 +573,7 @@ async def _link_new_google_identity(
 async def _apply_google_linking_gate(
     db: AsyncSession, identity: GoogleIdentity
 ) -> tuple[str, User | None]:
-    """ADR 0002's linking gate — consumer-track branches. Returns (outcome,
+    """The linking gate — consumer-track branches. Returns (outcome,
     user) — user is None only for GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT,
     where no session is minted this request.
 
@@ -616,7 +616,7 @@ async def _apply_google_linking_gate(
         return GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL, None
 
     # Non-authoritative address — Google's word on `email_verified` isn't
-    # trusted enough to auto-link (ADR 0002). Prove control via a
+    # trusted enough to auto-link. Prove control via a
     # confirmation magic link before any identity row is created.
     user = existing_user or await _get_or_create_user_for_google(db, identity["email"])
     await db.commit()

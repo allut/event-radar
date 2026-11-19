@@ -97,7 +97,7 @@ class AuthMagicLink(Base):
         DateTime(timezone=True), nullable=True
     )
     # Set when this magic link was sent to confirm a pending Google-identity
-    # link (ADR 0002) rather than to start a session — the sub is written
+    # link rather than to start a session — the sub is written
     # into user_identities only once the link is used.
     pending_google_sub: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
@@ -105,10 +105,10 @@ class AuthMagicLink(Base):
 
 
 class UserIdentity(Base):
-    """A linked external sign-in provider identity (ADR 0002) — e.g. Google's
+    """A linked external sign-in provider identity — e.g. Google's
     stable `sub`. Never shared with organizer_identities: the same Google
     account may hold both a User row and an Organizer row that never merge
-    (docs/security.md "Auth", track separation)."""
+    (auth track separation)."""
 
     __tablename__ = "user_identities"
     __table_args__ = (

@@ -6,7 +6,7 @@ import logging
 # (app/main.py's lifespan) — a DATABASE_URL host outside this set while
 # APP_ENV=development suggests a misconfigured env var pointed at a real
 # database, logged at ERROR rather than silently proceeding. "db" is the
-# Postgres service name in .devcontainer/docker-compose.yml.
+# usual Postgres service name inside a Compose network.
 DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db"})
 
 # Recycle pooled DB connections older than this many seconds. Set below Neon's
@@ -103,8 +103,8 @@ INGESTION_RUNS_RETENTION_DAYS = 90
 RAW_INBOUND_EMAILS_RETENTION_DAYS = 90
 DAILY_FEEDS_RETENTION_DAYS = 30
 # Unverified users/organizers — a row inserted on an unauthenticated
-# POST .../request-link before the address is proven reachable (see
-# docs/security.md "Auth", email verification gate). Retained this long in
+# POST .../request-link before the address is proven reachable (the email
+# verification gate). Retained this long in
 # case a slow/late click on a still-valid link would otherwise orphan it, then pruned so an
 # address nobody ever proved they own isn't retained indefinitely.
 UNVERIFIED_ACCOUNT_RETENTION_DAYS = 30

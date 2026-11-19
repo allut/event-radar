@@ -1,4 +1,4 @@
-// Drift guard (docs/design-system.md §7, §10): rules the stylesheets must keep
+// Drift guard: rules the stylesheets must keep
 // that neither ESLint nor tsc can see. Runs over every .module.css plus index.css.
 import { SRC_DIR, atRuleBlocks, composedTies, cssModules, readCss, rules } from './test/cssSheets';
 import { COMPOSED_TIE_BASELINE } from './test/composedTieBaseline';
@@ -107,7 +107,7 @@ describe('stylesheet rules', () => {
 
     it('out-rank the shared rule', () => {
       const added = ties.filter(tie => !baseline.has(tie));
-      expect(added, 'double or qualify the local selector (docs/design-system.md §7)').toEqual([]);
+      expect(added, 'double or qualify the local selector').toEqual([]);
     });
 
     it('keep the baseline down to ties that still exist', () => {

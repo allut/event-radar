@@ -10,7 +10,7 @@ import {
 import { THEME_PREFERENCES } from '../_generated/sharedConstants.js';
 
 // What actually gets applied to the DOM / rendered — always binary, and
-// always exactly one of the two (CONTEXT.md's "resolved theme"). Derived
+// always exactly one of the two. Derived
 // from THEME_PREFERENCES (shared/app-config.json) so this never drifts from
 // the backend's two-value taxonomy.
 export type ResolvedTheme = (typeof THEME_PREFERENCES)[number];
@@ -36,7 +36,7 @@ function currentDeviceTheme(): ResolvedTheme {
 }
 
 // Pure resolution function — no DOM/storage reads — so it's unit-testable
-// against every combination directly (CONTEXT.md's "theme override"). An
+// against every combination directly. An
 // override only counts if it's a valid light/dark value AND was chosen
 // under the device theme currently in effect — a mismatch (the device
 // flipped since) means the override has expired and the device theme wins.
@@ -82,7 +82,7 @@ function syncThemeColorMeta(theme: ResolvedTheme): void {
 }
 
 // Discards an override whose recorded device theme no longer matches the
-// current one — the "load-time mismatch" expiry path (ADR 0003), as
+// current one — the "load-time mismatch" expiry path, as
 // opposed to the live matchMedia-flip path below. Also wipes the legacy
 // tri-state key unconditionally: it was never chosen under a recorded
 // device theme, so there's nothing to reinterpret — every existing visitor
@@ -105,7 +105,7 @@ export function applyTheme(): void {
 }
 
 // A viewer's explicit choice — scoped to this browser only, never an
-// account (ADR 0003). Records the device theme it was made under, so a
+// account. Records the device theme it was made under, so a
 // later flip expires it.
 export function setThemeOverride(value: ResolvedTheme): void {
   storageSet(THEME_OVERRIDE_KEY, value);

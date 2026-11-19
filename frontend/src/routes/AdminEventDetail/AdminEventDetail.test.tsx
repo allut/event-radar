@@ -403,8 +403,8 @@ describe('AdminEventDetail', () => {
     const context = {
       event_id: 42,
       event_title: 'Jazz Cellar Night',
-      owner: { organizer_id: 9, name: 'Jazzklubi MTÜ', email: null },
-      prefill: { advertiser_legal_name: 'Jazzklubi MTÜ', billing_email: null },
+      owner: { organizer_id: 9, name: 'Example Jazz Club MTÜ', email: null },
+      prefill: { advertiser_legal_name: 'Example Jazz Club MTÜ', billing_email: null },
       today: '2026-10-17',
       earliest_start: '2026-10-18',
       event_last_day: '2026-10-30',
@@ -412,11 +412,11 @@ describe('AdminEventDetail', () => {
       pricing: { day_price_cents: 500, vat_rate_percent: '24.00' },
       promotions: [
         {
-          id: 1, event_id: 42, event_title: 'Jazz Cellar Night', organizer_name: 'Jazzklubi MTÜ',
+          id: 1, event_id: 42, event_title: 'Jazz Cellar Night', organizer_name: 'Example Jazz Club MTÜ',
           status: 'paid', state: 'scheduled', start_date: '2026-10-20', end_date: '2026-10-22', days: 3,
           net_price_cents: 1500, vat_rate_percent: '24.00', vat_cents: 360, gross_price_cents: 1860,
           is_complimentary: false, complimentary_note: null, invoice_reference: null,
-          advertiser_legal_name: 'Jazzklubi MTÜ',
+          advertiser_legal_name: 'Example Jazz Club MTÜ',
         },
       ],
     };

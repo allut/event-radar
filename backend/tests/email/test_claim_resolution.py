@@ -26,9 +26,9 @@ async def test_no_api_key_logs_and_skips_send(patch_client, monkeypatch):
 @pytest.mark.asyncio
 async def test_granted_email_posts_expected_content(patch_client, monkeypatch):
     monkeypatch.setattr(claim_resolution.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(claim_resolution.settings, "RESEND_FROM_ADDRESS", "noreply@radar.ee")
-    monkeypatch.setattr(claim_resolution.settings, "CONTACT_TO_ADDRESS", "owner@radar.ee")
-    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(claim_resolution.settings, "RESEND_FROM_ADDRESS", "noreply@radar.example")
+    monkeypatch.setattr(claim_resolution.settings, "CONTACT_TO_ADDRESS", "owner@radar.example")
+    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.example")
 
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
     post = patch_client(resend, resp)
@@ -41,15 +41,15 @@ async def test_granted_email_posts_expected_content(patch_client, monkeypatch):
     _args, kwargs = post.call_args
     assert kwargs["headers"]["Authorization"] == "Bearer re_key"
     body = kwargs["json"]
-    assert body["from"] == "noreply@radar.ee"
+    assert body["from"] == "noreply@radar.example"
     assert body["to"] == ["organizer@example.com"]
-    assert body["reply_to"] == "owner@radar.ee"
+    assert body["reply_to"] == "owner@radar.example"
     assert body["subject"] == "Your claim was approved"
 
     html_body = body["html"]
     assert "&lt;night&gt;" in html_body
     assert "Verified manually." in html_body
-    assert "https://radar.ee/en/organizer/dashboard" in html_body
+    assert "https://radar.example/en/organizer/dashboard" in html_body
 
     text_body = body["text"]
     assert "Verified manually." in text_body
@@ -58,7 +58,7 @@ async def test_granted_email_posts_expected_content(patch_client, monkeypatch):
 @pytest.mark.asyncio
 async def test_granted_blank_note_uses_fallback(patch_client, monkeypatch):
     monkeypatch.setattr(claim_resolution.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.example")
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
     post = patch_client(resend, resp)
 
@@ -73,7 +73,7 @@ async def test_granted_blank_note_uses_fallback(patch_client, monkeypatch):
 @pytest.mark.asyncio
 async def test_declined_email_uses_admin_note_and_own_subject(patch_client, monkeypatch):
     monkeypatch.setattr(claim_resolution.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.example")
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
     post = patch_client(resend, resp)
 
@@ -89,7 +89,7 @@ async def test_declined_email_uses_admin_note_and_own_subject(patch_client, monk
 @pytest.mark.asyncio
 async def test_expired_email_includes_expiry_window(patch_client, monkeypatch):
     monkeypatch.setattr(claim_resolution.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.example")
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
     post = patch_client(resend, resp)
 
@@ -103,7 +103,7 @@ async def test_expired_email_includes_expiry_window(patch_client, monkeypatch):
 @pytest.mark.asyncio
 async def test_self_cancelled_email_own_subject(patch_client, monkeypatch):
     monkeypatch.setattr(claim_resolution.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.example")
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
     post = patch_client(resend, resp)
 
@@ -158,11 +158,11 @@ async def test_non_2xx_logs_error(patch_client, monkeypatch, caplog):
     ("locale", "prefix"), [("et", ""), ("en", "/en"), ("ru", "/ru")]
 )
 def test_dashboard_link_carries_locale_prefix(monkeypatch, locale, prefix):
-    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(claim_resolution.settings, "FRONTEND_URL", "https://radar.example")
 
     html = claim_resolution.build_claim_granted_html("Jazz Night", "note", locale)
 
-    assert f'href="https://radar.ee{prefix}/organizer/dashboard"' in html
+    assert f'href="https://radar.example{prefix}/organizer/dashboard"' in html
 
 
 def test_header_carries_inline_brand_mark():

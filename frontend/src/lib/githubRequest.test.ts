@@ -11,10 +11,10 @@ describe('githubRequest', () => {
     const fetchMock = vi.fn<typeof fetch>(async () => ({ ok: true, status: 200 }) as Response);
     vi.stubGlobal('fetch', fetchMock);
 
-    await githubRequest('allut/event-radar', '/issues', 'tok123', 'seo-audit/1.0');
+    await githubRequest('example-org/example-repo', '/issues', 'tok123', 'seo-audit/1.0');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      `${GITHUB_API_BASE_URL}/repos/allut/event-radar/issues`,
+      `${GITHUB_API_BASE_URL}/repos/example-org/example-repo/issues`,
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer tok123',
@@ -30,14 +30,14 @@ describe('githubRequest', () => {
     const fetchMock = vi.fn<typeof fetch>(async () => ({ ok: true, status: 201 }) as Response);
     vi.stubGlobal('fetch', fetchMock);
 
-    await githubRequest('allut/event-radar', '/issues', 'tok123', 'prerender/1.0', {
+    await githubRequest('example-org/example-repo', '/issues', 'tok123', 'prerender/1.0', {
       method: 'POST',
       body: JSON.stringify({ title: 'x' }),
       headers: { 'Content-Type': 'application/json' },
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      `${GITHUB_API_BASE_URL}/repos/allut/event-radar/issues`,
+      `${GITHUB_API_BASE_URL}/repos/example-org/example-repo/issues`,
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ title: 'x' }),
@@ -54,7 +54,7 @@ describe('githubRequest', () => {
     const fetchMock = vi.fn<typeof fetch>(async () => ({ ok: true, status: 200 }) as Response);
     vi.stubGlobal('fetch', fetchMock);
 
-    await githubRequest('allut/event-radar', '/issues', 'tok123', 'default-ua/1.0', {
+    await githubRequest('example-org/example-repo', '/issues', 'tok123', 'default-ua/1.0', {
       headers: { 'User-Agent': 'override-ua/1.0' },
     });
 
@@ -66,7 +66,7 @@ describe('githubRequest', () => {
     const fetchMock = vi.fn<typeof fetch>(async () => ({ ok: false, status: 404 }) as Response);
     vi.stubGlobal('fetch', fetchMock);
 
-    const res = await githubRequest('allut/event-radar', '/issues/1', 'tok123', 'ua/1.0');
+    const res = await githubRequest('example-org/example-repo', '/issues/1', 'tok123', 'ua/1.0');
     expect(res.ok).toBe(false);
     expect(res.status).toBe(404);
   });

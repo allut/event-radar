@@ -136,11 +136,11 @@ describe('api.get', () => {
 describe('api.post', () => {
   it('sends POST method with JSON body', async () => {
     mockFetch(StatusCodes.OK, {});
-    await api.post('/auth/request-link', { email: 'a@b.com' });
+    await api.post('/auth/request-link', { email: 'a@b.example' });
     const call = vi.mocked(fetch).mock.calls[0];
     const init = call[1] as RequestInit;
     expect(init.method).toBe('POST');
-    expect(init.body).toBe(JSON.stringify({ email: 'a@b.com' }));
+    expect(init.body).toBe(JSON.stringify({ email: 'a@b.example' }));
     const headers = init.headers as Record<string, string>;
     expect(headers['Content-Type']).toBe('application/json');
   });

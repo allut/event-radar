@@ -1,7 +1,7 @@
 """Parity guard: migration 0052's event_series_key_sql() and its triggers must
 agree with event_series_key()/serialize_event_series_key() in Python.
 
-Needs a migrated Postgres (the migrations CI job, or the devcontainer db);
+Needs a migrated Postgres (the migrations CI job, or a local Postgres);
 skipped when DATABASE_URL is unreachable or not at revision 0052.
 """
 

@@ -25,10 +25,9 @@ if TYPE_CHECKING:
 
 
 class Publisher(Base):
-    """The real-world entity an event-claiming Claim is granted against — see
-    CONTEXT.md's Event Claiming glossary. One per Fienta organizer id, the
-    whole source for KUMU/Estonia Concert Hall (external_id NULL), or one per
-    resolved Piletilevi promoter id. Distinct from `Organizer` (the portal
+    """The real-world entity an event-claiming Claim is granted against. One
+    per Fienta organizer id, the whole source for KUMU/Estonia Concert Hall
+    (external_id NULL), or one per resolved Piletilevi promoter id. Distinct from `Organizer` (the portal
     account that holds a claim)."""
 
     __tablename__ = "publishers"
@@ -70,8 +69,7 @@ class Publisher(Base):
 
 
 class Claim(Base):
-    """An organizer's claim over a Publisher or an event series — see
-    CONTEXT.md's Event Claiming glossary (Publisher claim / Series claim).
+    """An organizer's claim over a Publisher or an event series (Publisher claim / Series claim).
     Polymorphic over `kind`: a Publisher claim sets `publisher_id`, a Series
     claim sets `event_series_key` (the `event_series_key()` tuple from
     `events/queries.py`, serialized as `"<normalized_title>\\x1f<normalized_venue>"`)
@@ -179,7 +177,7 @@ class Claim(Base):
     # its pins stop applying while dormant, but the row is never
     # deleted/revoked; re-cleared the moment this claim's target is
     # canonical again. Orthogonal to `status` (an APPROVED claim can be
-    # dormant) — see CONTEXT.md's Event Claiming glossary.
+    # dormant).
     dormant: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=false(), default=False
     )

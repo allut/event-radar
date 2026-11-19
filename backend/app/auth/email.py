@@ -74,7 +74,7 @@ async def send_google_link_confirmation(
     locale: str = DEFAULT_USER_LOCALE,
     verify_path: str = AUTH_VERIFY_PATH,
 ) -> None:
-    """Send the Google-link confirmation email (ADR 0002's non-authoritative-
+    """Send the Google-link confirmation email (the non-authoritative-
     address gate, OWASP audit #3). Its own subject/wording — it says a Google
     account is being linked to ``to_email`` — so it can't be mistaken for the
     plain sign-in link; the link itself is the same verify URL shape."""

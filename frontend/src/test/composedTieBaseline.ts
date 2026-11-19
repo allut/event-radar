@@ -1,6 +1,6 @@
 // Same-specificity overrides of composed classes that predate the guard in
 // cssRules.test.ts. Each still renders right only by bundle order. Fix one by
-// out-ranking the shared rule (docs/design-system.md §7), then delete its line.
+// out-ranking the shared rule, then delete its line.
 export const COMPOSED_TIE_BASELINE: readonly string[] = [
   'components/AdminQueueActionPanel/AdminQueueActionPanel.module.css .dangerBtn {color} = components/shared/Button.module.css .btnOutline',
   'components/Chip/Chip.module.css .chip {border-radius} = components/shared/Button.module.css .btnOutline',

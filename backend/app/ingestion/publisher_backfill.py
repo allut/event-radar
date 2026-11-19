@@ -6,7 +6,7 @@ what is still unresolved and past its retry cooldown. Piletilevi is out of
 scope: its Publisher resolves live, at claim time, from the event page's promoter identity
 (`app.claims.target_resolution`, #427) — never backfilled here.
 
-Batch-job discipline (CLAUDE.md's Code Quality Rules): bulk-load, no N+1,
+Batch-job discipline: bulk-load, no N+1,
 fixed DB-query count independent of row count. Fienta's HTTP re-query is
 bounded by configured organizer count, not by event/row count.
 """

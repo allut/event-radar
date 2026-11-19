@@ -3,8 +3,8 @@ import type { LegalDoc } from './types';
 
 const doc: LegalDoc = {
   title: 'Политика конфиденциальности',
-  lastUpdated: '2026-10-17',
-  lastUpdatedSlots: '2026-10-18',
+  lastUpdated: '2026-11-02',
+  lastUpdatedSlots: '2026-11-02',
   intro: [
     {
       kind: 'p',
@@ -20,7 +20,7 @@ const doc: LegalDoc = {
         {
           kind: 'p',
           content: [
-            'Контролёр данных — Aleksei Lutkov, ведущий Event Radar как индивидуальный предприниматель в Эстонии. По любым вопросам конфиденциальности или для реализации ваших прав свяжитесь по адресу ',
+            'Контролёр данных — Aleksei Lutkov, частное лицо, которое ведёт Event Radar в Эстонии. По любым вопросам конфиденциальности или для реализации ваших прав свяжитесь по адресу ',
             { text: CONTACT_EMAIL, href: CONTACT_MAILTO },
             '.',
           ],

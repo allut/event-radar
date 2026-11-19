@@ -53,7 +53,7 @@ describe('Login', () => {
     const { ApiError: ApiErrorClass } = await import('../../api/client');
     mockPost.mockRejectedValueOnce(new ApiErrorClass(StatusCodes.BAD_REQUEST, 'Invalid email'));
     renderWithProviders(<Login />, { route: '/en/login' });
-    await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'bad@test.com');
+    await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'bad@test.example');
     await userEvent.click(screen.getByRole('button', { name: /send/i }));
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.getByText('Invalid email')).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe('Login', () => {
   it('"use different" button resets to idle form', async () => {
     mockPost.mockResolvedValueOnce(undefined);
     renderWithProviders(<Login />, { route: '/en/login' });
-    await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'a@b.com');
+    await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'a@b.example');
     await userEvent.click(screen.getByRole('button', { name: /send/i }));
     await waitFor(() => screen.getByRole('status'));
     await userEvent.click(screen.getByRole('button', { name: /different/i }));

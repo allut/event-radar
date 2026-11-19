@@ -1,6 +1,6 @@
 /* Left-aligned, flat-proof-section rhythm (wayfinder #197) — replaces the
    old centered icon/title/message block. No icon: pictographic emoji don't
-   ship in consumer/organizer UI; see docs/design-system.md. */
+   ship in consumer/organizer UI. */
 .empty {
   display: flex;
   flex-direction: column;

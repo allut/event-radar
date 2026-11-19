@@ -19,16 +19,16 @@ function request(overrides: Record<string, unknown> = {}) {
     event_id: 7,
     event_title: 'Tallinn Jazz Night',
     organizer_id: 3,
-    organizer_name: 'Jazzklubi MTÜ',
-    organizer_email: 'info@jazzklubi.ee',
+    organizer_name: 'Example Jazz Club MTÜ',
+    organizer_email: 'info@jazzclub.example',
     status: 'pending',
     start_date: '2026-10-24',
     end_date: '2026-10-30',
     days: 7,
     price: { net_cents: 3500, vat_cents: 840, gross_cents: 4340 },
-    advertiser_legal_name: 'Jazzklubi MTÜ',
+    advertiser_legal_name: 'Example Jazz Club MTÜ',
     advertiser_registry_code: '80123456',
-    billing_email: 'info@jazzklubi.ee',
+    billing_email: 'info@jazzclub.example',
     note: 'Could the Promotion start a day earlier if possible?',
     decline_reason: null,
     promotion_restriction: 'none',
@@ -47,8 +47,8 @@ const context = {
   event_id: 7,
   event_title: 'Tallinn Jazz Night',
   promotion_restriction: 'none',
-  owner: { organizer_id: 3, name: 'Jazzklubi MTÜ', email: 'info@jazzklubi.ee' },
-  prefill: { advertiser_legal_name: 'Jazzklubi MTÜ', billing_email: 'info@jazzklubi.ee' },
+  owner: { organizer_id: 3, name: 'Example Jazz Club MTÜ', email: 'info@jazzclub.example' },
+  prefill: { advertiser_legal_name: 'Example Jazz Club MTÜ', billing_email: 'info@jazzclub.example' },
   today: '2026-10-18',
   earliest_start: '2026-10-19',
   event_last_day: '2026-10-30',
@@ -123,9 +123,9 @@ describe('PromotionRequests', () => {
     expect(await screen.findByRole('heading', { name: 'Grant Promotion from request #41' })).toBeInTheDocument();
     expect(await screen.findByLabelText('Start date')).toHaveValue('2026-10-24');
     expect(screen.getByLabelText('End date')).toHaveValue('2026-10-30');
-    expect(screen.getByLabelText('Advertiser legal name')).toHaveValue('Jazzklubi MTÜ');
+    expect(screen.getByLabelText('Advertiser legal name')).toHaveValue('Example Jazz Club MTÜ');
     expect(screen.getByLabelText('Registry code')).toHaveValue('80123456');
-    expect(screen.getByLabelText('Billing email')).toHaveValue('info@jazzklubi.ee');
+    expect(screen.getByLabelText('Billing email')).toHaveValue('info@jazzclub.example');
     expect(await screen.findByText('Dates match the request.')).toBeInTheDocument();
 
     const end = screen.getByLabelText('End date');
@@ -143,7 +143,7 @@ describe('PromotionRequests', () => {
       expect.objectContaining({
         start_date: '2026-10-24',
         end_date: '2026-10-28',
-        advertiser_legal_name: 'Jazzklubi MTÜ',
+        advertiser_legal_name: 'Example Jazz Club MTÜ',
         advertiser_registry_code: '80123456',
         is_complimentary: false,
       }),
@@ -183,7 +183,7 @@ describe('PromotionRequests', () => {
     renderQueue();
     await userEvent.click(await screen.findByRole('button', { name: 'Decline Tallinn Jazz Night' }));
     const dialog = await screen.findByRole('dialog', { name: 'Decline request for Tallinn Jazz Night' });
-    expect(within(dialog).getByText(/emailed to info@jazzklubi\.ee/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/emailed to info@jazzclub\.example/)).toBeInTheDocument();
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Decline request' }));
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Give a reason. It is emailed to the Organizer.');

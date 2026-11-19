@@ -7,8 +7,8 @@ import { AUTH_TRACK_ORGANIZER, AUTH_TRACK_USER, GOOGLE_SIGNIN_RESULT_QUERY_PARAM
 // the localStorage signed-in hint the route guards read (AuthVerify.tsx/
 // OrganizerVerify.tsx's magic-link routes set it in-page) never gets written.
 // This runs synchronously before the router's first render — see main.tsx —
-// so the guard's first read already sees the hint. No theme sync here (ADR
-// 0003) — the browser's theme override is never read from or written to an
+// so the guard's first read already sees the hint. No theme sync here:
+// the browser's theme override is never read from or written to an
 // account, so sign-in has nothing to reconcile.
 export function consumeGoogleSignInLanding(): void {
   const params = new URLSearchParams(window.location.search);

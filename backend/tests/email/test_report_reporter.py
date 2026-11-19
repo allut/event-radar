@@ -27,12 +27,12 @@ async def test_no_api_key_logs_and_skips_send(patch_client, monkeypatch, make_ev
 async def test_success_posts_expected_content(patch_client, monkeypatch, make_event):
     monkeypatch.setattr(report_reporter.settings, "RESEND_API_KEY", "re_key")
     monkeypatch.setattr(
-        report_reporter.settings, "RESEND_FROM_ADDRESS", "noreply@radar.ee"
+        report_reporter.settings, "RESEND_FROM_ADDRESS", "noreply@radar.example"
     )
     monkeypatch.setattr(
-        report_reporter.settings, "CONTACT_TO_ADDRESS", "owner@radar.ee"
+        report_reporter.settings, "CONTACT_TO_ADDRESS", "owner@radar.example"
     )
-    monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.example")
 
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
     post = patch_client(resend, resp)
@@ -46,26 +46,26 @@ async def test_success_posts_expected_content(patch_client, monkeypatch, make_ev
     _args, kwargs = post.call_args
     assert kwargs["headers"]["Authorization"] == "Bearer re_key"
     body = kwargs["json"]
-    assert body["from"] == "noreply@radar.ee"
+    assert body["from"] == "noreply@radar.example"
     assert body["to"] == ["reporter@example.com"]
-    assert body["reply_to"] == "owner@radar.ee"
+    assert body["reply_to"] == "owner@radar.example"
 
     html_body = body["html"]
     assert "&lt;night&gt;" in html_body
     assert "Looked into it, event is fine." in html_body
-    assert "https://radar.ee/en/events/42" in html_body
+    assert "https://radar.example/en/events/42" in html_body
     # no "automated means" disclosure
     assert "automated" not in html_body.lower()
 
     text_body = body["text"]
     assert "Looked into it, event is fine." in text_body
-    assert "https://radar.ee/en/events/42" in text_body
+    assert "https://radar.example/en/events/42" in text_body
 
 
 @pytest.mark.asyncio
 async def test_blank_note_uses_fallback(patch_client, monkeypatch, make_event):
     monkeypatch.setattr(report_reporter.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.example")
     resp = MagicMock(status_code=httpx.codes.OK, text="ok")
     post = patch_client(resend, resp)
 
@@ -80,7 +80,7 @@ async def test_blank_note_uses_fallback(patch_client, monkeypatch, make_event):
 
 @pytest.mark.asyncio
 async def test_renders_per_locale(monkeypatch, make_event):
-    monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.example")
     event = make_event(10, title="Concert")
 
     et_html = report_reporter.build_report_outcome_html(event, "Fine.", "et")
@@ -121,14 +121,14 @@ async def test_non_2xx_logs_error(patch_client, monkeypatch, caplog, make_event)
     ("locale", "prefix"), [("et", ""), ("en", "/en"), ("ru", "/ru")]
 )
 def test_event_link_carries_locale_prefix(monkeypatch, make_event, locale, prefix):
-    monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(report_reporter.settings, "FRONTEND_URL", "https://radar.example")
     event = make_event(42, title="Concert")
 
     html = report_reporter.build_report_outcome_html(event, "Fine.", locale)
     text = report_reporter.build_report_outcome_text(event, "Fine.", locale)
 
-    assert f'href="https://radar.ee{prefix}/events/42"' in html
-    assert text.endswith(f"https://radar.ee{prefix}/events/42")
+    assert f'href="https://radar.example{prefix}/events/42"' in html
+    assert text.endswith(f"https://radar.example{prefix}/events/42")
 
 
 def test_header_carries_inline_brand_mark(make_event):

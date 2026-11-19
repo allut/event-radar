@@ -173,7 +173,7 @@ async def load_publisher_lookup(
 ) -> dict[str | None, int]:
     """Bulk-load {Publisher.external_id: Publisher.id} for source_id.
 
-    One query per adapter run (Code Quality Rules' "Batch jobs" — fixed query
+    One query per adapter run (batch-job rule — fixed query
     count independent of row count) so insert_normalized_event resolves
     EventSource.publisher_id via an in-memory dict instead of a per-row
     SELECT. The publishers table is mirrored ahead of ingest — by

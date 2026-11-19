@@ -110,7 +110,6 @@ ehthumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
-!.vscode/tasks.json
 *.swp
 *.swo
 *~
@@ -134,9 +133,6 @@ inbound-mail-samples/
 
 # Claude Code per-user settings
 .claude/settings.local.json
-
-# Devcontainer: plaintext anvil reviewer API keys, host DPAPI-bound and unrecoverable in-container
-/.devcontainer/anvil.env
 
 # Playwright MCP temporary files
 .playwright-mcp/

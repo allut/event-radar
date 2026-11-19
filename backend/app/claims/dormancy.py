@@ -2,8 +2,7 @@
 
 When dedup clusters two claimed events, the representative's claim stays
 active and every other member's claim goes dormant: its pins stop applying,
-but the row is never deleted or revoked. See "Claimed Events" in
-docs/pipeline.md.
+but the row is never deleted or revoked.
 """
 
 from collections.abc import Mapping

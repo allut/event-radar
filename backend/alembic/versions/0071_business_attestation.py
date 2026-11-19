@@ -1,5 +1,5 @@
 """Business attestation: when the Organizer confirmed the registry code on a
-Promotion is its own business (security audit, ADR 0005). Existing rows stay
+Promotion is its own business (security audit). Existing rows stay
 NULL: they were made before the attestation existed.
 
 Revision ID: 0071

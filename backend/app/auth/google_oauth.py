@@ -1,14 +1,14 @@
-"""Google OAuth 2.0 authorization-code + PKCE helpers (docs/adr/0002).
+"""Google OAuth 2.0 authorization-code + PKCE helpers.
 
 PKCE pair generation, the authorization-URL builder, the code-for-token
 exchange (via app/ingestion/http_client.py's http_post, per this repo's
 retry-logic convention), and ID-token verification (PyJWT + PyJWKClient —
-see the ADR for why this library over google-auth). No refresh token is ever
-requested or stored (ADR 0002's "nothing on our side to revoke" invariant).
+chosen over google-auth). No refresh token is ever
+requested or stored.
 
 `PyJWKClient`'s JWKS fetch bypasses http_get/http_post (it does its own sync
 urllib fetch, cached via cache_jwk_set) — documented as a Retry logic bypass
-site in docs/conventions.md, justified the same way the ADR justifies choosing
+site, justified the same way as choosing
 PyJWKClient over google-auth: caching with no new async/sync-mixing cost.
 """
 
@@ -119,7 +119,7 @@ async def exchange_code_for_id_token(
 def verify_google_id_token(id_token: str) -> GoogleIdentity:
     """Verify signature (RS256 against Google's published JWKS), `iss`, and
     `aud`; return the claims this app is allowed to look at (sub/email/
-    email_verified/hd — never name/picture, per ADR 0002's scope decision).
+    email_verified/hd — never name/picture, per the scope decision).
     Raises jwt.PyJWTError (or a subclass) on any verification failure."""
     signing_key = _jwks_client.get_signing_key_from_jwt(id_token)
     claims = jwt.decode(
@@ -138,7 +138,7 @@ def verify_google_id_token(id_token: str) -> GoogleIdentity:
 
 
 def is_authoritative_identity(identity: GoogleIdentity) -> bool:
-    """ADR 0002's linking gate: Google is authoritative for an address only
+    """The linking gate: Google is authoritative for an address only
     when it's a Gmail/Googlemail address or carries a Workspace `hd` claim,
     and the token itself says the address is verified."""
     if not identity["email_verified"]:

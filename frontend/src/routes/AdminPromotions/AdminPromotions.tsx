@@ -121,7 +121,7 @@ export default function AdminPromotions() {
           <PromotionsTable rows={list.items} ariaBusy={list.isPlaceholderData} />
         )}
         <p className={styles.listHint}>{PROMOTION_STRIPE_COPY.listHint}</p>
-        {/* The pager's strings come from shared/i18n even here: docs/frontend.md "Admin Console" */}
+        {/* The pager's strings come from shared/i18n even here */}
         <Pager {...list.pagerProps} locale={LOCALE_EN} liveNoun="items" className={queueStyles.queuePager} />
       </section>
 

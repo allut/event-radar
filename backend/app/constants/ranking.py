@@ -126,7 +126,7 @@ BROWSE_SCORE_CACHE_ID_BYTES: int = 8
 BROWSE_ANON_CACHE_SENTINEL: int = 0
 # How far back browse.py::_load_feedback_context looks for a user's like/dislike
 # history when scoring /explore (Path B). user_event_feedback is preserved
-# indefinitely by policy (see docs/backend-ops.md "Data Retention"), so an unbounded load
+# indefinitely by policy, so an unbounded load
 # grows with the user's lifetime activity on every /explore request. The
 # FEEDBACK_DECAY_BASE (0.9) decay makes a signal this old numerically
 # negligible (0.9^90 ~= 0.0000265) to score_event() anyway, so the cutoff drops

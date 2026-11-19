@@ -6,7 +6,7 @@ function row(overrides: Partial<PromotionRow> = {}): PromotionRow {
     id: 1,
     event_id: 7,
     event_title: 'Jazz Night',
-    organizer_name: 'Jazzklubi MTÜ',
+    organizer_name: 'Example Jazz Club MTÜ',
     status: 'paid',
     state: 'live',
     paused_reason: null,
@@ -25,7 +25,7 @@ function row(overrides: Partial<PromotionRow> = {}): PromotionRow {
     invoice_url: null,
     awaiting_checkout: false,
     checkout_expires_at: null,
-    advertiser_legal_name: 'Jazzklubi MTÜ',
+    advertiser_legal_name: 'Example Jazz Club MTÜ',
     ...overrides,
   };
 }

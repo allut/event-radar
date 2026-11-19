@@ -98,8 +98,8 @@ class TestCheckImageHost:
     @pytest.mark.parametrize(
         "url",
         [
-            "https://evil.com\\@res.cloudinary.com/demo/image/upload/x.png",
-            "https://evil.com%5C@res.cloudinary.com/demo/image/upload/x.png",
+            "https://evil.example\\@res.cloudinary.com/demo/image/upload/x.png",
+            "https://evil.example%5C@res.cloudinary.com/demo/image/upload/x.png",
             "https://u:p@res.cloudinary.com/demo/image/upload/x.png",
             "https://res.cloudinary.com:8443/demo/image/upload/x.png",
             "https://res.cloudinary.com/demo/image/upload/x y.png",
@@ -465,7 +465,7 @@ class TestSubmitEvent:
         from app.routers.organizer_events import SubmitEventBody, submit_event
 
         organizer = make_organizer(organizer_id=5)
-        fake_event = _fake_event(url="https://mytheatre.ee/tickets/42")
+        fake_event = _fake_event(url="https://mytheatre.example/tickets/42")
         source = MagicMock(id=1, slug="user_submission")
         mock_db.scalar.side_effect = [0, source, EVENT_STATUS_PUBLISHED]
         mock_db.commit = AsyncMock()
@@ -490,7 +490,7 @@ class TestSubmitEvent:
             body = SubmitEventBody(
                 title="Kontsert",
                 starts_at="2026-06-01T18:00:00+03:00",
-                url="https://mytheatre.ee/tickets/42",
+                url="https://mytheatre.example/tickets/42",
             )
             result = await submit_event(
                 body,
@@ -879,9 +879,9 @@ class TestUpdateOwnEvent:
 
         with patch(
             "app.routers.organizer_events.safe_render_url",
-            return_value="https://mytheatre.ee/tickets/42",
+            return_value="https://mytheatre.example/tickets/42",
         ):
-            body = PatchEventBody(url="https://mytheatre.ee/tickets/42")
+            body = PatchEventBody(url="https://mytheatre.example/tickets/42")
             result = await update_own_event(
                 10,
                 body,
@@ -889,7 +889,7 @@ class TestUpdateOwnEvent:
                 organizer,
                 mock_db,
             )
-        assert event.url == "https://mytheatre.ee/tickets/42"
+        assert event.url == "https://mytheatre.example/tickets/42"
         assert result["status"] == EVENT_STATUS_PUBLISHED
 
     @pytest.mark.asyncio

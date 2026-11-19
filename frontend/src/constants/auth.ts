@@ -34,7 +34,7 @@ export const GOOGLE_IDENTITY_PROVIDER = 'google';
 
 export const AUTH_TOKEN_PARAM = 'token';
 // GoogleGMark's default render size (px) — the brand mark's own icon-only
-// SVG viewBox scale, not a design-system --fs-* token (docs/adr/0002).
+// SVG viewBox scale, not a design-system --fs-* token.
 export const GOOGLE_G_MARK_SIZE = 20;
 
 // ─── Auth / magic link ───────────────────────────────────────────────────────

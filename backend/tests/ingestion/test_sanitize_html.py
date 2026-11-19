@@ -72,7 +72,7 @@ class TestSanitizeHtml:
         assert "javascript:" not in result
 
     def test_iframe_stripped(self) -> None:
-        html = "<p>Good</p><iframe src='evil.com'></iframe>"
+        html = "<p>Good</p><iframe src='evil.example'></iframe>"
         result = sanitize_html(html)
         assert result is not None
         assert "iframe" not in result

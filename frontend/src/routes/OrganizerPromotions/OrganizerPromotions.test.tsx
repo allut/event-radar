@@ -28,7 +28,7 @@ function item(overrides: Partial<OrganizerPromotionItem>): OrganizerPromotionIte
     start_date: '2026-10-24',
     end_date: '2026-10-27',
     days: 4,
-    advertiser_legal_name: 'Telliskivi Tegijad OÜ',
+    advertiser_legal_name: 'Example Makers OÜ',
     advertiser_registry_code: '12345678',
     billing_email: null,
     price: { net_cents: 2000, vat_cents: 480, gross_cents: 2480 },
@@ -124,19 +124,19 @@ describe('OrganizerPromotions (#614)', () => {
       expect(row.getByText(badge)).toBeInTheDocument();
       expect(row.getByText(reason)).toBeInTheDocument();
     }
-    expect(within(rowFor('Scheduled Show')).getByText(/24–27 Oct · 4 days · Telliskivi Tegijad OÜ/)).toBeInTheDocument();
+    expect(within(rowFor('Scheduled Show')).getByText(/24–27 Oct · 4 days · Example Makers OÜ/)).toBeInTheDocument();
   });
 
   it('names the billing email in the awaiting-payment text, and the card hold has no invoice wording', async () => {
     serve([
-      item({ id: 21, status: 'awaiting_payment', event_title: 'Emailed Show', billing_email: 'pay@acme.ee' }),
-      item({ id: 22, status: 'awaiting_checkout', event_title: 'Checkout Show', billing_email: 'pay@acme.ee' }),
+      item({ id: 21, status: 'awaiting_payment', event_title: 'Emailed Show', billing_email: 'pay@acme.example' }),
+      item({ id: 22, status: 'awaiting_checkout', event_title: 'Checkout Show', billing_email: 'pay@acme.example' }),
     ]);
     renderPage();
     await screen.findByText('Emailed Show');
 
     const emailed = within(rowFor('Emailed Show'));
-    expect(emailed.getByText(/We emailed an invoice to pay@acme\.ee\./)).toBeInTheDocument();
+    expect(emailed.getByText(/We emailed an invoice to pay@acme\.example\./)).toBeInTheDocument();
     const checkout = within(rowFor('Checkout Show'));
     expect(checkout.getByText('Awaiting checkout')).toBeInTheDocument();
     expect(checkout.getByText(/Card checkout started/)).toBeInTheDocument();

@@ -11,8 +11,8 @@
          stylesheet link/injection. Keep the storage key literals in sync with
          THEME_OVERRIDE_KEY/THEME_OVERRIDE_DEVICE_KEY in src/constants.ts. An
          override only counts if it was chosen under the device theme in
-         effect right now (ADR 0003) — a mismatch means it expired since, so
-         the device theme wins; the legacy tri-state key from before that ADR
+         effect right now — a mismatch means it expired since, so
+         the device theme wins; the legacy tri-state key from before this model
          is wiped outright rather than read, since it has no equivalent value
          under the new semantics. Also rewrites the two media-queried
          theme-color tags below to a single override once an explicit theme
