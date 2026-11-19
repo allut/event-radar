@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -90,8 +91,12 @@ def _check_tree(tag: str) -> int:
 
 
 def _run(*cmd: str, cwd: Path = REPO) -> None:
-    """Run a step whose output the user should see, such as the pre-commit hook."""
-    if subprocess.run(cmd, cwd=cwd).returncode != 0:
+    """Run a step whose output the user should see, such as the pre-commit hook.
+
+    The executable is resolved with shutil.which first: on Windows `npm` is
+    `npm.cmd`, which CreateProcess won't find from the bare name."""
+    exe = shutil.which(cmd[0]) or cmd[0]
+    if subprocess.run([exe, *cmd[1:]], cwd=cwd).returncode != 0:
         raise RuntimeError(f"{' '.join(cmd)} failed")
 
 
