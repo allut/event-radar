@@ -6,7 +6,7 @@ import logging
 # (app/main.py's lifespan) — a DATABASE_URL host outside this set while
 # APP_ENV=development suggests a misconfigured env var pointed at a real
 # database, logged at ERROR rather than silently proceeding. "db" is the
-# Postgres service name in .devcontainer/docker-compose.yml.
+# usual Postgres service name inside a Compose network.
 DEV_DB_LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "db"})
 
 # Recycle pooled DB connections older than this many seconds. Set below Neon's

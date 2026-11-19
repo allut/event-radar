@@ -20,12 +20,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     // Bind IPv4 loopback explicitly. Vite's default `localhost` resolves to ::1
-    // first under Node's verbatim DNS order, so in the dev container the listener
-    // ends up IPv6-only while VS Code's port forwarder dials 127.0.0.1 -> the
-    // forwarded port refuses every connection even though Vite prints "ready".
+    // first under Node's verbatim DNS order, so the listener can end up IPv6-only
+    // while a port forwarder dials 127.0.0.1 and gets every connection refused
+    // even though Vite prints "ready".
     host: '127.0.0.1',
-    // strictPort: 5173 is the only dev port .devcontainer forwards; without this
-    // Vite silently drifts to 5174 and the forward is dead again.
+    // strictPort: fail rather than silently drifting to 5174, which a port
+    // forwarder pinned to 5173 would miss.
     port: 5173,
     strictPort: true,
     proxy: {

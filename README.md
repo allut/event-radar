@@ -44,33 +44,8 @@ The backend is one FastAPI process with an embedded APScheduler, so there is no 
 
 ## Getting started
 
-Use the devcontainer unless you have a reason not to. It matches CI and needs no local Python, Node or Postgres.
-
 > [!NOTE]
 > LLM and email keys are optional locally. Without LLM keys, dedup keeps only its rule-based merges and classification fails, so nothing publishes and the feeds stay empty. Without `RESEND_API_KEY`, emails are logged instead of sent.
-
-### Devcontainer
-
-You need Docker Desktop (WSL2 backend on Windows) and the VS Code [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension.
-
-1. **Free port 5432** if a host `db` container is running: `docker compose down`.
-2. **Run *F1 → Dev Containers: Reopen in Container*.** `.devcontainer/post-create.sh` writes `backend/.env` with a generated `SECRET_KEY`, installs dependencies, enables `.githooks/` and runs `alembic upgrade head`.
-3. **Wait for the dev servers.** `.devcontainer/post-start.sh` starts the backend on :8000 and the frontend on :5173 on every container start.
-4. **Sign in** as described in [First sign-in](#first-sign-in).
-
-Things to know inside the container:
-
-- **The interpreter is `/opt/venv/bin/python`, already on `PATH`.** There is no venv to create or activate. If VS Code shows a stale host interpreter from Settings Sync, pick `/opt/venv/bin/python` once via *Python: Select Interpreter*.
-- **Manage the servers with `bash .devcontainer/dev-server.sh`** and `status`, `restart`, `stop` or `logs backend|frontend`. Avoid an ad-hoc `npm run dev`: its watcher goes stale on the mounted workspace. Use `dev-server.sh run <backend|frontend>` for a foreground server.
-- **Logs are in `/tmp/event-radar-dev/`.** The `logs: backend` and `logs: frontend` tasks tail them in a split panel. They auto-open once you run *Tasks: Allow Automatic Tasks* and reload the window.
-- **`DATABASE_URL` comes from the container environment** and overrides `backend/.env`. The container's Postgres is a separate volume from the host's Compose `db`, so data doesn't carry over.
-- **The scheduler is off (`ENABLE_SCHEDULER=false`).** A `--reload` server left running overnight can't arm scrapes, LLM spend or digest email. To run it for one session, `bash .devcontainer/dev-server.sh stop backend`, then run `ENABLE_SCHEDULER=true uvicorn app.main:app --reload` from `backend/`.
-- **`gh` authenticates on start and attach** from the host's forwarded git credentials (`.devcontainer/gh-auth.sh`). If `gh auth status` is red, rerun that script or `gh auth login`.
-- **The `claude` CLI signs in once, into a persistent named volume** separate from the host's `~/.claude`. `post-start.sh` refreshes it on each start, and `.devcontainer/sync-claude-config.sh` mirrors the host's Claude Code config in. The image installs RTK, so the host's RTK hook works too.
-- **`.devcontainer/claude-plugins.json` lists container-only Claude Code plugins.** `sync-claude-config.sh` merges it into the container's `~/.claude/settings.json` on each start and never touches the host's config.
-- **`.devcontainer/mem-watchdog.sh` is a manual diagnostic** for the intermittent "reload the VS Code window" hang.
-
-### Native setup
 
 You need Python 3.12, Node.js 24 (`NODE_VERSION` in `frontend/wrangler.toml`) and Postgres 16, ideally through Docker Compose.
 
@@ -113,11 +88,9 @@ event-radar/
 ├── frontend/           Vite + React SPA, Pages Functions, prerender scripts
 ├── shared/             cross-stack i18n, personas and config
 ├── scripts/            repo-wide dev scripts, including the shared/ codegen
-├── .devcontainer/      devcontainer image and lifecycle scripts
 ├── .github/workflows/  CI and the dependency CVE audit
 ├── .githooks/          pre-commit checks and commit-message trimming
 ├── .claude/            Claude Code settings and hooks
-├── .vscode/            dev-server and log tasks
 ├── docker-compose.yml  local Postgres 16
 ├── LICENSE             MIT
 └── render.yaml         Render backend service

@@ -46,7 +46,7 @@ async def assert_schema_at_head() -> None:
     head; raise in production rather than let a stale schema serve traffic
     (the admin_actions/0030 incident: prod code shipped ahead of a DB still
     on an older revision, and every audited admin action 500'd instead of
-    failing loudly at boot). Development only warns, so a devcontainer with
+    failing loudly at boot). Development only warns, so a local setup with
     a half-migrated DB still boots."""
     alembic_cfg = Config(str(_ALEMBIC_INI_PATH))
     # script_location ("alembic") in alembic.ini is cwd-relative by alembic's

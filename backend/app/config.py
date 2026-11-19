@@ -32,9 +32,8 @@ class Settings(BaseSettings):
 
     # Development-only kill switch for the embedded APScheduler
     # (app/scheduler.py::start_scheduler). The schedule drives live HTTP scrapes of
-    # third-party sites, real LLM spend, and real digest email on a timer — the
-    # dev container sets this false (.devcontainer/docker-compose.yml) so
-    # `uvicorn --reload` left running overnight can't arm all of it. Ignored
+    # third-party sites, real LLM spend, and real digest email on a timer — set
+    # this false in local development so `uvicorn --reload` left running overnight can't arm all of it. Ignored
     # unless APP_ENV == development, so a stray env var can never stop the
     # pipeline in production. Manual POST /admin/* triggers are unaffected.
     ENABLE_SCHEDULER: bool = True
