@@ -26,7 +26,7 @@ from app.routers import organizer_events as organizer_events_module
 from app.routers import organizer_promotions as router_module
 from tests.promotions.conftest import NOW, at_tallinn, d
 
-VALID_CODE = "10234957"  # checksum-valid 8-digit registry code
+VALID_CODE = "90000009"  # checksum-valid, synthetic 8-digit registry code
 BAD_CHECKSUM = "10234958"
 
 
@@ -396,7 +396,7 @@ async def test_list_card_checkout_holds_and_invoice_url(oclient, db, make) -> No
     open_hold = _promo(ev.id, org.id, "unpaid", 20, 24, stripe_checkout_session_id="cs_open")
     abandoned = _promo(ev.id, org.id, "void", 26, 28, stripe_checkout_session_id="cs_gone")
     manual_void = _promo(ev.id, org.id, "void", 5, 6)
-    manual_unpaid = _promo(ev.id, org.id, "unpaid", 7, 9, billing_email="pay@acme.ee")
+    manual_unpaid = _promo(ev.id, org.id, "unpaid", 7, 9, billing_email="pay@acme.example")
     paid_card = _promo(
         ev.id, org.id, "paid", 11, 13, paid_at=NOW, stripe_checkout_session_id="cs_paid",
         invoice_url="https://invoice.stripe.com/i/x",
@@ -420,16 +420,16 @@ async def test_list_items_carry_billing_email(oclient, db, make) -> None:
     ev = await own_event(make)
     rid = (
         await oclient.post(
-            "/organizer/promotions/requests", json=req_body(ev.id, billing_email="bill@acme.ee")
+            "/organizer/promotions/requests", json=req_body(ev.id, billing_email="bill@acme.example")
         )
     ).json()["id"]
-    unpaid = _promo(ev.id, Who.organizer.id, "unpaid", 20, 22, billing_email="pay@acme.ee")
+    unpaid = _promo(ev.id, Who.organizer.id, "unpaid", 20, 22, billing_email="pay@acme.example")
     db.add(unpaid)
     await db.flush()
     items = (await oclient.get("/organizer/promotions")).json()["items"]
     by = {(i["kind"], i["id"]): i for i in items}
-    assert by[("request", rid)]["billing_email"] == "bill@acme.ee"
-    assert by[("promotion", unpaid.id)]["billing_email"] == "pay@acme.ee"
+    assert by[("request", rid)]["billing_email"] == "bill@acme.example"
+    assert by[("promotion", unpaid.id)]["billing_email"] == "pay@acme.example"
 
 
 @pytest.mark.asyncio

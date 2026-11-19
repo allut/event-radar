@@ -33,7 +33,7 @@ async def make_request(db, make, org=None, start=10, end=14, ev=None, **ev_kw) -
             start_date=d(start),
             end_date=d(end),
             advertiser_legal_name="Acme OÜ",
-            advertiser_registry_code="10234957",
+            advertiser_registry_code="90000009",
             billing_email=None,
             note="hello",
             business_attested=True,
@@ -48,7 +48,7 @@ def grant_body(start: int = 10, end: int = 14, **kw: Any) -> dict:
         "start_date": d(start).isoformat(),
         "end_date": d(end).isoformat(),
         "advertiser_legal_name": "Acme OÜ",
-        "advertiser_registry_code": "10234957",
+        "advertiser_registry_code": "90000009",
     }
     out.update(kw)
     return out
@@ -85,7 +85,7 @@ async def test_queue_lists_pending_with_count_reason_and_restriction(client, db,
     assert done.id not in by_id
     assert by_id[ok.id]["not_eligible_reason"] is None
     assert by_id[ok.id]["promotion_restriction"] == "alcohol"
-    assert by_id[ok.id]["advertiser_registry_code"] == "10234957"
+    assert by_id[ok.id]["advertiser_registry_code"] == "90000009"
     assert by_id[owner_lost.id]["not_eligible_reason"] == "organizer_not_owner"
 
 
@@ -299,5 +299,5 @@ async def test_grant_takes_the_cap_lock_before_the_request_row_lock(db, make, mo
     monkeypatch.setattr(requests_module, "lock_cap", lock_cap_spy)
     monkeypatch.setattr(requests_module, "_load_locked", load_spy)
     request = await make_request(db, make)
-    await grant_request(db, request.id, GrantRequest(d(10), d(14), "Acme OÜ", "10234957"), NOW)
+    await grant_request(db, request.id, GrantRequest(d(10), d(14), "Acme OÜ", "90000009"), NOW)
     assert order[:2] == ["cap", "row"]

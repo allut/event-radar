@@ -1,4 +1,4 @@
-"""Drift guards for docs/security.md's per-route rules, checked on the real app.
+"""Drift guards for per-route security rules, checked on the real app.
 
 Every route carries a rate limit, and every route either depends on its track's
 auth dependency or is listed in PUBLIC_ROUTES. A new unauthenticated endpoint
@@ -78,8 +78,7 @@ def _auth_dependencies(route: APIRoute) -> set[str]:
 
 
 def test_every_route_is_rate_limited() -> None:
-    """`@limiter.limit` or `@limiter.shared_limit` on every endpoint (docs/security.md
-    "Rate Limiting")."""
+    """`@limiter.limit` or `@limiter.shared_limit` on every endpoint."""
     registered = limiter._route_limits.keys() | limiter._dynamic_route_limits.keys()
     missing = [
         f"{method} {path}"

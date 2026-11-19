@@ -92,7 +92,7 @@ function tileSvg(variant: DialVariant, fill: number, size?: number, radiusRatio 
   );
 }
 
-/** Optical-size fills (see docs/design-system.md §9). Maskable keeps the rim
+/** Optical-size fills. Maskable keeps the rim
  * and tip dot inside the 40%-radius safe zone: 12.25 units * (512/32) = 196 < 204.8. */
 const SMALL_FILL = 0.84;
 const LARGE_FILL = 0.68;

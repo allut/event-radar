@@ -266,7 +266,7 @@ class TestVerifyMagicLink:
     async def test_pending_google_sub_links_identity_on_consume(
         self, mock_db, make_request
     ):
-        """ADR 0002 — a magic link sent to confirm a pending Google identity
+        """A magic link sent to confirm a pending Google identity
         (AuthMagicLink.pending_google_sub set) absorbs that sub into
         user_identities once the link is consumed, mirroring
         test_organizer_auth.py's organizer equivalent."""
@@ -616,7 +616,7 @@ class TestGetMe:
 
         user = MagicMock()
         user.id = 1
-        user.email = "a@b.com"
+        user.email = "a@b.example"
         user.locale = DEFAULT_USER_LOCALE
         user.home_city = DEFAULT_USER_CITY
         user.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
@@ -631,7 +631,7 @@ class TestGetMe:
 
         user = MagicMock()
         user.id = 2
-        user.email = "c@d.com"
+        user.email = "c@d.example"
         user.locale = "et"
         user.home_city = DEFAULT_USER_CITY
         user.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
@@ -646,7 +646,7 @@ class TestGetMe:
 
         user = MagicMock()
         user.id = 3
-        user.email = "e@f.com"
+        user.email = "e@f.example"
         user.locale = "ru"
         user.home_city = DEFAULT_USER_CITY
         user.created_at = datetime(2024, 1, 1, tzinfo=timezone.utc)

@@ -175,7 +175,7 @@ async def test_inbound_mail_rejects_tampered_body(mock_db):
     from app.db import get_db
     app.dependency_overrides[get_db] = override_db
 
-    tampered_payload = {**payload, "from": "attacker@evil.com"}
+    tampered_payload = {**payload, "from": "attacker@evil.example"}
 
     with patch("app.routers.webhooks.settings") as mock_settings:
         mock_settings.RESEND_WEBHOOK_SECRET = TEST_SECRET
@@ -404,7 +404,7 @@ async def test_inbound_mail_no_text_and_no_subject_skips_extraction(mock_db):
         "query_string": b"",
         "headers": [(b"content-type", b"application/json")],
     }
-    body = json.dumps({"from": "x@x.com", "to": "", "subject": "", "text": ""}).encode()
+    body = json.dumps({"from": "x@x.example", "to": "", "subject": "", "text": ""}).encode()
 
     async def receive():
         return {"type": "http.request", "body": body, "more_body": False}
@@ -490,7 +490,7 @@ async def test_inbound_mail_sender_not_allowlisted_skips_extraction(mock_db):
         "query_string": b"",
         "headers": [(b"content-type", b"application/json")],
     }
-    body = _json.dumps(_email_payload(from_addr="newsletter@untrusted.com")).encode()
+    body = _json.dumps(_email_payload(from_addr="newsletter@untrusted.example")).encode()
 
     async def receive():
         return {"type": "http.request", "body": body, "more_body": False}

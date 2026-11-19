@@ -153,7 +153,7 @@
 
 .table { composes: table from '../../components/shared/AdminCommerce.module.css'; }
 
-/* Overrides of AdminCommerce's .table rules out-rank them (design-system.md §7):
+/* Overrides of AdminCommerce's .table rules out-rank them:
    that module can land after this file in the bundle. */
 .table.table {
   min-width: var(--admin-promotion-days-min);

@@ -3,7 +3,7 @@ report (#614, #616).
 
 Every route 404s while PROMOTIONS_OFFER_ENABLED is off (admin direct grants are
 unaffected). Stays under /organizer/* so the organizer_session cookie, scoped
-to Path=/api/organizer, reaches it. See docs/organizer-portal.md.
+to Path=/api/organizer, reaches it.
 """
 
 import logging

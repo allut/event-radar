@@ -6,7 +6,7 @@
  *
  * Same-origin proxying (rather than the SPA fetching Render directly) is
  * what lets the backend's httpOnly session cookie work as a first-party
- * cookie from the browser's perspective — see docs/adr/0001.
+ * cookie from the browser's perspective.
  *
  * Routing note: Cloudflare Pages matches the exact-path sibling functions
  * (api/seo-audit.ts, api/prerender-cadence.ts) ahead of this catch-all, so

@@ -162,7 +162,7 @@ _run_sweep_promotions = _scheduled(
 
 
 def _register_scheduled_jobs(scheduler: AsyncIOScheduler) -> None:
-    """Wire the full cron schedule (see docs/backend-ops.md "Scheduled Jobs" for the cadence)."""
+    """Wire the full cron schedule."""
     # Organizer discovery — weekly Sunday at ORGANIZER_SYNC_HOUR (never hour 3: it repeats on fall-back day, #633)
     scheduler.add_job(
         _run_organizer_sync,

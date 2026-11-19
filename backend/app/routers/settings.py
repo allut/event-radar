@@ -126,7 +126,7 @@ async def unlink_own_identity(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Unconditional unlink (ADR 0002) — no last-factor guard, since magic
+    """Unconditional unlink — no last-factor guard, since magic
     link always remains as a sign-in path. Bumps session_token_version (a
     sign-out-everywhere shape) and immediately re-issues the caller's own
     session cookie at the new version, so only *other* devices drop. Mirrors

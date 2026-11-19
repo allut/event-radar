@@ -1,4 +1,4 @@
-// Drift guard (#465, docs/design-system.md §4): browser zoom shrinks
+// Drift guard (#465): browser zoom shrinks
 // the CSS viewport, so a vw-driven display token only grows once it hits its
 // lower bound. Each token must reach 2x its 100% size by 300% zoom (Safari's
 // cap) — guaranteed when max ÷ min ≤ 1.5 — with rem bounds so the token also

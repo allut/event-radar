@@ -1,8 +1,7 @@
 """Admin console auth endpoints — password + TOTP login, own session cookie.
 
 A third auth track alongside app/routers/auth.py (consumer) and
-app/routers/organizer_auth.py (organizer): see
-docs/backend-ops.md "Admin Endpoints" and docs/security.md "Auth". Credential is the
+app/routers/organizer_auth.py (organizer): Credential is the
 ADMIN_USERNAME/ADMIN_PASSWORD env vars plus a required TOTP step; success
 issues a session cookie so the admin console frontend never holds the
 password in JS. This is the only admin credential surface (HTTP Basic was
@@ -125,8 +124,7 @@ async def admin_login(body: AdminLoginBody, request: Request, response: Response
 async def admin_logout(request: Request, response: Response) -> dict:
     """Sign out this device only — the admin session carries no
     session_token_version, so there is no "logout everywhere" variant (a
-    12h TTL with no revocation beyond expiry is the accepted ceiling; see
-    docs/adr/0001). Idempotent (OWASP audit F18): no auth dependency, so an
+    12h TTL with no revocation beyond expiry is the accepted ceiling). Idempotent (OWASP audit F18): no auth dependency, so an
     already-expired session still gets a 200 with its stale cookie cleared,
     not a 401."""
     clear_session_cookie(

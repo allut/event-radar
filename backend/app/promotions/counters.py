@@ -3,7 +3,7 @@
 Counts live in a module-level dict keyed (promotion id, Tallinn day, column)
 and reach ``promotion_daily_stats`` as one bulk upsert every
 ``PROMOTION_COUNTER_FLUSH_SECONDS`` and on shutdown. This relies on the
-single-process topology (CLAUDE.md): a crash loses at most a minute of counts.
+single-process topology: a crash loses at most a minute of counts.
 
 No viewer identifier is ever written to the database, and nothing here feeds
 ranking, the persona or ``user_event_feedback``. The ``?ref=`` opens count once

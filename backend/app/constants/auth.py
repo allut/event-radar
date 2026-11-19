@@ -26,7 +26,7 @@ ADMIN_AUTH_FAILURES_MAX_ENTRIES = 4096
 # Auth tokens
 AUTH_MAGIC_SALT = "magic-link-v1"
 AUTH_SESSION_SALT = "session-v1"
-# Session-cookie transport (issue #26 / docs/adr/0001). Path scoping is what
+# Session-cookie transport (issue #26). Path scoping is what
 # keeps the higher-value organizer credential off ordinary consumer requests —
 # both paths sit under the `/api` proxy that makes the SPA same-origin
 # with this API, so a browser only ever attaches SESSION_COOKIE_NAME under
@@ -60,7 +60,7 @@ AUTH_ORGANIZER_SESSION_SALT = "organizer-session-v1"
 ORGANIZER_MAGIC_LINK_TTL_MINUTES = _MAGIC_LINK_TTL_MINUTES_SHARED
 ORGANIZER_SESSION_TTL_DAYS = _SESSION_TTL_DAYS_SHARED
 
-# Google sign-in (ADR 0002) — server-side OAuth 2.0 authorization code + PKCE.
+# Google sign-in — server-side OAuth 2.0 authorization code + PKCE.
 # One salt shared by both tracks' state cookies (payload's "track" field keeps
 # a user state token from verifying against the organizer callback and vice
 # versa, same defense-in-depth shape as the magic-link/session salt split).
@@ -87,13 +87,13 @@ GOOGLE_OAUTH_AUTHORIZATION_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/a
 GOOGLE_OAUTH_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 GOOGLE_OAUTH_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 GOOGLE_OAUTH_ISSUERS = frozenset({"accounts.google.com", "https://accounts.google.com"})
-# Domains Google is authoritative for (ADR 0002's linking gate) — an `hd` claim
+# Domains Google is authoritative for — an `hd` claim
 # on the ID token is the other authoritative signal, checked separately.
 GOOGLE_AUTHORITATIVE_EMAIL_DOMAINS = frozenset({"gmail.com", "googlemail.com"})
 # organizer_oauth_state / oauth_state cookies (Path scoped to the callback
 # route only, unlike the session cookie's broader /api/organizer or /api —
-# each is only ever read on one route). SameSite=Lax, not Strict — see
-# docs/adr/0002 for why.
+# each is only ever read on one route). SameSite=Lax, not Strict: the callback
+# arrives as a cross-site top-level redirect from Google.
 ORGANIZER_OAUTH_STATE_COOKIE_NAME = "organizer_oauth_state"
 ORGANIZER_GOOGLE_CALLBACK_PUBLIC_PATH = "/api/organizer/auth/google/callback"
 # The state cookie is Path-scoped to the callback route, so the two must be equal.
@@ -148,7 +148,7 @@ ADMIN_SESSION_COOKIE_NAME = "admin_session"
 # /api/organizer — an admin route added outside /admin/* would silently 401.
 ADMIN_SESSION_COOKIE_PATH = "/api/admin"
 # 12h, shorter than the 2-day consumer/organizer TTL — a higher-value credential
-# with no revocation mechanism beyond expiry (see docs/adr/0001).
+# with no revocation mechanism beyond expiry.
 ADMIN_SESSION_TTL_SECONDS = 12 * 60 * 60
 # One 30s step of drift tolerance either side of "now" (pyotp's valid_window is a
 # count of steps, not seconds; app/auth/totp.py) — accounts for clock skew between

@@ -12,7 +12,7 @@ const RESTRICTED_SYNTAX = [
     selector:
       'JSXOpeningElement[name.name="input"] > JSXAttribute[name.name="type"][value.value=/^(date|datetime-local|time)$/]',
     message:
-      'Native date and time inputs are banned; use the shared DatePicker (docs/design-system.md).',
+      'Native date and time inputs are banned; use the shared DatePicker.',
   },
   {
     selector:

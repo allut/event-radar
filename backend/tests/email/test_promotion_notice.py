@@ -13,7 +13,7 @@ from app.email import promotion_notice, resend
 
 def configure(monkeypatch) -> None:
     monkeypatch.setattr(settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(settings, "FRONTEND_URL", "https://radar.example")
 
 
 async def send_ended(locale: str, reason: str = "Event <moved>") -> None:

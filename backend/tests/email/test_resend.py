@@ -22,13 +22,13 @@ async def test_no_api_key_warns_and_skips_send(patch_client, monkeypatch, caplog
 @pytest.mark.asyncio
 async def test_success_adds_from_and_bearer_header(patch_client, monkeypatch):
     monkeypatch.setattr(resend.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(resend.settings, "RESEND_FROM_ADDRESS", "noreply@radar.ee")
+    monkeypatch.setattr(resend.settings, "RESEND_FROM_ADDRESS", "noreply@radar.example")
     post = patch_client(resend, MagicMock(status_code=httpx.codes.OK, text="ok"))
-    await resend.send_resend_email({"to": ["a@b.ee"]}, log_label="x", log_ref="ref")
+    await resend.send_resend_email({"to": ["a@b.example"]}, log_label="x", log_ref="ref")
     post.assert_awaited_once()
     _, kwargs = post.await_args
     assert kwargs["headers"]["Authorization"] == "Bearer re_key"
-    assert kwargs["json"] == {"from": "noreply@radar.ee", "to": ["a@b.ee"]}
+    assert kwargs["json"] == {"from": "noreply@radar.example", "to": ["a@b.example"]}
 
 
 @pytest.mark.asyncio

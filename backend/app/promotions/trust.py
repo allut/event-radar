@@ -1,7 +1,7 @@
 """Trust panel reads (#620): the tripwires an operator reviews to decide
 whether ads hurt trust, for the rolling 4 weeks and since launch, next to the
 denominators. One query per figure set, whatever the row count. Nothing here
-flips a flag; the thresholds are guidance in docs/backend-ops.md."""
+flips a flag; the thresholds are guidance only."""
 
 from datetime import date, datetime, time, timedelta
 from typing import Any

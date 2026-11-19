@@ -1,4 +1,4 @@
-"""Tests for the consumer-track Google sign-in endpoints (ADR 0002, #296) —
+"""Tests for the consumer-track Google sign-in endpoints —
 _apply_google_linking_gate, /auth/google/start, /auth/google/callback.
 Mirrors tests/auth/test_organizer_auth.py's Google-sign-in sections; the
 extra TestApplyGoogleLinkingGate cases cover the consumer-only

@@ -3,7 +3,7 @@
 # Usage (from anywhere): bash backend/scripts/scratch-test.sh [--no-db] [pytest args]
 # Test paths may be relative to backend/ (tests/...) or to the repo root (backend/tests/...).
 # --no-db skips creating and migrating the database, for tests that never touch one
-# (tests/test_docs_style.py). DATABASE_URL still names a scratch database, so conftest
+# (tests/test_move_to_shared.py). DATABASE_URL still names a scratch database, so conftest
 # keeps refusing the dev one, but that database does not exist.
 set -euo pipefail
 

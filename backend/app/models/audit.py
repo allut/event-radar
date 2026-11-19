@@ -14,7 +14,7 @@ class AdminAction(Base):
     reconstructible after the fact. Written inside the same transaction as the mutation it
     records where the endpoint has one open; survives an outage of the
     LOG_SHIP_URL log drain, unlike the structured log line alone. There is no
-    admins table (see ADR 0001), so there is no actor column — "a login
+    admins table, so there is no actor column — "a login
     happened" is the only fact the admin auth model asserts."""
 
     __tablename__ = "admin_actions"

@@ -6,7 +6,7 @@ from datetime import date
 from app.email.digest import build_digest_html
 from app.promotions.digest_slot import DigestSlot
 
-STOP = "https://app.radar.ee/en/email-consent-off?token=tok"
+STOP = "https://app.radar.example/en/email-consent-off?token=tok"
 
 
 def render(make_event, locale="en", with_slot=True):
@@ -16,7 +16,7 @@ def render(make_event, locale="en", with_slot=True):
         picks,
         date(2026, 5, 20),
         locale,
-        "https://app.radar.ee",
+        "https://app.radar.example",
         sponsored=slot if with_slot else None,
         ads_off_url=STOP if with_slot else None,
     )

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Refuse to push the local-only docs branch (see README.md, "Agent docs").
+# Git feeds one "<local ref> <local sha> <remote ref> <remote sha>" line per ref.
+set -euo pipefail
+
+DOCS_BRANCH="refs/heads/local-docs"
+
+while read -r local_ref _ remote_ref _; do
+  if [ "$local_ref" = "$DOCS_BRANCH" ] || [ "$remote_ref" = "$DOCS_BRANCH" ]; then
+    echo "pre-push: local-docs is local only and never leaves this machine." >&2
+    exit 1
+  fi
+done

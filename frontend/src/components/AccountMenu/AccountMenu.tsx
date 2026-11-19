@@ -50,8 +50,8 @@ interface AccountMenuProps {
   onLogout: () => void;
 }
 
-// The trigger depends only on signed-in/out (no name or email, no avatar —
-// ADR 0002) so it can't add a second layout shift on hydrate.
+// The trigger depends only on signed-in/out (no name or email, no avatar)
+// so it can't add a second layout shift on hydrate.
 export default function AccountMenu({ locale, track, items, onLogout }: AccountMenuProps) {
   const { open, setOpen, rootRef, popRef, triggerRef, close } = useDropdown('a, button');
   const localePath = useLocalePath();

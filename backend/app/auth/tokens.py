@@ -2,7 +2,7 @@
 
 Magic-link token: URLSafeTimedSerializer signed payload {user_id}, 15-min TTL.
 Session token: same serializer with a different salt, SESSION_TTL_DAYS TTL
-(2 days as of shared/app-config.json — see docs/security.md "Auth").
+(2 days as of shared/app-config.json).
 The magic-link token hash (SHA-256 hex) is stored in auth_magic_links.token_hash
 so a compromised DB row cannot be turned back into a valid token.
 """
@@ -171,7 +171,7 @@ class OAuthStatePayload(TypedDict):
 
 def generate_oauth_state_token(state: str, code_verifier: str, track: str) -> str:
     """Sign the PKCE state+verifier pair for the organizer_oauth_state /
-    oauth_state cookie (ADR 0002). ``track`` ("organizer" or "user") is
+    oauth_state cookie. ``track`` ("organizer" or "user") is
     checked at verify time so a state token minted for one track's callback
     can never be replayed against the other's."""
     return _serializer().dumps(

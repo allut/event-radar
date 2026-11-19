@@ -1,10 +1,10 @@
-"""Structured log event names and statuses (the Axiom record shape — see docs/observability.md)."""
+"""Structured log event names and statuses (the Axiom record shape)."""
 
 # "color_message" is uvicorn's own `extra=` on its startup/shutdown lines — kept
-# reserved so it doesn't leak into the curated shipped schema (docs/observability.md).
+# reserved so it doesn't leak into the curated shipped schema.
 
 # Structured log `event` field values (shipped as a first-class JSON key via
-# `extra={"event": ...}`) — each keys an Axiom monitor or triage query. See docs/observability.md.
+# `extra={"event": ...}`) — each keys an Axiom monitor or triage query.
 LOG_EVENT_JOB_RUN = "job_run"  # scheduled-job completion/failure telemetry
 LOG_EVENT_RATE_LIMIT_BLOCK = "rate_limit_block"  # own per-IP 429 rejection
 LOG_EVENT_LLM_DEGRADED = "llm_degraded"  # provider chain exhausted / backlog deferred
@@ -21,7 +21,7 @@ LOG_EVENT_UNVERIFIED_ACCOUNT_BUDGET_EXCEEDED = "unverified_account_budget_exceed
 # promotions/counters.py::first_ref_hit's per-day set hit
 # PROMOTION_REF_SEEN_MAX_ENTRIES — ?ref= opens stop counting until midnight.
 LOG_EVENT_PROMOTION_REF_SEEN_FULL = "promotion_ref_seen_full"
-# ADR 0002 (Google sign-in) — carries `track`/`outcome` (see GOOGLE_SIGNIN_OUTCOME_*).
+# Google sign-in — carries `track`/`outcome` (see GOOGLE_SIGNIN_OUTCOME_*).
 LOG_EVENT_GOOGLE_SIGNIN = "google_signin"
 # Network/5xx failure talking to Google (token exchange or JWKS fetch) — distinct
 # from auth_failed, which is a caller-side/verification rejection, not an

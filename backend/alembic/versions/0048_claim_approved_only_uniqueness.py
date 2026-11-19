@@ -52,7 +52,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_claims_active_publisher", table_name="claims")
     op.drop_index("ix_claims_active_series", table_name="claims")
-    # Defensive (docs/data-model.md "Migrations"): this migration's whole point is
+    # Defensive: this migration's whole point is
     # to let multiple pending claims coexist per target, so by the time a
     # downgrade runs there may be real ones — recreating the wider
     # pending-or-approved index without first resolving them would fail with

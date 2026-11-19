@@ -808,7 +808,7 @@
   .frame {
     top: var(--bar-h-phone);
   }
-  /* Capture first (#498, docs/design-system.md §4): heroTop/heroBot dissolve into
+  /* Capture first (#498): heroTop/heroBot dissolve into
      one heroMain flex column so the sub and the counter (as a ledger) can
      follow the capture bar. */
   .heroMain {

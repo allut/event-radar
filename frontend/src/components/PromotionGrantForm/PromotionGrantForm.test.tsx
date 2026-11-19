@@ -17,8 +17,8 @@ function context(overrides: Record<string, unknown> = {}) {
   return {
     event_id: 42,
     event_title: 'Tallinn Jazz Night',
-    owner: { organizer_id: 9, name: 'Jazzklubi MTÜ', email: 'info@jazzklubi.ee' },
-    prefill: { advertiser_legal_name: 'Jazzklubi MTÜ', billing_email: 'info@jazzklubi.ee' },
+    owner: { organizer_id: 9, name: 'Example Jazz Club MTÜ', email: 'info@jazzclub.example' },
+    prefill: { advertiser_legal_name: 'Example Jazz Club MTÜ', billing_email: 'info@jazzclub.example' },
     today: '2026-10-17',
     earliest_start: '2026-10-18',
     event_last_day: '2026-10-30',
@@ -112,8 +112,8 @@ describe('PromotionGrantForm', () => {
   it('prefills the advertiser from the owner and shows the live price for valid dates', async () => {
     setup();
     await pickDates();
-    expect(screen.getByLabelText('Advertiser legal name')).toHaveValue('Jazzklubi MTÜ');
-    expect(screen.getByLabelText('Billing email')).toHaveValue('info@jazzklubi.ee');
+    expect(screen.getByLabelText('Advertiser legal name')).toHaveValue('Example Jazz Club MTÜ');
+    expect(screen.getByLabelText('Billing email')).toHaveValue('info@jazzclub.example');
     expect(await screen.findByText('Dates are available.')).toBeInTheDocument();
     expect(screen.getByText('€35.00 + €8.40 VAT = €43.40')).toBeInTheDocument();
     expect(screen.getByText('7 days × €5.00 net · VAT 24%')).toBeInTheDocument();
@@ -165,9 +165,9 @@ describe('PromotionGrantForm', () => {
       expect(mockPost).toHaveBeenCalledWith('/admin/events/42/promotions', {
         start_date: '2026-10-20',
         end_date: '2026-10-26',
-        advertiser_legal_name: 'Jazzklubi MTÜ',
+        advertiser_legal_name: 'Example Jazz Club MTÜ',
         advertiser_registry_code: '80123456',
-        billing_email: 'info@jazzklubi.ee',
+        billing_email: 'info@jazzclub.example',
         is_complimentary: false,
         complimentary_note: null,
         invoice_reference: 'ER-M-0001',

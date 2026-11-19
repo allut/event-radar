@@ -21,8 +21,7 @@
  *
  * Fails loudly (non-zero exit) if the published-events fetch fails, if
  * Playwright can't reach/render any target route, or if the validation gate
- * finds a structural/staleness issue — see
- * docs/seo.md "Build-Time Prerender".
+ * finds a structural/staleness issue —
  * `npm run build` copies dist/index.html to dist/app-shell.html *before*
  * invoking this script (not inside it) so the SPA-fallback rewrite
  * target exists even if this script never runs to completion.
@@ -809,7 +808,7 @@ async function snapshotTarget(
 /** Bounded-concurrency runner shared by the change-detection pass, the
  * snapshot pass, and the validation-gate pass below (issues #53, #80) —
  * bounded, not unbounded, mirroring this repo's external-API fan-out
- * convention (CLAUDE.md). Shares its index-claiming with the render pass's
+ * convention. Shares its index-claiming with the render pass's
  * time-boxed pool via createBudgetedCursor (issue #82) — an unreachable
  * deadline (`Infinity`) makes it behave as a plain, non-budgeted cursor
  * rather than a second hand-rolled "claim next index" loop. */

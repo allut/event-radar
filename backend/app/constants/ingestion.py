@@ -183,7 +183,7 @@ TALLINN_REGION_BBOX: tuple[float, float, float, float] = (59.2, 59.7, 24.3, 25.3
 SOURCE_STATUS_OK = "ok"
 SOURCE_STATUS_ERROR = "error"
 
-# Event claiming (#409/#410/#411) — see CONTEXT.md's Event Claiming glossary.
+# Event claiming (#409/#410/#411).
 PUBLISHER_STATUS_ACTIVE = "active"
 PUBLISHER_STATUS_RETIRED = "retired"
 VALID_PUBLISHER_STATUSES = frozenset(
@@ -249,7 +249,7 @@ GEOCODE_COMMIT_INTERVAL_SECONDS: float = 120.0
 GEOCODE_RETRY_INTERVAL_DAYS = 7
 
 # How far back a donor event can be and still seed the geocode cache / sibling
-# copy pass. events rows are never deleted (see docs/backend-ops.md "Data Retention"), so
+# copy pass. events rows are never deleted, so
 # without this bound both donor queries would scan every event ever ingested,
 # growing without limit. Venue coordinates don't change, so this trades a small
 # amount of donor coverage (a venue whose only past event is older than this
@@ -460,8 +460,8 @@ ERROR_UNKNOWN_SOURCE = "Unknown source: {slug!r}"
 
 # ---------------------------------------------------------------------------
 # Single-institution sources (KUMU, Estonia Concert Hall) — one Publisher and
-# one hardcoded DNS-TXT verification domain per source; see CONTEXT.md's
-# Publisher glossary entry. Piletilevi is deliberately absent: its Publisher
+# one hardcoded DNS-TXT verification domain per source. Piletilevi is
+# deliberately absent: its Publisher
 # resolution is promoter-id-keyed, not source-constant.
 # ---------------------------------------------------------------------------
 class SingleInstitution(NamedTuple):

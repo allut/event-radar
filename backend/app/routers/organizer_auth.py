@@ -213,7 +213,7 @@ async def verify_organizer_magic_link(
     now = datetime.now(timezone.utc)
 
     # Atomic UPDATE — same TOCTOU-closing pattern as auth.py::verify_magic_link.
-    # Also returns pending_google_sub (ADR 0002): set when this link was sent
+    # Also returns pending_google_sub: set when this link was sent
     # to confirm a Google-identity link rather than to start a session.
     result = await db.execute(
         update(OrganizerMagicLink)
@@ -248,7 +248,7 @@ async def verify_organizer_magic_link(
         )
 
     if pending_google_sub is not None:
-        # ADR 0002 — this magic link was sent to confirm a pending Google
+        # This magic link was sent to confirm a pending Google
         # identity link (non-authoritative address), not to start a session
         # directly. Create the link now that control of the address is proven
         # — and only in the browser that started the Google sign-in (OWASP
@@ -391,7 +391,7 @@ def _error_redirect(error_code: str) -> RedirectResponse:
 @router.get("/google/start")
 @limiter.limit(RATE_LIMIT_GOOGLE_SIGNIN_START)
 async def start_organizer_google_signin(request: Request) -> RedirectResponse:
-    """Kick off the organizer-track Google sign-in flow (ADR 0002). 404 when
+    """Kick off the organizer-track Google sign-in flow. 404 when
     the flag is off — the endpoint doesn't exist for an outside prober, not
     just "disabled"."""
     if not settings.GOOGLE_SIGNIN_ORGANIZER_ENABLED:
@@ -424,7 +424,7 @@ async def _send_google_confirmation_link(
 ) -> None:
     """Send a confirmation magic link that, once used, absorbs `sub` into
     organizer_identities (see verify_organizer_magic_link above) rather than
-    starting a session directly — ADR 0002's non-authoritative-address gate."""
+    starting a session directly — the non-authoritative-address gate."""
     if await recent_unused_link_exists(
         db,
         OrganizerMagicLink,
@@ -466,7 +466,7 @@ async def _send_google_confirmation_link(
 async def _apply_google_linking_gate(
     db: AsyncSession, identity: GoogleIdentity
 ) -> tuple[str, Organizer | None]:
-    """ADR 0002's linking gate. Returns (outcome, organizer) — organizer is
+    """The linking gate. Returns (outcome, organizer) — organizer is
     None only for GOOGLE_SIGNIN_OUTCOME_CONFIRMATION_SENT, where no session
     is minted this request."""
     existing_identity = await db.scalar(
@@ -504,7 +504,7 @@ async def _apply_google_linking_gate(
         except IntegrityError:
             # A concurrent callback for the same Google account (double-click,
             # two tabs) won the identity-link race first — never surface a
-            # 500 here (docs/security.md "Auth", callback invariant). Roll back
+            # 500 here (callback invariant). Roll back
             # (which also undoes this request's own uncommitted Organizer
             # insert, if any — the winning request's row is what persists)
             # and fall back to that winner's identity.
@@ -538,7 +538,7 @@ async def _apply_google_linking_gate(
         return GOOGLE_SIGNIN_OUTCOME_UNVERIFIED_EMAIL, None
 
     # Non-authoritative address — Google's word on `email_verified` isn't
-    # trusted enough to auto-link (ADR 0002). Prove control via a
+    # trusted enough to auto-link. Prove control via a
     # confirmation magic link before any identity row is created.
     organizer = existing_organizer or await _get_or_create_organizer_for_google(
         db, identity["email"]

@@ -54,7 +54,7 @@ describe('OrganizerLogin', () => {
     const { ApiError: ApiErrorClass } = await import('../../api/client');
     mockPost.mockRejectedValueOnce(new ApiErrorClass(StatusCodes.BAD_REQUEST, 'Invalid email'));
     renderWithProviders(<OrganizerLogin />, { route: '/en/organizer/login' });
-    await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'bad@test.com');
+    await userEvent.type(screen.getByRole('textbox', { name: /email/i }), 'bad@test.example');
     await userEvent.click(screen.getByRole('button', { name: /send/i }));
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
     expect(screen.getByText('Invalid email')).toBeInTheDocument();

@@ -216,7 +216,7 @@ async def _sync_publishers(
     (#409/#411) — a read mirror only, never the other way around; the JSONB
     lists on Source.config stay the live ingestion filter (see module
     docstring). One bulk SELECT plus in-memory upserts, independent of how
-    many organizers changed this run (Code Quality Rules' "Batch jobs").
+    many organizers changed this run (batch-job rule).
     """
     all_oids = set(current_ids) | retired_ids
     if not all_oids:

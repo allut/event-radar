@@ -327,7 +327,7 @@ export default function EventDetail() {
             )}
 
             {/* #441: a pending-only target is still claimable by a rival —
-                ADR 0004's "proof preempts assertion" only blocks the CTA once
+                "proof preempts assertion" only blocks the CTA once
                 a claim is actually approved. #445: a direct organizer
                 submission has no ingested EventSource to ever claim, so the
                 CTA never renders for it. */}

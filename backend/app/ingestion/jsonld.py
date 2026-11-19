@@ -244,8 +244,8 @@ def organizer_from_jsonld_items(
 
     ``external_id`` is the organizer's schema.org ``@id`` (falls back to
     ``url`` when ``@id`` is absent) — for Piletilevi this is the promoter's
-    profile URL, the key a Publisher resolves against (see CONTEXT.md's Event
-    Claiming glossary; resolution itself is a later ticket — this function
+    profile URL, the key a Publisher resolves against (resolution itself is
+    a later ticket — this function
     only extracts the raw field, #411).
     """
     for item in items:

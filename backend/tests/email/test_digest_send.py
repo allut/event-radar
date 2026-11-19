@@ -33,8 +33,8 @@ async def test_no_api_key_skips_send(monkeypatch, make_event):
 @pytest.mark.asyncio
 async def test_success_calls_http_post(monkeypatch, make_event):
     monkeypatch.setattr(digest.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(digest.settings, "RESEND_FROM_ADDRESS", "d@radar.ee")
-    monkeypatch.setattr(digest.settings, "FRONTEND_URL", "https://app.radar.ee")
+    monkeypatch.setattr(digest.settings, "RESEND_FROM_ADDRESS", "d@radar.example")
+    monkeypatch.setattr(digest.settings, "FRONTEND_URL", "https://app.radar.example")
     _patch_client(monkeypatch)
     post = AsyncMock()
     monkeypatch.setattr(digest, "http_post", post)
@@ -46,11 +46,11 @@ async def test_success_calls_http_post(monkeypatch, make_event):
     post.assert_awaited_once()
     _args, kwargs = post.call_args
     body = kwargs["json_body"]
-    assert body["from"] == "d@radar.ee"
+    assert body["from"] == "d@radar.example"
     assert body["to"] == ["u@example.com"]
     assert body["subject"]
     assert body["html"]
-    assert "app.radar.ee/en/unsubscribe?token=" in body["html"]
+    assert "app.radar.example/en/unsubscribe?token=" in body["html"]
     [mark] = body["attachments"]
     assert mark["content_id"] == "event-radar-mark"
     headers = body["headers"]
@@ -84,8 +84,8 @@ async def test_unsubscribe_link_carries_locale_prefix(
     # #499 — the in-body unsubscribe link opens the recipient's locale; the
     # List-Unsubscribe header (backend one-click endpoint) stays unprefixed.
     monkeypatch.setattr(digest.settings, "RESEND_API_KEY", "re_key")
-    monkeypatch.setattr(digest.settings, "FRONTEND_URL", "https://app.radar.ee")
-    monkeypatch.setattr(digest.settings, "BACKEND_URL", "https://api.radar.ee")
+    monkeypatch.setattr(digest.settings, "FRONTEND_URL", "https://app.radar.example")
+    monkeypatch.setattr(digest.settings, "BACKEND_URL", "https://api.radar.example")
     _patch_client(monkeypatch)
     post = AsyncMock()
     monkeypatch.setattr(digest, "http_post", post)
@@ -93,7 +93,7 @@ async def test_unsubscribe_link_carries_locale_prefix(
     await send_digest_email("u@example.com", locale, [make_event()], date(2026, 7, 21), 7)
 
     body = post.call_args.kwargs["json_body"]
-    assert f'href="https://app.radar.ee{prefix}/unsubscribe?token=' in body["html"]
+    assert f'href="https://app.radar.example{prefix}/unsubscribe?token=' in body["html"]
     assert body["headers"]["List-Unsubscribe"].startswith(
-        "<https://api.radar.ee/email/unsubscribe?token="
+        "<https://api.radar.example/email/unsubscribe?token="
     )

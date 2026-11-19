@@ -38,7 +38,7 @@ describe('useMagicLinkRequest', () => {
   it('ApiError sets errorMsg from the error message and state=error', async () => {
     mockPost.mockRejectedValueOnce(new ApiError(429, 'Too many requests'));
     const { result } = renderHook(() => useMagicLinkRequest('en'));
-    act(() => result.current.setEmail('a@b.co'));
+    act(() => result.current.setEmail('a@b.example'));
     await act(async () => { await result.current.submit(noSubmit); });
 
     expect(result.current.state).toBe('error');
@@ -48,7 +48,7 @@ describe('useMagicLinkRequest', () => {
   it('non-ApiError falls back to generic error text', async () => {
     mockPost.mockRejectedValueOnce(new Error('boom'));
     const { result } = renderHook(() => useMagicLinkRequest('en'));
-    act(() => result.current.setEmail('a@b.co'));
+    act(() => result.current.setEmail('a@b.example'));
     await act(async () => { await result.current.submit(noSubmit); });
 
     expect(result.current.state).toBe('error');
@@ -58,7 +58,7 @@ describe('useMagicLinkRequest', () => {
 
   it('reset returns to idle and clears email', async () => {
     const { result } = renderHook(() => useMagicLinkRequest('en'));
-    act(() => result.current.setEmail('a@b.co'));
+    act(() => result.current.setEmail('a@b.example'));
     await act(async () => { await result.current.submit(noSubmit); });
     act(() => result.current.reset());
 

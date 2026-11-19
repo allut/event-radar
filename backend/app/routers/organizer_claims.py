@@ -1,6 +1,5 @@
 """Organizer event-claiming endpoints (#413) — the first slice of #409 to
-actually create/mutate a `claims` row. See CONTEXT.md's Event Claiming
-glossary, docs/organizer-portal.md, and app/claims/lifecycle.py for the
+actually create/mutate a `claims` row. See app/claims/lifecycle.py for the
 business logic these endpoints just wire up to HTTP.
 """
 

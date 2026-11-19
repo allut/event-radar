@@ -3,7 +3,7 @@
 HtmlListingAdapter owns the fetch loop, pagination, dedup, partial-tolerance
 error handling, capped concurrent detail fetches, and per-locale text
 backfill. Concrete sources (piletilevi.py, kumu.py, estonia_concert_hall.py)
-subclass it — new HTML-scraped sources should too (docs/pipeline.md "Pipeline Code Rules").
+subclass it — new HTML-scraped sources should too.
 """
 
 import asyncio

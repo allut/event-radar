@@ -27,19 +27,19 @@ def test_localized_path(path, locale, expected):
 @pytest.mark.parametrize(
     ("locale", "expected"),
     [
-        ("et", "https://radar.ee/unsubscribe"),
-        ("en", "https://radar.ee/en/unsubscribe"),
-        ("ru", "https://radar.ee/ru/unsubscribe"),
+        ("et", "https://radar.example/unsubscribe"),
+        ("en", "https://radar.example/en/unsubscribe"),
+        ("ru", "https://radar.example/ru/unsubscribe"),
     ],
 )
 def test_frontend_url_prefixes_frontend_base(monkeypatch, locale, expected):
-    monkeypatch.setattr(links.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(links.settings, "FRONTEND_URL", "https://radar.example")
     assert links.frontend_url("/unsubscribe", locale) == expected
 
 
 def test_frontend_url_explicit_base_overrides_settings(monkeypatch):
-    monkeypatch.setattr(links.settings, "FRONTEND_URL", "https://radar.ee")
+    monkeypatch.setattr(links.settings, "FRONTEND_URL", "https://radar.example")
     assert (
-        links.frontend_url("/events/1", "ru", "https://other.ee")
-        == "https://other.ee/ru/events/1"
+        links.frontend_url("/events/1", "ru", "https://other.example")
+        == "https://other.example/ru/events/1"
     )

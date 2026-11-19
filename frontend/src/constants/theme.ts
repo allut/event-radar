@@ -2,7 +2,7 @@
 // .js extensions required: Cloudflare Pages Functions import constants as unbundled ESM.
 
 // Legacy tri-state theme key ("system" | "light" | "dark") from the
-// permanent-preference model this app replaced (ADR 0003) — wiped on every
+// permanent-preference model this app replaced — wiped on every
 // boot (lib/theme.ts) rather than reinterpreted, since its "system" value
 // has no equivalent under the new expiring-override semantics.
 export const LEGACY_THEME_PREFERENCE_KEY = 'theme_preference';
@@ -10,7 +10,7 @@ export const LEGACY_THEME_PREFERENCE_KEY = 'theme_preference';
 // (one SPA bundle, one light palette) — see lib/theme.ts's resolveTheme().
 // Holds "light" | "dark" only; paired with THEME_OVERRIDE_DEVICE_KEY, which
 // records the device theme the override was chosen under, so a later device
-// flip can be detected and the override discarded (ADR 0003).
+// flip can be detected and the override discarded.
 export const THEME_OVERRIDE_KEY = 'theme_override';
 export const THEME_OVERRIDE_DEVICE_KEY = 'theme_override_device';
 
@@ -44,8 +44,8 @@ export const THEME_COLOR_META_DARK = '#13161e';
 
 // The two theme options rendered by PrefsRows (the preferences menu and the
 // phone drawer), kept in one place so they can't drift out of sync —
-// mirrors NAV_ITEMS' {value, labelKey} pattern (routes.ts). No "System" entry
-// (ADR 0003) — device-following is the default state a viewer falls back to
+// mirrors NAV_ITEMS' {value, labelKey} pattern (routes.ts). No "System" entry:
+// device-following is the default state a viewer falls back to
 // once their override expires, not something offered as a third choice.
 export const THEME_OPTIONS = [
   { value: 'light', labelKey: 'theme_light' },

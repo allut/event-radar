@@ -1,4 +1,4 @@
-"""Tests for email/styles.py — the one email bundle (ADR 0003)."""
+"""Tests for email/styles.py — the one email bundle."""
 
 from app.email.styles import EMAIL_STYLES, get_email_styles
 

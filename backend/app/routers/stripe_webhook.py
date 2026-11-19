@@ -2,7 +2,7 @@
 
 Outside all three auth tracks: the signature over the raw body is the only
 credential (5-minute tolerance), so a bad, missing or stale one is a 400 before
-any work. See docs/security.md "Stripe Webhook".
+any work.
 """
 
 import logging

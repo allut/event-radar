@@ -1,4 +1,4 @@
-"""Google sign-in identity-link emails (ADR 0002, OWASP audit #3) — HTML/text.
+"""Google sign-in identity-link emails — HTML/text.
 
 Two emails, both distinct from the plain magic-link sign-in email so a
 recipient can tell them apart:

@@ -1,6 +1,6 @@
 /* Shared top-bar layer (direction A · Programme): TopBar, OrganizerTopBar and
    the bar sub-components (BarLogo, BarNav, PulseChip, BarSearch, AccountMenu,
-   PrefsMenu) all compose from here. See docs/design-system.md §7.
+   PrefsMenu) all compose from here.
 
    Every bar and drawer link sets its own :hover colour explicitly: index.css's
    global `a:hover { color: var(--accent-light) }` outranks single-class link

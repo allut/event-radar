@@ -1,7 +1,6 @@
 """Stripe behind a Protocol: the only module that imports the ``stripe`` SDK.
 
-The SDK is a documented bypass of the shared HTTP client (docs/conventions.md
-"HTTP Retry Bypasses"). Everything the Promotions code needs from Stripe is one
+The SDK is a documented bypass of the shared HTTP client. Everything the Promotions code needs from Stripe is one
 method here, so tests swap in ``tests/promotions/fakes.py``'s fake.
 """
 

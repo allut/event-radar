@@ -82,7 +82,7 @@ function setup({ route = '/en/organizer/promotions/new?event_id=5', ctx, lookup 
   mockPost.mockImplementation(async (path: string, body?: unknown) => {
     if (path === '/organizer/promotions/registry-lookup') {
       const code = (body as { registry_code: string }).registry_code;
-      return lookup ? lookup(code) : { registry_code: code, legal_name: 'Kalamaja Kogukond MTÜ' };
+      return lookup ? lookup(code) : { registry_code: code, legal_name: 'Example Community MTÜ' };
     }
     throw new Error(`unexpected POST ${path}`);
   });
@@ -186,10 +186,10 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
       setup({ lookup: async () => { throw new ApiError(503, 'x', 'registry_unavailable'); } });
       await screen.findByLabelText('Registry code');
       await userEvent.type(field('Registry code'), VALID_CODE);
-      await userEvent.type(await screen.findByLabelText('Legal name'), 'Studio Nord OÜ');
+      await userEvent.type(await screen.findByLabelText('Legal name'), 'Example Studio OÜ');
 
       const card = screen.getByText('Studios and courtyards open to visitors').closest('article') as HTMLElement;
-      expect(within(card).getByText(/Studio Nord OÜ/)).toBeInTheDocument();
+      expect(within(card).getByText(/Example Studio OÜ/)).toBeInTheDocument();
     });
 
     it('takes the caption from the registry once the code is found', async () => {
@@ -198,7 +198,7 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
       await fillBusiness();
 
       const card = screen.getByText('Studios and courtyards open to visitors').closest('article') as HTMLElement;
-      expect(within(card).getByText(/Kalamaja Kogukond MTÜ/)).toBeInTheDocument();
+      expect(within(card).getByText(/Example Community MTÜ/)).toBeInTheDocument();
     });
 
     it('opens the Why? panel with the no-interests explanation', async () => {
@@ -374,7 +374,7 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
       await userEvent.type(field('Registry code'), VALID_CODE);
 
       expect(await screen.findByText('Found in the business register.')).toBeInTheDocument();
-      expect(field('Legal name')).toHaveValue('Kalamaja Kogukond MTÜ');
+      expect(field('Legal name')).toHaveValue('Example Community MTÜ');
       expect(field('Legal name')).toHaveAttribute('readonly');
       expect(screen.getByText('Filled in from the business register. It can’t be edited.')).toBeInTheDocument();
       expect(mockPost).toHaveBeenCalledWith('/organizer/promotions/registry-lookup', { registry_code: VALID_CODE });
@@ -386,7 +386,7 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
       await userEvent.type(await screen.findByLabelText('Registry code'), VALID_CODE);
 
       expect(await screen.findByText('Looking up the business register…')).toBeInTheDocument();
-      release({ registry_code: VALID_CODE, legal_name: 'Kalamaja Kogukond MTÜ' });
+      release({ registry_code: VALID_CODE, legal_name: 'Example Community MTÜ' });
       expect(await screen.findByText('Found in the business register.')).toBeInTheDocument();
     });
 
@@ -448,7 +448,7 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
       mockPost.mockImplementation(async (path: string, body?: unknown) =>
         path === '/organizer/promotions/checkout'
           ? { promotion_id: 9, checkout_url: 'https://checkout.stripe.com/c/pay/cs_1', expires_at: null }
-          : { registry_code: (body as { registry_code: string }).registry_code, legal_name: 'Kalamaja Kogukond MTÜ' },
+          : { registry_code: (body as { registry_code: string }).registry_code, legal_name: 'Example Community MTÜ' },
       );
 
       await userEvent.click(screen.getByRole('button', { name: 'Pay €37.20' }));
@@ -573,10 +573,10 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
               start_date: '2026-10-29',
               end_date: '2026-11-03',
               days: 6,
-              advertiser_legal_name: 'Kalamaja Kogukond MTÜ',
+              advertiser_legal_name: 'Example Community MTÜ',
               price: priceFor(6),
             }
-          : { registry_code: (body as { registry_code: string }).registry_code, legal_name: 'Kalamaja Kogukond MTÜ' },
+          : { registry_code: (body as { registry_code: string }).registry_code, legal_name: 'Example Community MTÜ' },
       );
 
       await userEvent.click(screen.getByRole('button', { name: 'Send request' }));
@@ -586,7 +586,7 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
         event_id: 5,
         start_date: '2026-10-29',
         end_date: '2026-11-03',
-        advertiser_legal_name: 'Kalamaja Kogukond MTÜ',
+        advertiser_legal_name: 'Example Community MTÜ',
         advertiser_registry_code: VALID_CODE,
         billing_email: null,
         note: 'Invoice to accounting please',
@@ -609,7 +609,7 @@ describe('OrganizerPromotionRequest (#614, #617, #618)', () => {
       await userEvent.click(screen.getByRole('checkbox', { name: /I accept the Organizer terms/ }));
       mockPost.mockImplementation(async (path: string) => {
         if (path === '/organizer/promotions/requests') throw new ApiError(429, 'Too many', 'daily_request_limit');
-        return { registry_code: VALID_CODE, legal_name: 'Kalamaja Kogukond MTÜ' };
+        return { registry_code: VALID_CODE, legal_name: 'Example Community MTÜ' };
       });
 
       await userEvent.click(screen.getByRole('button', { name: 'Send request' }));

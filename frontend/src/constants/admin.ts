@@ -56,7 +56,7 @@ export const ADMIN_GENERIC_ERROR = 'Something went wrong. Try again.';
 // AdminShell's foot-area theme toggle (issue #255) — same {value, label}
 // shape as THEME_OPTIONS (theme.ts), but plain-English labels: same no-i18n
 // exemption as ADMIN_NAV_ITEMS, since the admin console has no locale.
-// Two options only (ADR 0003) — device-following is the default state, not
+// Two options only — device-following is the default state, not
 // a picker entry.
 export const ADMIN_THEME_OPTIONS = [
   { value: 'light', label: 'Light' },

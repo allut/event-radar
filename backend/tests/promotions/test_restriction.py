@@ -267,13 +267,13 @@ class TestClearNewlyFlagged:
         ev = await classified(make, org=org)
         ev.promotion_restriction = "political"
         promo = await promote(db, ev, org)
-        monkeypatch.setattr(promotion_admin.settings, "CONTACT_TO_ADDRESS", "owner@radar.ee")
-        monkeypatch.setattr(promotion_admin.settings, "FRONTEND_URL", "https://radar.ee")
+        monkeypatch.setattr(promotion_admin.settings, "CONTACT_TO_ADDRESS", "owner@radar.example")
+        monkeypatch.setattr(promotion_admin.settings, "FRONTEND_URL", "https://radar.example")
         with patch.object(promotion_admin, "send_resend_email", new=AsyncMock()) as send:
             await promotion_admin.send_restriction_flagged_notice(promo, ev, "political")
         payload = send.await_args.args[0]
-        assert payload["to"] == ["owner@radar.ee"]
-        assert f"https://radar.ee/admin/promotions/{promo.id}" in payload["text"]
+        assert payload["to"] == ["owner@radar.example"]
+        assert f"https://radar.example/admin/promotions/{promo.id}" in payload["text"]
         assert "political" in payload["subject"]
 
 

@@ -123,8 +123,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # Swagger UI / ReDoc load their JS/CSS from a CDN, which the restrictive
 # default-src 'none' CSP (SECURITY_HEADERS, set on every response below) blocks —
 # rather than carve out CDN exceptions in the policy, disable the docs routes
-# outside development. docs/security.md already frames this as "a pure JSON API with no
-# first-party HTML/script surface"; this makes that statement true everywhere.
+# outside development, so the backend is a pure JSON API with no first-party
+# HTML/script surface everywhere.
 _docs_enabled = settings.APP_ENV == APP_ENV_DEVELOPMENT
 app = FastAPI(
     title="Event Radar API",
@@ -148,7 +148,7 @@ app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    # Auth is now a Set-Cookie session (see #26 / docs/adr/0001), but
+    # Auth is now a Set-Cookie session (see #26), but
     # allow_credentials stays False deliberately: the cookie is scoped to this
     # API's own origin and only ever travels through the same-origin `/api`
     # proxy the SPA is served behind, never via a cross-origin
@@ -243,7 +243,7 @@ if _allowed_hosts:
 # (proven via X-Edge-Auth against settings.EDGE_SHARED_SECRET, set by the
 # Cloudflare Function), falling back to rightmost-XFF only when that pair is
 # absent or invalid — correct for a direct-to-Render caller with exactly one
-# trusted hop. See docs/security.md and OWASP audit finding G-1.
+# trusted hop. OWASP audit finding G-1.
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 app.include_router(admin_auth_router)

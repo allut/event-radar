@@ -65,7 +65,7 @@ def resolve_venue_coords(event: Event) -> tuple[float | None, float | None]:
     A venue-linked event's own lat/lng never gets backfilled by the
     geocoding job (its partial index keys off venue_address IS NOT NULL,
     which is NULL for a linked event) — the Venue's own geocode cooldown
-    (docs/data-model.md) is the only source of coordinates once linked.
+    is the only source of coordinates once linked.
     Requires both lat AND lng to be present before preferring the venue's
     pair — a half-geocoded venue (one of the two still NULL) falls back to
     the event's own (possibly also-NULL, but never mismatched) pair rather

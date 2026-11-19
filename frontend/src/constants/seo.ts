@@ -87,7 +87,7 @@ export const ROBOTS_TXT_PATH = `/${ROBOTS_TXT_FILENAME}`;
 // app/constants/jobs.py) + a 2h buffer.
 export const SEO_AUDIT_STALE_THRESHOLD_HOURS = 8;
 // GitHub repo the live audit files/updates/closes its failure issue against
-// (CLAUDE.md "Issue tracker") and the fixed label it searches/tags by.
+// and the fixed label it searches/tags by.
 export const SEO_AUDIT_GITHUB_REPO = 'allut/event-radar';
 export const SEO_AUDIT_ISSUE_LABEL = 'seo-audit-failure';
 export const GITHUB_API_BASE_URL = 'https://api.github.com';
@@ -95,7 +95,7 @@ export const GITHUB_API_BASE_URL = 'https://api.github.com';
 // GitHub default-version bump can't silently change response shapes.
 export const GITHUB_API_VERSION = '2022-11-28';
 // Shared-secret header cron-job.org sends on its seo-audit ping, mirroring
-// the backend's /internal/tick pattern (docs/backend-ops.md "External Cron Jobs"). Distinct from
+// the backend's /internal/tick pattern. Distinct from
 // PRERENDER_CADENCE_TOKEN_HEADER and the backend's own X-Internal-Token: if
 // both Cloudflare Pages Functions ever shared one header name, a future
 // refactor that merged their handlers could forward this header's value to

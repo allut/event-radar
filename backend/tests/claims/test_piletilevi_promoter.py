@@ -19,7 +19,7 @@ from app.claims.piletilevi_promoter import (
 _EVENT_URL = "https://www.piletilevi.ee/en/tickets/VG7HG4DQLY/some-event"
 
 
-def _event_page_with_promoter(promoter_url="/en/promoters/21-69-5910/nikulin-circus-ou"):
+def _event_page_with_promoter(promoter_url="/en/promoters/00-00-0001/example-circus-ou"):
     graph = {
         "@context": "https://schema.org",
         "@graph": [
@@ -32,7 +32,7 @@ def _event_page_with_promoter(promoter_url="/en/promoters/21-69-5910/nikulin-cir
             {
                 "@id": "https://www.piletilevi.ee/#/schema/organization/1",
                 "@type": "Organization",
-                "name": "Nikulin Circus OÜ",
+                "name": "Example Circus OÜ",
                 "url": promoter_url,
             },
         ],
@@ -70,11 +70,11 @@ def _event_page_no_specific_promoter():
     )
 
 
-def _promoter_page(mailto="mailto:nikulincircus@own-domain.ee"):
+def _promoter_page(mailto="mailto:examplecircus@own-domain.example"):
     return (
         "<html><body>"
         '<h3>Contacts and additional details</h3>'
-        '<div><span>Nikulin Circus OÜ</span>'
+        '<div><span>Example Circus OÜ</span>'
         f'<a href="{mailto}">contact</a></div>'
         "</body></html>"
     )
@@ -86,7 +86,7 @@ class TestResolvePromoterUrl:
 
         result = resolve_promoter_url(html, _EVENT_URL)
 
-        assert result == "https://www.piletilevi.ee/en/promoters/21-69-5910/nikulin-circus-ou"
+        assert result == "https://www.piletilevi.ee/en/promoters/00-00-0001/example-circus-ou"
 
     def test_organizer_resolving_to_site_identity_returns_none(self):
         html = _event_page_no_specific_promoter()
@@ -110,17 +110,17 @@ class TestResolvePromoterUrl:
 
 class TestExtractContactEmail:
     def test_extracts_raw_mailto_address(self):
-        html = _promoter_page("mailto:Nikulincircus@Own-Domain.ee")
+        html = _promoter_page("mailto:Examplecircus@Own-Domain.example")
 
-        assert extract_contact_email(html) == "nikulincircus@own-domain.ee"
+        assert extract_contact_email(html) == "examplecircus@own-domain.example"
 
     def test_free_email_provider_address_is_not_excluded(self):
         """Unlike extract_contact_domain, the raw mailbox is kept even on a
         free/shared provider (#428) — the mailbox-match path checks exact
         account-email identity, not DNS control."""
-        html = _promoter_page("mailto:nikulincircus@gmail.com")
+        html = _promoter_page("mailto:examplecircus@gmail.com")
 
-        assert extract_contact_email(html) == "nikulincircus@gmail.com"
+        assert extract_contact_email(html) == "examplecircus@gmail.com"
 
     def test_no_mailto_link_returns_none(self):
         html = "<html><body><p>no contact link</p></body></html>"
@@ -130,12 +130,12 @@ class TestExtractContactEmail:
 
 class TestExtractContactDomain:
     def test_extracts_domain_from_mailto(self):
-        html = _promoter_page("mailto:nikulincircus@own-domain.ee")
+        html = _promoter_page("mailto:examplecircus@own-domain.example")
 
-        assert extract_contact_domain(html) == "own-domain.ee"
+        assert extract_contact_domain(html) == "own-domain.example"
 
     def test_free_email_provider_domain_is_excluded(self):
-        html = _promoter_page("mailto:nikulincircus@mail.ee")
+        html = _promoter_page("mailto:examplecircus@mail.ee")
 
         assert extract_contact_domain(html) is None
 
@@ -149,15 +149,15 @@ class TestResolvePromoterContact:
     @pytest.mark.asyncio
     async def test_resolving_promoter_returns_controllable_domain(self):
         async def handler(request):
-            return httpx.Response(200, text=_promoter_page("mailto:info@own-domain.ee"))
+            return httpx.Response(200, text=_promoter_page("mailto:info@own-domain.example"))
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
             result = await resolve_promoter_contact(
                 client, _event_page_with_promoter(), _EVENT_URL
             )
 
-        assert result.domain == "own-domain.ee"
-        assert result.email == "info@own-domain.ee"
+        assert result.domain == "own-domain.example"
+        assert result.email == "info@own-domain.example"
 
     @pytest.mark.asyncio
     async def test_non_resolving_promoter_never_fetches_promoter_page(self):

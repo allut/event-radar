@@ -6,7 +6,7 @@ Event Radar ingests events from Tallinn's ticketing platforms, venue sites and o
 
 It's for people in Tallinn deciding what to do this week, and for the venues and promoters who want to reach them.
 
-How the pieces fit is in [CLAUDE.md's Architecture](CLAUDE.md#architecture) and [docs/pipeline.md](docs/pipeline.md).
+The backend is one FastAPI process with an embedded APScheduler, so there is no Celery or Redis. It runs on Render and talks to Neon Postgres. The React SPA runs on Cloudflare Pages, which proxies `/api/*` to the backend.
 
 ## Features
 
@@ -113,44 +113,54 @@ event-radar/
 ├── frontend/           Vite + React SPA, Pages Functions, prerender scripts
 ├── shared/             cross-stack i18n, personas and config
 ├── scripts/            repo-wide dev scripts, including the shared/ codegen
-├── docs/               deep-dive docs, ADRs, agent workflow docs
 ├── .devcontainer/      devcontainer image and lifecycle scripts
 ├── .github/workflows/  CI and the dependency CVE audit
 ├── .githooks/          pre-commit checks and commit-message trimming
-├── .claude/            Claude Code settings, hooks and skills
+├── .claude/            Claude Code settings and hooks
 ├── .vscode/            dev-server and log tasks
-├── CLAUDE.md           engineering rules and the Documentation Map
-├── CODING_STANDARDS.md review-only rules and where every standard lives
-├── CONTEXT.md          domain glossary
 ├── docker-compose.yml  local Postgres 16
-├── LICENSE             GNU AGPL v3.0
-├── ROADMAP.md          planned work
+├── LICENSE             MIT
 └── render.yaml         Render backend service
 ```
 
 ## Development
 
-- **Day-to-day commands are in [CLAUDE.md's Commands](CLAUDE.md#commands):** tests, lint, type-check and build for both stacks. Read its [Traps](CLAUDE.md#traps) before your first commit.
-- **Shared values and translations live in `shared/`.** After an edit, run `python scripts/generate_shared.py` and commit both sides. See [shared/README.md](shared/README.md).
+```bash
+# Backend, from backend/
+bash scripts/scratch-test.sh                 # all tests, against a throwaway database
+bash scripts/scratch-test.sh tests/test_x.py # one file or node id
+python -m ruff check . ../scripts            # lint
+python -m mypy app ../scripts                # type-check
+```
+
+The frontend's commands are the `frontend/package.json` scripts: `dev`, `build`, `type-check`, `lint`, `test` and `test:coverage`.
+
+- **CI runs ruff, mypy, eslint and type-check.** `.githooks/pre-commit` runs them on staged areas.
+- **Shared values and translations live in `shared/`.** After an edit, run `python scripts/generate_shared.py` and commit the JSON and the regenerated `_generated/` files together.
 - **Bump the version with `python scripts/bump_version.py [patch|minor|major]`** on `master`. The version lives in `frontend/package.json`. The script commits, tags `vX.Y.Z` and pushes `master` with the tag, so local commits not yet on `origin` go out too. `--help` lists the dry-run and no-push flags.
 - **Running the pipeline locally:** with the scheduler off, the feed stays empty until you trigger the stages yourself. Sign in at `/admin/login` and run them from `/admin/pipeline`. Locally, either set `ADMIN_PASSWORD` and `ADMIN_TOTP_SECRET`, or set `ALLOW_INSECURE_DEV=true` and leave both unset.
-- **Resetting event data:** `backend/scripts/reset_events.py` wipes events and pipeline state, dry run by default. See [docs/backend-ops.md](docs/backend-ops.md)'s Maintenance Scripts section.
+- **Resetting event data:** `backend/scripts/reset_events.py` wipes events and pipeline state, dry run by default.
 
 ## Deployment
 
-Production builds from the `release` branch, not `master`. Topology, secrets and scheduled jobs are in [docs/backend-ops.md](docs/backend-ops.md).
+Production builds from the `release` branch, not `master`. `render.yaml` defines the backend service and `frontend/wrangler.toml` the Cloudflare Pages build.
 
-## Documentation
+## Agent docs
 
-[CLAUDE.md's Documentation Map](CLAUDE.md#documentation-map) routes to every deep-dive doc in `docs/`. The domain glossary is [CONTEXT.md](CONTEXT.md), architecture decisions are in [docs/adr/](docs/adr/), and the shared-file workflow is in [shared/README.md](shared/README.md).
+The engineering docs live on `local-docs`, a branch that exists only in the maintainer's clone and is never pushed. They cover the rules, architecture, domain glossary, ADRs, runbooks and roadmap. A clone from GitHub does not have this branch.
+
+- **Start with `git show local-docs:CLAUDE.md`.** Its Documentation Map routes to every other doc by its path on that branch, such as `git show local-docs:docs/pipeline.md`.
+- **List them with `git ls-tree -r --name-only local-docs`.**
+- **Edit them in a worktree:** `git worktree add ../event-radar-docs local-docs`, then commit there.
+- **`.githooks/pre-push` refuses to push the branch.**
 
 ## Roadmap
 
-Planned work is in [ROADMAP.md](ROADMAP.md). Individual items are tracked in [GitHub Issues](https://github.com/allut/event-radar/issues).
+Planned work is tracked in [GitHub Issues](https://github.com/allut/event-radar/issues).
 
 ## License
 
 Copyright (C) 2026 the Event Radar contributors.
 
-- **Event Radar is licensed under the [GNU Affero General Public License v3.0](LICENSE).** Anyone who runs a modified copy as a network service must offer its users the complete source of that copy.
-- **The license grants no rights to the Event Radar name or logo.** This is an additional term under AGPL section 7(e). A fork runs under its own name.
+- **Event Radar is licensed under the [MIT License](LICENSE).**
+- **The license covers the code, not the Event Radar name or logo.** A fork runs under its own name.

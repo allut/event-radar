@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     PROMOTIONS_OFFER_ENABLED: bool = False
     PROMOTIONS_CHECKOUT_ENABLED: bool = False
 
-    # Stripe card checkout (docs/adr/0005). Empty = checkout cannot start and the
+    # Stripe card checkout. Empty = checkout cannot start and the
     # webhook fails closed. The Tax Rate is the 24% exclusive VAT rate made in
     # the Stripe Dashboard; the footer carries the Operator's VAT number.
     STRIPE_SECRET_KEY: str = ""
@@ -196,7 +196,7 @@ class Settings(BaseSettings):
     CLOUDINARY_API_KEY: str = ""
     CLOUDINARY_API_SECRET: str = ""
 
-    # Google sign-in (docs/adr/0002-google-sign-in-oauth-pkce.md). Both empty in
+    # Google sign-in. Both empty in
     # dev — token exchange/verification code paths are exercised via mocks in
     # tests, never against real Google endpoints locally. Organizer flag
     # defaults false regardless of client-id presence (explicit rollout gate,

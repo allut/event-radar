@@ -34,8 +34,8 @@ class TestSearchClaimableEvents(object):
 
     @pytest.mark.asyncio
     async def test_publisher_claimed_events_excluded_in_sql(self, mock_db, make_event, make_request, make_organizer):
-        """An event whose Publisher already has an *approved* claim (#441/ADR
-        0004) is excluded by the candidate query itself (NOT EXISTS), so the
+        """An event whose Publisher already has an *approved* claim (#441)
+        is excluded by the candidate query itself (NOT EXISTS), so the
         LIMIT window is never spent on already-claimed rows."""
         from app.routers.organizer_claim_search import search_claimable_events
 
@@ -99,7 +99,7 @@ class TestSearchClaimableEvents(object):
     async def test_includes_pending_only_claim_event(self, mock_db, make_event, make_request, make_organizer):
         """(#441) A Publisher target with only a *pending* claim must still
         surface in search — a rival claimant needs a product path to start
-        proving ownership, per ADR 0004."""
+        proving ownership."""
         from app.routers.organizer_claim_search import search_claimable_events
 
         pending_event = make_event(event_id=1, title="Jazz Night")
@@ -200,14 +200,14 @@ class TestSuggestedClaimableEvents:
         from app.routers.organizer_claim_search import suggested_claimable_events
 
         organizer = make_organizer()
-        organizer.email = "team@example-promoter.ee"
+        organizer.email = "team@example-promoter.example"
 
         matching = make_event(event_id=1, title="Their show")
-        matching.url = "https://tickets.example-promoter.ee/event/1"
+        matching.url = "https://tickets.example-promoter.example/event/1"
         matching.sources = [_make_source(event_id=1, publisher_id=1)]
 
         decoy = make_event(event_id=2, title="Someone else's show")
-        decoy.url = "https://notexample-promoter.ee/event/2"
+        decoy.url = "https://notexample-promoter.example/event/2"
         decoy.sources = [_make_source(event_id=2, publisher_id=2)]
 
         candidates_result = MagicMock()
@@ -234,11 +234,11 @@ class TestSuggestedClaimableEvents:
         from app.routers.organizer_claim_search import suggested_claimable_events
 
         organizer = make_organizer(organizer_id=5, locale="en")
-        organizer.email = "team@example-promoter.ee"
+        organizer.email = "team@example-promoter.example"
 
         matching = make_event(event_id=1, title="Their show")
         matching.title_localized = {"ru": "Их шоу"}
-        matching.url = "https://tickets.example-promoter.ee/event/1"
+        matching.url = "https://tickets.example-promoter.example/event/1"
         matching.sources = [_make_source(event_id=1, publisher_id=1)]
 
         candidates_result = MagicMock()

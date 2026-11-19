@@ -36,7 +36,7 @@ def acquire_admin_job_lock(key: str) -> None:
     #160): pipeline/run, cleanup, full ingest, send_digests, classify. Raises
     409 if *key* is already running instead of letting a retry click start a
     second concurrent run. In-memory only — fine given this app's
-    single-process topology (see CLAUDE.md "Architecture")."""
+    single-process topology."""
     if key in _RUNNING_ADMIN_JOBS:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

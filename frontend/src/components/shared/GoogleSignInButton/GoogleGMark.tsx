@@ -3,7 +3,7 @@
  * from Google's icon-only asset — same mark in every theme, only the button
  * plate around it changes. Stays inline in the DOM rather than an `<img src>`:
  * one fewer request, no `img-src` CSP surface, asserted by the brand-fill
- * test (docs/adr/0002 Design-system exception).
+ * test.
  */
 import { GOOGLE_G_MARK_SIZE } from '../../../constants/auth';
 

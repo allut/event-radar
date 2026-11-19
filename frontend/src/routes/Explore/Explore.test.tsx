@@ -608,7 +608,7 @@ describe('Explore', () => {
   });
 
   describe('Sponsored slot (issue #603)', () => {
-    const SLOT = { advertiser: 'Telliskivi Selts MTÜ', explanation: 'filters', tile: 4 };
+    const SLOT = { advertiser: 'Example Society MTÜ', explanation: 'filters', tile: 4 };
 
     /** Serves `total` organic events the way GET /explore?sponsored_slot=true
      * does when page 1 has a slot: page 1 holds limit - 1 organic rows plus the
@@ -661,7 +661,7 @@ describe('Explore', () => {
       const cards = screen.getAllByTestId('event-card');
       expect(cards).toHaveLength(24);
       expect(cards[3]).toHaveTextContent('Paid Event');
-      expect(cards[3]).toHaveAttribute('data-sponsored', 'Telliskivi Selts MTÜ|filters');
+      expect(cards[3]).toHaveAttribute('data-sponsored', 'Example Society MTÜ|filters');
       expect(cards[2]).toHaveTextContent('Event 3');
       expect(cards[4]).toHaveTextContent('Event 4');
       expect(cards.filter((c) => c.hasAttribute('data-sponsored'))).toHaveLength(1);

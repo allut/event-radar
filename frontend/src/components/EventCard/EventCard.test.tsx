@@ -223,7 +223,7 @@ describe('EventCard', () => {
   });
 
   describe('sponsored caption slot (issue #603)', () => {
-    const sponsored = { advertiser: 'Telliskivi Selts MTÜ', explanation: 'filters' } as const;
+    const sponsored = { advertiser: 'Example Society MTÜ', explanation: 'filters' } as const;
 
     it('renders no caption, marker or sponsored rel on an organic card', () => {
       const { container } = renderWithProviders(<EventCard event={makeEvent({ id: 7 })} index={0} locale="en" />);
@@ -254,7 +254,7 @@ describe('EventCard', () => {
     ])('shows the label, advertiser and why-button in %s', (locale, label, why) => {
       renderWithProviders(<EventCard event={makeEvent()} index={0} locale={locale} sponsored={sponsored} />);
       expect(screen.getByText(label)).toBeInTheDocument();
-      expect(screen.getByText(/Telliskivi Selts MTÜ/)).toBeInTheDocument();
+      expect(screen.getByText(/Example Society MTÜ/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: why })).toHaveAttribute('aria-expanded', 'false');
     });
 

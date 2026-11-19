@@ -53,7 +53,7 @@ export interface SeoMetaResult {
 
 /** Pure builder behind useSeoMeta, kept separate from the hook so tests (and
  * the hook itself) can assert on plain tag/link data rather than
- * react-helmet-async's DOM side-effects — see docs/seo.md "Meta Tags". */
+ * react-helmet-async's DOM side-effects. */
 export function buildSeoMeta(input: SeoMetaInput): SeoMetaResult {
   const { title, locale, path, indexable = false, description, image, page } = input;
   const bare = stripLocalePrefix(path);

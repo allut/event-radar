@@ -69,8 +69,8 @@ function composedClasses(file: string, cls: string, seen = new Set<string>()): [
 /**
  * Local rules that set a property a class composed from another module also
  * sets, at the same selector shape and so the same specificity. Vite may bundle
- * either module first, so source order, not the author, picks the winner
- * (docs/design-system.md §7). One entry per property:
+ * either module first, so source order, not the author, picks the winner.
+ * One entry per property:
  * `routes/X.module.css .a:hover {color} = components/shared/Button.module.css .btnOutline:hover`.
  */
 export function composedTies(files: string[]): string[] {

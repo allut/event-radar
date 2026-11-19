@@ -70,7 +70,7 @@ class TestMaskEmail:
         assert mask_email("jane.doe@example.com") == "ja***@example.com"
 
     def test_short_local_part(self):
-        assert mask_email("a@b.com") == "a***@b.com"
+        assert mask_email("a@b.example") == "a***@b.example"
 
     def test_no_at_sign_returns_placeholder(self):
         assert mask_email("not-an-email") == "***"

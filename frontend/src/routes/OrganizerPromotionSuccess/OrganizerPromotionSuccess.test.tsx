@@ -27,7 +27,7 @@ function promotion(status: OrganizerPromotionItem['status']): OrganizerPromotion
     start_date: '2026-10-29',
     end_date: '2026-11-03',
     days: 6,
-    advertiser_legal_name: 'Kalamaja Kogukond MTÜ',
+    advertiser_legal_name: 'Example Community MTÜ',
     advertiser_registry_code: '12345678',
     billing_email: null,
     price: { net_cents: 3000, vat_cents: 720, gross_cents: 3720 },

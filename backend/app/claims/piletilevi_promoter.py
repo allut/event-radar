@@ -7,7 +7,7 @@ target for ``app.claims.dns_txt.verify_dns_txt_token``, or (no such domain)
 the raw mailto address for an exact-match check against the claiming
 organizer's own account email. Also resolves (#427) the promoter's own
 identity (profile URL + name) as the ``Publisher`` a Piletilevi claim resolves
-against — see CONTEXT.md's Event Claiming glossary and claims.py's
+against — see claims.py's
 ``Publisher`` docstring (the promoter profile URL is the ``external_id`` key
 a Piletilevi Publisher resolves against).
 
@@ -16,8 +16,8 @@ document's ``@graph`` rather than inlining it (unlike Fienta/KUMU/ECH, which
 ``app/ingestion/jsonld.py::organizer_from_jsonld_items`` already handles) — a
 listing with no specific promoter set resolves that reference back to
 Piletilevi's own site identity node, which carries no ``/promoters/`` url and
-is treated as non-resolving (falls back to a Series claim target — see
-CONTEXT.md's Event Claiming glossary — this is the *only* case that does).
+is treated as non-resolving (falls back to a Series claim target — this is
+the *only* case that does).
 """
 
 from dataclasses import dataclass

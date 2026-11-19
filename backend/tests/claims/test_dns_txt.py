@@ -55,13 +55,13 @@ class TestClaimDnsRecordName:
     @pytest.mark.parametrize("mechanism", sorted(CLAIM_DNS_VERIFICATION_MECHANISMS))
     def test_dns_mechanism_names_the_label_under_the_domain(self, mechanism):
         assert (
-            claim_dns_record_name(mechanism, "example.ee")
-            == f"{CLAIM_DNS_TXT_RECORD_LABEL}.example.ee"
+            claim_dns_record_name(mechanism, "example.com")
+            == f"{CLAIM_DNS_TXT_RECORD_LABEL}.example.com"
         )
 
     def test_non_dns_mechanism_has_no_record_name(self):
-        assert claim_dns_record_name("email", "example.ee") is None
-        assert claim_dns_record_name(None, "example.ee") is None
+        assert claim_dns_record_name("email", "example.com") is None
+        assert claim_dns_record_name(None, "example.com") is None
 
     def test_missing_domain_has_no_record_name(self):
         mechanism = sorted(CLAIM_DNS_VERIFICATION_MECHANISMS)[0]

@@ -1,6 +1,5 @@
 """Claim-editing surface (#416): resolving "the event" a granted claim edits,
-per-field pin/unpin bookkeeping, and the price-mismatch diff. See CONTEXT.md's
-Event Claiming glossary and app/claims/lifecycle.py for claim create/cancel/
+per-field pin/unpin bookkeeping, and the price-mismatch diff. See app/claims/lifecycle.py for claim create/cancel/
 recheck.
 """
 
@@ -191,8 +190,7 @@ async def organizer_covered_event_count(db: AsyncSession, organizer_id: int) -> 
     claim's coverage is the same EventSource.publisher_id match
     list_claim_events (#436) uses, bulk-counted (distinct event id) across
     every approved Publisher claim the organizer holds in one query — fixed
-    query count regardless of how many claims or events (CLAUDE.md's Batch
-    jobs rule). A Series claim has no FK to bulk-count against (Claim carries
+    query count regardless of how many claims or events. A Series claim has no FK to bulk-count against (Claim carries
     only a normalized title/venue key, per the Claim model docstring), so it
     counts as the one representative event the claim-editing surface
     actually exposes for it. A dormant claim's pins don't apply (#422), so it

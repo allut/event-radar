@@ -72,7 +72,7 @@ describe('sanitizeHtml', () => {
 
   it('overrides an attacker-supplied rel/target on anchors', () => {
     const result = sanitizeHtml(
-      '<a href="https://evil.com" rel="opener" target="_self">link</a>'
+      '<a href="https://evil.example" rel="opener" target="_self">link</a>'
     );
     expect(result).toContain('rel="noopener noreferrer"');
     expect(result).toContain('target="_blank"');

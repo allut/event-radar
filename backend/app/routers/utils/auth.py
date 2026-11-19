@@ -60,7 +60,8 @@ def set_session_cookie(
 ) -> None:
     """Set a hardened session cookie — shared by the consumer, organizer, and
     admin /verify|/login endpoints. Secure is unconditional (never gated on
-    APP_ENV): see docs/adr/0001-session-tokens-in-httponly-cookies.md."""
+    APP_ENV), so testing on a real device over plain-HTTP LAN needs an HTTPS
+    tunnel."""
     response.set_cookie(
         key=name,
         value=token,
