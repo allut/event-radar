@@ -120,10 +120,10 @@ Production builds from the `release` branch, not `master`. `render.yaml` defines
 
 ## Agent docs
 
-The engineering docs live on `local-docs`, a branch that exists only in the maintainer's clone and is never pushed. They cover the rules, architecture, domain glossary, ADRs, runbooks and roadmap. A clone from GitHub does not have this branch.
+The engineering docs live on `local-docs`, a branch that exists only in the maintainer's clone and is never pushed. It is `master` plus the docs, kept in sync by local hooks. The docs cover the rules, architecture, domain glossary, ADRs, runbooks and roadmap. A clone from GitHub does not have this branch.
 
 - **Start with `git show local-docs:CLAUDE.md`.** Its Documentation Map routes to every other doc by its path on that branch, such as `git show local-docs:docs/pipeline.md`.
-- **List them with `git ls-tree -r --name-only local-docs`.**
+- **List them with `git diff --name-only master local-docs`.**
 - **Edit them in a worktree:** `git worktree add ../event-radar-docs local-docs`, then commit there.
 - **`.githooks/pre-push` refuses to push the branch.**
 
