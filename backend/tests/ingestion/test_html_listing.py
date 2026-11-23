@@ -788,7 +788,10 @@ class TestPiletileviFetchRaw:
           <div class="text-card-venue" data-cy="card-description">Jazz Club, Tallinn</div>
         </a>
         """
-        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
+        with (
+            patch("app.ingestion.sources.html_base.http_get") as mock_get,
+            _no_store_session(),
+        ):
             mock_get.side_effect = [
                 _mock_response(single_card_html),
                 _mock_response(PILETILEVI_EMPTY_HTML),
