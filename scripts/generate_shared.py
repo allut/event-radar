@@ -484,7 +484,7 @@ def main() -> None:
     FRONTEND_GEN.mkdir(parents=True, exist_ok=True)
 
     for path, content in files:
-        path.write_text(content, encoding="utf-8")
+        path.write_text(content, encoding="utf-8", newline="\n")
         print(f"  wrote {label_of(path)}")
 
     print("done.")
