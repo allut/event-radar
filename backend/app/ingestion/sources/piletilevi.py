@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup, NavigableString, Tag
 from app.constants.core import TALLINN_TZ
 from app.constants.http import HTTP_ACCEPT_JSON_HEADERS
 from app.constants.ingestion import PRICE_ERROR_BODY_SNIPPET_CHARS, SOURCE_SLUG_PILETILEVI
+from app.ingestion.adapter import NormalizedEvent, coords_in_tallinn
 from app.ingestion.http_client import http_get, http_post
 from app.ingestion.jsonld import (
     location_from_jsonld_items,
@@ -42,7 +43,7 @@ from app.ingestion.selectors import (
     PILETILEVI_PRICES_URL,
     PILETILEVI_SALE_NOT_STARTED_CODE,
     PILETILEVI_SOLD_OUT_MESSAGE,
-    PILETILEVI_TALLINN_FILTER,
+    PILETILEVI_TALLINN_RE,
     PILETILEVI_TITLE_SELECTOR,
     PILETILEVI_VENUE_SELECTOR,
 )
@@ -53,6 +54,7 @@ log = logging.getLogger(__name__)
 
 _PILETILEVI_HEIGHT_RE = re.compile(PILETILEVI_HEIGHT_PATH_RE)
 _PILETILEVI_CODE_RE = re.compile(PILETILEVI_CODE_RE)
+_PILETILEVI_TALLINN_RE = re.compile(PILETILEVI_TALLINN_RE)
 
 
 def _price_bounds_from_store(data: dict[str, Any]) -> tuple[float | None, float | None, bool]:
@@ -266,6 +268,25 @@ def piletilevi_localized_text(soup: BeautifulSoup) -> tuple[str | None, str | No
     return title, localized_description(soup, PILETILEVI_DETAIL_DESC_SELECTOR)
 
 
+def _card_in_area(card: dict[str, Any]) -> bool:
+    """Whether a card's event takes place in the Tallinn area.
+
+    The detail page decides: an address naming Tallinn, else its coordinates,
+    so a suburb inside TALLINN_REGION_BBOX stays in. The venue text is read only
+    when the detail page gave neither. An event placed by none of them is out,
+    so a dead selector can't let every card through (#720).
+    """
+    address = card.get("venue_address")
+    if address and _PILETILEVI_TALLINN_RE.search(address):
+        return True
+    lat, lng = card.get("lat"), card.get("lng")
+    if lat is not None and lng is not None:
+        return coords_in_tallinn(lat, lng)
+    if address:
+        return False
+    return bool(_PILETILEVI_TALLINN_RE.search(card.get("venue") or ""))
+
+
 class PiletileviAdapter(HtmlListingAdapter):
     """piletilevi.ee/en/tickets/all — paginated catalog (Nuxt SSR markup).
 
@@ -287,10 +308,31 @@ class PiletileviAdapter(HtmlListingAdapter):
     async def fetch_raw(self, known_ids: set[str]) -> list[dict[str, Any]]:
         self.price_outcomes = {}
         try:
-            return await super().fetch_raw(known_ids)
+            cards = await super().fetch_raw(known_ids)
         finally:
             if self.price_outcomes:
                 log.info("%s price unavailable: %s", self.source.slug, self.price_outcomes)
+
+        # Only a fetched detail page can place a card. parse_detail always sets
+        # "description", so a card without it had its fetch fail: dropped here,
+        # it stores no raw_events row and the next run retries it. Returned, it
+        # would sit in the skip set for INGEST_REJECT_RECHECK_DAYS.
+        detailed = [card for card in cards if "description" in card]
+        if len(detailed) < len(cards):
+            log.info(
+                "%s dropped %d cards with a failed detail fetch",
+                self.source.slug,
+                len(cards) - len(detailed),
+            )
+        if detailed and not any(
+            card.get("venue_address") or card.get("lat") is not None for card in detailed
+        ):
+            log.warning(
+                "%s: none of %d detail pages has a JSON-LD location",
+                self.source.slug,
+                len(detailed),
+            )
+        return detailed
 
     async def _bootstrap_store_session(self, client: httpx.AsyncClient) -> bool | None:
         """Login POST establishing the Piletilevi store session cookie.
@@ -342,12 +384,21 @@ class PiletileviAdapter(HtmlListingAdapter):
                     "url": base_url + href,
                 }
             )
+        if cards and not any(card["venue"] for card in cards):
+            log.warning(
+                "%s listing page: none of %d cards has a venue, selector %s may be dead",
+                self.source.slug,
+                len(cards),
+                PILETILEVI_VENUE_SELECTOR,
+            )
         return cards
 
-    def passes_filter(self, card: dict[str, Any]) -> bool:
-        venue = card.get("venue") or ""
-        # Filter non-Tallinn events when city information is present
-        return not venue or PILETILEVI_TALLINN_FILTER in venue
+    def normalize(self, raw: dict[str, Any]) -> NormalizedEvent | None:
+        # Rejected here, not before the detail fetch: the stored raw_events row
+        # keeps an out-of-area card in the skip set until its weekly recheck.
+        if not _card_in_area(raw):
+            return None
+        return super().normalize(raw)
 
     def parse_date(self, card: dict[str, Any]) -> datetime | None:
         return _parse_piletilevi_date(card.get("date_str") or "")
@@ -374,6 +425,7 @@ class PiletileviAdapter(HtmlListingAdapter):
             card["venue_address"] = location["venue_address"]
             card["lat"] = location["lat"]
             card["lng"] = location["lng"]
+            card["venue"] = card.get("venue") or location["venue_name"]
 
         match = _PILETILEVI_CODE_RE.search(card.get("url") or "")
         if not match:

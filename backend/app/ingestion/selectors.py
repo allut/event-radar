@@ -15,7 +15,9 @@ from app.constants.ingestion import (
 
 # --- Piletilevi (www.piletilevi.ee) ---
 PILETILEVI_HOST = "piletilevi.ee"
-PILETILEVI_TALLINN_FILTER = "Tallinn"
+# The city as a whole comma-separated part: "Tallinna mnt 13" is a street
+# elsewhere, and "Tallinn-Narva mnt 5" a road.
+PILETILEVI_TALLINN_RE = r"(?:^|,)\s*(?:\d{5}\s+)?Tallinn\s*(?:,|$)"
 PILETILEVI_DATE_FORMAT = "%d.%m.%Y %H:%M"
 PILETILEVI_DATE_SEPARATOR = "•"
 PILETILEVI_ALL_PATH = "/en/tickets/all"
@@ -24,7 +26,7 @@ PILETILEVI_MAX_PAGES = 70  # safety bound — real stop is an empty page or the 
 PILETILEVI_CARD_SELECTOR = "a.card"
 PILETILEVI_TITLE_SELECTOR = ".card__time-title h3"
 PILETILEVI_DATE_SELECTOR = ".card__time"
-PILETILEVI_VENUE_SELECTOR = ".card__description"
+PILETILEVI_VENUE_SELECTOR = '[data-cy="card-description"]'
 PILETILEVI_IMAGE_SELECTOR = "img.card__image"
 PILETILEVI_DETAIL_DESC_SELECTOR = ".event__description"
 # Promoter profile page's "Contacts and additional details" mailto — the only

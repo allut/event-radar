@@ -238,7 +238,7 @@ class HtmlListingAdapter(SourceAdapter):
                 soup = BeautifulSoup(resp.text, HTML_PARSER)
                 # Count new external ids regardless of passes_filter, so a page
                 # consisting entirely of filtered-out events (e.g. non-Tallinn
-                # Piletilevi listings) doesn't prematurely stop pagination.
+                # listings) doesn't prematurely stop pagination.
                 new_ids_on_page = 0
                 for card in self.parse_cards(soup):
                     external_id = card.get("external_id") or ""

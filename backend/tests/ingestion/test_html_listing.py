@@ -1,6 +1,7 @@
 """Tests for HtmlListingAdapter base + Piletilevi/Kumu/EstoniaConcertHall."""
 import base64
 import json as json_module
+import logging
 from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
@@ -476,22 +477,37 @@ PILETILEVI_LISTING_HTML = """
     <div class="card__cover"><img class="card__image" src="https://www.piletilevi.ee/i/height=252/images/aa1.jpg"/></div>
     <div class="card__info">
       <div class="card__time-title"><div class="card__time">We 19.08.2026 • 19:00</div><h3>Jazz Night</h3></div>
-      <div class="card__description">Jazz Club, Tallinn</div>
+      <div class="text-card-venue" data-cy="card-description">Jazz Club, Tallinn</div>
     </div>
   </a>
   <a class="card card--normal" href="/en/tickets/BB2/riga-rock">
     <div class="card__info">
       <div class="card__time-title"><div class="card__time">Fr 21.08.2026 • 20:00</div><h3>Riga Rock</h3></div>
-      <div class="card__description">Rock Arena, Riga</div>
+      <div class="text-card-venue" data-cy="card-description">Rock Arena, Riga</div>
     </div>
   </a>
   <a class="card card--normal" href="/en/tickets/CC3/festival-pass">
     <div class="card__info">
       <div class="card__time-title"><div class="card__time">Th 11.06.2026 - Su 14.06.2026</div><h3>Festival Pass</h3></div>
-      <div class="card__description">Outdoors, Tallinn</div>
+      <div class="text-card-venue" data-cy="card-description">Outdoors, Tallinn</div>
     </div>
   </a>
 </body></html>
+"""
+
+# One live card (2026-11-23), without its cover and hidden markers.
+PILETILEVI_LIVE_CARD_HTML = """
+<a class="card group relative mb-2 w-full" data-cy="card" data-theme="light" href="/en/tickets/X6J7YVK7JX/hc-panter-vs-hs-riga-dinaburga">
+ <div class="card__info flex grow min-w-0 relative sm:min-h-[140px]" data-cy="card-info">
+  <div class="card__info-top flex flex-col gap-2 grow min-w-0 xs:px-4">
+   <div class="card__time-title flex flex-col">
+    <div class="card__time text-card-date xs:text-body-md" data-cy="card-time">Tu 24.11.2026 • 19:30</div>
+    <h3 class="font-bold text-on-surface-1 pt-2">HC Panter vs HS Riga/Dinaburga</h3>
+   </div>
+   <div class="text-body-sm xs:text-body-md mb-3 font-medium text-card-venue max-sm:line-clamp-1" data-cy="card-description">Haabersti jäähall</div>
+  </div>
+ </div>
+</a>
 """
 
 PILETILEVI_EMPTY_HTML = "<html><body></body></html>"
@@ -510,6 +526,13 @@ PILETILEVI_DETAIL_WITH_LOCATION_HTML = """
 </head><body>
   <div class="event__description">A wonderful jazz evening with local musicians.</div>
 </body></html>
+"""
+
+PILETILEVI_DETAIL_WITH_EMPTY_LOCATION_HTML = """
+<script type="application/ld+json">
+{"@type": "Event", "name": "Jazz Night", "location": {"@type": "Place", "name": "Jazz Club"}}
+</script>
+<div class="event__description">A wonderful jazz evening with local musicians.</div>
 """
 
 PILETILEVI_DETAIL_WITH_ARRAY_TYPE_AND_STRING_COORDS_HTML = """
@@ -626,12 +649,36 @@ class TestPiletileviParseCards:
         assert jazz["url"] == settings.PILETILEVI_BASE_URL + "/en/tickets/AA1/jazz-night"
         assert jazz["image_url"] == "https://www.piletilevi.ee/i/height=1009/images/aa1.jpg"
 
-    def test_passes_filter_drops_non_tallinn_venue(self):
-        adapter = _piletilevi_adapter()
-        soup = BeautifulSoup(PILETILEVI_LISTING_HTML, "html.parser")
-        cards = {c["external_id"]: c for c in adapter.parse_cards(soup)}
-        assert adapter.passes_filter(cards["/en/tickets/AA1/jazz-night"]) is True
-        assert adapter.passes_filter(cards["/en/tickets/BB2/riga-rock"]) is False
+    def test_live_card_markup_has_a_venue(self):
+        soup = BeautifulSoup(PILETILEVI_LIVE_CARD_HTML, "html.parser")
+        (card,) = _piletilevi_adapter().parse_cards(soup)
+        assert card["venue"] == "Haabersti jäähall"
+        assert card["title"] == "HC Panter vs HS Riga/Dinaburga"
+
+    def test_page_where_no_card_has_a_venue_logs_warning(self, caplog):
+        dead_selector_html = PILETILEVI_LISTING_HTML.replace("card-description", "renamed")
+        with caplog.at_level(logging.WARNING, logger="app.ingestion.sources.piletilevi"):
+            cards = _piletilevi_adapter().parse_cards(
+                BeautifulSoup(dead_selector_html, "html.parser")
+            )
+        assert len(cards) == 3
+        assert [r.levelname for r in caplog.records] == ["WARNING"]
+        assert "venue" in caplog.text
+
+    @pytest.mark.parametrize(
+        "html",
+        [
+            # One venue-less card among others is a listing gap, not a dead selector.
+            PILETILEVI_LISTING_HTML.replace(
+                '<div class="text-card-venue" data-cy="card-description">Rock Arena, Riga</div>', ""
+            ),
+            PILETILEVI_EMPTY_HTML,
+        ],
+    )
+    def test_page_with_some_venue_or_no_cards_does_not_warn(self, html, caplog):
+        with caplog.at_level(logging.WARNING, logger="app.ingestion.sources.piletilevi"):
+            _piletilevi_adapter().parse_cards(BeautifulSoup(html, "html.parser"))
+        assert caplog.records == []
 
     def test_relative_image_url_becomes_absolute(self):
         html = """
@@ -666,29 +713,71 @@ class TestPiletileviNormalize:
         assert result.starts_at.tzinfo == TALLINN_TZ
 
 
+def _serve_piletilevi(detail: str | Exception, requested: list[str] | None = None):
+    """Stub http_get: the listing on page 1, an empty page after it, ``detail`` elsewhere."""
+
+    async def fake_get(client, url, **kwargs):
+        if requested is not None:
+            requested.append(url)
+        if "/tickets/all" in url:
+            return _mock_response(
+                PILETILEVI_LISTING_HTML if url.endswith("page=1") else PILETILEVI_EMPTY_HTML
+            )
+        if isinstance(detail, Exception):
+            raise detail
+        return _mock_response(detail)
+
+    return patch("app.ingestion.sources.html_base.http_get", side_effect=fake_get)
+
+
+def _no_store_session():
+    return patch("app.ingestion.sources.piletilevi.piletilevi_store_login", return_value=None)
+
+
 class TestPiletileviFetchRaw:
     @pytest.mark.asyncio
     async def test_pagination_stops_when_page_yields_no_new_cards(self):
         adapter = _piletilevi_adapter()
-        listing_resp = _mock_response(PILETILEVI_LISTING_HTML)
-        empty_resp = _mock_response(PILETILEVI_EMPTY_HTML)
-        detail_resp = _mock_response(PILETILEVI_DETAIL_HTML)
-
-        with patch("app.ingestion.sources.html_base.http_get") as mock_get:
-            mock_get.side_effect = [
-                listing_resp,  # page 1 — 2 cards survive the Tallinn filter
-                empty_resp,  # page 2 — no cards → pagination halts
-                detail_resp,  # detail fetch for Jazz Night
-                detail_resp,  # detail fetch for Festival Pass... no, dropped by normalize
-            ]
+        requested: list[str] = []
+        with _serve_piletilevi(PILETILEVI_DETAIL_HTML, requested), _no_store_session():
             results = await adapter.fetch_raw(_known_ids())
 
-        # Riga Rock filtered (non-Tallinn); Jazz Night + Festival Pass collected as raw
-        # cards (Festival Pass is dropped later by normalize() for its date format).
-        assert len(results) == 2
-        external_ids = [r["external_id"] for r in results]
-        assert "/en/tickets/AA1/jazz-night" in external_ids
-        assert "/en/tickets/BB2/riga-rock" not in external_ids
+        # Every card reaches the detail page, which decides the area in normalize().
+        assert [r["external_id"] for r in results] == [
+            "/en/tickets/AA1/jazz-night",
+            "/en/tickets/BB2/riga-rock",
+            "/en/tickets/CC3/festival-pass",
+        ]
+        assert [u for u in requested if "/tickets/all" in u] == [
+            f"{settings.PILETILEVI_BASE_URL}/en/tickets/all?page=1",
+            f"{settings.PILETILEVI_BASE_URL}/en/tickets/all?page=2",
+        ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("detail_html", "warns"),
+        [
+            (PILETILEVI_DETAIL_HTML, True),
+            (PILETILEVI_DETAIL_WITH_EMPTY_LOCATION_HTML, True),
+            (PILETILEVI_DETAIL_WITH_LOCATION_HTML, False),
+        ],
+    )
+    async def test_run_where_no_detail_page_has_a_location_logs_warning(
+        self, detail_html, warns, caplog
+    ):
+        with (
+            _serve_piletilevi(detail_html),
+            _no_store_session(),
+            caplog.at_level(logging.WARNING, logger="app.ingestion.sources.piletilevi"),
+        ):
+            await _piletilevi_adapter().fetch_raw(_known_ids())
+        assert ("JSON-LD location" in caplog.text) is warns
+
+    @pytest.mark.asyncio
+    async def test_failed_detail_is_left_for_the_next_run(self):
+        """Listing text alone never places a card, even when it names Tallinn."""
+        with _serve_piletilevi(httpx.ConnectError("detail down")):
+            assert await _piletilevi_adapter().fetch_raw(_known_ids()) == []
 
     @pytest.mark.asyncio
     async def test_detail_description_merged_onto_card(self):
@@ -696,7 +785,7 @@ class TestPiletileviFetchRaw:
         single_card_html = """
         <a class="card" href="/en/tickets/AA1/jazz-night">
           <div class="card__time-title"><div class="card__time">We 19.08.2026 • 19:00</div><h3>Jazz Night</h3></div>
-          <div class="card__description">Jazz Club, Tallinn</div>
+          <div class="text-card-venue" data-cy="card-description">Jazz Club, Tallinn</div>
         </a>
         """
         with patch("app.ingestion.sources.html_base.http_get") as mock_get:
@@ -745,6 +834,17 @@ class TestPiletileviParseDetail:
         assert card["venue_address"] == "Rataskaevu 10, Tallinn, Harju maakond"
         assert card["lat"] == 59.4372
         assert card["lng"] == 24.7454
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("card_venue", "expected"),
+        [("", "Jazz Club"), ("Jazz Club, Tallinn", "Jazz Club, Tallinn")],
+    )
+    async def test_jsonld_venue_name_fills_only_a_missing_venue(self, card_venue, expected):
+        card: dict = {"venue": card_venue}
+        soup = BeautifulSoup(PILETILEVI_DETAIL_WITH_LOCATION_HTML, "html.parser")
+        await _piletilevi_adapter().parse_detail(MagicMock(), soup, card)
+        assert card["venue"] == expected
 
     @pytest.mark.asyncio
     async def test_no_jsonld_leaves_address_and_coords_unset(self):
@@ -826,6 +926,152 @@ class TestPiletileviParseDetail:
         assert not result.startswith("[")
         assert not result.endswith("]")
         assert result == "<p>Ticket prices include fees.</p><p>Age limit: 18+.</p>"
+
+
+def _piletilevi_location_html(location: dict) -> str:
+    item = {"@type": "Event", "name": "Some Event", "location": {"@type": "Place", **location}}
+    return (
+        f'<script type="application/ld+json">{json_module.dumps(item)}</script>'
+        '<div class="event__description">About the event.</div>'
+    )
+
+
+async def _normalize_with_detail(venue: str, location: dict) -> NormalizedEvent | None:
+    """Run one listing card through parse_detail and normalize."""
+    adapter = _piletilevi_adapter()
+    card = {
+        "external_id": "/en/tickets/XX1/some-event",
+        "title": "Some Event",
+        "date_str": "We 19.08.2026 • 19:00",
+        "venue": venue,
+        # No /tickets/<code> segment, so parse_detail makes no store price call.
+        "url": settings.PILETILEVI_BASE_URL + "/some-event",
+    }
+    soup = BeautifulSoup(_piletilevi_location_html(location), "html.parser")
+    await adapter.parse_detail(MagicMock(), soup, card)
+    return adapter.normalize(card)
+
+
+# Locations copied from live detail pages (2026-11-23).
+HAABERSTI_LOCATION = {
+    "name": "Haabersti jäähall",
+    "latitude": 59.4258616,
+    "longitude": 24.6439702,
+    "address": {
+        "streetAddress": "Haabersti 3, Tallinn",
+        "addressLocality": "Tallinn",
+        "addressRegion": "Harjumaa",
+    },
+}
+VANEMUISE_LOCATION = {
+    "name": "Vanemuise Kontserdimaja, Tartu",
+    "latitude": 58.376357,
+    "longitude": 26.724054,
+    "address": {
+        "streetAddress": "Vanemuise 6",
+        "addressLocality": "Tartu",
+        "addressRegion": "Tartumaa",
+    },
+}
+
+
+class TestPiletileviAreaFilter:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("venue", "location"),
+        [
+            pytest.param("Haabersti jäähall", HAABERSTI_LOCATION, id="no-city-in-venue-text"),
+            pytest.param(
+                "Väravatorn",
+                {
+                    "name": "Väravatorn",
+                    "address": {
+                        "streetAddress": "Lühike jalg 9",
+                        "addressLocality": "Tallinn",
+                        "addressRegion": "Harjumaa",
+                    },
+                },
+                id="tallinn-address-without-coords",
+            ),
+            pytest.param(
+                "Kellerteater",
+                {"name": "Kellerteater", "address": {"streetAddress": "Uus tn. 37, Tallinn"}},
+                id="city-only-in-street-address",
+            ),
+            pytest.param(
+                "Saku Toomase kirik",
+                {
+                    "name": "Saku Toomase kirik",
+                    "latitude": 59.29947730744974,
+                    "longitude": 24.650307898166403,
+                    "address": {"streetAddress": "Küütsu 2", "addressRegion": "Harjumaa"},
+                },
+                id="suburb-inside-the-tallinn-region",
+            ),
+        ],
+    )
+    async def test_in_area_detail_address_is_ingested(self, venue, location):
+        normalized = await _normalize_with_detail(venue, location)
+        assert normalized is not None
+        assert normalized.venue_name == venue
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("venue", "location"),
+        [
+            pytest.param("Vanemuise Kontserdimaja, Tartu", VANEMUISE_LOCATION, id="tartu"),
+            pytest.param("", VANEMUISE_LOCATION, id="no-venue-text"),
+            pytest.param(
+                "Tallinn Chamber Orchestra, Tartu", VANEMUISE_LOCATION, id="venue-text-names-tallinn"
+            ),
+            pytest.param(
+                "Kuressaare Kultuurikeskus",
+                {
+                    "name": "Kuressaare Kultuurikeskus",
+                    "address": {
+                        "streetAddress": "Tallinna tn. 6",
+                        "addressLocality": "Kuressaare",
+                        "addressRegion": "Saaremaa",
+                    },
+                },
+                id="street-named-after-tallinn-without-coords",
+            ),
+            pytest.param(
+                "Coyote Fly",
+                {
+                    "name": "Coyote Fly",
+                    "latitude": 56.95873303181346,
+                    "longitude": 24.097673320683334,
+                    "address": {"streetAddress": "Eksporta iela 1A", "addressLocality": "Rīga"},
+                },
+                id="riga",
+            ),
+            pytest.param(
+                "Roadside Club",
+                {
+                    "latitude": 59.350283,
+                    "longitude": 26.350083,
+                    "address": {
+                        "streetAddress": "Tallinn-Narva mnt 5",
+                        "addressLocality": "Rakvere",
+                    },
+                },
+                id="road-named-after-tallinn",
+            ),
+            pytest.param(
+                "Wagenküll Lossispaa",
+                {"name": "Wagenküll Lossispaa", "address": {"streetAddress": "Taagepera küla"}},
+                id="no-coords-no-city",
+            ),
+            pytest.param(
+                "Haljala rahvamaja",
+                {"latitude": 59.43445, "longitude": 26.261597, "address": {}},
+                id="coords-without-address",
+            ),
+        ],
+    )
+    async def test_out_of_area_detail_address_is_not_ingested(self, venue, location):
+        assert await _normalize_with_detail(venue, location) is None
 
 
 class TestPiletileviLocalizedText:
