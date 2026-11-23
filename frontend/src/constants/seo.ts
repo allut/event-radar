@@ -83,9 +83,8 @@ export const ROBOTS_TXT_PATH = `/${ROBOTS_TXT_FILENAME}`;
 // Live-audit (issue #54, api/seo-audit.ts + src/lib/seoAudit.ts): sitemap.xml's
 // <lastmod> (target.updatedAt when available, else the build timestamp — see
 // prerender.ts's buildSitemapXml) older than this is treated as a dead prerender cadence.
-// 6h backend publish/geocode cadence (LLM_PASS_INTERVAL_HOURS, backend
-// app/constants/jobs.py) + a 2h buffer.
-export const SEO_AUDIT_STALE_THRESHOLD_HOURS = 8;
+// The daily prerender cadence (cron-job.org) + a 2h buffer.
+export const SEO_AUDIT_STALE_THRESHOLD_HOURS = 26;
 // GitHub repo the live audit files/updates/closes its failure issue against
 // and the fixed label it searches/tags by.
 export const SEO_AUDIT_GITHUB_REPO = 'allut/event-radar';

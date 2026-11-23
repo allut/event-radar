@@ -1,6 +1,6 @@
 /**
  * Independent live SEO audit (issue #54) — a Cloudflare Pages Function, hit
- * every 6h by its own cron-job.org job (offset from the prerender-rebuild
+ * once a day by its own cron-job.org job (offset from the prerender-rebuild
  * job, issue #52), mirroring the backend's `/internal/tick` keepalive
  * pattern but living on the Cloudflare side since the check it runs
  * (src/lib/seoAudit.ts's evaluateLiveAudit) reuses seoValidation.ts's

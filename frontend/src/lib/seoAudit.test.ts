@@ -131,7 +131,7 @@ describe('evaluateLiveAudit', () => {
   });
 
   it(`flags a build older than ${SEO_AUDIT_STALE_THRESHOLD_HOURS}h as stale`, () => {
-    const buildTimestamp = new Date(now.getTime() - 9 * 60 * 60 * 1000).toISOString(); // 9h old
+    const buildTimestamp = new Date(now.getTime() - (SEO_AUDIT_STALE_THRESHOLD_HOURS + 1) * 60 * 60 * 1000).toISOString();
     const result = evaluateLiveAudit({
       sitemapXml: sitemapWithLastmod(buildTimestamp),
       robotsTxt: VALID_ROBOTS_TXT,

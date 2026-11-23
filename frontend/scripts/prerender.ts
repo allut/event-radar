@@ -1565,7 +1565,7 @@ export async function main(): Promise<void> {
   // classify `unchanged` — see classifyTarget) reliably finishes `done`
   // again, forever. That self-sustaining loop is what shipped overnight
   // (issue #101) before this gate existed. If the commit is skipped or
-  // fails, the chain simply resumes via the next 6-hourly cron tick instead
+  // fails, the chain simply resumes via the next daily cron tick instead
   // of self-triggering (degraded, not broken — same fallback as any other
   // lost marker commit).
   if (commitMarker) {

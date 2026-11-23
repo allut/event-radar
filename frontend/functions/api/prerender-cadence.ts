@@ -1,6 +1,6 @@
 /**
  * Cadence gate for the independent `prerender-cadence` Deploy Hook (issue
- * #92) — a Cloudflare Pages Function cron-job.org now hits every 6h
+ * #92) — a Cloudflare Pages Function cron-job.org hits once a day
  * *instead of* POSTing straight to the Deploy Hook URL. Reads the production
  * branch's tip commit message and skips forwarding the request to the real
  * Deploy Hook when `shouldSkipCadenceTick` (src/lib/prerenderChain.ts) says a
